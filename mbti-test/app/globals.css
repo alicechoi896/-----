@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #faf9f7;
-  --foreground: #27272a;
+  --background: #faf6ed;
+  --foreground: #1a1816;
 }
 
 @theme inline {
@@ -11,9 +11,14 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* 브랜드 강조 컬러 — 진행바, CTA 버튼 등 유형 미확정 구간에서 사용 */
-  --color-accent: #6366f1;
-  --color-accent-soft: #e0e7ff;
+  /*
+   * 브랜드 강조 컬러(파스텔 옐로우) — 진행바, CTA 버튼 등 유형 미확정 구간에서 사용.
+   * ink: 라이트/다크 모드와 무관하게 항상 고정된 잉크 블랙. 노란 배경 위 텍스트는
+   * 테마에 따라 반전되는 foreground 대신 이 고정색을 써야 다크모드에서도 대비가 유지된다.
+   */
+  --color-accent: #ffdd66;
+  --color-accent-soft: #fff6df;
+  --color-ink: #1a1816;
 
   /*
    * 유형 그룹 테마 컬러 (PRD 5.3, 5.4) — 컴포넌트에서 임의 hex 값을 쓰지 않고 이 토큰만 사용한다.
@@ -36,8 +41,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #1c1c1f;
-    --foreground: #f4f4f5;
+    --background: #1a1715;
+    --foreground: #faf6ed;
   }
 }
 
@@ -46,24 +51,14 @@ body {
   color: var(--foreground);
 }
 
-@keyframes slide-in-forward {
+/* 절제된 등장 효과 — 문항/카드가 살짝 떠오르듯 부드럽게 나타난다 */
+@keyframes appear {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateY(6px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slide-in-backward {
-  from {
-    opacity: 0;
-    transform: translateX(-24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
   }
 }
