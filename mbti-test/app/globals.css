@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --background: #faf9f7;
+  --foreground: #27272a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* 브랜드 강조 컬러 — 진행바, CTA 버튼 등 유형 미확정 구간에서 사용 */
+  --color-accent: #6366f1;
+  --color-accent-soft: #e0e7ff;
+
+  /*
+   * 유형 그룹 테마 컬러 (PRD 5.3, 5.4) — 컴포넌트에서 임의 hex 값을 쓰지 않고 이 토큰만 사용한다.
+   * base: 뱃지/보더/그래프 바 등 장식용 강조색. soft: 옅은 배경. strong: soft 배경 위 텍스트용
+   * (WCAG AA 명도 대비 확보를 위해 base보다 어둡게 별도 정의, PRD 5.5).
+   */
+  --color-group-nt: #8b5cf6;
+  --color-group-nt-soft: #ede9fe;
+  --color-group-nt-strong: #6d28d9;
+  --color-group-nf: #10b981;
+  --color-group-nf-soft: #d1fae5;
+  --color-group-nf-strong: #047857;
+  --color-group-sj: #3b82f6;
+  --color-group-sj-soft: #dbeafe;
+  --color-group-sj-strong: #1d4ed8;
+  --color-group-sp: #f59e0b;
+  --color-group-sp-soft: #fef3c7;
+  --color-group-sp-strong: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1c1c1f;
+    --foreground: #f4f4f5;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+@keyframes slide-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
