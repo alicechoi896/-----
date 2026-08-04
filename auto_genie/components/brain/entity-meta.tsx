@@ -1,0 +1,65 @@
+import {
+  Building2,
+  Package,
+  Users,
+  AlertCircle,
+  Heart,
+  ShieldAlert,
+  Lightbulb,
+  GraduationCap,
+  Compass,
+  LayoutTemplate,
+  MessageSquareQuote,
+  Ban,
+  BookOpen,
+  type LucideIcon,
+} from "lucide-react";
+import type { EntityType } from "@/types/database";
+
+export const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
+  company: "기업",
+  product: "상품",
+  audience: "고객",
+  customer_problem: "고객 문제",
+  desire: "숨은 욕구",
+  objection: "구매 장벽",
+  solution: "해결책",
+  expertise: "전문성",
+  philosophy: "철학",
+  content_pattern: "콘텐츠 패턴",
+  brand_expression: "브랜드 표현",
+  prohibited_expression: "금지 표현",
+  platform_rule: "플랫폼 규칙",
+};
+
+export const ENTITY_TYPE_ICON: Record<EntityType, LucideIcon> = {
+  company: Building2,
+  product: Package,
+  audience: Users,
+  customer_problem: AlertCircle,
+  desire: Heart,
+  objection: ShieldAlert,
+  solution: Lightbulb,
+  expertise: GraduationCap,
+  philosophy: Compass,
+  content_pattern: LayoutTemplate,
+  brand_expression: MessageSquareQuote,
+  prohibited_expression: Ban,
+  platform_rule: BookOpen,
+};
+
+export const ENTITY_TYPE_COLOR: Record<EntityType, string> = {
+  company: "bg-neutral-100 text-neutral-700 border-neutral-300",
+  product: "bg-violet-100 text-violet-700 border-violet-300",
+  audience: "bg-sky-100 text-sky-700 border-sky-300",
+  customer_problem: "bg-orange-100 text-orange-700 border-orange-300",
+  desire: "bg-pink-100 text-pink-700 border-pink-300",
+  objection: "bg-amber-100 text-amber-700 border-amber-300",
+  solution: "bg-emerald-100 text-emerald-700 border-emerald-300",
+  expertise: "bg-indigo-100 text-indigo-700 border-indigo-300",
+  philosophy: "bg-teal-100 text-teal-700 border-teal-300",
+  content_pattern: "bg-cyan-100 text-cyan-700 border-cyan-300",
+  brand_expression: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300",
+  prohibited_expression: "bg-red-100 text-red-700 border-red-300",
+  platform_rule: "bg-lime-100 text-lime-700 border-lime-300",
+};
