@@ -105,7 +105,7 @@ export function AppShell({
     <div className="min-h-screen flex bg-neutral-50">
       <aside className="w-64 shrink-0 border-r border-neutral-200 bg-white flex flex-col">
         <div className="h-16 flex items-center gap-2 px-5 border-b border-neutral-200">
-          <Image src="/icon.png" alt="자동화 지니" width={28} height={28} className="shrink-0" />
+          <Image src="/icon.png" alt="자동화 지니" width={30} height={30} className="shrink-0" />
           <span className="text-lg font-semibold text-neutral-900">자동화 지니</span>
         </div>
 

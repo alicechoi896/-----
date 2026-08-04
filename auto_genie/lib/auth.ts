@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -13,12 +14,23 @@ export interface CurrentOrganization {
   role: OrgRole;
 }
 
-/** Redirects to /login if there is no signed-in user. Returns the user otherwise. */
-export async function requireUser() {
+// Server pages routinely call requireUser()/getUserOrganizations()/
+// requireCurrentOrganization() several times while rendering a single request
+// (e.g. requireCurrentOrganization() itself calls both). Each supabase.auth.getUser()
+// is a network round trip to the Supabase Auth API, not a local JWT decode, so without
+// caching a single page load could fire it 3-4x. React's cache() dedupes it to once
+// per request/render pass.
+const getCachedUser = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  return user;
+});
+
+/** Redirects to /login if there is no signed-in user. Returns the user otherwise. */
+export async function requireUser() {
+  const user = await getCachedUser();
 
   if (!user) {
     redirect("/login");
@@ -27,12 +39,10 @@ export async function requireUser() {
 }
 
 export async function getUserOrganizations(): Promise<CurrentOrganization[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return [];
 
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("organization_members")
     .select("role, organizations(id, name, industry)")
