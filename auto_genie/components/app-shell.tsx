@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { switchOrganizationAction, signOutAction } from "@/app/(app)/actions";
 import { DemoModeDrawer } from "@/components/demo-mode-drawer";
 import { DemoBrainStoreProvider } from "@/lib/demo/store";
@@ -99,7 +98,6 @@ export function AppShell({
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
   const [demoModeOpen, setDemoModeOpen] = useState(false);
-  const isDemoWorkspace = organization.name.includes("인더업");
 
   return (
     <div className="min-h-screen flex bg-neutral-50">
@@ -132,15 +130,6 @@ export function AppShell({
         </nav>
 
         <div className="border-t border-neutral-200 p-3 space-y-2">
-          {isDemoWorkspace && (
-            <Badge
-              variant="outline"
-              className="w-full justify-center border-amber-300 bg-amber-50 text-amber-700"
-            >
-              시연용 데이터 워크스페이스
-            </Badge>
-          )}
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm hover:bg-neutral-100 text-left">
