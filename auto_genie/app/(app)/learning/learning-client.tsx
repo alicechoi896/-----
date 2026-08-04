@@ -31,9 +31,9 @@ import {
   registerFileSourceAction,
   startAnalysisAction,
   deleteDataSourceAction,
-  contentCategories,
   type ActionState,
 } from "./actions";
+import { CONTENT_CATEGORIES } from "./constants";
 import type { Database } from "@/types/database";
 import { Link2, FileText, Upload, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 
@@ -165,7 +165,7 @@ function CategorySelect({ name }: { name: string }) {
         <SelectValue placeholder="자료 유형 선택" />
       </SelectTrigger>
       <SelectContent>
-        {contentCategories.map((c) => (
+        {CONTENT_CATEGORIES.map((c) => (
           <SelectItem key={c} value={c}>
             {c}
           </SelectItem>

@@ -5,23 +5,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentOrganization } from "@/lib/auth";
 import { runDataSourcePipeline } from "@/lib/pipeline/data-source-pipeline";
-import { validateFile, ACCEPTED_FILE_TYPES, MAX_FILE_BYTES } from "@/lib/ingestion/file-extract";
+import { validateFile } from "@/lib/ingestion/file-extract";
 import { assertPublicUrl, UrlNotAllowedError } from "@/lib/ingestion/ssrf";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { CONTENT_CATEGORIES } from "./constants";
 
 export type ActionState = { error: string | null; sourceId?: string };
-
-const CONTENT_CATEGORIES = [
-  "상품정보",
-  "회사소개",
-  "강의자료",
-  "기존 콘텐츠",
-  "고객 질문",
-  "고객 후기",
-  "상담 기록",
-  "마케팅 노하우",
-  "브랜드 가이드",
-] as const;
 
 const urlSchema = z.object({
   url: z.string().url().max(2000),
@@ -235,7 +224,3 @@ export async function deleteDataSourceAction(dataSourceId: string): Promise<void
   await supabase.from("data_sources").delete().eq("id", dataSourceId).eq("organization_id", org.id);
   revalidatePath("/learning");
 }
-
-export const dataSourceMaxFileBytes = MAX_FILE_BYTES;
-export const acceptedFileTypes = ACCEPTED_FILE_TYPES;
-export const contentCategories = CONTENT_CATEGORIES;
