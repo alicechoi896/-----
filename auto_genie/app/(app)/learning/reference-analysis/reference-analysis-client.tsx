@@ -89,16 +89,12 @@ export function ReferenceAnalysisClient() {
   }
 
   return (
-    <div className="p-6 max-w-[1440px] mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">AI 학습센터</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-900">참조 콘텐츠 분석</h1>
-          <p className="mt-2 max-w-2xl text-sm text-neutral-500 leading-relaxed">
-            블로그, 유튜브, 인스타그램, 스레드 등의 참조 URL에서 콘텐츠의 표현 문구를 복사하는 것이 아니라, 훅,
-            전개 구조, CTA 위치, 문장 스타일과 설득 패턴을 구조화하여 추출합니다.
-          </p>
-        </div>
+        <p className="max-w-2xl text-sm text-neutral-500 leading-relaxed">
+          블로그, 유튜브, 인스타그램, 스레드 등의 참조 URL에서 콘텐츠의 표현 문구를 복사하는 것이 아니라, 훅,
+          전개 구조, CTA 위치, 문장 스타일과 설득 패턴을 구조화하여 추출합니다.
+        </p>
         <DemoBadge variant="prototype" />
       </div>
 

@@ -7,19 +7,15 @@ import { useDemoBrainStore } from "@/lib/demo/store";
 import type { BrainHistoryEntry } from "@/lib/demo/rule-update-data";
 import { GitCommitHorizontal, X } from "lucide-react";
 
-export function BrainHistoryClient() {
+export function BrainHistoryPanel() {
   const { history } = useDemoBrainStore();
   const [selected, setSelected] = useState<BrainHistoryEntry | null>(null);
   const ordered = [...history].reverse();
 
   return (
-    <div className="p-6 max-w-[1440px] mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">성과 학습센터</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-900">AI 브레인 변경 이력</h1>
-          <p className="mt-1 text-sm text-neutral-500">버전별로 AI 브레인에 반영된 변경 내역을 확인합니다.</p>
-        </div>
+        <p className="max-w-2xl text-sm text-neutral-500">버전별로 AI 브레인에 반영된 변경 내역을 확인합니다.</p>
         <DemoBadge variant="prototype" />
       </div>
 

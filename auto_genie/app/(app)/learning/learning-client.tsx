@@ -34,6 +34,7 @@ import {
   type ActionState,
 } from "./actions";
 import { CONTENT_CATEGORIES } from "./constants";
+import { ReferenceAnalysisClient } from "./reference-analysis/reference-analysis-client";
 import type { Database } from "@/types/database";
 import { Link2, FileText, Upload, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 
@@ -105,13 +106,18 @@ export function LearningClient({
       <Tabs key={initialTab} defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="register">데이터 등록</TabsTrigger>
+          <TabsTrigger value="reference">참조 콘텐츠 분석</TabsTrigger>
           <TabsTrigger value="list">데이터 목록 ({sources.length})</TabsTrigger>
           <TabsTrigger value="pipeline">분석 파이프라인</TabsTrigger>
-          <TabsTrigger value="quality">데이터 품질</TabsTrigger>
+          <TabsTrigger value="quality">데이터 품질관리</TabsTrigger>
         </TabsList>
 
         <TabsContent value="register" className="mt-4">
           <RegisterPanel />
+        </TabsContent>
+
+        <TabsContent value="reference" className="mt-4">
+          <ReferenceAnalysisClient />
         </TabsContent>
 
         <TabsContent value="list" className="mt-4">

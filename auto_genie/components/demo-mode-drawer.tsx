@@ -54,17 +54,17 @@ const STEPS = [
     title: "8. 참조 URL 분석",
     description:
       "블로그·유튜브·인스타그램 등 참조 URL을 등록하면 URL 유효성 검사부터 결과 생성까지 7단계 분석 파이프라인이 진행됩니다. (시제품 예시 데이터)",
-    href: "/learning/reference-analysis",
+    href: "/learning?tab=reference",
   },
   {
     title: "9. 콘텐츠 구조 규칙 추출",
     description: "훅 유형, 전개 구조, CTA 위치, 문장 스타일이 구조화된 분석 결과와 근거를 확인합니다.",
-    href: "/learning/reference-analysis",
+    href: "/learning?tab=reference",
   },
   {
     title: "10. 마케팅 브레인 반영",
     description: "'마케팅 브레인에 반영' 버튼으로 추출된 구조 규칙이 AI 브레인 버전에 학습되는 과정을 확인합니다.",
-    href: "/learning/reference-analysis",
+    href: "/learning?tab=reference",
   },
   {
     title: "11. 전략 추천 및 근거 확인",
@@ -74,17 +74,17 @@ const STEPS = [
   {
     title: "12. 성과 기반 생성 규칙 변경",
     description: "성과 데이터 수집부터 생성 가이드 갱신까지, 콘텐츠 요소별 가중치가 조정되는 과정을 확인합니다.",
-    href: "/performance/rule-update",
+    href: "/performance?tab=rule-update",
   },
   {
     title: "13. AI 브레인 버전 업데이트",
     description: "'AI 브레인에 적용' 버튼으로 생성 규칙 변경 사항이 새 버전에 반영되는 과정을 확인합니다.",
-    href: "/performance/rule-update",
+    href: "/performance?tab=rule-update",
   },
   {
     title: "14. 변경 전후 콘텐츠 비교",
     description: "이전 버전과 업데이트된 버전의 생성 결과를 나란히 비교합니다.",
-    href: "/performance/rule-update#before-after",
+    href: "/performance?tab=before-after",
   },
 ];
 

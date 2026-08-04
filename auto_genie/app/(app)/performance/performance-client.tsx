@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { registerPerformanceAction, type PerformanceActionState } from "./actions";
+import { RuleUpdateMainPanel, RuleUpdateBeforeAfterPanel } from "./rule-update/rule-update-client";
+import { BrainHistoryPanel } from "./brain-history/brain-history-client";
 import type { Database } from "@/types/database";
 import { Sparkles, TrendingUp, TrendingDown } from "lucide-react";
 
@@ -44,6 +48,7 @@ export function PerformanceClient({
   strategyOptions,
   events,
   weights,
+  approverEmail,
 }: {
   preselectedOutputId: string | null;
   outputs: ContentOutput[];
@@ -52,7 +57,11 @@ export function PerformanceClient({
   strategyOptions: { id: string; strategy_type: string; title: string }[];
   events: LearningEvent[];
   weights: Database["public"]["Tables"]["preference_weights"]["Row"] | null;
+  approverEmail: string;
 }) {
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") ?? "overview";
+
   const outputById = useMemo(() => new Map(outputs.map((o) => [o.id, o])), [outputs]);
   const strategyTypeByProject = useMemo(() => {
     const optionById = new Map(strategyOptions.map((o) => [o.id, o]));
@@ -107,71 +116,95 @@ export function PerformanceClient({
         </h1>
       </div>
 
-      <RegisterForm outputs={outputs} preselectedOutputId={preselectedOutputId} />
+      <Tabs key={initialTab} defaultValue={initialTab}>
+        <TabsList>
+          <TabsTrigger value="overview">통합 성과</TabsTrigger>
+          <TabsTrigger value="ai-analysis">AI 성과 해석</TabsTrigger>
+          <TabsTrigger value="rule-update">생성 규칙 업데이트</TabsTrigger>
+          <TabsTrigger value="before-after">학습 전후 비교</TabsTrigger>
+          <TabsTrigger value="brain-history">AI 브레인 변경 이력</TabsTrigger>
+        </TabsList>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="플랫폼별 평균 성과 점수" data={platformChartData} xKey="platform" />
-        <ChartCard title="전략 유형별 평균 성과 점수" data={strategyTypeChartData} xKey="type" />
-      </div>
+        <TabsContent value="overview" className="mt-4 space-y-6">
+          <RegisterForm outputs={outputs} preselectedOutputId={preselectedOutputId} />
 
-      <div id="ai-analysis" className="scroll-mt-6">
-        {latestAnalysisEvent ? (
-          <AnalysisCard event={latestAnalysisEvent} />
-        ) : (
-          <div className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-neutral-400 text-sm">
-            아직 AI 성과 해석 결과가 없습니다. 성과를 입력하면 AI가 원인을 분석합니다.
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="플랫폼별 평균 성과 점수" data={platformChartData} xKey="platform" />
+            <ChartCard title="전략 유형별 평균 성과 점수" data={strategyTypeChartData} xKey="type" />
           </div>
-        )}
-      </div>
 
-      {weightEvents.length > 0 && (
-        <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-          <p className="font-medium text-neutral-900 mb-3">학습 전후 가중치 (선호 학습)</p>
-          <div className="space-y-2">
-            {weightEvents.map((e) => {
-              const before = e.before_state as Record<string, number> | null;
-              const after = e.after_state as Record<string, number> | null;
-              const key = before ? Object.keys(before)[0] : after ? Object.keys(after)[0] : "";
-              const beforeVal = before?.[key];
-              const afterVal = after?.[key];
-              const up = (afterVal ?? 0) >= (beforeVal ?? 0);
-              return (
-                <div key={e.id} className="flex items-center justify-between text-sm border-b border-neutral-100 pb-2">
-                  <span className="text-neutral-600">{e.description}</span>
-                  <span className="flex items-center gap-1 font-medium">
-                    {beforeVal?.toFixed(2)} → {afterVal?.toFixed(2)}
-                    {up ? (
-                      <TrendingUp className="size-3.5 text-emerald-600" />
-                    ) : (
-                      <TrendingDown className="size-3.5 text-orange-500" />
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {weights && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {(
-                [
-                  ["clarity_weight", "명확성"],
-                  ["authority_weight", "전문성"],
-                  ["purchase_link_weight", "구매연결"],
-                  ["brand_fit_weight", "브랜드적합"],
-                  ["novelty_weight", "새로움"],
-                  ["empathy_weight", "공감도"],
-                ] as [keyof typeof weights, string][]
-              ).map(([key, label]) => (
-                <Badge key={key} variant="outline" className="text-[10px]">
-                  {label} {Number(weights[key]).toFixed(2)}
-                </Badge>
-              ))}
+          <RecordsTable records={records} outputById={outputById} />
+        </TabsContent>
+
+        <TabsContent value="ai-analysis" className="mt-4 space-y-6">
+          {latestAnalysisEvent ? (
+            <AnalysisCard event={latestAnalysisEvent} />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-neutral-400 text-sm">
+              아직 AI 성과 해석 결과가 없습니다. 성과를 입력하면 AI가 원인을 분석합니다.
             </div>
           )}
-        </div>
-      )}
 
-      <RecordsTable records={records} outputById={outputById} />
+          {weightEvents.length > 0 && (
+            <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+              <p className="font-medium text-neutral-900 mb-3">학습 전후 가중치 (선호 학습)</p>
+              <div className="space-y-2">
+                {weightEvents.map((e) => {
+                  const before = e.before_state as Record<string, number> | null;
+                  const after = e.after_state as Record<string, number> | null;
+                  const key = before ? Object.keys(before)[0] : after ? Object.keys(after)[0] : "";
+                  const beforeVal = before?.[key];
+                  const afterVal = after?.[key];
+                  const up = (afterVal ?? 0) >= (beforeVal ?? 0);
+                  return (
+                    <div key={e.id} className="flex items-center justify-between text-sm border-b border-neutral-100 pb-2">
+                      <span className="text-neutral-600">{e.description}</span>
+                      <span className="flex items-center gap-1 font-medium">
+                        {beforeVal?.toFixed(2)} → {afterVal?.toFixed(2)}
+                        {up ? (
+                          <TrendingUp className="size-3.5 text-emerald-600" />
+                        ) : (
+                          <TrendingDown className="size-3.5 text-orange-500" />
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {weights && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["clarity_weight", "명확성"],
+                      ["authority_weight", "전문성"],
+                      ["purchase_link_weight", "구매연결"],
+                      ["brand_fit_weight", "브랜드적합"],
+                      ["novelty_weight", "새로움"],
+                      ["empathy_weight", "공감도"],
+                    ] as [keyof typeof weights, string][]
+                  ).map(([key, label]) => (
+                    <Badge key={key} variant="outline" className="text-[10px]">
+                      {label} {Number(weights[key]).toFixed(2)}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="rule-update" className="mt-4">
+          <RuleUpdateMainPanel approverEmail={approverEmail} />
+        </TabsContent>
+
+        <TabsContent value="before-after" className="mt-4">
+          <RuleUpdateBeforeAfterPanel />
+        </TabsContent>
+
+        <TabsContent value="brain-history" className="mt-4">
+          <BrainHistoryPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

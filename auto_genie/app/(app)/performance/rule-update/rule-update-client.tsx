@@ -58,14 +58,12 @@ const TOP_METRICS = [
   { label: "변경된 생성 규칙", value: "6개" },
 ];
 
-export function RuleUpdateClient({ approverEmail }: { approverEmail: string }) {
+export function RuleUpdateMainPanel({ approverEmail }: { approverEmail: string }) {
   const store = useDemoBrainStore();
   const [detailRow, setDetailRow] = useState<(RuleUpdateRow & { status: string }) | null>(null);
   const [excludeOpen, setExcludeOpen] = useState(false);
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [regenerated, setRegenerated] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
   const includedCount = store.ruleRows.length - excludedIds.size;
@@ -78,25 +76,12 @@ export function RuleUpdateClient({ approverEmail }: { approverEmail: string }) {
     });
   }
 
-  function handleRegenerate() {
-    setRegenerating(true);
-    setRegenerated(false);
-    setTimeout(() => {
-      setRegenerating(false);
-      setRegenerated(true);
-    }, 900);
-  }
-
   return (
-    <div className="p-6 max-w-[1440px] mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">성과 학습센터</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-900">성과 기반 생성 규칙 업데이트</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            콘텐츠 성과가 어떻게 생성 규칙과 AI 브레인 버전에 반영되는지 확인합니다.
-          </p>
-        </div>
+        <p className="max-w-2xl text-sm text-neutral-500">
+          콘텐츠 성과가 어떻게 생성 규칙과 AI 브레인 버전에 반영되는지 확인합니다.
+        </p>
         <DemoBadge variant="prototype" />
       </div>
 
@@ -288,53 +273,6 @@ export function RuleUpdateClient({ approverEmail }: { approverEmail: string }) {
         </div>
       </div>
 
-      {/* 변경 전후 콘텐츠 비교 */}
-      <div id="before-after" className="rounded-2xl border border-neutral-200 bg-white p-5 scroll-mt-6">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-          <p className="font-medium text-neutral-900">변경 전후 콘텐츠 비교</p>
-          <DemoBadge variant="demo-result" />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-neutral-200 p-4">
-            <Badge variant="outline" className="mb-2">
-              {BEFORE_AFTER_CONTENT.before.version} 기존 생성 결과
-            </Badge>
-            <p className="font-medium text-neutral-900">{BEFORE_AFTER_CONTENT.before.title}</p>
-            <ul className="mt-2 text-sm text-neutral-600 list-disc list-inside space-y-0.5">
-              {BEFORE_AFTER_CONTENT.before.structure.map((s) => (
-                <li key={s}>{s}</li>
-              ))}
-            </ul>
-          </div>
-          <div
-            className={`rounded-xl border-2 p-4 transition-all ${
-              regenerated ? "border-violet-400 bg-violet-50/50 shadow-sm" : "border-neutral-200"
-            }`}
-          >
-            <Badge className="mb-2 bg-violet-600 text-white">
-              {BEFORE_AFTER_CONTENT.after.version} 업데이트 후 생성 결과
-            </Badge>
-            <p className="font-medium text-neutral-900">{BEFORE_AFTER_CONTENT.after.title}</p>
-            <ul className="mt-2 text-sm text-neutral-600 list-disc list-inside space-y-0.5">
-              {BEFORE_AFTER_CONTENT.after.structure.map((s) => (
-                <li key={s}>{s}</li>
-              ))}
-            </ul>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {BEFORE_AFTER_CONTENT.after.changeBadges.map((b) => (
-                <Badge key={b} variant="outline" className="text-[10px] border-violet-300 text-violet-700">
-                  {b}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </div>
-        <Button className="mt-4" variant="outline" disabled={regenerating} onClick={handleRegenerate}>
-          <RefreshCw className={`size-4 ${regenerating ? "animate-spin" : ""}`} />
-          {regenerating ? "새 규칙으로 다시 생성 중..." : "새 규칙으로 다시 생성"}
-        </Button>
-      </div>
-
       {/* 상세 패널 */}
       <Sheet open={!!detailRow} onOpenChange={(open) => !open && setDetailRow(null)}>
         <SheetContent side="right" className="w-full sm:max-w-lg">
@@ -441,6 +379,73 @@ export function RuleUpdateClient({ approverEmail }: { approverEmail: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+export function RuleUpdateBeforeAfterPanel() {
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerated, setRegenerated] = useState(false);
+
+  function handleRegenerate() {
+    setRegenerating(true);
+    setRegenerated(false);
+    setTimeout(() => {
+      setRegenerating(false);
+      setRegenerated(true);
+    }, 900);
+  }
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+        <div>
+          <p className="font-medium text-neutral-900">변경 전후 콘텐츠 비교</p>
+          <p className="mt-1 text-sm text-neutral-500">
+            같은 조건으로 생성 규칙 반영 전/후 콘텐츠가 어떻게 달라지는지 비교합니다.
+          </p>
+        </div>
+        <DemoBadge variant="demo-result" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-neutral-200 p-4">
+          <Badge variant="outline" className="mb-2">
+            {BEFORE_AFTER_CONTENT.before.version} 기존 생성 결과
+          </Badge>
+          <p className="font-medium text-neutral-900">{BEFORE_AFTER_CONTENT.before.title}</p>
+          <ul className="mt-2 text-sm text-neutral-600 list-disc list-inside space-y-0.5">
+            {BEFORE_AFTER_CONTENT.before.structure.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+        </div>
+        <div
+          className={`rounded-xl border-2 p-4 transition-all ${
+            regenerated ? "border-violet-400 bg-violet-50/50 shadow-sm" : "border-neutral-200"
+          }`}
+        >
+          <Badge className="mb-2 bg-violet-600 text-white">
+            {BEFORE_AFTER_CONTENT.after.version} 업데이트 후 생성 결과
+          </Badge>
+          <p className="font-medium text-neutral-900">{BEFORE_AFTER_CONTENT.after.title}</p>
+          <ul className="mt-2 text-sm text-neutral-600 list-disc list-inside space-y-0.5">
+            {BEFORE_AFTER_CONTENT.after.structure.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {BEFORE_AFTER_CONTENT.after.changeBadges.map((b) => (
+              <Badge key={b} variant="outline" className="text-[10px] border-violet-300 text-violet-700">
+                {b}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      </div>
+      <Button className="mt-4" variant="outline" disabled={regenerating} onClick={handleRegenerate}>
+        <RefreshCw className={`size-4 ${regenerating ? "animate-spin" : ""}`} />
+        {regenerating ? "새 규칙으로 다시 생성 중..." : "새 규칙으로 다시 생성"}
+      </Button>
     </div>
   );
 }

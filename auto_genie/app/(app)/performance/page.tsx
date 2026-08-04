@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireCurrentOrganization, requireUser } from "@/lib/auth";
 import { PerformanceClient } from "./performance-client";
 
 export default async function PerformancePage({
@@ -9,6 +9,7 @@ export default async function PerformancePage({
 }) {
   const { contentOutputId } = await searchParams;
   const org = await requireCurrentOrganization();
+  const user = await requireUser();
   const supabase = await createClient();
 
   const [outputsRes, recordsRes, projectsRes, optionsRes, eventsRes, weightsRes] = await Promise.all([
@@ -43,6 +44,7 @@ export default async function PerformancePage({
       strategyOptions={optionsRes.data ?? []}
       events={eventsRes.data ?? []}
       weights={weightsRes.data ?? null}
+      approverEmail={user.email ?? "워크스페이스 소유자"}
     />
   );
 }
