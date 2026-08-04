@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Radar,
   UploadCloud,
@@ -14,6 +14,7 @@ import {
   Cpu,
   Settings,
   ChevronsUpDown,
+  ChevronDown,
   LogOut,
   PlayCircle,
   Check,
@@ -33,17 +34,54 @@ import { DemoModeDrawer } from "@/components/demo-mode-drawer";
 import { DemoBrainStoreProvider } from "@/lib/demo/store";
 import type { CurrentOrganization } from "@/lib/auth";
 
-const NAV_ITEMS = [
+interface NavChild {
+  href: string;
+  label: string;
+}
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof Radar;
+  children?: NavChild[];
+}
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "AI 컨트롤타워", icon: Radar },
-  { href: "/learning", label: "AI 학습센터", icon: UploadCloud },
+  {
+    href: "/learning",
+    label: "AI 학습센터",
+    icon: UploadCloud,
+    children: [
+      { href: "/learning", label: "데이터 수집" },
+      { href: "/learning?tab=reference", label: "참조 콘텐츠 분석" },
+      { href: "/learning?tab=pipeline", label: "분석 파이프라인" },
+      { href: "/learning?tab=quality", label: "데이터 품질관리" },
+    ],
+  },
   { href: "/brain", label: "마케팅 브레인", icon: Sparkles },
   { href: "/strategy", label: "전략 시뮬레이터", icon: FlaskConical },
   { href: "/orchestrator", label: "콘텐츠 오케스트레이터", icon: LayoutGrid },
   { href: "/workflow", label: "자동화 워크플로우", icon: Workflow },
-  { href: "/performance", label: "성과 학습센터", icon: TrendingUp },
+  {
+    href: "/performance",
+    label: "성과 학습센터",
+    icon: TrendingUp,
+    children: [
+      { href: "/performance", label: "통합 성과" },
+      { href: "/performance?tab=ai-analysis", label: "AI 성과 해석" },
+      { href: "/performance?tab=rule-update", label: "생성 규칙 업데이트" },
+      { href: "/performance?tab=before-after", label: "학습 전후 비교" },
+      { href: "/performance?tab=brain-history", label: "AI 브레인 변경 이력" },
+    ],
+  },
   { href: "/technology", label: "AI 기술 리포트", icon: Cpu },
   { href: "/settings", label: "설정", icon: Settings },
 ];
+
+function stripQuery(href: string): string {
+  return href.split("?")[0];
+}
 
 export function AppShell({
   organization,
@@ -57,6 +95,8 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab");
   const [demoModeOpen, setDemoModeOpen] = useState(false);
   const isDemoWorkspace = organization.name.includes("인더업");
 
@@ -71,7 +111,9 @@ export function AppShell({
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
+            return item.children ? (
+              <NavGroup key={item.href} item={item} active={active} pathname={pathname} currentTab={currentTab} />
+            ) : (
               <Link
                 key={item.href}
                 href={item.href}
@@ -152,6 +194,58 @@ export function AppShell({
       </div>
 
       <DemoModeDrawer open={demoModeOpen} onOpenChange={setDemoModeOpen} />
+    </div>
+  );
+}
+
+function NavGroup({
+  item,
+  active,
+  pathname,
+  currentTab,
+}: {
+  item: NavItem;
+  active: boolean;
+  pathname: string;
+  currentTab: string | null;
+}) {
+  const [open, setOpen] = useState(active);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+          active ? "bg-violet-50 text-violet-700" : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+        }`}
+      >
+        <item.icon className="size-4 shrink-0" />
+        <span className="flex-1 text-left">{item.label}</span>
+        <ChevronDown className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-1 ml-4 pl-3 border-l border-neutral-200 space-y-0.5">
+          {item.children!.map((child) => {
+            const childPath = stripQuery(child.href);
+            const childTab = child.href.includes("?tab=") ? child.href.split("?tab=")[1] : null;
+            const childActive = pathname === childPath && currentTab === childTab;
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                className={`block rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  childActive
+                    ? "bg-violet-50 text-violet-700 font-medium"
+                    : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                }`}
+              >
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
