@@ -186,7 +186,7 @@ export function AppShell({
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 border-b border-neutral-200 bg-white flex items-center justify-end px-6 gap-3">
           <Button variant="outline" size="sm" onClick={() => setDemoModeOpen(true)}>
-            <PlayCircle className="size-4" /> 면접 시연 모드
+            <PlayCircle className="size-4" /> 시연 모드
           </Button>
         </header>
         <main className="flex-1 overflow-y-auto">

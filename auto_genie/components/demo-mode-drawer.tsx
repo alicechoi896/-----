@@ -104,7 +104,7 @@ export function DemoModeDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-violet-700">면접 시연 모드</SheetTitle>
+          <SheetTitle className="text-violet-700">시연 모드</SheetTitle>
           <SheetDescription>
             이미 준비된 시연용 데이터를 순서대로 안내합니다. 데이터를 조작하지 않고 화면 이동만
             안내합니다.
