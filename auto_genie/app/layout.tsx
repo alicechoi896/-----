@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "jini AI Marketing Brain",
+  title: "자동화 지니 - 당신의 노하우를 배우는 AI 마케팅 브레인",
   description: "기업 데이터를 학습해 마케팅 전략을 판단하는 AI 운영체계",
 };
 

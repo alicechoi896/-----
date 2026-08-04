@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -103,9 +104,9 @@ export function AppShell({
   return (
     <div className="min-h-screen flex bg-neutral-50">
       <aside className="w-64 shrink-0 border-r border-neutral-200 bg-white flex flex-col">
-        <div className="h-16 flex items-center px-5 border-b border-neutral-200">
-          <span className="text-lg font-semibold text-neutral-900">jini</span>
-          <span className="text-lg font-semibold text-violet-600">.ai</span>
+        <div className="h-16 flex items-center gap-2 px-5 border-b border-neutral-200">
+          <Image src="/icon.png" alt="자동화 지니" width={28} height={28} className="shrink-0" />
+          <span className="text-lg font-semibold text-neutral-900">자동화 지니</span>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
