@@ -46,6 +46,11 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEMO_USER_EMAIL = process.env.DEMO_USER_EMAIL || "demo@intheup.example";
 const DEMO_USER_PASSWORD = process.env.DEMO_USER_PASSWORD || "demo-password-1234";
+// 관리자·기술 시연 모드 토글이 아예 보이지 않는 순수 "일반 사용자 모드" 로그인을
+// 별도로 만들어 둔다 — 모든 워크스페이스에 member 권한으로만 등록한다.
+const DEMO_MEMBER_EMAIL = process.env.DEMO_MEMBER_EMAIL || "user@intheup.example";
+const DEMO_MEMBER_PASSWORD = process.env.DEMO_MEMBER_PASSWORD || "user-password-1234";
+const INTHEUP_ORG_NAME = "주식회사 인더업";
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error(
@@ -161,6 +166,15 @@ interface PersonaSeed {
   contentProjectTitle: string;
   contentOutputs: ContentOutputSeed[];
   performance: { views: number; performanceScore: number }[];
+  performanceAnalysis: {
+    whatWorked: string[];
+    whatUnderperformed: string[];
+    viewsVsPurchaseGap: string;
+    keepElements: string[];
+    reviseElements: string[];
+    nextContentSuggestions: string[];
+  };
+  weightLearning: { column: string; label: string; before: number; after: number };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -324,6 +338,22 @@ const YOUTUBER: PersonaSeed = {
     { views: 24100, performanceScore: 81.5 },
     { views: 31200, performanceScore: 88.3 },
   ],
+  performanceAnalysis: {
+    whatWorked: [
+      "첫 3초 안에 결과·질문을 제시한 후킹 구조 쇼츠의 완주율이 평균보다 높았습니다.",
+      "결과 장면 직후에 배치한 구독 유도 CTA의 반응이 좋았습니다.",
+    ],
+    whatUnderperformed: ["전문지식형 콘텐츠는 조회수 대비 구독 전환이 낮았습니다."],
+    viewsVsPurchaseGap:
+      "조회수는 꾸준히 늘고 있지만 미니 강의 문의 전환은 아직 낮은 편입니다. 후킹·구조화 콘텐츠가 문의 전환에 더 효과적이었습니다.",
+    keepElements: ["3초 후킹 질문", "결과 장면 직후 CTA 배치"],
+    reviseElements: ["전문지식형 콘텐츠의 초반 전개 속도"],
+    nextContentSuggestions: [
+      "구독자를 실제 팬으로 전환하는 후속 시리즈 기획",
+      "소재 뱅크를 활용한 반복 가능한 포맷 제작",
+    ],
+  },
+  weightLearning: { column: "novelty_weight", label: "새로움", before: 1.0, after: 1.15 },
 };
 
 // ---------------------------------------------------------------------------
@@ -491,6 +521,22 @@ const BLOGGER: PersonaSeed = {
     { views: 6800, performanceScore: 74.8 },
     { views: 9100, performanceScore: 82.6 },
   ],
+  performanceAnalysis: {
+    whatWorked: [
+      "사용 전/후 비교 근거를 담은 후기의 협찬 문의 전환이 다른 글보다 높았습니다.",
+      "첫 문단에 결론을 요약한 글의 체류시간과 상위노출 유지 기간이 더 길었습니다.",
+    ],
+    whatUnderperformed: ["단순 정보 나열형 글은 방문자는 늘어도 문의로 이어지지 않았습니다."],
+    viewsVsPurchaseGap:
+      "방문자 수는 꾸준히 늘고 있지만 협찬 문의 전환은 아직 낮은 편입니다. 비교 근거가 있는 후기가 문의 전환에 더 효과적이었습니다.",
+    keepElements: ["사용 전/후 비교 구조", "첫 문단 결론 요약"],
+    reviseElements: ["단순 정보 나열형 글의 후반부 구성"],
+    nextContentSuggestions: [
+      "재구매·재협찬으로 이어지는 후속 후기 시리즈 기획",
+      "롱테일 키워드를 활용한 상위노출 유지 콘텐츠 확대",
+    ],
+  },
+  weightLearning: { column: "authority_weight", label: "전문성", before: 1.0, after: 1.1 },
 };
 
 // ---------------------------------------------------------------------------
@@ -656,6 +702,22 @@ const SELLER: PersonaSeed = {
     { views: 9800, performanceScore: 79.4 },
     { views: 13500, performanceScore: 85.9 },
   ],
+  performanceAnalysis: {
+    whatWorked: [
+      "일회용 대비 비용을 숫자로 비교한 콘텐츠의 구매 전환이 가장 높았습니다.",
+      "실사용 후기 중심 콘텐츠가 신뢰 형성에 효과적이었습니다.",
+    ],
+    whatUnderperformed: ["제품 기능만 나열한 콘텐츠는 체류시간 대비 구매 전환이 낮았습니다."],
+    viewsVsPurchaseGap:
+      "상세페이지 체류시간은 긴 편이지만 구매 전환은 아직 낮습니다. 비교 데이터와 리뷰 근거를 제시한 콘텐츠가 구매 전환에 더 효과적이었습니다.",
+    keepElements: ["일회용 대비 비용 비교", "실사용 후기 근거"],
+    reviseElements: ["기능 나열형 콘텐츠의 도입부"],
+    nextContentSuggestions: [
+      "재구매 유도 타이밍에 맞춘 후속 콘텐츠 제작",
+      "리뷰 리워드 안내를 포함한 신규 구매자 온보딩 콘텐츠",
+    ],
+  },
+  weightLearning: { column: "purchase_link_weight", label: "구매연결", before: 1.0, after: 1.2 },
 };
 
 const PERSONAS: PersonaSeed[] = [YOUTUBER, BLOGGER, SELLER];
@@ -664,17 +726,17 @@ const PERSONAS: PersonaSeed[] = [YOUTUBER, BLOGGER, SELLER];
 // 시딩 로직
 // ---------------------------------------------------------------------------
 
-async function ensureDemoUser(): Promise<string> {
+async function ensureUser(email: string, password: string): Promise<string> {
   const { data: listData, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
   if (listError) throw new Error(`auth 사용자 목록 조회 실패: ${listError.message}`);
-  const found = listData.users.find((u) => u.email === DEMO_USER_EMAIL);
+  const found = listData.users.find((u) => u.email === email);
   if (found) return found.id;
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
-    email: DEMO_USER_EMAIL,
-    password: DEMO_USER_PASSWORD,
+    email,
+    password,
     email_confirm: true,
   });
-  if (createError || !created.user) throw new Error(`데모 계정 생성 실패: ${createError?.message}`);
+  if (createError || !created.user) throw new Error(`계정 생성 실패(${email}): ${createError?.message}`);
   return created.user.id;
 }
 
@@ -996,12 +1058,15 @@ async function seedPersona(persona: PersonaSeed, demoUserId: string): Promise<vo
       target_type: "content_output",
       target_id: outputs[2]?.id ?? outputs[0]?.id ?? null,
       description: `성과 데이터가 등록되었습니다 (성과 점수 ${persona.performance[2]?.performanceScore ?? persona.performance[0].performanceScore}점).`,
+      after_state: { analysis: persona.performanceAnalysis } as Json,
     },
     {
       organization_id: organizationId,
       event_type: "preference_updated",
       target_type: "preference_weights",
-      description: "실제 성과 데이터를 바탕으로 선호 가중치가 소폭 조정되었습니다.",
+      description: `실제 성과 데이터를 바탕으로 ${persona.weightLearning.label} 가중치가 조정되었습니다.`,
+      before_state: { [persona.weightLearning.column]: persona.weightLearning.before } as Json,
+      after_state: { [persona.weightLearning.column]: persona.weightLearning.after } as Json,
     },
   ];
   const { error: learnError } = await supabase.from("learning_events").insert(learningRows);
@@ -1034,15 +1099,47 @@ async function seedPersona(persona: PersonaSeed, demoUserId: string): Promise<vo
   log(p, "처리 작업", `${jobRows.length}건 생성.`);
 }
 
+async function ensureMemberAccountEverywhere(memberUserId: string): Promise<void> {
+  const orgNames = [INTHEUP_ORG_NAME, ...PERSONAS.map((p) => p.orgName)];
+  for (const name of orgNames) {
+    const { data: org, error } = await supabase.from("organizations").select("id").eq("name", name).limit(1).maybeSingle();
+    if (error || !org) {
+      console.warn(`[user-계정] 조직을 찾을 수 없어 건너뜁니다: ${name}`);
+      continue;
+    }
+    // 이미 owner로 등록되어 있다면(예: 같은 이메일을 재사용한 경우) 낮추지 않는다 —
+    // upsert에서 role은 organization_id+user_id가 이미 있으면 새 값으로 덮어쓰므로,
+    // 기존 행이 없을 때만 member로 삽입한다.
+    const { data: existing } = await supabase
+      .from("organization_members")
+      .select("role")
+      .eq("organization_id", org.id)
+      .eq("user_id", memberUserId)
+      .maybeSingle();
+    if (existing) continue;
+    const { error: memberError } = await supabase
+      .from("organization_members")
+      .insert({ organization_id: org.id, user_id: memberUserId, role: "member" });
+    if (memberError) throw new Error(`organization_members(member) 생성 실패: ${memberError.message}`);
+  }
+  log("user-계정", "멤버십", `${orgNames.length}개 워크스페이스에 member 권한을 확인/부여했습니다.`);
+}
+
 async function main() {
   console.log("=== 페르소나 예시 데이터 시드 스크립트 시작 (유튜버 / 블로거 / 셀러) ===\n");
-  const demoUserId = await ensureDemoUser();
+  const demoUserId = await ensureUser(DEMO_USER_EMAIL, DEMO_USER_PASSWORD);
   for (const persona of PERSONAS) {
     await seedPersona(persona, demoUserId);
   }
+
+  const memberUserId = await ensureUser(DEMO_MEMBER_EMAIL, DEMO_MEMBER_PASSWORD);
+  await ensureMemberAccountEverywhere(memberUserId);
+
   console.log("\n=== 완료 ===");
-  console.log(`데모 로그인: ${DEMO_USER_EMAIL} / ${DEMO_USER_PASSWORD}`);
-  console.log("로그인 후 좌측 하단 워크스페이스 전환 메뉴에서 3개 워크스페이스를 오갈 수 있습니다:");
+  console.log(`관리자 로그인(owner, 모드 전환 가능): ${DEMO_USER_EMAIL} / ${DEMO_USER_PASSWORD}`);
+  console.log(`일반 사용자 로그인(member, 항상 일반 사용자 모드): ${DEMO_MEMBER_EMAIL} / ${DEMO_MEMBER_PASSWORD}`);
+  console.log("로그인 후 좌측 하단 워크스페이스 전환 메뉴에서 워크스페이스를 오갈 수 있습니다:");
+  console.log(` - ${INTHEUP_ORG_NAME}`);
   for (const persona of PERSONAS) {
     console.log(` - ${persona.orgName}`);
   }
