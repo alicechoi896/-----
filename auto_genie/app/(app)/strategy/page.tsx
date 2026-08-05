@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { StrategyHomeClient } from "./strategy-home-client";
 
 export default async function StrategyPage() {
-  const org = await requireCurrentOrganization();
+  const { org, mode } = await requireScreenAccess("/strategy");
   const supabase = await createClient();
 
   const [campaignsRes, runsRes, optionsRes, productsRes] = await Promise.all([
@@ -35,5 +35,5 @@ export default async function StrategyPage() {
     };
   });
 
-  return <StrategyHomeClient summaries={summaries} products={productsRes.data ?? []} />;
+  return <StrategyHomeClient summaries={summaries} products={productsRes.data ?? []} screenMode={mode} />;
 }

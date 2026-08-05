@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { ensureContentProjectAction } from "./actions";
 import { OrchestratorClient } from "./orchestrator-client";
 import { ProjectListClient } from "./project-list-client";
@@ -10,7 +10,7 @@ export default async function OrchestratorPage({
   searchParams: Promise<{ strategyOptionId?: string; projectId?: string }>;
 }) {
   const { strategyOptionId, projectId: projectIdParam } = await searchParams;
-  const org = await requireCurrentOrganization();
+  const { org, mode } = await requireScreenAccess("/orchestrator");
   const supabase = await createClient();
 
   let projectId = projectIdParam ?? null;
@@ -27,7 +27,7 @@ export default async function OrchestratorPage({
       .eq("organization_id", org.id)
       .order("created_at", { ascending: false });
 
-    return <ProjectListClient projects={projects ?? []} />;
+    return <ProjectListClient projects={projects ?? []} screenMode={mode} />;
   }
 
   const [projectRes, outputsRes] = await Promise.all([
@@ -49,5 +49,5 @@ export default async function OrchestratorPage({
     );
   }
 
-  return <OrchestratorClient project={projectRes.data} outputs={outputsRes.data ?? []} />;
+  return <OrchestratorClient project={projectRes.data} outputs={outputsRes.data ?? []} screenMode={mode} />;
 }

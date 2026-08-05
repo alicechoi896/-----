@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "seed:personas": "tsx scripts/seed-personas.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.27",

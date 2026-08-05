@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { StrategyDetailClient } from "./strategy-detail-client";
 
 export default async function StrategyDetailPage({
@@ -9,7 +9,7 @@ export default async function StrategyDetailPage({
   params: Promise<{ campaignId: string }>;
 }) {
   const { campaignId } = await params;
-  const org = await requireCurrentOrganization();
+  const { org } = await requireScreenAccess("/strategy");
   const supabase = await createClient();
 
   const { data: campaign } = await supabase

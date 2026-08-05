@@ -1,9 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { BrainClient } from "./brain-client";
 
-export default async function BrainPage() {
-  const org = await requireCurrentOrganization();
+export default async function BrainPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
+  const { org, mode } = await requireScreenAccess("/brain", tab ?? null);
   const supabase = await createClient();
 
   const [entitiesRes, relationsRes, rulesRes, brandRes, evidenceRes] = await Promise.all([
@@ -51,6 +56,7 @@ export default async function BrainPage() {
       decisionRules={rulesRes.data ?? []}
       brandProfile={brandRes.data ?? null}
       evidence={evidence}
+      screenMode={mode}
     />
   );
 }

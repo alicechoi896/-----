@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { LearningClient } from "./learning-client";
 
 // Kept outside the page component so the impure Date.now() read isn't
@@ -8,8 +8,13 @@ function ninetyDaysAgoCutoff(): number {
   return Date.now() - 90 * 24 * 60 * 60 * 1000;
 }
 
-export default async function LearningPage() {
-  const org = await requireCurrentOrganization();
+export default async function LearningPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
+  const { org, mode } = await requireScreenAccess("/learning", tab ?? null);
   const supabase = await createClient();
 
   const [sourcesRes, chunkCountRes, entityCountRes, relationCountRes, ruleCountRes, entitiesRes, evidenceRes, rulesRes] =
@@ -112,6 +117,7 @@ export default async function LearningPage() {
       sources={sources}
       pipelineSummary={pipelineSummary}
       quality={quality}
+      screenMode={mode}
     />
   );
 }

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { createCampaignAndGenerateAction, type CampaignActionState } from "./actions";
 import type { Database } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import { FlaskConical, Plus } from "lucide-react";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -55,9 +56,11 @@ const initialState: CampaignActionState = { error: null };
 export function StrategyHomeClient({
   summaries,
   products,
+  screenMode,
 }: {
   summaries: CampaignSummary[];
   products: { id: string; name: string }[];
+  screenMode: ScreenMode;
 }) {
   const [showForm, setShowForm] = useState(summaries.length === 0);
 
@@ -65,7 +68,9 @@ export function StrategyHomeClient({
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">전략 시뮬레이터</p>
+          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+            {screenMode === "technical" ? "전략 시뮬레이터" : "캠페인 전략"}
+          </p>
           <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
             AI가 기업 데이터를 근거로 마케팅 전략 4개를 비교합니다
           </h1>

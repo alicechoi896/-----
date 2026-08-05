@@ -36,6 +36,7 @@ import {
 import { CONTENT_CATEGORIES } from "./constants";
 import { ReferenceAnalysisClient } from "./reference-analysis/reference-analysis-client";
 import type { Database } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import { Link2, FileText, Upload, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 
 type DataSource = Database["public"]["Tables"]["data_sources"]["Row"];
@@ -48,6 +49,18 @@ const STATUS_LABEL: Record<DataSource["status"], string> = {
   chunking: "분할 중",
   embedding: "임베딩 중",
   analyzing: "지식 분석 중",
+  completed: "완료",
+  failed: "실패",
+};
+
+// 일반 사용자 화면에서는 파이프라인 처리 단계(추출/분할/임베딩)를 노출하지 않고
+// "분석 중"으로 뭉뚱그려 보여준다. 실제 status 값과 관리자 화면 라벨은 그대로 둔다.
+const USER_STATUS_LABEL: Record<DataSource["status"], string> = {
+  pending: "대기",
+  extracting: "분석 중",
+  chunking: "분석 중",
+  embedding: "분석 중",
+  analyzing: "분석 중",
   completed: "완료",
   failed: "실패",
 };
@@ -85,48 +98,61 @@ export function LearningClient({
   sources,
   pipelineSummary,
   quality,
+  screenMode,
 }: {
   organizationId: string;
   sources: DataSource[];
   pipelineSummary: PipelineSummary;
   quality: QualitySignal;
+  screenMode: ScreenMode;
 }) {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") ?? "register";
+  const isTechnical = screenMode === "technical";
 
   return (
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">AI 학습센터</p>
+        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+          {isTechnical ? "AI 학습센터" : "내 비즈니스"}
+        </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
-          기업 데이터를 등록하고 AI 분석 파이프라인을 실행합니다
+          {isTechnical
+            ? "기업 데이터를 등록하고 AI 분석 파이프라인을 실행합니다"
+            : "회사·상품 자료를 등록하고 AI 분석 결과를 확인합니다"}
         </h1>
       </div>
 
       <Tabs key={initialTab} defaultValue={initialTab}>
         <TabsList>
-          <TabsTrigger value="register">데이터 등록</TabsTrigger>
-          <TabsTrigger value="reference">참조 콘텐츠 분석</TabsTrigger>
-          <TabsTrigger value="list">데이터 목록 ({sources.length})</TabsTrigger>
-          <TabsTrigger value="pipeline">분석 파이프라인</TabsTrigger>
-          <TabsTrigger value="quality">데이터 품질관리</TabsTrigger>
+          <TabsTrigger value="register">{isTechnical ? "데이터 등록" : "회사·상품 자료 등록"}</TabsTrigger>
+          {isTechnical && <TabsTrigger value="reference">참조 콘텐츠 분석</TabsTrigger>}
+          <TabsTrigger value="list">
+            {isTechnical ? "데이터 목록" : "등록 자료 관리"} ({sources.length})
+          </TabsTrigger>
+          {isTechnical && <TabsTrigger value="pipeline">분석 파이프라인</TabsTrigger>}
+          <TabsTrigger value="quality">{isTechnical ? "데이터 품질관리" : "AI 분석 결과 확인"}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="register" className="mt-4">
           <RegisterPanel />
         </TabsContent>
 
-        <TabsContent value="reference" className="mt-4">
-          <ReferenceAnalysisClient />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="reference" className="mt-4">
+            <ReferenceAnalysisClient />
+          </TabsContent>
+        )}
 
         <TabsContent value="list" className="mt-4">
-          <SourceList sources={sources} />
+          <SourceList sources={sources} screenMode={screenMode} />
         </TabsContent>
 
-        <TabsContent value="pipeline" className="mt-4">
-          <PipelineFlow summary={pipelineSummary} />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="pipeline" className="mt-4">
+            <PipelineFlow summary={pipelineSummary} />
+          </TabsContent>
+        )}
 
         <TabsContent value="quality" className="mt-4">
           <QualityPanel quality={quality} />
@@ -277,9 +303,10 @@ function FileForm() {
   );
 }
 
-function SourceList({ sources }: { sources: DataSource[] }) {
+function SourceList({ sources, screenMode }: { sources: DataSource[]; screenMode: ScreenMode }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const statusLabel = screenMode === "technical" ? STATUS_LABEL : USER_STATUS_LABEL;
 
   if (sources.length === 0) {
     return (
@@ -309,9 +336,9 @@ function SourceList({ sources }: { sources: DataSource[] }) {
               <TableCell>{SOURCE_TYPE_LABEL[source.source_type]}</TableCell>
               <TableCell>
                 <Badge className={STATUS_COLOR[source.status]} variant="secondary">
-                  {STATUS_LABEL[source.status]}
+                  {statusLabel[source.status]}
                 </Badge>
-                {source.error_message && (
+                {source.error_message && screenMode === "technical" && (
                   <p className="mt-1 text-xs text-orange-600 max-w-xs truncate">{source.error_message}</p>
                 )}
               </TableCell>

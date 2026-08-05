@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { CampaignGoal, CampaignStatus } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import {
   Package,
   Sparkles,
@@ -110,15 +111,19 @@ export function WorkflowClient({
   userEmail,
   runs,
   orgDataNote,
+  screenMode,
 }: {
   userEmail: string;
   runs: WorkflowRun[];
   orgDataNote: string;
+  screenMode: ScreenMode;
 }) {
   return (
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">자동화 워크플로우</p>
+        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+          {screenMode === "technical" ? "자동화 워크플로우" : "발행·자동화"}
+        </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
           캠페인별 자동화 파이프라인 진행 상태를 확인합니다
         </h1>

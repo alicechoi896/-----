@@ -1,24 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import {
-  Radar,
-  UploadCloud,
-  Sparkles,
-  FlaskConical,
-  LayoutGrid,
-  Workflow,
-  TrendingUp,
-  Cpu,
-  Settings,
   ChevronsUpDown,
   ChevronDown,
   LogOut,
   PlayCircle,
   Check,
+  ShieldCheck,
+  UserRound,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,75 +23,54 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { switchOrganizationAction, signOutAction } from "@/app/(app)/actions";
+import { switchOrganizationAction, signOutAction, setScreenModeAction } from "@/app/(app)/actions";
 import { DemoModeDrawer } from "@/components/demo-mode-drawer";
 import { DemoBrainStoreProvider } from "@/lib/demo/store";
+import { getMenuForMode, SETTINGS_ITEM, type MenuItem, type MenuChild } from "@/lib/access/menu-config";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import type { CurrentOrganization } from "@/lib/auth";
 
-interface NavChild {
-  href: string;
-  label: string;
+function stripQuery(route: string): string {
+  return route.split("?")[0];
 }
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: typeof Radar;
-  children?: NavChild[];
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "AI 컨트롤타워", icon: Radar },
-  {
-    href: "/learning",
-    label: "AI 학습센터",
-    icon: UploadCloud,
-    children: [
-      { href: "/learning", label: "데이터 수집" },
-      { href: "/learning?tab=reference", label: "참조 콘텐츠 분석" },
-      { href: "/learning?tab=pipeline", label: "분석 파이프라인" },
-      { href: "/learning?tab=quality", label: "데이터 품질관리" },
-    ],
-  },
-  { href: "/brain", label: "마케팅 브레인", icon: Sparkles },
-  { href: "/strategy", label: "전략 시뮬레이터", icon: FlaskConical },
-  { href: "/orchestrator", label: "콘텐츠 오케스트레이터", icon: LayoutGrid },
-  { href: "/workflow", label: "자동화 워크플로우", icon: Workflow },
-  {
-    href: "/performance",
-    label: "성과 학습센터",
-    icon: TrendingUp,
-    children: [
-      { href: "/performance", label: "통합 성과" },
-      { href: "/performance?tab=ai-analysis", label: "AI 성과 해석" },
-      { href: "/performance?tab=rule-update", label: "생성 규칙 업데이트" },
-      { href: "/performance?tab=before-after", label: "학습 전후 비교" },
-      { href: "/performance?tab=brain-history", label: "AI 브레인 변경 이력" },
-    ],
-  },
-  { href: "/technology", label: "AI 기술 리포트", icon: Cpu },
-  { href: "/settings", label: "설정", icon: Settings },
-];
-
-function stripQuery(href: string): string {
-  return href.split("?")[0];
+function tabOf(route: string): string | null {
+  return route.includes("?tab=") ? route.split("?tab=")[1] : null;
 }
 
 export function AppShell({
   organization,
   organizations,
   userEmail,
+  screenMode,
+  canUseTechnicalMode,
   children,
 }: {
   organization: CurrentOrganization;
   organizations: CurrentOrganization[];
   userEmail: string;
+  screenMode: ScreenMode;
+  canUseTechnicalMode: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
   const [demoModeOpen, setDemoModeOpen] = useState(false);
+  const [modePending, startModeTransition] = useTransition();
+  const navItems = getMenuForMode(screenMode);
+
+  useEffect(() => {
+    if (searchParams.get("accessDenied") === "1") {
+      toast.error("접근 권한이 없는 화면입니다.");
+      const params = new URLSearchParams(searchParams);
+      params.delete("accessDenied");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when accessDenied param changes
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen flex bg-neutral-50">
@@ -108,14 +81,15 @@ export function AppShell({
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {NAV_ITEMS.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          {navItems.map((item) => {
+            const ownPaths = [item.route, ...(item.children?.map((c) => c.route) ?? [])].map(stripQuery);
+            const active = ownPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
             return item.children ? (
-              <NavGroup key={item.href} item={item} active={active} pathname={pathname} currentTab={currentTab} />
+              <NavGroup key={item.id} item={item} active={active} pathname={pathname} currentTab={currentTab} />
             ) : (
               <Link
-                key={item.href}
-                href={item.href}
+                key={item.id}
+                href={item.route}
                 className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-violet-50 text-violet-700"
@@ -127,6 +101,18 @@ export function AppShell({
               </Link>
             );
           })}
+
+          <Link
+            href={SETTINGS_ITEM.route}
+            className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+              pathname === SETTINGS_ITEM.route
+                ? "bg-violet-50 text-violet-700"
+                : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+            }`}
+          >
+            <SETTINGS_ITEM.icon className="size-4 shrink-0" />
+            {SETTINGS_ITEM.label}
+          </Link>
         </nav>
 
         <div className="border-t border-neutral-200 p-3 space-y-2">
@@ -173,10 +159,47 @@ export function AppShell({
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 border-b border-neutral-200 bg-white flex items-center justify-end px-6 gap-3">
-          <Button variant="outline" size="sm" onClick={() => setDemoModeOpen(true)}>
-            <PlayCircle className="size-4" /> 시연 모드
-          </Button>
+        <header className="border-b border-neutral-200 bg-white">
+          <div className="h-16 flex items-center justify-end px-6 gap-3">
+            <span
+              className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
+                screenMode === "technical"
+                  ? "bg-violet-100 text-violet-700"
+                  : "bg-neutral-100 text-neutral-600"
+              }`}
+            >
+              {screenMode === "technical" ? (
+                <ShieldCheck className="size-3.5" />
+              ) : (
+                <UserRound className="size-3.5" />
+              )}
+              {screenMode === "technical" ? "관리자·기술 시연 모드" : "일반 사용자 모드"}
+            </span>
+
+            {canUseTechnicalMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={modePending}
+                onClick={() =>
+                  startModeTransition(async () => {
+                    await setScreenModeAction(screenMode === "technical" ? "user" : "technical");
+                  })
+                }
+              >
+                {screenMode === "technical" ? "일반 사용자 모드" : "관리자·기술 시연 모드"}
+              </Button>
+            )}
+
+            <Button variant="outline" size="sm" onClick={() => setDemoModeOpen(true)}>
+              <PlayCircle className="size-4" /> 시연 모드
+            </Button>
+          </div>
+          {screenMode === "technical" && (
+            <div className="px-6 py-1.5 bg-violet-50 border-t border-violet-100 text-xs text-violet-700">
+              AI의 데이터 처리 과정과 판단 근거를 확인하는 관리자용 화면입니다.
+            </div>
+          )}
         </header>
         <main className="flex-1 overflow-y-auto">
           <DemoBrainStoreProvider>{children}</DemoBrainStoreProvider>
@@ -194,7 +217,7 @@ function NavGroup({
   pathname,
   currentTab,
 }: {
-  item: NavItem;
+  item: MenuItem;
   active: boolean;
   pathname: string;
   currentTab: string | null;
@@ -216,14 +239,14 @@ function NavGroup({
       </button>
       {open && (
         <div className="mt-1 ml-4 pl-3 border-l border-neutral-200 space-y-0.5">
-          {item.children!.map((child) => {
-            const childPath = stripQuery(child.href);
-            const childTab = child.href.includes("?tab=") ? child.href.split("?tab=")[1] : null;
+          {item.children!.map((child: MenuChild) => {
+            const childPath = stripQuery(child.route);
+            const childTab = tabOf(child.route);
             const childActive = pathname === childPath && currentTab === childTab;
             return (
               <Link
-                key={child.href}
-                href={child.href}
+                key={child.id}
+                href={child.route}
                 className={`block rounded-lg px-3 py-1.5 text-sm transition-colors ${
                   childActive
                     ? "bg-violet-50 text-violet-700 font-medium"

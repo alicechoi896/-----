@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 export default async function DashboardPage() {
-  const org = await requireCurrentOrganization();
+  const { org, mode } = await requireScreenAccess("/dashboard");
   const supabase = await createClient();
 
   const [
@@ -126,7 +126,9 @@ export default async function DashboardPage() {
     <TooltipProvider>
       <div className="p-6 max-w-[1440px] mx-auto space-y-6">
         <div className="rounded-2xl border border-neutral-200 bg-white p-6">
-          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">AI 컨트롤타워</p>
+          <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+            {mode === "technical" ? "AI 컨트롤타워" : "홈"}
+          </p>
           <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
             기업의 데이터를 학습해 다음 마케팅 전략을 판단합니다.
           </h1>

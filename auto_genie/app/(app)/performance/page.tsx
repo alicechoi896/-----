@@ -1,14 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization, requireUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { PerformanceClient } from "./performance-client";
 
 export default async function PerformancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ contentOutputId?: string }>;
+  searchParams: Promise<{ contentOutputId?: string; tab?: string }>;
 }) {
-  const { contentOutputId } = await searchParams;
-  const org = await requireCurrentOrganization();
+  const { contentOutputId, tab } = await searchParams;
+  const { org, mode } = await requireScreenAccess("/performance", tab ?? null);
   const user = await requireUser();
   const supabase = await createClient();
 
@@ -45,6 +46,7 @@ export default async function PerformancePage({
       events={eventsRes.data ?? []}
       weights={weightsRes.data ?? null}
       approverEmail={user.email ?? "워크스페이스 소유자"}
+      screenMode={mode}
     />
   );
 }

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { generateContentAction, updateContentOutputAction, deleteContentOutputAction } from "./actions";
 import type { Database } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import { Sparkles, Pencil, Copy, RefreshCw, TrendingUp, Trash2, History } from "lucide-react";
 
 type ContentProject = Database["public"]["Tables"]["content_projects"]["Row"];
@@ -26,9 +27,11 @@ const PLATFORMS: { value: string; label: string }[] = [
 export function OrchestratorClient({
   project,
   outputs,
+  screenMode,
 }: {
   project: ContentProject;
   outputs: ContentOutput[];
+  screenMode: ScreenMode;
 }) {
   const router = useRouter();
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(
@@ -40,7 +43,9 @@ export function OrchestratorClient({
   return (
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">콘텐츠 오케스트레이터</p>
+        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+          {screenMode === "technical" ? "콘텐츠 오케스트레이터" : "콘텐츠 만들기"}
+        </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">{project.title}</h1>
         <p className="mt-1 text-sm text-neutral-500">{project.core_message}</p>
       </div>

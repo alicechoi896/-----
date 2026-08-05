@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization, requireUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { WorkflowClient, type StageStatus, type WorkflowRun, type WorkflowStage } from "./workflow-client";
 import type { Database } from "@/types/database";
 
@@ -22,7 +23,7 @@ function earliestBy<T>(rows: T[], key: (row: T) => string): T | null {
 }
 
 export default async function WorkflowPage() {
-  const org = await requireCurrentOrganization();
+  const { org, mode } = await requireScreenAccess("/workflow");
   const user = await requireUser();
   const supabase = await createClient();
 
@@ -240,5 +241,5 @@ export default async function WorkflowPage() {
       ? `'자료 등록'/'AI 분석' 단계는 캠페인별로 연결되지 않고 조직 전체 자료(${dataSources.length}건) 기준으로 표시됩니다.`
       : "'자료 등록'/'AI 분석' 단계는 조직 전체 자료 기준으로 표시됩니다. 아직 등록된 자료가 없습니다.";
 
-  return <WorkflowClient userEmail={user.email ?? ""} runs={runs} orgDataNote={orgDataNote} />;
+  return <WorkflowClient userEmail={user.email ?? ""} runs={runs} orgDataNote={orgDataNote} screenMode={mode} />;
 }

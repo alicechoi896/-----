@@ -19,6 +19,7 @@ import { registerPerformanceAction, type PerformanceActionState } from "./action
 import { RuleUpdateMainPanel, RuleUpdateBeforeAfterPanel } from "./rule-update/rule-update-client";
 import { BrainHistoryPanel } from "./brain-history/brain-history-client";
 import type { Database } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import { Sparkles, TrendingUp, TrendingDown } from "lucide-react";
 
 type ContentOutput = Database["public"]["Tables"]["content_outputs"]["Row"];
@@ -49,6 +50,7 @@ export function PerformanceClient({
   events,
   weights,
   approverEmail,
+  screenMode,
 }: {
   preselectedOutputId: string | null;
   outputs: ContentOutput[];
@@ -58,7 +60,9 @@ export function PerformanceClient({
   events: LearningEvent[];
   weights: Database["public"]["Tables"]["preference_weights"]["Row"] | null;
   approverEmail: string;
+  screenMode: ScreenMode;
 }) {
+  const isTechnical = screenMode === "technical";
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") ?? "overview";
 
@@ -110,7 +114,9 @@ export function PerformanceClient({
   return (
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">성과 학습센터</p>
+        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+          {isTechnical ? "성과 학습센터" : "성과"}
+        </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
           콘텐츠 성과를 입력하면 AI가 원인을 분석하고 다음 전략에 반영합니다
         </h1>
@@ -120,9 +126,9 @@ export function PerformanceClient({
         <TabsList>
           <TabsTrigger value="overview">통합 성과</TabsTrigger>
           <TabsTrigger value="ai-analysis">AI 성과 해석</TabsTrigger>
-          <TabsTrigger value="rule-update">생성 규칙 업데이트</TabsTrigger>
-          <TabsTrigger value="before-after">학습 전후 비교</TabsTrigger>
-          <TabsTrigger value="brain-history">AI 브레인 변경 이력</TabsTrigger>
+          {isTechnical && <TabsTrigger value="rule-update">생성 규칙 업데이트</TabsTrigger>}
+          {isTechnical && <TabsTrigger value="before-after">학습 전후 비교</TabsTrigger>}
+          {isTechnical && <TabsTrigger value="brain-history">AI 브레인 변경 이력</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-6">
@@ -145,7 +151,7 @@ export function PerformanceClient({
             </div>
           )}
 
-          {weightEvents.length > 0 && (
+          {isTechnical && weightEvents.length > 0 && (
             <div className="rounded-2xl border border-neutral-200 bg-white p-5">
               <p className="font-medium text-neutral-900 mb-3">학습 전후 가중치 (선호 학습)</p>
               <div className="space-y-2">
@@ -193,17 +199,23 @@ export function PerformanceClient({
           )}
         </TabsContent>
 
-        <TabsContent value="rule-update" className="mt-4">
-          <RuleUpdateMainPanel approverEmail={approverEmail} />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="rule-update" className="mt-4">
+            <RuleUpdateMainPanel approverEmail={approverEmail} />
+          </TabsContent>
+        )}
 
-        <TabsContent value="before-after" className="mt-4">
-          <RuleUpdateBeforeAfterPanel />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="before-after" className="mt-4">
+            <RuleUpdateBeforeAfterPanel />
+          </TabsContent>
+        )}
 
-        <TabsContent value="brain-history" className="mt-4">
-          <BrainHistoryPanel />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="brain-history" className="mt-4">
+            <BrainHistoryPanel />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

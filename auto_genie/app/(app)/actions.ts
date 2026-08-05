@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { CURRENT_ORG_COOKIE } from "@/lib/auth";
+import { CURRENT_ORG_COOKIE, requireCurrentOrganization } from "@/lib/auth";
+import { SCREEN_MODE_COOKIE, canUseTechnicalMode, type ScreenMode } from "@/lib/access/screen-mode";
 
 export async function switchOrganizationAction(organizationId: string) {
   const supabase = await createClient();
@@ -36,5 +37,26 @@ export async function switchOrganizationAction(organizationId: string) {
 export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete(SCREEN_MODE_COOKIE);
   redirect("/login");
+}
+
+export async function setScreenModeAction(mode: ScreenMode) {
+  const org = await requireCurrentOrganization();
+  if (mode === "technical" && !canUseTechnicalMode(org.role)) {
+    throw new Error("관리자·기술 시연 모드 접근 권한이 없습니다.");
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(SCREEN_MODE_COOKIE, mode, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+  });
+  revalidatePath("/", "layout");
+
+  if (mode === "user") {
+    redirect("/dashboard");
+  }
 }

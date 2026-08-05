@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireCurrentOrganization } from "@/lib/auth";
+import { requireScreenAccess } from "@/lib/access/route-access";
 import { currentModelNames } from "@/lib/ai/provider";
 import { TechnologyClient, type LayerStats, type ProcessingJobRow } from "./technology-client";
 import type { SourceType } from "@/types/database";
 
 export default async function TechnologyPage() {
-  const org = await requireCurrentOrganization();
+  const { org } = await requireScreenAccess("/technology");
   const supabase = await createClient();
 
   const [

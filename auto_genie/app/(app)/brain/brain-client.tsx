@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { EvidenceDrawer, type EvidenceItem } from "@/components/brain/evidence-d
 import { ENTITY_TYPE_ICON, ENTITY_TYPE_COLOR } from "@/components/brain/entity-meta";
 import { editEntityAction, editBrandProfileAction, toggleDecisionRuleAction } from "./actions";
 import type { Database, EntityType } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import { Pencil, Eye, ArrowRight, Sparkles } from "lucide-react";
 
 type Entity = Database["public"]["Tables"]["knowledge_entities"]["Row"];
@@ -24,13 +26,18 @@ export function BrainClient({
   decisionRules,
   brandProfile,
   evidence,
+  screenMode,
 }: {
   entities: Entity[];
   relations: Relation[];
   decisionRules: DecisionRule[];
   brandProfile: BrandProfile;
   evidence: EvidenceItem[];
+  screenMode: ScreenMode;
 }) {
+  const isTechnical = screenMode === "technical";
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") ?? "dna";
   const [drawerEntity, setDrawerEntity] = useState<Entity | null>(null);
   const evidenceByEntity = useMemo(() => {
     const map = new Map<string, EvidenceItem[]>();
@@ -47,19 +54,23 @@ export function BrainClient({
   return (
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">마케팅 브레인</p>
+        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+          {isTechnical ? "마케팅 브레인" : "내 브랜드 정보"}
+        </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
-          AI가 구조화한 기업의 마케팅 지식과 의사결정 기준
+          {isTechnical
+            ? "AI가 구조화한 기업의 마케팅 지식과 의사결정 기준"
+            : "AI가 정리한 우리 회사, 상품, 고객, 브랜드 정보"}
         </h1>
       </div>
 
-      <Tabs defaultValue="dna">
+      <Tabs key={initialTab} defaultValue={initialTab}>
         <TabsList>
-          <TabsTrigger value="dna">기업 DNA</TabsTrigger>
-          <TabsTrigger value="problem-map">고객 문제지도</TabsTrigger>
-          <TabsTrigger value="expert-map">전문가 사고지도</TabsTrigger>
-          <TabsTrigger value="graph">지식그래프</TabsTrigger>
-          <TabsTrigger value="rules">의사결정 규칙</TabsTrigger>
+          <TabsTrigger value="dna">{isTechnical ? "기업 DNA" : "내 브랜드 정보"}</TabsTrigger>
+          {isTechnical && <TabsTrigger value="problem-map">고객 문제지도</TabsTrigger>}
+          {isTechnical && <TabsTrigger value="expert-map">전문가 사고지도</TabsTrigger>}
+          {isTechnical && <TabsTrigger value="graph">지식그래프</TabsTrigger>}
+          {isTechnical && <TabsTrigger value="rules">의사결정 규칙</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="dna" className="mt-4 space-y-6">
@@ -97,25 +108,33 @@ export function BrainClient({
           )}
         </TabsContent>
 
-        <TabsContent value="problem-map" className="mt-4">
-          <ProblemMap entities={entities} relations={relations} />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="problem-map" className="mt-4">
+            <ProblemMap entities={entities} relations={relations} />
+          </TabsContent>
+        )}
 
-        <TabsContent value="expert-map" className="mt-4">
-          <ExpertMap rules={decisionRules} />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="expert-map" className="mt-4">
+            <ExpertMap rules={decisionRules} />
+          </TabsContent>
+        )}
 
-        <TabsContent value="graph" className="mt-4">
-          <KnowledgeGraph
-            entities={entities}
-            relations={relations}
-            onSelectEntity={(id) => setDrawerEntity(entities.find((e) => e.id === id) ?? null)}
-          />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="graph" className="mt-4">
+            <KnowledgeGraph
+              entities={entities}
+              relations={relations}
+              onSelectEntity={(id) => setDrawerEntity(entities.find((e) => e.id === id) ?? null)}
+            />
+          </TabsContent>
+        )}
 
-        <TabsContent value="rules" className="mt-4">
-          <RulesTable rules={decisionRules} />
-        </TabsContent>
+        {isTechnical && (
+          <TabsContent value="rules" className="mt-4">
+            <RulesTable rules={decisionRules} />
+          </TabsContent>
+        )}
       </Tabs>
 
       <EvidenceDrawer

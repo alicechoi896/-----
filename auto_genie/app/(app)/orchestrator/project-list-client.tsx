@@ -2,15 +2,24 @@
 
 import Link from "next/link";
 import type { Database } from "@/types/database";
+import type { ScreenMode } from "@/lib/access/screen-mode";
 import { LayoutGrid } from "lucide-react";
 
 type ContentProject = Database["public"]["Tables"]["content_projects"]["Row"];
 
-export function ProjectListClient({ projects }: { projects: ContentProject[] }) {
+export function ProjectListClient({
+  projects,
+  screenMode,
+}: {
+  projects: ContentProject[];
+  screenMode: ScreenMode;
+}) {
   return (
     <div className="p-6 max-w-[1440px] mx-auto space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">콘텐츠 오케스트레이터</p>
+        <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">
+          {screenMode === "technical" ? "콘텐츠 오케스트레이터" : "콘텐츠 만들기"}
+        </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
           선택한 전략을 여러 플랫폼 콘텐츠로 동시에 변환합니다
         </h1>
