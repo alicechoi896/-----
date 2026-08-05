@@ -59,7 +59,7 @@ export function StrategyHomeClient({
   screenMode,
 }: {
   summaries: CampaignSummary[];
-  products: { id: string; name: string }[];
+  products: { id: string; name: string; summary: string | null }[];
   screenMode: ScreenMode;
 }) {
   const [showForm, setShowForm] = useState(summaries.length === 0);
@@ -105,6 +105,15 @@ export function StrategyHomeClient({
                       </Badge>
                     </div>
                     <p className="mt-1 text-sm text-neutral-500">{campaign.current_problem}</p>
+                    {Array.isArray(campaign.platforms) && campaign.platforms.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {(campaign.platforms as string[]).map((p) => (
+                          <Badge key={p} variant="outline" className="text-[10px] text-neutral-500">
+                            {PLATFORM_LABEL[p] ?? p}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xs text-neutral-400">
@@ -126,9 +135,11 @@ export function StrategyHomeClient({
   );
 }
 
-function CampaignForm({ products }: { products: { id: string; name: string }[] }) {
+function CampaignForm({ products }: { products: { id: string; name: string; summary: string | null }[] }) {
   const [state, action, pending] = useActionState(createCampaignAndGenerateAction, initialState);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
 
   return (
     <form action={action} className="rounded-2xl border border-neutral-200 bg-white p-6 space-y-4 max-w-2xl">
@@ -140,18 +151,29 @@ function CampaignForm({ products }: { products: { id: string; name: string }[] }
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>상품</Label>
-          <Select name="productEntityId">
+          <Select name="productEntityId" value={selectedProductId} onValueChange={setSelectedProductId}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="상품 선택 (선택)" />
             </SelectTrigger>
             <SelectContent>
-              {products.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
+              {products.length === 0 ? (
+                <p className="px-2 py-1.5 text-xs text-neutral-400">
+                  등록된 상품이 없습니다. 내 비즈니스에서 자료를 먼저 등록하세요.
+                </p>
+              ) : (
+                products.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
+          <p className="text-xs text-neutral-400">
+            {selectedProduct?.summary
+              ? `내 브랜드 정보에서 추출된 상품: ${selectedProduct.summary}`
+              : "내 비즈니스 > 내 브랜드 정보에서 AI가 추출한 상품 목록입니다."}
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label>목표</Label>

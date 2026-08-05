@@ -190,3 +190,17 @@ export const performanceAnalysisSchema = z.object({
 });
 
 export type PerformanceAnalysis = z.infer<typeof performanceAnalysisSchema>;
+
+// ---------------------------------------------------------------------------
+// Content-strategy fit analysis (사용자가 직접 등록한 콘텐츠 vs 전략)
+// ---------------------------------------------------------------------------
+
+export const contentFitAnalysisSchema = z.object({
+  fitScore: z.number().min(0).max(100),
+  matchedElements: z.array(z.string()),
+  mismatchedElements: z.array(z.string()),
+  suggestions: z.array(z.string()),
+  summary: z.string().min(1).max(1000),
+});
+
+export type ContentFitAnalysis = z.infer<typeof contentFitAnalysisSchema>;

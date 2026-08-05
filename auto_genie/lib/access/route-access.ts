@@ -21,7 +21,7 @@ const ROUTE_AUDIENCE: Record<string, RouteAudience | Record<string, RouteAudienc
     register: "shared",
     list: "shared",
     quality: "shared",
-    reference: "technical",
+    reference: "shared",
     pipeline: "technical",
   },
   "/brain": {

@@ -39,6 +39,15 @@ import { RefreshCw, Eye, CheckCircle2, TrendingUp } from "lucide-react";
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 type StrategyOption = Database["public"]["Tables"]["strategy_options"]["Row"];
 
+const CAMPAIGN_PLATFORM_LABEL: Record<string, string> = {
+  naver_blog: "네이버 블로그",
+  instagram: "인스타그램",
+  threads: "스레드",
+  youtube_shorts: "유튜브 쇼츠",
+  newsletter: "뉴스레터",
+  landing_page: "랜딩페이지",
+};
+
 interface EvidencePayload {
   citedChunks: { dataSourceTitle: string; excerpt: string; similarity: number }[];
   appliedRules: string[];
@@ -126,6 +135,16 @@ export function StrategyDetailClient({
           <p className="text-xs font-medium tracking-wide text-violet-600 uppercase">전략 비교</p>
           <h1 className="mt-1 text-2xl font-semibold text-neutral-900">{campaign.name}</h1>
           <p className="mt-1 text-sm text-neutral-500">{campaign.current_problem}</p>
+          {Array.isArray(campaign.platforms) && campaign.platforms.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-neutral-400">선택한 채널:</span>
+              {(campaign.platforms as string[]).map((p) => (
+                <Badge key={p} variant="outline" className="text-[10px] text-neutral-600">
+                  {CAMPAIGN_PLATFORM_LABEL[p] ?? p}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
         <Button
           variant="outline"

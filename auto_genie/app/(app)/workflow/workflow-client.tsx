@@ -125,24 +125,30 @@ export function WorkflowClient({
           {screenMode === "technical" ? "자동화 워크플로우" : "발행·자동화"}
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
-          캠페인별 자동화 파이프라인 진행 상태를 확인합니다
+          캠페인이 자료 등록부터 성과 입력까지 어느 단계에 있는지 한눈에 확인합니다
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
           상품/자료 등록 → AI 분석 → 전략 생성 → 전략 승인 → 콘텐츠 생성 → 콘텐츠 검수 → 성과 입력 → AI 학습 반영
         </p>
+        <p className="mt-2 text-xs text-neutral-400">
+          이 화면은 채널에 실제로 콘텐츠를 자동 발행하지 않습니다. 각 캠페인이 어느 단계까지 진행됐는지 보여주고,
+          다음 단계로 바로 이동할 수 있게 도와줍니다. 실제 발행 자동화는 아래 안내를 참고하세요.
+        </p>
       </div>
+
+      <ExternalPublishCard />
 
       <TemplateSection />
 
       <div>
-        <h2 className="text-lg font-semibold text-neutral-900 mb-1">워크플로우 실행 현황</h2>
+        <h2 className="text-lg font-semibold text-neutral-900 mb-1">캠페인 진행 현황</h2>
         <p className="text-sm text-neutral-500 mb-4">{orgDataNote}</p>
 
         {runs.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-12 text-center text-neutral-500">
-            <p>아직 진행 중인 워크플로우가 없습니다.</p>
+            <p>아직 진행 중인 캠페인이 없습니다.</p>
             <p className="mt-1 text-sm">
-              워크플로우는 자료를 등록하고 전략을 생성하는 순간부터 시작됩니다. 먼저{" "}
+              진행 현황은 자료를 등록하고 전략을 생성하는 순간부터 시작됩니다. 먼저{" "}
               <Link href="/learning" className="text-violet-600 underline underline-offset-2">
                 AI 학습센터
               </Link>
@@ -161,8 +167,6 @@ export function WorkflowClient({
           </div>
         )}
       </div>
-
-      <ExternalPublishCard />
     </div>
   );
 }

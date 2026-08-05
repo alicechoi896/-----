@@ -14,7 +14,11 @@ export default async function StrategyPage() {
       .order("created_at", { ascending: false }),
     supabase.from("strategy_runs").select("*").eq("organization_id", org.id),
     supabase.from("strategy_options").select("id, strategy_run_id, selected, final_score").eq("organization_id", org.id),
-    supabase.from("knowledge_entities").select("id, name").eq("organization_id", org.id).eq("entity_type", "product"),
+    supabase
+      .from("knowledge_entities")
+      .select("id, name, summary")
+      .eq("organization_id", org.id)
+      .eq("entity_type", "product"),
   ]);
 
   const campaigns = campaignsRes.data ?? [];

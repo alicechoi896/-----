@@ -30,13 +30,18 @@ export default async function OrchestratorPage({
     return <ProjectListClient projects={projects ?? []} screenMode={mode} />;
   }
 
-  const [projectRes, outputsRes] = await Promise.all([
+  const [projectRes, outputsRes, strategyOptionsRes] = await Promise.all([
     supabase.from("content_projects").select("*").eq("id", projectId).eq("organization_id", org.id).single(),
     supabase
       .from("content_outputs")
       .select("*")
       .eq("content_project_id", projectId)
       .eq("organization_id", org.id),
+    supabase
+      .from("strategy_options")
+      .select("id, title, strategy_type")
+      .eq("organization_id", org.id)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (!projectRes.data) {
@@ -49,5 +54,12 @@ export default async function OrchestratorPage({
     );
   }
 
-  return <OrchestratorClient project={projectRes.data} outputs={outputsRes.data ?? []} screenMode={mode} />;
+  return (
+    <OrchestratorClient
+      project={projectRes.data}
+      outputs={outputsRes.data ?? []}
+      strategyOptions={strategyOptionsRes.data ?? []}
+      screenMode={mode}
+    />
+  );
 }

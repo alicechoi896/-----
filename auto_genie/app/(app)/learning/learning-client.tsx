@@ -126,7 +126,7 @@ export function LearningClient({
       <Tabs key={initialTab} defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="register">{isTechnical ? "데이터 등록" : "회사·상품 자료 등록"}</TabsTrigger>
-          {isTechnical && <TabsTrigger value="reference">참조 콘텐츠 분석</TabsTrigger>}
+          <TabsTrigger value="reference">참조 콘텐츠 분석</TabsTrigger>
           <TabsTrigger value="list">
             {isTechnical ? "데이터 목록" : "등록 자료 관리"} ({sources.length})
           </TabsTrigger>
@@ -138,11 +138,9 @@ export function LearningClient({
           <RegisterPanel />
         </TabsContent>
 
-        {isTechnical && (
-          <TabsContent value="reference" className="mt-4">
-            <ReferenceAnalysisClient />
-          </TabsContent>
-        )}
+        <TabsContent value="reference" className="mt-4">
+          <ReferenceAnalysisClient />
+        </TabsContent>
 
         <TabsContent value="list" className="mt-4">
           <SourceList sources={sources} screenMode={screenMode} />

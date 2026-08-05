@@ -60,6 +60,7 @@ const USER_MENU_ITEMS: MenuItem[] = [
     children: [
       { id: "my-business-register", label: "회사·상품 자료 등록", route: "/learning", audience: "shared" },
       { id: "my-business-sources", label: "등록 자료 관리", route: "/learning?tab=list", audience: "shared" },
+      { id: "my-business-reference", label: "참조 콘텐츠 분석", route: "/learning?tab=reference", audience: "shared" },
       { id: "my-business-brand", label: "내 브랜드 정보", route: "/brain?tab=dna", audience: "shared" },
       { id: "my-business-quality", label: "AI 분석 결과 확인", route: "/learning?tab=quality", audience: "shared" },
     ],
@@ -123,7 +124,7 @@ const TECHNICAL_MENU_ITEMS: MenuItem[] = [
     displayOrder: 2,
     children: [
       { id: "tech-data-register", label: "데이터 등록", route: "/learning", audience: "shared" },
-      { id: "tech-data-reference", label: "참조 콘텐츠 분석", route: "/learning?tab=reference", audience: "technical" },
+      { id: "tech-data-reference", label: "참조 콘텐츠 분석", route: "/learning?tab=reference", audience: "shared" },
       { id: "tech-data-list", label: "데이터 목록", route: "/learning?tab=list", audience: "shared" },
       { id: "tech-data-pipeline", label: "분석 파이프라인", route: "/learning?tab=pipeline", audience: "technical" },
       { id: "tech-data-quality", label: "데이터 품질관리", route: "/learning?tab=quality", audience: "shared" },
