@@ -2,3 +2,6 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+overrides:
+  jsdom: ^26.1.0

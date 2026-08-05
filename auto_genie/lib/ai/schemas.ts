@@ -25,7 +25,7 @@ export const extractedEntitySchema = z.object({
   name: z.string().min(1).max(200),
   summary: z.string().min(1).max(1000),
   confidence: z.number().min(0).max(1),
-  evidenceChunkIndexes: z.array(z.number().int().min(0)).default([]),
+  evidenceChunkIndexes: z.array(z.number().int().min(0)),
 });
 
 export const extractedRelationSchema = z.object({
@@ -47,19 +47,19 @@ export const extractedDecisionRuleSchema = z.object({
 });
 
 export const brandProfileSchema = z.object({
-  coreMessage: z.string().max(500).default(""),
-  tone: z.array(z.string()).default([]),
-  preferredExpressions: z.array(z.string()).default([]),
-  prohibitedExpressions: z.array(z.string()).default([]),
-  targetAudiences: z.array(z.string()).default([]),
-  persuasionStructure: z.array(z.string()).default([]),
-  expertiseAreas: z.array(z.string()).default([]),
+  coreMessage: z.string().max(500),
+  tone: z.array(z.string()),
+  preferredExpressions: z.array(z.string()),
+  prohibitedExpressions: z.array(z.string()),
+  targetAudiences: z.array(z.string()),
+  persuasionStructure: z.array(z.string()),
+  expertiseAreas: z.array(z.string()),
 });
 
 export const knowledgeExtractionSchema = z.object({
-  entities: z.array(extractedEntitySchema).default([]),
-  relations: z.array(extractedRelationSchema).default([]),
-  decisionRules: z.array(extractedDecisionRuleSchema).default([]),
+  entities: z.array(extractedEntitySchema),
+  relations: z.array(extractedRelationSchema),
+  decisionRules: z.array(extractedDecisionRuleSchema),
   brandProfile: brandProfileSchema,
 });
 
@@ -90,10 +90,10 @@ export const strategyOptionAiSchema = z.object({
   contentMix: z.array(z.object({ platform: z.string(), ratio: z.number().min(0).max(100) })),
   featureScores: featureScoresSchema,
   reasoning: z.string().min(1).max(2000),
-  risks: z.array(z.string()).default([]),
-  advantages: z.array(z.string()).default([]),
-  evidenceChunkIndexes: z.array(z.number().int().min(0)).default([]),
-  appliedDecisionRuleNames: z.array(z.string()).default([]),
+  risks: z.array(z.string()),
+  advantages: z.array(z.string()),
+  evidenceChunkIndexes: z.array(z.number().int().min(0)),
+  appliedDecisionRuleNames: z.array(z.string()),
 });
 
 export const strategyGenerationSchema = z.object({
