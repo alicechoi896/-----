@@ -14,6 +14,27 @@ export interface CurrentOrganization {
   role: OrgRole;
 }
 
+// If Supabase is unreachable (e.g. a paused free-tier project), getUser() can
+// hang far longer than any user will wait instead of failing fast. Cap it so
+// a dead backend renders the page as "signed out" quickly instead of stalling.
+const AUTH_CHECK_TIMEOUT_MS = 3000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("auth check timed out")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 // Server pages routinely call requireUser()/getUserOrganizations()/
 // requireCurrentOrganization() several times while rendering a single request
 // (e.g. requireCurrentOrganization() itself calls both). Each supabase.auth.getUser()
@@ -22,10 +43,14 @@ export interface CurrentOrganization {
 // per request/render pass.
 const getCachedUser = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  try {
+    const {
+      data: { user },
+    } = await withTimeout(supabase.auth.getUser(), AUTH_CHECK_TIMEOUT_MS);
+    return user;
+  } catch {
+    return null;
+  }
 });
 
 /** Redirects to /login if there is no signed-in user. Returns the user otherwise. */
