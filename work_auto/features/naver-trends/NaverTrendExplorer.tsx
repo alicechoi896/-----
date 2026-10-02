@@ -158,6 +158,7 @@ function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
       {keyword && <ActiveKeyword keyword={keyword} onClear={onClear} />}
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <SectionCard title="급상승 주제" icon={Zap} description="클립 소재로 쓰기 좋은 주제입니다." flush>
+          {insight.risingTopics.length === 0 && <EmptyNote text="급상승 주제를 찾지 못했습니다. 위쪽 안내 문구를 확인하거나 다른 검색어로 조회해 보세요." />}
           <ul className="divide-y divide-line">
             {insight.risingTopics.map((t) => (
               <li key={t.id} className="flex items-start justify-between gap-4 px-5 py-4">
@@ -189,7 +190,8 @@ function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
           <SectionCard title="급상승 키워드" icon={TrendingUp} description="키워드를 누르면 그 키워드로 조회합니다." flush>
             <KeywordTable keywords={insight.risingKeywords} onKeyword={onKeyword} />
           </SectionCard>
-          <KeywordChips title="시즌 키워드" icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} />
+          {/* 시즌 키워드는 검색어와 무관한 지표라 검색어가 없을 때만 보여준다 */}
+          {!keyword && <KeywordChips title="시즌 키워드" icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} />}
           <KeywordChips title="관련 키워드" icon={Link2} keywords={insight.relatedKeywords} onKeyword={onKeyword} />
         </div>
       </div>
@@ -200,8 +202,7 @@ function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
 /* ───────── NAVER 블로그 ───────── */
 
 /**
- * 검색어가 없을 때: 카테고리의 급상승·시즌 키워드와 콘텐츠 아이디어를 보여주고, 키워드를 누르면 바로 조회한다.
- *   (검색 추이는 특정 검색어의 지표라서 검색어가 없으면 보여주지 않는다)
+ * 검색어가 없을 때: 프로필(또는 카테고리) 전체의 검색 추이·관련 검색어·급상승·시즌 키워드·아이디어. 키워드를 누르면 바로 조회한다.
  * 검색어가 있을 때: 그 검색어의 검색 추이·관련 검색어·글 아이디어가 중심.
  *   급상승·시즌 키워드는 검색어와 무관한 카테고리 지표라서 아래 "다른 키워드 둘러보기" 로 작게 내린다.
  */
@@ -228,15 +229,24 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
   if (!keyword) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-card border border-dashed border-line-strong bg-subtle/60 px-5 py-4">
-          <Search className="size-5 shrink-0 text-fg-subtle" />
-          <p className="text-[13px] text-fg-muted">
-            검색어를 입력하거나 아래 키워드를 누르면 <b className="font-medium text-fg">최근 검색 추이</b>와{" "}
-            <b className="font-medium text-fg">관련 검색어</b>를 보여줍니다.
-          </p>
+        <div className="flex items-center gap-3 rounded-card border border-dashed border-line-strong bg-subtle/60 px-5 py-3">
+          <Search className="size-4 shrink-0 text-fg-subtle" />
+          <p className="text-[13px] text-fg-muted">지금은 현재 분석 기준 전체를 보여줍니다. 검색어를 넣거나 키워드를 누르면 그 키워드로 좁혀 조회합니다.</p>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+          <SectionCard
+            title={`최근 검색 추이 · ${insight.searchTrendLabel ?? "전체"}`}
+            icon={TrendingUp}
+            description="관심 키워드를 한 묶음으로 본 상대 지수입니다 (기간 내 최대값 = 100)."
+          >
+            {insight.searchTrend.length ? <TrendLineChart data={insight.searchTrend} /> : <EmptyNote text="검색 추이 데이터를 받지 못했습니다." />}
+          </SectionCard>
+          <SectionCard title="관련 검색어" icon={Link2} description="누르면 그 검색어로 조회합니다." flush>
+            <KeywordTable keywords={insight.relatedKeywords} showGrowth={false} onKeyword={onKeyword} />
+          </SectionCard>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
-          <SectionCard title="급상승 키워드" icon={Zap} description="선택한 카테고리 기준" flush>
+          <SectionCard title="급상승 키워드" icon={Zap} description="현재 분석 기준" flush>
             <KeywordTable keywords={insight.risingKeywords} compact onKeyword={onKeyword} />
           </SectionCard>
           <KeywordChips title="시즌 키워드" icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} />
@@ -325,6 +335,10 @@ function KeywordStatsRow({ stats }: { stats: NonNullable<NaverTrendInsight["keyw
   );
 }
 
+function EmptyNote({ text }: { text: string }) {
+  return <p className="px-5 py-6 text-center text-[13px] text-fg-subtle">{text}</p>;
+}
+
 function KeywordButton({ text, onClick }: { text: string; onClick: (k: string) => void }) {
   return (
     <button type="button" onClick={() => onClick(text)} title={`'${text}' 로 조회`}>
@@ -385,6 +399,7 @@ function KeywordTable({
       rows={keywords}
       rowKey={(k) => k.text}
       onRowClick={onKeyword ? (k) => onKeyword(k.text) : undefined}
+      empty={<EmptyNote text="표시할 키워드가 없습니다. 위쪽 안내 문구를 확인해 주세요." />}
     />
   );
 }
@@ -404,6 +419,7 @@ function KeywordChips({
 }) {
   return (
     <SectionCard title={title} icon={icon}>
+      {keywords.length === 0 && <p className="text-[13px] text-fg-subtle">표시할 키워드가 없습니다.</p>}
       <div className="flex flex-wrap gap-1.5">
         {keywords.map((k) => {
           const tag = (

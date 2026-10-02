@@ -7,6 +7,7 @@ import type { ContentProfileInput } from "@/lib/types";
 export async function GET() {
   return handle(async () => {
     await requireSession();
+    await contentProfileService.ensureStarter();
     return contentProfileService.list();
   });
 }

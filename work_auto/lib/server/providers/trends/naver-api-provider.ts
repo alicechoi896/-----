@@ -118,7 +118,7 @@ export class NaverApiProvider implements NaverTrendProvider {
 
   /* ───────── 외부 호출 ───────── */
 
-  /** 데이터랩: 그룹 5개까지 한 번에. 끝 날짜는 어제 (오늘 데이터는 아직 없다) */
+  /** 데이터랩: 그룹 5개까지 한 번에. 끝 날짜는 어제 (오늘 데이터는 아직 없다). 한도 초과·서버 오류는 한 번 더 시도 */
   private async datalab(
     groups: { groupName: string; keywords: string[] }[],
     days: number,
@@ -127,26 +127,43 @@ export class NaverApiProvider implements NaverTrendProvider {
   ): Promise<Map<string, Series>> {
     const end = new Date(Date.now() - endOffsetDays * 86_400_000);
     const start = new Date(end.getTime() - (days - 1) * 86_400_000);
-    const res = await fetch(DATALAB_URL, {
-      method: "POST",
-      headers: this.headers(),
-      cache: "no-store",
-      body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), timeUnit, keywordGroups: groups.slice(0, 5) }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
-      throw new NaverHttpError(describeNaverError(res.status, body));
+    const body = JSON.stringify({ startDate: ymd(start), endDate: ymd(end), timeUnit, keywordGroups: groups.slice(0, 5) });
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(DATALAB_URL, { method: "POST", headers: this.headers(), cache: "no-store", body });
+      if (res.ok) {
+        const data = (await res.json()) as { results?: { title: string; data?: Series }[] };
+        return new Map((data.results ?? []).map((r) => [r.title, r.data ?? []]));
+      }
+      if ((res.status === 429 || res.status >= 500) && attempt === 0) {
+        await new Promise((r) => setTimeout(r, 700));
+        continue;
+      }
+      const err = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
+      throw new NaverHttpError(describeNaverError(res.status, err));
     }
-    const data = (await res.json()) as { results: { title: string; data: Series }[] };
-    return new Map(data.results.map((r) => [r.title, r.data]));
   }
 
-  /** 키워드 여러 개를 각각 한 그룹으로 (5개씩 나눠 호출) */
+  /** 키워드 여러 개를 각각 한 그룹으로 (5개씩, 동시에 2번까지만 호출 — 한꺼번에 보내면 한도에 걸릴 수 있다) */
   private async seriesFor(keywords: string[], days: number, timeUnit: "date" | "week" | "month"): Promise<Map<string, Series>> {
     const chunks: string[][] = [];
     for (let i = 0; i < keywords.length; i += 5) chunks.push(keywords.slice(i, i + 5));
-    const maps = await Promise.all(chunks.map((c) => this.datalab(c.map((k) => ({ groupName: k, keywords: [k] })), days, timeUnit)));
-    return new Map(maps.flatMap((m) => [...m.entries()]));
+    const out = new Map<string, Series>();
+    for (let i = 0; i < chunks.length; i += 2) {
+      const maps = await Promise.all(
+        chunks.slice(i, i + 2).map((c) => this.datalab(c.map((k) => ({ groupName: k, keywords: [k] })), days, timeUnit)),
+      );
+      for (const m of maps) for (const [k, v] of m) out.set(k, v);
+    }
+    return out;
+  }
+
+  /** 네이버 자동완성 (검색광고 키가 없을 때 관련 키워드 대신 쓴다. 검색량은 없다) */
+  private async autocomplete(keyword: string): Promise<string[]> {
+    const qs = new URLSearchParams({ q: keyword, st: "100", r_format: "json", r_enc: "UTF-8", q_enc: "UTF-8", r_unicode: "0", t_koreng: "1", ans: "2", run: "2", rev: "4", con: "0", frm: "nv" });
+    const res = await fetch(`https://ac.search.naver.com/nx/ac?${qs.toString()}`, { cache: "no-store", headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!res.ok) return [];
+    const data = (await res.json().catch(() => null)) as { items?: [string, string][][] } | null;
+    return (data?.items?.[0] ?? []).map((x) => x[0]).filter(Boolean);
   }
 
   private async blogDocCount(keyword: string): Promise<number> {
@@ -163,6 +180,10 @@ export class NaverApiProvider implements NaverTrendProvider {
 
   /* ───────── 인사이트 ───────── */
 
+  /**
+   * 부분 실패에 강하게: 각 단계가 실패해도 나머지는 보여주고, 이유는 notes 에 남긴다.
+   * (예전에는 한 단계가 비거나 실패하면 화면 전체가 비었다)
+   */
   async getInsight(query: NaverTrendQuery): Promise<NaverTrendInsight> {
     const kw = query.keyword?.trim() ?? "";
     const scope = query.profileScope ?? null;
@@ -173,56 +194,78 @@ export class NaverApiProvider implements NaverTrendProvider {
 
     const notes: string[] = [];
     const ok = (k: string) => !hasExcluded(k, exclude);
+    const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const scopeName = scope?.profileName ?? query.category ?? "카테고리";
 
-    // 1) 조사 출발점
+    // 1) 조사 출발점: 검색어 → 프로필 관심 키워드·세부 관심분야 → 카테고리 기본 키워드
     const seeds = uniq(
       kw ? [kw] : scope ? [...scope.seedKeywords, ...scope.subCategories] : categorySeedKeywords(query.category ?? ""),
     ).filter(ok);
     if (!seeds.length) seeds.push(scope?.mainCategory ?? "가전");
 
-    // 2) 연관 키워드 + 검색량 (검색광고 API)
+    // 2) 연관 키워드 + 검색량: 검색광고 API → 없거나 실패하면 네이버 자동완성
     let related: SearchAdKeyword[] = [];
     let seedStats: SearchAdKeyword | undefined;
+    let relatedFromAd = false;
     if (this.searchAd) {
       try {
         const rows = await fetchKeywordTool(this.searchAd, seeds.slice(0, 5));
-        const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
         seedStats = kw ? rows.find((r) => norm(r.text) === norm(kw)) : undefined;
         const seedSet = new Set(seeds.map(norm));
         related = rows.filter((r) => !seedSet.has(norm(r.text)) && ok(r.text)).sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+        relatedFromAd = true;
       } catch (e) {
-        notes.push(e instanceof SearchAdError ? e.message : "검색광고 API 를 호출하지 못해 검색량·연관 키워드를 표시하지 않습니다.");
+        notes.push(e instanceof SearchAdError ? e.message : "검색광고 API 를 호출하지 못했습니다.");
       }
-    } else {
-      notes.push("검색광고 API 키가 없어 월간 검색량·연관 키워드는 표시하지 않습니다. (설정 → API 연결 센터 → NAVER)");
     }
-    const volumeOf = new Map(related.map((r) => [r.text, r]));
+    if (!relatedFromAd) {
+      const lists = await Promise.all(seeds.slice(0, kw ? 1 : 4).map((s) => this.autocomplete(s).catch(() => [] as string[])));
+      const seedSet = new Set(seeds.map(norm));
+      related = uniq(lists.flat())
+        .filter((t) => !seedSet.has(norm(t)) && ok(t))
+        .map((text) => ({ text, source: "naver" as const, monthlyPc: 0, monthlyMobile: 0 }));
+      notes.push(
+        this.searchAd
+          ? "관련 키워드는 네이버 자동완성으로 대신 보여줍니다 (검색량 없음)."
+          : "검색광고 API 키가 없어 관련 키워드는 네이버 자동완성으로 보여주고, 월간 검색량은 표시하지 않습니다. (설정 → API 연결 센터 → NAVER 에 검색광고 키 3개 입력)",
+      );
+    }
+    const volumeOf = new Map(related.filter((r) => r.volume).map((r) => [r.text, r]));
 
-    // 3) 급상승 후보 = 출발점 + 검색량 많은 연관 키워드
+    // 3) 급상승 후보 = 출발점 + 연관 키워드
     const candidates = uniq([...seeds, ...related.slice(0, 30).map((r) => r.text)]).slice(0, MAX_CANDIDATES);
     const periodDays = query.periodDays;
     const timeUnit = periodDays <= 90 ? "date" : periodDays <= 365 ? "week" : "month";
+    const fail = (what: string) => (e: unknown) => {
+      notes.push(`${what}: ${e instanceof NaverHttpError ? e.message : "데이터랩 응답 오류"}`);
+      return new Map<string, Series>();
+    };
 
-    const [candidateSeries, monthly, keywordSeries, blogCount] = await Promise.all([
-      this.seriesFor(candidates, Math.min(periodDays, 90), "date"),
-      this.seriesFor(candidates, 365, "month").catch(() => new Map<string, Series>()),
-      kw ? this.datalab([{ groupName: kw, keywords: [kw] }], periodDays, timeUnit) : Promise.resolve(new Map<string, Series>()),
-      kw
-        ? this.blogDocCount(kw).catch((e: unknown) => {
-            notes.push(e instanceof NaverHttpError ? `블로그 문서 수: ${e.message}` : "블로그 문서 수를 가져오지 못했습니다.");
-            return null;
-          })
-        : Promise.resolve(null),
-    ]);
+    // 차례로 호출 (한꺼번에 많이 보내지 않는다)
+    const candidateSeries = await this.seriesFor(candidates, Math.min(periodDays, 90), "date").catch(fail("급상승 키워드"));
+    const monthly = await this.seriesFor(candidates, 365, "month").catch(fail("시즌 키워드"));
+    // 검색 추이: 검색어가 있으면 그 검색어, 없으면 출발점 키워드를 한 묶음으로 (프로필·카테고리 전체 관심도)
+    const trendGroup = kw ? { groupName: kw, keywords: [kw] } : { groupName: scopeName, keywords: seeds.slice(0, 20) };
+    const trendSeries = await this.datalab([trendGroup], periodDays, timeUnit).catch(fail("검색 추이"));
+    const blogCount = kw
+      ? await this.blogDocCount(kw).catch((e: unknown) => {
+          notes.push(e instanceof NaverHttpError ? `블로그 문서 수: ${e.message}` : "블로그 문서 수를 가져오지 못했습니다.");
+          return null;
+        })
+      : null;
+
+    const withData = candidates.filter((k) => (candidateSeries.get(k) ?? []).some((p) => p.ratio > 0));
+    if (candidateSeries.size > 0 && withData.length === 0) {
+      notes.push(`데이터랩에서 후보 키워드 ${candidates.length}개의 검색 데이터를 받지 못했습니다. 검색량이 적은 키워드일 수 있으니 프로필의 관심 키워드를 사람들이 실제로 검색하는 말로 바꿔 보세요.`);
+    }
 
     const toKeyword = (text: string, growthRate?: number): Keyword => {
       const v = volumeOf.get(text) ?? (seedStats && text === kw ? seedStats : undefined);
       return { text, source: "naver", volume: v?.volume, growthRate, competition: v?.competition };
     };
 
-    const risingKeywords = candidates
+    const risingKeywords = withData
       .map((k) => ({ k, g: growthOf(candidateSeries.get(k) ?? []) }))
-      .filter((x) => (candidateSeries.get(x.k) ?? []).some((p) => p.ratio > 0))
       .sort((a, b) => b.g - a.g)
       .slice(0, 8)
       .map((x) => toKeyword(x.k, x.g));
@@ -242,10 +285,10 @@ export class NaverApiProvider implements NaverTrendProvider {
       .sort((a, b) => b.idx - a.idx)
       .slice(0, 6)
       .map((x) => toKeyword(x.k, Math.round((x.idx - 1) * 100)));
+    if (monthly.size > 0 && !seasonalKeywords.length) notes.push("다음 달에 오를 시즌 키워드가 후보 중에 없습니다 (작년 같은 시기 기준).");
 
-    const relatedKeywords = (kw ? related : related.slice(0, 40)).slice(0, 15).map((r) => toKeyword(r.text));
-
-    const searchTrend = (keywordSeries.get(kw) ?? []).map((p) => ({ date: chartLabel(p.period, timeUnit), value: Math.round(p.ratio) }));
+    const relatedKeywords = related.slice(0, 15).map((r) => toKeyword(r.text));
+    const searchTrend = (trendSeries.get(trendGroup.groupName) ?? []).map((p) => ({ date: chartLabel(p.period, timeUnit), value: Math.round(p.ratio) }));
 
     const keywordStats: NaverKeywordStats | null = kw
       ? {
@@ -277,7 +320,8 @@ export class NaverApiProvider implements NaverTrendProvider {
       seasonalKeywords,
       relatedKeywords,
       searchTrend,
-      contentIdeas: buildIdeas(kw, relatedKeywords, risingKeywords, seasonalKeywords, scope?.mainCategory),
+      searchTrendLabel: kw ? kw : `${scopeName} 전체`,
+      contentIdeas: buildIdeas(kw, relatedKeywords, risingKeywords, seasonalKeywords, scope?.mainCategory ?? query.category),
       keywordStats,
       dataSource: "live",
       notes,

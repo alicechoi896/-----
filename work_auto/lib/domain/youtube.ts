@@ -5,24 +5,47 @@ import { hasExcluded } from "@/lib/types/profile";
  * YouTube 트렌드 조회 공용 규칙 (클라이언트·서버 공용, 순수 함수)
  */
 
-/** 조회 국가 (regionCode) 와 그 나라 언어 (relevanceLanguage). 첫 번째가 기본값 */
+/**
+ * 조회 국가.
+ * YouTube API 의 regionCode 는 "그 나라에서 볼 수 있는 영상"이라는 뜻이라 외국 영상이 섞인다 (IP 를 바꿔도 같다).
+ * 그래서 **제목 언어(글자)** 로 한 번 더 거른다: 한국 = 한글 제목, 일본 = 가나 제목 …
+ * 글자로 구분할 수 없는 나라(영국·독일·브라질 등)는 목록에 두지 않는다. 첫 번째가 기본값.
+ */
 export const YOUTUBE_COUNTRIES: { code: string; label: string; lang: string }[] = [
-  { code: "KR", label: "한국", lang: "ko" },
-  { code: "US", label: "미국", lang: "en" },
-  { code: "JP", label: "일본", lang: "ja" },
-  { code: "TW", label: "대만", lang: "zh-Hant" },
-  { code: "VN", label: "베트남", lang: "vi" },
-  { code: "TH", label: "태국", lang: "th" },
-  { code: "ID", label: "인도네시아", lang: "id" },
-  { code: "IN", label: "인도", lang: "en" },
-  { code: "GB", label: "영국", lang: "en" },
-  { code: "DE", label: "독일", lang: "de" },
-  { code: "FR", label: "프랑스", lang: "fr" },
-  { code: "BR", label: "브라질", lang: "pt" },
-  { code: "MX", label: "멕시코", lang: "es" },
-  { code: "CA", label: "캐나다", lang: "en" },
-  { code: "AU", label: "호주", lang: "en" },
+  { code: "KR", label: "한국 (한국어 제목)", lang: "ko" },
+  { code: "JP", label: "일본 (일본어 제목)", lang: "ja" },
+  { code: "TW", label: "중화권 (중국어 제목)", lang: "zh-Hant" },
+  { code: "US", label: "영어권 (영어 제목)", lang: "en" },
+  { code: "TH", label: "태국 (태국어 제목)", lang: "th" },
+  { code: "VN", label: "베트남 (베트남어 제목)", lang: "vi" },
 ];
+
+const HANGUL = /[\uAC00-\uD7A3]/;
+const KANA = /[\u3040-\u30FF]/;
+const CJK = /[\u4E00-\u9FFF]/;
+const THAI = /[\u0E00-\u0E7F]/;
+const VIET = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
+const LATIN_WORD = /[A-Za-z]{2,}/;
+
+/** 제목이 그 나라 언어로 쓰였는가 (한국 = 한글이 들어간 제목) */
+export function titleMatchesCountry(title: string, country: string): boolean {
+  switch (country) {
+    case "KR":
+      return HANGUL.test(title);
+    case "JP":
+      return KANA.test(title);
+    case "TW":
+      return CJK.test(title) && !KANA.test(title) && !HANGUL.test(title);
+    case "TH":
+      return THAI.test(title);
+    case "VN":
+      return VIET.test(title);
+    case "US":
+      return LATIN_WORD.test(title) && !HANGUL.test(title) && !KANA.test(title) && !CJK.test(title) && !THAI.test(title) && !VIET.test(title);
+    default:
+      return true;
+  }
+}
 
 /** YouTube 공식 동영상 카테고리 (videoCategoryId) */
 export const YOUTUBE_CATEGORIES: { id: string; label: string }[] = [
@@ -107,6 +130,8 @@ export function matchesRanges(item: YouTubeTrendItem, q: YouTubeTrendQuery): boo
   if (q.maxSubscribers != null && item.channelSubscribers > q.maxSubscribers) return false;
   if (q.minViews != null && item.views < q.minViews) return false;
   if (q.maxViews != null && item.views >= q.maxViews) return false;
+  // 나라 = 제목 언어 (YouTube 의 국가 설정만으로는 외국 영상이 섞인다)
+  if (q.country && !titleMatchesCountry(item.title, q.country)) return false;
   if (q.scope && hasExcluded(`${item.title} ${item.tags.join(" ")}`, q.scope.excludeKeywords)) return false;
   return true;
 }

@@ -18,6 +18,9 @@ import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
 import { infoVideoHref, trendPrefill } from "./trend-links";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
+/** 처음 검색할 때 조건에 맞는 영상이 이보다 적으면 다음 페이지를 자동으로 더 불러온다 */
+const AUTO_FILL_TARGET = 20;
+const AUTO_EXTRA_PAGES = 2;
 
 /**
  * YouTube 트렌드 찾기.
@@ -61,11 +64,21 @@ export function YouTubeTrendExplorer() {
     setError(null);
     setMoreError(null);
     try {
-      const page = await api.trends.youtube(query);
+      // 제목 언어·구독자·조회수 조건으로 걸러져 남는 영상이 적으면 다음 페이지를 자동으로 더 불러온다 (최대 3페이지 = 약 306 units)
+      let page = await api.trends.youtube(query);
+      let items = page.items;
+      let fetchedCount = page.fetched;
+      for (let extra = 0; extra < AUTO_EXTRA_PAGES && items.length < AUTO_FILL_TARGET && page.nextPageToken; extra++) {
+        if (id !== requestId.current) return;
+        page = await api.trends.youtube({ ...query, pageToken: page.nextPageToken });
+        const seen = new Set(items.map((i) => i.id));
+        items = [...items, ...page.items.filter((i) => !seen.has(i.id))];
+        fetchedCount += page.fetched;
+      }
       if (id !== requestId.current) return;
-      setItems(page.items);
+      setItems(items);
       setNextPageToken(page.nextPageToken);
-      setFetched(page.fetched);
+      setFetched(fetchedCount);
       setProvider(page.provider);
     } catch (e) {
       if (id !== requestId.current) return;
@@ -382,6 +395,13 @@ export function YouTubeTrendExplorer() {
         icon={TrendingUp}
         description={`${summary}${summary ? " — " : ""}Trend Score = 조회 속도 50% + 구독자 대비 조회 비율 30% + 최근성 20%. 열 제목을 누르면 정렬합니다.`}
         flush
+        actions={
+          !loading && nextPageToken ? (
+            <Button size="sm" icon={ChevronDown} loading={loadingMore} onClick={() => void loadMore()}>
+              50개 더 불러오기
+            </Button>
+          ) : undefined
+        }
         footer={
           !loading && !error && items.length + fetched > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3">

@@ -135,6 +135,7 @@ export function buildNaverInsight(query: NaverTrendQuery, now: number): NaverTre
     seasonalKeywords: toKeywords(seed.seasonal.filter(keep), base + "s", true),
     relatedKeywords: toKeywords(related.filter(keep), base + "r", false),
     searchTrend,
+    searchTrendLabel: kw ? kw : `${profile?.profileName ?? query.category ?? "카테고리"} 전체`,
     contentIdeas: kw ? [`${kw} 고르는 기준 5가지`, `${kw} 가격대별 비교`, ...seed.ideas.slice(0, 2)] : seed.ideas,
     keywordStats: kw
       ? {

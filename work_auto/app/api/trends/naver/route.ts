@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { handle } from "@/lib/server/http";
 import { trendService } from "@/lib/server/services/trends";
 
+export const maxDuration = 60;
+
 /** GET /api/trends/naver?scope=clip|blog&category&keyword&period */
 export async function GET(request: NextRequest) {
   return handle(async () => {

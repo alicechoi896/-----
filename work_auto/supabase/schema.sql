@@ -310,9 +310,12 @@ create table if not exists public.user_settings (
   id            uuid primary key references auth.users (id) on delete cascade,
   user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
   preferred_ai  text check (preferred_ai in ('openai', 'claude')),
+  profile_seeded_at timestamptz,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+-- v0.9.1: 예시 콘텐츠 프로필을 자동으로 만든 시각 (한 번만 만든다)
+alter table public.user_settings add column if not exists profile_seeded_at timestamptz;
 
 -- 콘텐츠 프로필: "무엇을 다룰 것인가" (관심분야). 트렌드 조사 범위와 생성 Context 에 쓴다 (docs/CONTENT_PROFILE.md)
 create table if not exists public.content_profiles (

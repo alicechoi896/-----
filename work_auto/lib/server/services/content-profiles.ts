@@ -4,6 +4,7 @@ import { EXAMPLE_PROFILE, toTrendScope, type ContentProfile, type ContentProfile
 import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
+import { settingsService } from "./settings";
 
 const MAX_PROFILES = 10;
 export const TREND_PERIODS = [7, 14, 21, 30, 90] as const;
@@ -76,6 +77,27 @@ export const contentProfileService = {
     if (data.isDefault) await this.clearDefault(existing);
     const now = nowIso();
     return getRepositories().contentProfiles.insert({ ...data, id: createId("prf"), userId: await getCurrentUserId(), createdAt: now, updatedAt: now });
+  },
+
+  /**
+   * 처음 들어온 사용자: 프로필이 하나도 없고 아직 예시를 만든 적이 없으면 "가전 콘텐츠" 예시를 자동으로 만든다.
+   * - 한 번만 만든다 (user_settings.profile_seeded_at). 사용자가 지우면 다시 만들지 않는다.
+   * - 화면 여러 곳이 동시에 불러도 하나만 생기도록 ID 를 사용자별로 고정한다.
+   */
+  async ensureStarter(): Promise<void> {
+    const list = await this.list();
+    if (list.length) return;
+    const settings = await settingsService.get().catch(() => null);
+    if (settings?.profileSeededAt) return;
+    const userId = await getCurrentUserId();
+    const repo = getRepositories();
+    const id = `prf_start_${userId.replace(/-/g, "").slice(0, 12)}`;
+    if (!(await repo.contentProfiles.get(id))) {
+      const now = nowIso();
+      await repo.contentProfiles.insert({ ...EXAMPLE_PROFILE, id, userId, createdAt: now, updatedAt: now }).catch(() => undefined);
+    }
+    // 설정 컬럼이 아직 없으면(schema.sql 재실행 전) 기록만 건너뛴다 — ID 가 고정이라 중복 생성은 없다
+    await settingsService.markProfileSeeded().catch(() => undefined);
   },
 
   /** 처음 시작할 때 예시(가전 콘텐츠)로 만들기 */

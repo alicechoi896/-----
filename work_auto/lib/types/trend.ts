@@ -180,6 +180,8 @@ export interface NaverTrendInsight {
   relatedKeywords: Keyword[];
   /** 최근 검색 추이 (상대값 0~100) */
   searchTrend: { date: string; value: number }[];
+  /** 검색 추이가 무엇의 추이인지 (검색어, 또는 "가전 콘텐츠 전체") */
+  searchTrendLabel?: string;
   contentIdeas: string[];
   /** 검색어의 검색량·문서 수 (검색어가 있을 때) */
   keywordStats?: NaverKeywordStats | null;

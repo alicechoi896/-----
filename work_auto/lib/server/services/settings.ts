@@ -16,6 +16,16 @@ export const settingsService = {
     return { id: userId, userId, preferredAi: null, createdAt: now, updatedAt: now };
   },
 
+  /** 예시 콘텐츠 프로필을 만들었다고 기록 (설정 행이 없으면 만든다) */
+  async markProfileSeeded(): Promise<void> {
+    const userId = await getCurrentUserId();
+    const repo = getRepositories();
+    const now = nowIso();
+    const existing = await repo.settings.get(userId);
+    if (existing) await repo.settings.update(userId, { profileSeededAt: now, updatedAt: now });
+    else await repo.settings.insert({ id: userId, userId, preferredAi: null, profileSeededAt: now, createdAt: now, updatedAt: now });
+  },
+
   async update(input: UserSettingsInput): Promise<UserSettings> {
     const userId = await getCurrentUserId();
     if (input.preferredAi !== undefined && input.preferredAi !== null && !AI_IDS.includes(input.preferredAi)) {
