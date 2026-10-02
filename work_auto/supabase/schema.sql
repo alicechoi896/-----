@@ -383,6 +383,28 @@ create index if not exists idx_publications_published on public.content_publicat
 create index if not exists idx_publications_scheduled on public.content_publications (scheduled_at desc);
 create index if not exists idx_publications_content on public.content_publications (content_id);
 
+-- v0.9.18: 학습 프로필 (팀 공통, 채널·유형별 1행 = 최대 6행). 생성 결과의 피드백·직접 수정·선택·업로드 완료·성과를
+-- 작은 Insight 로 압축해 다음 생성에 "경향"으로 참고한다 (Fine-tuning 아님). 원문은 복사하지 않는다. docs/INCREMENTAL_LEARNING.md
+create table if not exists public.learning_profiles (
+  id                     text primary key,               -- '{channel_id}:{content_type}'
+  channel_id             text not null,
+  content_type           text not null,
+  summary_json           jsonb not null default '{}',     -- 항목 8개 × 최대 10개 Insight
+  previous_summary_json  jsonb,                           -- 직전 버전 1개 (되돌리기용)
+  version                int not null default 0,
+  sample_count           int not null default 0,
+  positive_count         int not null default 0,
+  negative_count         int not null default 0,
+  user_cursors           jsonb not null default '{}',     -- 사용자별 마지막 반영 시각 (각자 자기 콘텐츠만 읽을 수 있어서)
+  last_processed_at      timestamptz,
+  last_error             text,
+  updated_by             uuid references public.profiles (id) on delete set null,
+  updated_by_name        text not null default '',
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now(),
+  unique (channel_id, content_type)
+);
+
 -- 찜한 트렌드 영상 (영상 정보 텍스트만 저장, 썸네일은 YouTube 주소만)
 create table if not exists public.saved_trends (
   id             text primary key,
@@ -506,6 +528,21 @@ create policy "publications_update" on public.content_publications for update to
 drop policy if exists "publications_delete" on public.content_publications;
 create policy "publications_delete" on public.content_publications for delete to authenticated
   using ((select public.is_active()) and (user_id = (select auth.uid()) or (select public.is_admin())));
+
+-- learning_profiles (v0.9.18): 팀 공통 학습 프로필. 승인된 직원은 조회·학습 반영(추가·수정), 삭제는 관리자
+alter table public.learning_profiles enable row level security;
+drop policy if exists "learning_select_team" on public.learning_profiles;
+create policy "learning_select_team" on public.learning_profiles for select to authenticated
+  using ((select public.is_active()));
+drop policy if exists "learning_insert_team" on public.learning_profiles;
+create policy "learning_insert_team" on public.learning_profiles for insert to authenticated
+  with check ((select public.is_active()));
+drop policy if exists "learning_update_team" on public.learning_profiles;
+create policy "learning_update_team" on public.learning_profiles for update to authenticated
+  using ((select public.is_active())) with check ((select public.is_active()));
+drop policy if exists "learning_delete_admin" on public.learning_profiles;
+create policy "learning_delete_admin" on public.learning_profiles for delete to authenticated
+  using ((select public.is_admin()));
 
 -- 통계 갱신: 쿼리 계획이 새 인덱스를 바로 활용하도록
 analyze public.profiles, public.role_permissions, public.audit_logs, public.products, public.generated_contents,

@@ -40,7 +40,7 @@
 | 사이트 관리 | `admin-permissions` | 권한 관리 | `/admin/permissions` | admin | ✅ | - | 등급별 허용 여부 | 권한표 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-audit-logs` | 활동 기록 | `/admin/audit-logs` | admin | ✅ | - | 종류 필터, 검색 | 활동 기록 | `features/admin` (관리자 전용) |
 | (단독) | `uploads` | 업로드 관리 | `/uploads` | - | ✅ | - | 플랫폼, 제품, 상태, 담당자 | 월간 캘린더, 날짜 상세, 업로드 등록(기존 콘텐츠·직접), 업로드 상태 배지 | `features/uploads` |
-| (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | ✅ | - | - | 제품 데이터, 나의 스타일(제목 패턴, 파일 일괄 추가 .txt/.csv), 콘텐츠 히스토리(최근 300건 자동 정리), 피드백, 성과 데이터 | `features/ai-learning` |
+| (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | ✅ | - | - | 제품 데이터, 나의 스타일(제목 패턴, 파일 일괄 추가 .txt/.csv), 콘텐츠 히스토리(최근 300건 자동 정리), 학습 프로필(팀 공통 6개, 자동·수동 학습, 되돌리기), 피드백, 성과 데이터 | `features/ai-learning` |
 
 `*` = 필수 입력
 

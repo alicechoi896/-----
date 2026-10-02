@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, Brain, CalendarPlus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { BookmarkPlus, Brain, CalendarPlus, Check, Pencil, RefreshCw, ThumbsDown, ThumbsUp, Undo2 } from "lucide-react";
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -40,13 +40,33 @@ export function ResultPanel({
   headlineKey?: string;
   onChange?: (content: GeneratedContent) => void;
 }) {
-  const allText = outputs.map((o) => `■ ${o.label}\n${toText(content.output[o.key])}`).join("\n\n");
+  const allText = outputs.map((o) => `■ ${o.label}\n${toText(content.context.userEdits?.[o.key]?.value ?? content.output[o.key])}`).join("\n\n");
 
   // 업로드 상태 (업로드 관리 기록에서 계산)
   const uploads = useUploadStatus([content.id]);
   // 항목별 [다시 만들기]: 한 번에 하나씩 (AI 1회)
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [regenError, setRegenError] = useState<{ key: string; message: string } | null>(null);
+
+  /** 직접 수정 저장 (원본과 같으면 수정 기록이 지워진다) */
+  async function saveEdit(key: string, value: string | string[]) {
+    onChange?.(await api.contents.annotate(content.id, { edit: { key, value } }));
+  }
+  /** 후보 선택 토글 (제목·Hook·CTA) */
+  async function togglePick(key: string, item: string) {
+    const current = content.context.picks?.[key]?.values ?? [];
+    const values = current.includes(item) ? current.filter((v) => v !== item) : [...current, item];
+    // 체크는 바로 보여 주고(낙관적 반영), 저장에 실패하면 되돌린다
+    const picks = { ...(content.context.picks ?? {}) };
+    if (values.length) picks[key] = { values, at: new Date().toISOString() };
+    else delete picks[key];
+    onChange?.({ ...content, context: { ...content.context, picks } });
+    try {
+      onChange?.(await api.contents.annotate(content.id, { pick: { key, values } }));
+    } catch {
+      onChange?.(content);
+    }
+  }
 
   async function regenerate(key: string) {
     setRegenerating(key);
@@ -102,7 +122,12 @@ export function ResultPanel({
         <OutputBlock
           key={section.key}
           section={section}
-          value={content.output[section.key] ?? content.output[LEGACY_KEY[section.key] ?? ""]}
+          value={content.context.userEdits?.[section.key]?.value ?? content.output[section.key] ?? content.output[LEGACY_KEY[section.key] ?? ""]}
+          edit={content.context.userEdits?.[section.key] ?? null}
+          original={content.output[section.key]}
+          picks={PICKABLE.has(section.key) ? (content.context.picks?.[section.key]?.values ?? []) : undefined}
+          onTogglePick={onChange && PICKABLE.has(section.key) ? (item) => void togglePick(section.key, item) : undefined}
+          onSaveEdit={onChange ? (v) => saveEdit(section.key, v) : undefined}
           photos={photos}
           // 소제목은 본문을 다시 만들 때 함께 바뀐다
           onRegenerate={onChange && section.key !== "headings" ? () => void regenerate(section.key) : undefined}
@@ -117,6 +142,9 @@ export function ResultPanel({
   );
 }
 
+/** 체크해서 "실제로 쓴 것"을 고를 수 있는 후보 (학습 힌트) */
+const PICKABLE = new Set(["titles", "hooks", "ctas"]);
+
 /** v0.9.13 에서 바뀐 출력 키: 예전 결과는 옛 키로 저장되어 있다 */
 const LEGACY_KEY: Record<string, string> = { hooks: "hook", titles: "title", tags: "hashtags", ctas: "cta" };
 
@@ -128,6 +156,11 @@ function toText(value: GeneratedValue | undefined): string {
 function OutputBlock({
   section,
   value,
+  edit,
+  original,
+  picks,
+  onTogglePick,
+  onSaveEdit,
   photos,
   onRegenerate,
   regenerating,
@@ -136,6 +169,12 @@ function OutputBlock({
 }: {
   section: OutputSection;
   value: GeneratedValue | undefined;
+  /** 직접 수정 기록 (있으면 value 가 수정본) */
+  edit: { ratio: number } | null;
+  original: GeneratedValue | undefined;
+  picks?: string[];
+  onTogglePick?: (item: string) => void;
+  onSaveEdit?: (value: string | string[]) => Promise<void>;
   photos: ProcessedPhoto[];
   onRegenerate?: () => void;
   regenerating?: boolean;
@@ -143,14 +182,46 @@ function OutputBlock({
   error?: string | null;
 }) {
   const list = Array.isArray(value) ? value : value ? [value] : [];
+  const isList = section.format === "list" || section.format === "tags";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function startEdit() {
+    setDraft(toText(value));
+    setEditError(null);
+    setEditing(true);
+  }
+  async function save(next: string | string[]) {
+    if (!onSaveEdit) return;
+    setSaving(true);
+    setEditError(null);
+    try {
+      await onSaveEdit(next);
+      setEditing(false);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  const draftValue = () => (isList ? draft.split("\n").map((l) => l.trim()).filter(Boolean) : draft);
+
   return (
     <section className={cardClass}>
-      <header className="flex items-center justify-between border-b border-line px-5 py-2.5">
-        <h3 className="text-[13.5px] font-semibold text-fg">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-5 py-2.5">
+        <h3 className="min-w-0 text-[13.5px] font-semibold text-fg">
           {section.label}
           {section.description && <span className="ml-2 text-xs font-normal text-fg-subtle">{section.description}</span>}
+          {edit && <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand">직접 수정함 · {Math.round(edit.ratio * 100)}% 바뀜</span>}
         </h3>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+          {onSaveEdit && !editing && (
+            <Button size="sm" variant="ghost" icon={Pencil} disabled={busy} onClick={startEdit} title="직접 고치면 학습에 반영됩니다 (원본은 남습니다)">
+              직접 수정
+            </Button>
+          )}
           {onRegenerate && (
             <Button
               size="sm"
@@ -168,8 +239,34 @@ function OutputBlock({
         </div>
       </header>
       {error && <p className="border-b border-line bg-danger/5 px-5 py-2 text-xs text-danger">{error}</p>}
+      {onTogglePick && list.length > 0 && !editing && (
+        <p className="border-b border-line bg-subtle/50 px-5 py-1.5 text-[11.5px] text-fg-subtle">실제로 쓴 것을 체크하면 다음 생성 학습에 힌트가 됩니다.</p>
+      )}
       <div className={cn("px-5 py-4", regenerating && "opacity-50")}>
-        {list.length === 0 ? (
+        {editing ? (
+          <div className="space-y-2">
+            <Textarea
+              rows={section.format === "longtext" ? 14 : isList ? Math.min(14, Math.max(4, list.length + 1)) : 3}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            {isList && <p className="text-xs text-fg-subtle">한 줄에 하나씩</p>}
+            {editError && <p className="text-xs text-danger">{editError}</p>}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {edit && (
+                <Button size="sm" variant="ghost" icon={Undo2} disabled={saving} onClick={() => void save(isList ? (Array.isArray(original) ? original : [String(original ?? "")]) : toText(original))}>
+                  원본으로 되돌리기
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEditing(false)}>
+                취소
+              </Button>
+              <Button size="sm" variant="primary" icon={Check} loading={saving} onClick={() => void save(draftValue())}>
+                수정 저장
+              </Button>
+            </div>
+          </div>
+        ) : list.length === 0 ? (
           <p className="text-sm text-fg-subtle">결과 없음</p>
         ) : section.format === "tags" ? (
           <div className="flex flex-wrap gap-1.5">
@@ -180,7 +277,16 @@ function OutputBlock({
         ) : section.format === "list" ? (
           <ol className="space-y-2">
             {list.map((item, i) => (
-              <li key={i} className="group flex items-start gap-3 text-sm leading-relaxed text-fg">
+              <li key={i} className={cn("group flex items-start gap-3 text-sm leading-relaxed text-fg", picks?.includes(item) && "font-medium text-brand")}>
+                {onTogglePick ? (
+                  <input
+                    type="checkbox"
+                    checked={Boolean(picks?.includes(item))}
+                    onChange={() => onTogglePick(item)}
+                    aria-label={`'${item}' 사용함`}
+                    className="mt-1 size-4 shrink-0 accent-[var(--color-brand)]"
+                  />
+                ) : null}
                 <span className="tabular mt-px w-5 shrink-0 text-right text-xs font-semibold text-fg-subtle">{i + 1}</span>
                 <span className="flex-1">{item}</span>
                 <CopyButton value={item} iconOnly className="opacity-0 group-hover:opacity-100 focus:opacity-100" />
@@ -207,7 +313,8 @@ function ContextSummaryBox({ content }: { content: GeneratedContent }) {
     { label: "콘텐츠 프로필", value: c.profile?.name ?? null },
     { label: "제품", value: c.product ? `${c.product.name} (분석 v${c.product.analysisVersion})` : null },
     { label: "스타일", value: c.style?.name ?? null },
-    { label: "좋은 예시", value: c.exemplars.length ? `${c.exemplars.length}건` : null },
+    { label: "좋은 예시", value: c.goodExampleIds?.length ? `${c.goodExampleIds.length}건 (요약)` : c.exemplars.length ? `${c.exemplars.length}건` : null },
+    { label: "학습 프로필", value: c.learningProfile ? `v${c.learningProfile.version} · 경향 ${c.learningProfile.insightCount}개` : null },
     { label: "피드백", value: c.avoidNotes.length ? `${c.avoidNotes.length}건 반영` : null },
     { label: "성과", value: c.performanceHints.length ? `${c.performanceHints.length}건` : null },
     { label: "트렌드", value: c.trend?.title ?? null },

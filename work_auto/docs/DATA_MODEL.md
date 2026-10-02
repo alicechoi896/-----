@@ -286,6 +286,20 @@ UserStyle 에 `profileId` (선택, `on delete set null`) 를 추가했다. 이 �
 | analysis (jsonb) | AI 분석 결과 { reasons, titleSuggestions, keywords } — 찜한 영상을 분석하면 함께 저장 |
 | createdAt | |
 
+### LearningProfile (learning_profiles, v0.9.18)
+
+**왜 필요한가**: 쌓인 학습 신호를 작은 요약(Insight)으로 압축해 두는 곳. 팀 공통, 채널·유형별 1행(최대 6행). 원문은 복사하지 않는다. 자세한 내용은 [INCREMENTAL_LEARNING.md](./INCREMENTAL_LEARNING.md).
+
+| 필드 | 설명 |
+|------|------|
+| id | `{channelId}:{contentType}` (예: youtube:product) |
+| summaryJson / previousSummaryJson | 8개 항목 × 최대 10개 Insight / 직전 버전 1개 |
+| version, sampleCount, positiveCount, negativeCount | |
+| userCursors | 사용자별 마지막 반영 시각 (각자 자기 콘텐츠만 읽을 수 있어서) |
+| lastProcessedAt, lastError, updatedBy, updatedByName | |
+
+생성 기록의 `context` 에 추가된 선택 필드 (DB 변경 없음): `learningProfile`, `goodExampleIds`, `userEdits`(직접 수정본·수정량), `picks`(선택한 후보), `regenerated`.
+
 ### ContentPublication (content_publications, v0.9.16)
 
 **왜 필요한가**: 콘텐츠 생성과 실제 업로드를 나눈다. 콘텐츠 1개 → 여러 플랫폼·여러 날짜 업로드, 예약, URL, 담당자, 직접 등록. 팀 공용 (승인된 직원 모두 조회). 자세한 내용은 [UPLOADS.md](./UPLOADS.md).

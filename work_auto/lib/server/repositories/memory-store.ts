@@ -70,4 +70,5 @@ export const memoryRepositories: Repositories = {
   savedTrends: createCollection("savedTrends"),
   contentProfiles: createCollection("contentProfiles"),
   publications: createCollection("publications"),
+  learningProfiles: createCollection("learningProfiles"),
 };

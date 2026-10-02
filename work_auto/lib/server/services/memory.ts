@@ -8,6 +8,7 @@ import type {
   UserStyle,
   UserStyleInput,
 } from "@/lib/types";
+import { findGeneratorConfig } from "@/lib/generators/configs";
 import { STYLE_LIMITS, cleanStyleText, styleItemKey } from "@/lib/style-limits";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
@@ -103,6 +104,47 @@ export const memoryService = {
   },
 
   /* ── Feedback ── */
+  /**
+   * 결과 직접 수정·후보 선택 (학습 신호). 원본(output)은 그대로 두고 context.userEdits / context.picks 에 남긴다.
+   * edit: { key, value } — value 가 원본과 같으면 수정 기록을 지운다
+   * pick: { key, values } — 예: 제목 후보 중 실제로 쓴 제목. 빈 배열이면 선택 해제
+   */
+  async annotate(contentId: string, body: { edit?: { key: string; value: unknown }; pick?: { key: string; values: unknown } }): Promise<GeneratedContent> {
+    const repo = getRepositories();
+    const userId = await getCurrentUserId();
+    const content = await repo.contents.get(contentId);
+    if (!content || content.userId !== userId) throw new AppError("NOT_FOUND", "콘텐츠를 찾을 수 없습니다.", 404);
+    const config = findGeneratorConfig(content.featureId);
+    const context = { ...content.context };
+    const now = nowIso();
+    if (body.edit) {
+      const section = config?.outputs.find((o) => o.key === body.edit!.key);
+      if (!section) throw new AppError("VALIDATION", "수정할 수 없는 항목입니다.");
+      const isList = section.format === "list" || section.format === "tags";
+      const raw = body.edit.value;
+      const value = isList
+        ? (Array.isArray(raw) ? raw : String(raw ?? "").split("\n")).map((x) => String(x).trim().slice(0, 1000)).filter(Boolean).slice(0, 60)
+        : String(raw ?? "").slice(0, 20_000);
+      const original = content.output[section.key];
+      const toText = (v: unknown) => (Array.isArray(v) ? v.join("\n") : String(v ?? ""));
+      const edits = { ...(context.userEdits ?? {}) };
+      if (toText(value).trim() === toText(original).trim()) delete edits[section.key];
+      else edits[section.key] = { value, at: now, ratio: editRatio(toText(original), toText(value)) };
+      context.userEdits = edits;
+    }
+    if (body.pick) {
+      const key = String(body.pick.key);
+      if (!config?.outputs.some((o) => o.key === key)) throw new AppError("VALIDATION", "선택할 수 없는 항목입니다.");
+      const values = (Array.isArray(body.pick.values) ? body.pick.values : []).map((v) => String(v).slice(0, 300)).filter(Boolean).slice(0, 10);
+      const picks = { ...(context.picks ?? {}) };
+      if (values.length) picks[key] = { values, at: now };
+      else delete picks[key];
+      context.picks = picks;
+    }
+    const updated = await repo.contents.update(content.id, { context });
+    return updated!;
+  },
+
   async addFeedback(input: UserFeedbackInput): Promise<UserFeedback> {
     const repo = getRepositories();
     const userId = await getCurrentUserId();
@@ -262,3 +304,22 @@ export const memoryService = {
     };
   },
 };
+
+/** 원본 대비 바뀐 정도 0~1 (글자 2개 묶음 겹침 기준, 길이 상관없이 빠르다) */
+export function editRatio(a: string, b: string): number {
+  const grams = (s: string) => {
+    const t = s.replace(/\s+/g, "");
+    const m = new Map<string, number>();
+    for (let i = 0; i < t.length - 1; i++) m.set(t.slice(i, i + 2), (m.get(t.slice(i, i + 2)) ?? 0) + 1);
+    return m;
+  };
+  const ga = grams(a);
+  const gb = grams(b);
+  let overlap = 0;
+  let total = 0;
+  for (const v of ga.values()) total += v;
+  for (const v of gb.values()) total += v;
+  for (const [k, v] of ga) overlap += Math.min(v, gb.get(k) ?? 0);
+  if (!total) return a === b ? 0 : 1;
+  return Math.round((1 - (2 * overlap) / total) * 100) / 100;
+}

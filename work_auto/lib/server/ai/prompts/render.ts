@@ -65,11 +65,29 @@ function contextBlocks(ctx: GenerationContext): string[] {
   if (ctx.styleContext) {
     for (const b of renderStyleBlocks(ctx.styleContext)) blocks.push(block(b.title, b.lines));
   }
-  if (ctx.exemplars.length) {
+  if (ctx.learning) {
+    const LABEL: Record<string, string> = {
+      title_insights: "제목",
+      hook_insights: "Hook",
+      structure_insights: "구조",
+      cta_insights: "CTA",
+      keyword_insights: "키워드",
+      positive_traits: "좋은 특징",
+      negative_traits: "피할 특징",
+      style_adjustments: "표현",
+    };
+    blocks.push(
+      block(`학습 프로필 v${ctx.learning.version} — 팀이 실제로 써 보며 발견한 경향 (참고용)`, [
+        "규칙·금지 표현·나의 스타일이 이것보다 우선한다. 경향을 모든 결과에 똑같이 적용하지 말고 다양성을 유지한다.",
+        ...ctx.learning.insights.map((i) => `${LABEL[i.category] ?? i.category}: ${i.text}`),
+      ]),
+    );
+  }
+  if (ctx.examples.length) {
     blocks.push(
       block(
-        "좋은 예시 (사용자가 좋은 결과로 저장한 과거 결과물)",
-        ctx.exemplars.map((e) => JSON.stringify(e.output).slice(0, 600)),
+        "좋은 예시 (과거 결과 요약 — 구조·톤만 참고, 문장 복사 금지)",
+        ctx.examples.map((e) => `(${e.kind === "positive" ? "반응 좋았던 결과" : "일반 결과"}) ${e.text.replace(/\n/g, " | ")}`),
       ),
     );
   }

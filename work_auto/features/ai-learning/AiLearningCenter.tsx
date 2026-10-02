@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Compass, History, MessageSquare, Package, Palette, Plus } from "lucide-react";
+import { BarChart3, Compass, GraduationCap, History, MessageSquare, Package, Palette, Plus } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { StatTile, Tabs, type TabItem } from "@/components/ui";
@@ -9,22 +9,33 @@ import { cn } from "@/lib/utils";
 import { ContentHistoryTab } from "./ContentHistoryTab";
 import { ContentProfileTab } from "./ContentProfileTab";
 import { FeedbackTab } from "./FeedbackTab";
+import { LearningProfileTab } from "./LearningProfileTab";
 import { PerformanceTab } from "./PerformanceTab";
 import { ProductMemoryTab } from "./ProductMemoryTab";
 import { StyleTab } from "./StyleTab";
 
-type TabKey = "profiles" | "products" | "styles" | "contents" | "feedback" | "performance";
+type TabKey = "profiles" | "products" | "styles" | "contents" | "feedback" | "performance" | "learning";
 
 /** 생성 시 Context 로 들어가는 순서 (docs/AI_LEARNING_SYSTEM.md) */
-const FLOW = ["고정 프롬프트", "콘텐츠 프로필", "스타일 데이터", "제품 데이터", "현재 트렌드", "과거 좋은 결과물", "피드백", "성과 데이터"];
+const FLOW = ["고정 프롬프트", "콘텐츠 프로필", "스타일 데이터", "제품 데이터", "현재 트렌드", "학습 프로필", "좋은 예시(요약)", "피드백"];
 
 /**
  * AI 학습 관리 — "학습" = Fine-tuning 이 아니라, 저장 데이터를 생성 시 Context 로 주입하는 것.
  * 이 화면에서 각 Memory 를 확인하고 관리한다.
  */
-const TAB_KEYS: TabKey[] = ["profiles", "products", "styles", "contents", "feedback", "performance"];
+const TAB_KEYS: TabKey[] = ["profiles", "products", "styles", "contents", "feedback", "performance", "learning"];
 
-export function AiLearningCenter({ initialTab, styleRef, styleChannel }: { initialTab?: string; styleRef?: string; styleChannel?: string }) {
+export function AiLearningCenter({
+  initialTab,
+  styleRef,
+  styleChannel,
+  isAdmin = false,
+}: {
+  initialTab?: string;
+  styleRef?: string;
+  styleChannel?: string;
+  isAdmin?: boolean;
+}) {
   const [tab, setTab] = useState<TabKey>(TAB_KEYS.includes(initialTab as TabKey) ? (initialTab as TabKey) : "profiles");
   const overview = useAsync(() => api.memory.overview(), [tab]);
   const c = overview.data?.counts;
@@ -36,6 +47,7 @@ export function AiLearningCenter({ initialTab, styleRef, styleChannel }: { initi
     { value: "contents", label: "콘텐츠 히스토리", icon: History, count: c?.contents },
     { value: "feedback", label: "피드백", icon: MessageSquare, count: c?.feedback },
     { value: "performance", label: "성과 데이터", icon: BarChart3, count: c?.performance },
+    { value: "learning", label: "학습 프로필", icon: GraduationCap },
   ];
 
   return (
@@ -72,6 +84,7 @@ export function AiLearningCenter({ initialTab, styleRef, styleChannel }: { initi
           {tab === "contents" && <ContentHistoryTab onChanged={overview.reload} />}
           {tab === "feedback" && <FeedbackTab onChanged={overview.reload} />}
           {tab === "performance" && <PerformanceTab onChanged={overview.reload} />}
+          {tab === "learning" && <LearningProfileTab isAdmin={isAdmin} />}
         </div>
       </div>
     </div>

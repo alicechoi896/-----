@@ -18,6 +18,14 @@ export interface ContextSummary {
   trend: { id: ID; title: string } | null;
   /** 경고나 참고 (예: "실제 경험 미입력 → 사용 후기 표현 금지") */
   notes: string[];
+  /** 이번 생성에 참고한 학습 프로필 (v0.9.18~) */
+  learningProfile?: { id: ID; version: number; insightCount: number } | null;
+  /** 이번 생성에 보낸 좋은 예시 (요약본) */
+  goodExampleIds?: ID[];
+  /** 사용자가 직접 고친 결과 (항목별). ratio = 원본 대비 바뀐 정도 0~1. 화면은 이 값을 보여 주고 원본은 output 에 남는다 */
+  userEdits?: Record<string, { value: GeneratedValue; at: ISODate; ratio: number }>;
+  /** 사용자가 고른 후보 (예: 제목 후보 중 실제로 쓴 제목) */
+  picks?: Record<string, { values: string[]; at: ISODate }>;
   /** [다시 만들기] 기록 (항목 key, 시각) — 최근 20개 */
   regenerated?: { key: string; at: ISODate; provider: string }[];
   /** 이번 생성에 실제로 보낸 스타일 표본 (v0.9.9~, 예전 결과에는 없다) */

@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  LearningProfile,
   ContentPublication,
   ApiConnection,
   AuditLog,
@@ -53,4 +54,5 @@ export interface Repositories {
   savedTrends: Repository<SavedTrend>;
   contentProfiles: Repository<ContentProfile>;
   publications: Repository<ContentPublication>;
+  learningProfiles: Repository<LearningProfile>;
 }

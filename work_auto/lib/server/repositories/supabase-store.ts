@@ -123,4 +123,5 @@ export const supabaseRepositories: Repositories = {
   savedTrends: createTable("saved_trends"),
   contentProfiles: createTable("content_profiles"),
   publications: createTable("content_publications"),
+  learningProfiles: createTable("learning_profiles"),
 };

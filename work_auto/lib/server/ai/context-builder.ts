@@ -8,6 +8,8 @@ import { normalizeStyle } from "../services/memory";
 import { trendService } from "../services/trends";
 import type { GenerationContext } from "./context-types";
 import { buildStyleContext, styleSnapshot } from "./style-context";
+import { learningConfig } from "@/lib/learning-config";
+import { compressContent, learningService, profileIdForFeature, promptInsights } from "../services/learning";
 
 /**
  * ★ ContextBuilder — AI Memory 를 "생성 1회분"의 Context 로 조립한다.
@@ -20,14 +22,14 @@ import { buildStyleContext, styleSnapshot } from "./style-context";
  *   1. Product Memory      — 선택한 제품의 현재 분석 1건
  *   2. Style Memory        — 생성 폼에서 고른 스타일 1건. 고르지 않으면 이 채널의 기본 스타일 (없으면 "모든 채널" 기본 스타일)
  *                            → buildStyleContext(): Hook·CTA·제목 패턴·자주 쓰는 표현은 10개 초과면 무작위 10개, 규칙·금지 표현은 전부 (docs/STYLE_CONTEXT.md)
- *   3. Content History     — 같은 기능의 "좋은 결과" 최근 2건 (few-shot)
+ *   3. 좋은 예시           — 긍정 결과 무작위 3 + 일반 1 (요약본, 최근에 쓴 예시는 덜 고름) + 팀 공통 학습 프로필 (docs/INCREMENTAL_LEARNING.md)
  *   4. Feedback            — 같은 기능의 "별로예요" 최근 3건 (피해야 할 패턴)
  *   5. Performance         — 같은 채널 성과 상위 2건
  *   6. Trend / 참고 영상   — 사용자가 고른 것
  * (docs/AI_LEARNING_SYSTEM.md)
  */
 
-export const CONTEXT_LIMITS = { exemplars: 2, avoid: 3, performance: 2 } as const;
+export const CONTEXT_LIMITS = { avoid: 3, performance: 2 } as const;
 
 interface BuildParams {
   userId: string;
@@ -48,11 +50,11 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const styleId = String(input.styleId ?? "");
   const pickedProfileId = String(input.profileId ?? "");
 
-  const [productRow, styles, featureContents, downFeedback, channelContents, performance, trend, referenceVideo, profiles] = await Promise.all([
+  const [productRow, styles, featureContents, featureFeedback, channelContents, performance, trend, referenceVideo, profiles] = await Promise.all([
     productId ? repo.products.get(productId) : Promise.resolve(null),
     repo.styles.list((s) => s.userId === userId && (s.isDefault || s.id === styleId)),
-    repo.contents.list((c) => c.userId === userId && c.featureId === featureId && c.isExemplar),
-    repo.feedback.list((f) => f.userId === userId && f.featureId === featureId && f.rating === "down"),
+    repo.contents.list((c) => c.userId === userId && c.featureId === featureId),
+    repo.feedback.list((f) => f.userId === userId && f.featureId === featureId),
     repo.contents.list((c) => c.userId === userId && c.channelId === channelId),
     repo.performance.list((m) => m.views != null),
     trendId ? trendService.findOption(trendId) : Promise.resolve(null),
@@ -93,13 +95,40 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     null;
   if (!contentProfile) notes.push("콘텐츠 프로필 없음 → AI 학습 관리 > 콘텐츠 프로필에서 만들면 관심분야에 맞게 생성됩니다.");
 
-  // 3) Content History — 좋은 결과 (few-shot 예시)
-  const exemplars = featureContents
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, CONTEXT_LIMITS.exemplars);
+  // 3) 좋은 예시 — 긍정 결과(★·👍·선택·업로드 완료·거의 안 고친 수정) 중 무작위 3 + 일반 1, 최근에 쓴 예시는 덜 고른다. 요약본만 보낸다
+  const up = new Set(featureFeedback.filter((f) => f.rating === "up").map((f) => f.contentId));
+  const down = new Set(featureFeedback.filter((f) => f.rating === "down").map((f) => f.contentId));
+  const featureIds = new Set(featureContents.map((c) => c.id));
+  const published = new Set(
+    (await repo.publications.list((p) => p.status === "published" && Boolean(p.contentId && featureIds.has(p.contentId)))).map((p) => p.contentId!),
+  );
+  const ordered = [...featureContents].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const recentlyUsed = new Set(ordered.slice(0, learningConfig.examples.recentWindow).flatMap((c) => c.context.goodExampleIds ?? []));
+  const isPositive = (c: (typeof featureContents)[number]) =>
+    !down.has(c.id) &&
+    (c.isExemplar || up.has(c.id) || published.has(c.id) || Boolean(c.context.picks && Object.keys(c.context.picks).length) ||
+      Object.values(c.context.userEdits ?? {}).some((e) => e.ratio < 0.3));
+  const weightOf = (c: (typeof featureContents)[number]) =>
+    (c.isExemplar ? 1.5 : up.has(c.id) ? 1.3 : 1) * (recentlyUsed.has(c.id) ? learningConfig.examples.recentPenalty : 1);
+  const positivePool = featureContents.filter(isPositive);
+  const generalPool = featureContents.filter((c) => !isPositive(c) && !down.has(c.id));
+  const positivePicks = weightedSample(positivePool, learningConfig.examples.positive, weightOf);
+  const generalPicks = weightedSample(generalPool, learningConfig.examples.general, (c) => (recentlyUsed.has(c.id) ? learningConfig.examples.recentPenalty : 1));
+  const exemplars = positivePicks;
+  const examples = [
+    ...positivePicks.map((c) => ({ id: c.id, kind: "positive" as const, text: compressContent(c, learningConfig.examples.maxCharsEach) })),
+    ...generalPicks.map((c) => ({ id: c.id, kind: "general" as const, text: compressContent(c, learningConfig.examples.maxCharsEach) })),
+  ];
+
+  // 학습 프로필 (팀 공통). 없거나 읽기에 실패하면 학습 없이 생성한다
+  const learningId = profileIdForFeature(featureId);
+  const learningProfile = learningId ? await learningService.get(learningId).catch(() => null) : null;
+  const insights = promptInsights(learningProfile);
+  const learning = learningProfile && insights.length ? { id: learningProfile.id, version: learningProfile.version, insights } : null;
 
   // 4) Feedback — 별로예요 사유와 수정본
-  const avoid = downFeedback
+  const avoid = featureFeedback
+    .filter((f) => f.rating === "down")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, CONTEXT_LIMITS.avoid)
     .map((f) => ({ reason: f.reason ?? "사유 없음", edited: f.editedOutput }));
@@ -132,7 +161,22 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     trend: trend ? { id: trend.id, title: trend.title } : null,
     notes,
     styleSamples: styleContext ? styleSnapshot(styleContext) : null,
+    learningProfile: learning ? { id: learning.id, version: learning.version, insightCount: insights.length } : null,
+    goodExampleIds: examples.map((e) => e.id),
   };
 
-  return { contentProfile, product, style, styleContext, exemplars, avoid, performanceHints, trend, referenceVideo, honestyGuard, summary };
+  return { contentProfile, product, style, styleContext, exemplars, examples, learning, avoid, performanceHints, trend, referenceVideo, honestyGuard, summary };
+}
+
+/** 가중치 무작위 뽑기 (중복 없이 n개) */
+function weightedSample<T>(items: T[], n: number, weight: (x: T) => number): T[] {
+  const pool = items.map((x) => ({ x, w: Math.max(0.01, weight(x)) }));
+  const out: T[] = [];
+  while (out.length < n && pool.length) {
+    const total = pool.reduce((s, p) => s + p.w, 0);
+    let r = Math.random() * total;
+    const i = pool.findIndex((p) => (r -= p.w) <= 0);
+    out.push(pool.splice(i < 0 ? pool.length - 1 : i, 1)[0].x);
+  }
+  return out;
 }

@@ -2,6 +2,7 @@ import { FeaturePage } from "@/components/layout/FeaturePage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AiLearningCenter } from "@/features/ai-learning/AiLearningCenter";
 import { getStandalonePage } from "@/lib/registry";
+import { getSession } from "@/lib/server/auth";
 
 const page = getStandalonePage("ai-learning");
 
@@ -13,6 +14,7 @@ export default async function Page({ searchParams }: PageProps<"/ai-learning">) 
   const tab = typeof sp.tab === "string" ? sp.tab : undefined;
   const styleRef = typeof sp.styleRef === "string" ? sp.styleRef.slice(0, 4000) : undefined;
   const styleChannel = typeof sp.styleChannel === "string" ? sp.styleChannel : undefined;
+  const isAdmin = (await getSession())?.role === "admin";
   return (
     <FeaturePage
       featureId={page.id}
@@ -28,7 +30,7 @@ export default async function Page({ searchParams }: PageProps<"/ai-learning">) 
         />
       }
     >
-      <AiLearningCenter initialTab={tab} styleRef={styleRef} styleChannel={styleChannel} />
+      <AiLearningCenter initialTab={tab} styleRef={styleRef} styleChannel={styleChannel} isAdmin={isAdmin} />
     </FeaturePage>
   );
 }

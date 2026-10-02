@@ -50,6 +50,32 @@ export class MockAIProvider implements AIProvider {
       return { data: data as unknown as T, provider: this.id, model: "mock-analyzer-v1" };
     }
 
+    if (request.task === "learning-update") {
+      // 데모: 신호 종류를 세어 그럴듯한 Insight 를 만든다 (기존 Insight 는 근거를 더한다)
+      const prev = (v.previous ?? {}) as Record<string, { text: string; support_count: number; positive_count: number; negative_count: number; confidence: number }[]>;
+      const samples = (v.samples ?? []) as { kinds: string[] }[];
+      const pos = samples.filter((s) => s.kinds.some((k) => ["up", "exemplar", "published", "pick", "edit"].includes(k))).length;
+      const neg = samples.filter((s) => s.kinds.includes("down")).length;
+      const bump = (cat: string, text: string, p: number, n: number) => {
+        const list = [...(prev[cat] ?? [])].map((i) => ({ ...i, updated: false }));
+        const hit = list.find((i) => i.text === text);
+        if (hit) Object.assign(hit, { support_count: hit.support_count + p + n, positive_count: hit.positive_count + p, negative_count: hit.negative_count + n, confidence: Math.min(0.95, hit.confidence + 0.1), updated: true });
+        else if (p + n > 0) list.push({ text, support_count: p + n, positive_count: p, negative_count: n, confidence: p + n >= 2 ? 0.55 : 0.35, updated: true });
+        return list;
+      };
+      const data = {
+        title_insights: bump("title_insights", "숫자가 들어간 구체적인 제목을 많이 고름", pos, 0),
+        hook_insights: bump("hook_insights", "첫 문장에서 문제를 바로 짚는 Hook 반응이 좋음", pos, 0),
+        structure_insights: bump("structure_insights", "핵심 장점 2~3개로 짧게 정리한 구조 선호", pos, 0),
+        cta_insights: bump("cta_insights", "부담 없는 저장·링크 확인 CTA 선호", pos, 0),
+        keyword_insights: prev.keyword_insights ?? [],
+        positive_traits: bump("positive_traits", "짧은 문장과 빠른 전개", pos, 0),
+        negative_traits: bump("negative_traits", "긴 서론과 같은 표현 반복", 0, neg),
+        style_adjustments: prev.style_adjustments ?? [],
+      };
+      return { data: data as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task.startsWith("content-regenerate:")) {
       const data = writeMockContent({
         featureId: v.featureId as string,

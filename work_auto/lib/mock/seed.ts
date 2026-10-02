@@ -1,4 +1,5 @@
 import type {
+  LearningProfile,
   ContentPublication,
   ApiConnection,
   AuditLog,
@@ -41,6 +42,7 @@ export interface StoreState {
   savedTrends: SavedTrend[];
   contentProfiles: ContentProfile[];
   publications: ContentPublication[];
+  learningProfiles: LearningProfile[];
 }
 
 const DAY = 86_400_000;
@@ -306,6 +308,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
     rolePermissions: [],
     settings: [],
     publications: demoPublications(now, userId, contents, products),
+    learningProfiles: [],
     auditLogs: [
       { id: "log_seed1", actorId: userId, actorEmail: "demo@example.com", actorName: "데모 관리자", action: "user.approve", targetType: "user", targetId: "demo-member-1", targetLabel: "김크리", detail: { role: "gold", roleLabel: "골드" }, createdAt: iso(10) },
     ],

@@ -3,6 +3,8 @@ import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
   ApiConnectionPublic,
+  LearningProfile,
+  LearningProfileView,
   ContentPublicationInput,
   ContentPublicationView,
   ContentUploadState,
@@ -164,11 +166,21 @@ export const api = {
       request<GeneratedContent[]>(`/api/contents${qs(filter)}`),
     generate: (req: GenerateContentRequest) =>
       request<GeneratedContent>("/api/contents/generate", { method: "POST", body: json(req) }),
+    /** 직접 수정 · 후보 선택 (학습 신호) */
+    annotate: (id: string, body: { edit?: { key: string; value: string | string[] }; pick?: { key: string; values: string[] } }) =>
+      request<GeneratedContent>(`/api/contents/${id}/annotations`, { method: "PATCH", body: json(body) }),
     /** 결과의 한 항목만 다시 만들기 (블로그 본문은 소제목도 함께) */
     regenerate: (id: string, key: string) =>
       request<GeneratedContent>(`/api/contents/${id}/regenerate`, { method: "POST", body: json({ key }) }),
     setExemplar: (id: string, isExemplar: boolean) =>
       request<GeneratedContent>(`/api/contents/${id}`, { method: "PATCH", body: json({ isExemplar }) }),
+  },
+
+  /** 팀 공통 학습 프로필 (docs/INCREMENTAL_LEARNING.md) */
+  learning: {
+    list: () => request<LearningProfileView[]>("/api/learning"),
+    update: (id: string) => request<LearningProfile>(`/api/learning/${encodeURIComponent(id)}/update`, { method: "POST" }),
+    rollback: (id: string) => request<LearningProfile>(`/api/learning/${encodeURIComponent(id)}/rollback`, { method: "POST" }),
   },
 
   /** 업로드 관리 (팀 공용 캘린더) */

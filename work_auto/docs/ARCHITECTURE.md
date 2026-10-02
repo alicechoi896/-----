@@ -286,6 +286,15 @@ Context가 실제로 비어 있으면(제품 없음, 스타일 없음 등) `cont
    └─ return ApiConnectionPublic   ← 암호문, 평문 둘 다 포함하지 않는 공개용 DTO
 ```
 
+### 5.x 학습 루프 (v0.9.18)
+
+```
+결과 화면: 👍/👎 · 직접 수정 · 후보 체크 · ★ · 업로드 완료
+   → API 응답 → after(): learningService.maybeUpdate(featureId)
+        새 신호 ≥ 10 → 기존 프로필 + 신호 요약 → getAIProvider().generateStructured(JSON Schema) → sanitize → learning_profiles v+1
+생성: buildGenerationContext() → 학습 프로필 Insight(≤1,500자) + 좋은 예시 요약 → 프롬프트 → 기본 AI
+```
+
 ## 6. 렌더링 전략
 
 | 화면 | 방식 | 이유 |

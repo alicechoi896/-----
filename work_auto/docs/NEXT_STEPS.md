@@ -36,6 +36,11 @@
 
 ## 3. 다음 개발 순서 (추천)
 
+### 학습 루프 후속 (v0.9.18 이후)
+- 학습 프로필 버전별 👍 비율·수정량·업로드율 집계 화면 (기존 데이터로 계산)
+- 성과 데이터 입력(현재 수동·데모) → 업로드 URL 로 조회수 자동 수집
+- 충분히 쌓이면 Fine-tuning 검토 (docs/INCREMENTAL_LEARNING.md 9장 기준)
+
 ### Step 1. Supabase 연결 + 실제 YouTube 확인 (사용자 작업 필요)
 - `docs/SUPABASE_SETUP.md` 1~7단계 → 첫 관리자 지정 → YouTube 키 연결 → 트렌드 화면 확인
 - (코드 작업 완료: 저장소, 로그인, 역할, 권한, YouTube Provider)

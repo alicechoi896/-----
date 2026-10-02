@@ -200,7 +200,13 @@ export const contentGenerationService = {
       if (violations.length) notes.push(`정직성 검사 경고(다시 만들기): "${violations.join('", "')}" 표현 확인 필요`);
     }
     const regenerated = [...(content.context.regenerated ?? []), { key, at: nowIso(), provider: result.provider }].slice(-20);
-    const updated = await repo.contents.update(content.id, { output, headline, context: { ...content.context, notes, regenerated } });
+    const userEdits = { ...(content.context.userEdits ?? {}) };
+    const picks = { ...(content.context.picks ?? {}) };
+    for (const k of keys) {
+      delete userEdits[k];
+      delete picks[k];
+    }
+    const updated = await repo.contents.update(content.id, { output, headline, context: { ...content.context, notes, regenerated, userEdits, picks } });
     if (!updated) throw new AppError("NOT_FOUND", "콘텐츠를 찾을 수 없습니다.", 404);
     return updated;
   },

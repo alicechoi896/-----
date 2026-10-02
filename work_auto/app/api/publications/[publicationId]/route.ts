@@ -1,7 +1,10 @@
 import type { NextRequest } from "next/server";
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { scheduleLearning } from "@/lib/server/services/learning";
 import { publicationService } from "@/lib/server/services/publications";
+
+export const maxDuration = 120;
 import type { ContentPublicationInput } from "@/lib/types";
 
 type Ctx = RouteContext<"/api/publications/[publicationId]">;
@@ -11,7 +14,9 @@ export async function PUT(request: NextRequest, ctx: Ctx) {
   const { publicationId } = await ctx.params;
   return handle(async () => {
     const session = await requireAccess("uploads");
-    return publicationService.update(session, publicationId, await readJson<Partial<ContentPublicationInput>>(request));
+    const updated = await publicationService.update(session, publicationId, await readJson<Partial<ContentPublicationInput>>(request));
+    if (updated.status === "published") scheduleLearning(updated.contentId);
+    return updated;
   });
 }
 

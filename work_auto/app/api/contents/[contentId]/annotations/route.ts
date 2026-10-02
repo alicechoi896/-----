@@ -5,13 +5,12 @@ import { memoryService } from "@/lib/server/services/memory";
 
 export const maxDuration = 120; // 응답 후 학습 업데이트가 이어질 수 있다
 
-/** PATCH /api/contents/:id { isExemplar } — "좋은 결과로 저장" */
-export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/contents/[contentId]">) {
+/** PATCH /api/contents/:id/annotations { edit?: { key, value }, pick?: { key, values } } — 직접 수정·후보 선택 (학습 신호) */
+export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/contents/[contentId]/annotations">) {
   const { contentId } = await ctx.params;
   return handle(async () => {
-    const { isExemplar } = await readJson<{ isExemplar: boolean }>(request);
-    const updated = await memoryService.setExemplar(contentId, Boolean(isExemplar));
-    if (isExemplar) scheduleLearning(contentId);
+    const updated = await memoryService.annotate(contentId, await readJson(request));
+    scheduleLearning(contentId);
     return updated;
   });
 }

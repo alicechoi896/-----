@@ -27,6 +27,10 @@ export interface GenerationContext {
   styleContext: StyleContext | null;
   /** Content History: 같은 기능에서 "좋은 결과"로 저장된 예시 (few-shot) */
   exemplars: GeneratedContent[];
+  /** 좋은 예시 요약본 (긍정 결과 무작위 + 일반 1개, 최근에 쓴 예시는 덜 고른다) */
+  examples: { id: string; kind: "positive" | "general"; text: string }[];
+  /** 팀 공통 학습 프로필에서 고른 Insight (없으면 null → 학습 없이 생성) */
+  learning: { id: string; version: number; insights: { category: string; text: string; confidence: number }[] } | null;
   /** Feedback Data: 최근 "별로예요" 사유와 사용자 수정본 → 피해야 할 패턴 */
   avoid: { reason: string; edited: Record<string, GeneratedValue> | null }[];
   /** Performance Data: 성과가 좋았던 콘텐츠의 특징 */
