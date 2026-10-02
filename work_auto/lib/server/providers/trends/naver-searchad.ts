@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac } from "node:crypto";
-import type { Keyword } from "@/lib/types";
+import type { ConnectionTestResult, Keyword } from "@/lib/types";
+import type { BaseProvider } from "../types";
 
 /**
  * NAVER 검색광고 API — 키워드도구 (연관 키워드 + 월간 검색량 + 경쟁도).
@@ -89,4 +90,21 @@ export async function fetchKeywordTool(cred: SearchAdCredentials, hints: string[
       monthlyMobile,
     };
   });
+}
+
+/** API 연결 센터 [테스트]용 */
+export class NaverSearchAdProvider implements BaseProvider {
+  readonly id = "naver-searchad";
+  readonly label = "NAVER 검색광고 API";
+  constructor(private readonly cred: SearchAdCredentials) {}
+
+  async testConnection(): Promise<ConnectionTestResult> {
+    const testedAt = new Date().toISOString();
+    try {
+      const rows = await fetchKeywordTool(this.cred, ["가전"]);
+      return { ok: true, message: `연결 성공 · '가전' 연관 키워드 ${rows.length}개를 받았습니다.`, testedAt, mock: false };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : "검색광고 API 에 연결할 수 없습니다.", testedAt, mock: false };
+    }
+  }
 }

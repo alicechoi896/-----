@@ -12,6 +12,7 @@ import { ImageTextCollector, MockImageCollector, MockUrlCollector, TextCollector
 import { MockNaverTrendProvider } from "./trends/mock-naver-provider";
 import { MockYouTubeTrendProvider } from "./trends/mock-youtube-provider";
 import { NaverApiProvider } from "./trends/naver-api-provider";
+import { NaverSearchAdProvider } from "./trends/naver-searchad";
 import { YouTubeDataApiProvider } from "./trends/youtube-data-api-provider";
 import type { AIProvider, BaseProvider, NaverTrendProvider, ProductDataCollector, YouTubeTrendProvider } from "./types";
 
@@ -73,15 +74,16 @@ export async function getYouTubeTrendProvider(): Promise<YouTubeTrendProvider> {
  */
 export async function getNaverTrendProvider(): Promise<NaverTrendProvider> {
   if (serverConfig.providerMode === "live") {
-    const cred = await loadCredentials("naver");
-    if (cred) return createNaverProvider(cred);
+    const [cred, ad] = await Promise.all([loadCredentials("naver"), loadCredentials("naver-searchad").catch(() => null)]);
+    if (cred) return createNaverProvider(cred, ad);
   }
   return mockNaver;
 }
 
-function createNaverProvider(c: ProviderCredentialMap["naver"]): NaverApiProvider {
-  const ad = c.adApiKey && c.adSecretKey && c.adCustomerId ? { apiKey: c.adApiKey, secretKey: c.adSecretKey, customerId: c.adCustomerId } : null;
-  return new NaverApiProvider(c.clientId, c.clientSecret, ad);
+/** 검색광고 키: 별도 연결(naver-searchad), 없으면 예전처럼 NAVER 연결 안에 저장된 값 */
+function createNaverProvider(c: ProviderCredentialMap["naver"], ad: ProviderCredentialMap["naver-searchad"] | null = null): NaverApiProvider {
+  const legacy = c.adApiKey && c.adSecretKey && c.adCustomerId ? { apiKey: c.adApiKey, secretKey: c.adSecretKey, customerId: c.adCustomerId } : null;
+  return new NaverApiProvider(c.clientId, c.clientSecret, ad ?? legacy);
 }
 
 /**
@@ -114,6 +116,8 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new YouTubeDataApiProvider((cred as ProviderCredentialMap["youtube"]).apiKey);
     case "naver":
       return createNaverProvider(cred as ProviderCredentialMap["naver"]);
+    case "naver-searchad":
+      return new NaverSearchAdProvider(cred as ProviderCredentialMap["naver-searchad"]);
     default:
       return null;
   }

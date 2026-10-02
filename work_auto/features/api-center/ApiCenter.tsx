@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, MonitorPlay, Search, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Bot, MonitorPlay, Search, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
 import type { AiProviderId, ApiConnectionPublic } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -40,18 +40,28 @@ const PROVIDERS: ProviderMeta[] = [
   {
     id: "naver",
     name: "NAVER API",
-    description: "검색 추이(데이터랩)·블로그 문서 수(검색 API) + 선택: 월간 검색량·연관 키워드(검색광고 API)",
-    usages: ["네이버 트렌드", "키워드 조사", "검색량"],
+    description: "검색 추이(데이터랩)·블로그 문서 수(검색 API)",
+    usages: ["네이버 트렌드", "키워드 조사", "블로그 문서 수"],
     icon: Search,
     keepBlank: true,
     fields: [
       { name: "clientId", label: "Client ID", placeholder: "애플리케이션 Client ID", hint: "developers.naver.com → 내 애플리케이션. 사용 API 에 '데이터랩(검색어트렌드)'와 '검색' 추가" },
       { name: "clientSecret", label: "Client Secret", placeholder: "애플리케이션 Client Secret" },
-      { name: "adApiKey", label: "엑세스라이선스", placeholder: "0100000000…", optional: true, section: "검색광고 API", hint: "searchad.naver.com → 도구 → API 사용 관리" },
-      { name: "adSecretKey", label: "비밀키", placeholder: "AQAAAA…", optional: true, section: "검색광고 API" },
-      { name: "adCustomerId", label: "CUSTOMER_ID", placeholder: "숫자 (예: 1234567)", optional: true, section: "검색광고 API" },
     ],
     docsUrl: "https://developers.naver.com/apps/#/register",
+  },
+  {
+    id: "naver-searchad",
+    name: "NAVER 검색광고 API",
+    description: "키워드의 월간 검색량(PC·모바일)·연관 키워드·경쟁도. 위 NAVER API 와 함께 연결하면 네이버 트렌드·키워드 조사에 숫자가 붙습니다 (선택)",
+    usages: ["월간 검색량", "연관 키워드", "경쟁도"],
+    icon: BarChart3,
+    fields: [
+      { name: "apiKey", label: "엑세스라이선스", placeholder: "0100000000…", hint: "searchad.naver.com → 도구 → API 사용 관리 (광고비 없이 무료 발급)" },
+      { name: "secretKey", label: "비밀키", placeholder: "AQAAAA…" },
+      { name: "customerId", label: "CUSTOMER_ID", placeholder: "숫자 (예: 1234567)" },
+    ],
+    docsUrl: "https://searchad.naver.com",
   },
 ];
 

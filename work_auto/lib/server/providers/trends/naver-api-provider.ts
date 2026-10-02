@@ -112,7 +112,7 @@ export class NaverApiProvider implements NaverTrendProvider {
         ),
       );
     } else {
-      parts.push("검색광고 API 키 미입력 (검색량·연관 키워드 없이 동작)");
+      parts.push("검색광고 API 미연결 (검색량·연관 키워드 없이 동작. 'NAVER 검색광고 API' 카드에서 연결)");
     }
     return { ok: true, message: parts.join(" · "), testedAt, mock: false };
   }

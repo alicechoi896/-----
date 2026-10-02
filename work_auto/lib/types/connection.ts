@@ -36,6 +36,8 @@ export interface ProviderCredentialMap {
   openai: { apiKey: string };
   claude: { apiKey: string };
   youtube: { apiKey: string };
-  /** Open API(데이터랩·검색) + 선택: 검색광고 API(검색량·연관 키워드) */
+  /** Open API (데이터랩·검색). ad* 는 v0.9.7 이전에 함께 저장하던 검색광고 키 (목록을 볼 때 naver-searchad 로 옮긴다) */
   naver: { clientId: string; clientSecret: string; adApiKey?: string; adSecretKey?: string; adCustomerId?: string };
+  /** 검색광고 API (월간 검색량·연관 키워드·경쟁도) */
+  "naver-searchad": { apiKey: string; secretKey: string; customerId: string };
 }

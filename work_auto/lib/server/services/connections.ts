@@ -20,7 +20,7 @@ import { encryptSecret, maskSecret } from "../security/crypto";
  *  - 평문 Key 를 로그로 남기지 않는다.
  */
 
-export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver"];
+export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver", "naver-searchad"];
 
 function toPublic(c: ApiConnection): ApiConnectionPublic {
   // encryptedCredentials, userId 를 명시적으로 제거한다
@@ -39,14 +39,15 @@ function validate<P extends ProviderId>(provider: P, raw: unknown): ProviderCred
   const c = (raw ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof c[k] === "string" ? (c[k] as string).trim() : "");
   if (provider === "naver") {
-    // 비운 칸은 기존 값을 유지한다 (검색광고 키만 추가할 때 Client ID 를 다시 넣지 않아도 되도록) → connect() 에서 합친다
-    return {
-      clientId: str("clientId"),
-      clientSecret: str("clientSecret"),
-      adApiKey: str("adApiKey"),
-      adSecretKey: str("adSecretKey"),
-      adCustomerId: str("adCustomerId").replace(/[^\d]/g, ""),
-    } as ProviderCredentialMap[P];
+    // 비운 칸은 기존 값을 유지한다 → connect() 에서 합친다
+    return { clientId: str("clientId"), clientSecret: str("clientSecret") } as ProviderCredentialMap[P];
+  }
+  if (provider === "naver-searchad") {
+    const cred = { apiKey: str("apiKey"), secretKey: str("secretKey"), customerId: str("customerId").replace(/[^\d]/g, "") };
+    if (!cred.apiKey || !cred.secretKey || !cred.customerId) {
+      throw new AppError("VALIDATION", "엑세스라이선스, 비밀키, CUSTOMER_ID 세 가지를 모두 입력해 주세요.");
+    }
+    return cred as ProviderCredentialMap[P];
   }
   if (!str("apiKey")) throw new AppError("VALIDATION", "API Key 를 입력해 주세요.");
   if (provider === "openai" && !str("apiKey").startsWith("sk-")) {
@@ -74,27 +75,54 @@ function assertProvider(provider: string): asserts provider is ProviderId {
   if (!PROVIDER_IDS.includes(provider as ProviderId)) throw new AppError("UNKNOWN_PROVIDER", "지원하지 않는 Provider 입니다.", 404);
 }
 
-/**
- * NAVER: 비운 칸은 저장된 값으로 채운다. 검색광고 키 3개는 모두 있거나 모두 없어야 한다.
- * (검색광고 3칸을 모두 지우려면 연결 해제 후 다시 연결한다)
- */
+/** NAVER: 비운 칸은 저장된 값으로 채운다 */
 async function mergeNaver(input: ProviderCredentialMap["naver"]): Promise<ProviderCredentialMap["naver"]> {
   const prev = (await loadCredentials("naver").catch(() => null)) ?? null;
-  const pick = (k: keyof ProviderCredentialMap["naver"]) => input[k] || prev?.[k] || "";
-  const merged = {
-    clientId: pick("clientId"),
-    clientSecret: pick("clientSecret"),
-    adApiKey: pick("adApiKey"),
-    adSecretKey: pick("adSecretKey"),
-    adCustomerId: pick("adCustomerId"),
-  };
+  const merged = { clientId: input.clientId || prev?.clientId || "", clientSecret: input.clientSecret || prev?.clientSecret || "" };
   if (!merged.clientId || !merged.clientSecret) throw new AppError("VALIDATION", "Client ID 와 Client Secret 을 모두 입력해 주세요.");
-  const ad = [merged.adApiKey, merged.adSecretKey, merged.adCustomerId].filter(Boolean).length;
-  if (ad > 0 && ad < 3) {
-    throw new AppError("VALIDATION", "검색광고 API 는 엑세스라이선스, 비밀키, CUSTOMER_ID 세 가지를 모두 입력해야 합니다.");
-  }
-  if (ad === 0) return { clientId: merged.clientId, clientSecret: merged.clientSecret };
   return merged;
+}
+
+function hintFor(provider: ProviderId, cred: unknown): string {
+  if (provider === "naver") return `ID ${maskSecret((cred as ProviderCredentialMap["naver"]).clientId)}`;
+  if (provider === "naver-searchad") {
+    const c = cred as ProviderCredentialMap["naver-searchad"];
+    return `CUSTOMER_ID ${c.customerId} · ${maskSecret(c.apiKey)}`;
+  }
+  return maskSecret((cred as { apiKey: string }).apiKey);
+}
+
+/**
+ * v0.9.7 이전에는 검색광고 키를 NAVER API 연결 안에 함께 저장했다.
+ * 목록을 볼 때 한 번, 별도 연결(naver-searchad)로 옮기고 NAVER 연결에서는 지운다.
+ */
+async function migrateLegacySearchAd(): Promise<void> {
+  const naver = await findConnection("naver");
+  if (!naver?.encryptedCredentials || !naver.maskedHint?.includes("검색광고")) return;
+  const cred = await loadCredentials("naver").catch(() => null);
+  if (!cred) return;
+  const repo = getRepositories();
+  const now = nowIso();
+  if (cred.adApiKey && cred.adSecretKey && cred.adCustomerId && !(await findConnection("naver-searchad"))) {
+    const ad: ProviderCredentialMap["naver-searchad"] = { apiKey: cred.adApiKey, secretKey: cred.adSecretKey, customerId: cred.adCustomerId };
+    await repo.connections.insert({
+      id: createId("conn"),
+      userId: naver.userId,
+      provider: "naver-searchad",
+      status: "connected",
+      encryptedCredentials: encryptSecret(JSON.stringify(ad)),
+      maskedHint: hintFor("naver-searchad", ad),
+      lastTest: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  const plain = { clientId: cred.clientId, clientSecret: cred.clientSecret };
+  await repo.connections.update(naver.id, {
+    encryptedCredentials: encryptSecret(JSON.stringify(plain)),
+    maskedHint: hintFor("naver", plain),
+    updatedAt: now,
+  });
 }
 
 async function findConnection(provider: ProviderId) {
@@ -105,6 +133,7 @@ async function findConnection(provider: ProviderId) {
 
 export const connectionService = {
   async list(): Promise<ApiConnectionPublic[]> {
+    await migrateLegacySearchAd().catch((e) => console.error("[connections] 검색광고 키 이전 실패", e instanceof Error ? e.message : e));
     return Promise.all(
       PROVIDER_IDS.map(async (p) => {
         const conn = await findConnection(p);
@@ -120,10 +149,7 @@ export const connectionService = {
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const now = nowIso();
-    const hint =
-      provider === "naver"
-        ? `ID ${maskSecret((cred as ProviderCredentialMap["naver"]).clientId)}${(cred as ProviderCredentialMap["naver"]).adApiKey ? " · 검색광고 연결" : ""}`
-        : maskSecret((cred as { apiKey: string }).apiKey);
+    const hint = hintFor(provider, cred);
     const encrypted = encryptSecret(JSON.stringify(cred));
 
     const existing = await findConnection(provider);

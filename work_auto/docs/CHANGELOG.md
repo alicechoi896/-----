@@ -2,6 +2,14 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.8] - 2026-10-02: NAVER 검색광고 API 별도 카드
+
+### 변경
+- API 연결 센터에 **NAVER 검색광고 API** 카드를 따로 둔다 (엑세스라이선스·비밀키·CUSTOMER_ID, [테스트]는 키워드도구 실제 호출)
+  - 이전에는 NAVER API 카드 아래 '선택' 칸으로 숨어 있어 찾기 어려웠다
+  - 예전에 NAVER API 카드에 함께 저장한 검색광고 키는 API 연결 센터를 열 때 자동으로 새 카드로 옮긴다
+- Provider id `naver-searchad` 추가 (DB 변경 없음)
+
 ## [0.9.7] - 2026-10-02: 보안 보강
 
 ### 보안
