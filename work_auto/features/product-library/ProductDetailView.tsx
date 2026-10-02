@@ -22,8 +22,9 @@ import { CreateContentMenu } from "@/components/shared/ProductCard";
 import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
 import { ProductThumb } from "@/components/shared/ProductThumb";
 import { formatDate, formatRelative } from "@/lib/utils";
+import { ProductVideos } from "./ProductVideos";
 
-/** 제품 상세: 저장된 모든 분석 데이터 + 원본 수집 데이터 + 이 제품으로 만든 콘텐츠 */
+/** 제품 상세: 저장된 모든 분석 데이터 + 연결된 영상(샤오홍슈 다시 받기) + 원본 수집 데이터 + 이 제품으로 만든 콘텐츠 */
 export function ProductDetailView({ productId, initialMode }: { productId: string; initialMode: "view" | "edit" }) {
   const router = useRouter();
   const detail = useAsync(() => api.products.get(productId), [productId]);
@@ -82,6 +83,8 @@ export function ProductDetailView({ productId, initialMode }: { productId: strin
           }}
         />
       )}
+
+      <ProductVideos productId={product.id} />
 
       <div className="grid items-start gap-6 xl:grid-cols-[1fr_340px]">
         <ProductAnalysisView analysis={analysis} />

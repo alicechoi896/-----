@@ -1,17 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Check, CircleCheck, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2, Wand2 } from "lucide-react";
+import { useState } from "react";
+import { Check, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2, Wand2 } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { downloadBlob } from "@/lib/photo-process";
 import { DOWNLOAD_DIR, INSTALL_COMMANDS, downloadCommand } from "@/lib/video-download";
 import { PLATFORM_LABEL, parseVideoLinks } from "@/lib/video-links";
-import { downloadXhsBlurred, downloadXhsMuted, type XhsStage } from "@/lib/xhs-download";
-import { createZip } from "@/lib/zip";
 import {
-  Badge,
   Button,
   Combobox,
   CopyButton,
@@ -29,26 +25,11 @@ import {
 } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatRelative } from "@/lib/utils";
+import { XhsJobStatus, useXhsDownloads } from "./useXhsDownloads";
 
 const MAX_BATCH = 20;
 
 type ImportResult = { url: string; ok: boolean; error?: string };
-
-/** 샤오홍슈 다운로드 진행 상태 (행마다) */
-type Job = { stage: XhsStage | "error"; progress?: number; error?: string; note?: string };
-
-const STAGE_LABEL: Record<XhsStage, string> = {
-  resolve: "영상 찾는 중",
-  download: "받는 중",
-  mute: "소리 빼는 중",
-  analyze: "AI 가 글자 위치 찾는 중",
-  blur: "글자 흐리게 처리 중",
-  done: "저장 완료",
-};
-
-/** 글자 흐리게는 원작자 허락을 받은 영상에만 (이 화면에서 한 번 확인) */
-const PERMISSION_TEXT =
-  "원작자에게 이 영상의 사용과 로고·자막 제거 허락을 받으셨나요?\n\n확인을 누르면 영상 속 자막·작성자 이름·글자 로고를 AI 가 찾아 흐리게 처리하고, 소리를 빼서 저장합니다.";
 
 /**
  * 영상 URL 가져오기.
@@ -68,10 +49,8 @@ export function VideoImport() {
   const [results, setResults] = useState<ImportResult[] | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [jobs, setJobs] = useState<Record<string, Job>>({});
-  const [bulk, setBulk] = useState<string | null>(null);
-  // 글자 흐리게 허락 확인 (이 화면에서 한 번)
-  const permitted = useRef(false);
+  const xhs = useXhsDownloads();
+  const { jobs, bulk, busy } = xhs;
 
   const links = parseVideoLinks(text);
   const urls = links.map((l) => l.url);
@@ -84,7 +63,6 @@ export function VideoImport() {
   const productName = new Map((products.data ?? []).map((p) => [p.id, p.name]));
   const xhsVideos = videos.filter((v) => v.platform === "xiaohongshu");
   const otherVideos = videos.filter((v) => v.platform !== "xiaohongshu");
-  const busy = Object.values(jobs).some((j) => j.stage !== "done" && j.stage !== "error");
 
   async function handleImport() {
     if (!urls.length) return;
@@ -116,62 +94,6 @@ export function VideoImport() {
     list.setData((prev) => prev?.filter((x) => x.id !== v.id) ?? null);
   }
 
-  function confirmPermission(): boolean {
-    if (permitted.current) return true;
-    permitted.current = window.confirm(PERMISSION_TEXT);
-    return permitted.current;
-  }
-
-  /**
-   * 샤오홍슈 1개. save=false 면 저장하지 않고 결과만 돌려준다 (ZIP 용)
-   * - plain: 워터마크 없는 원본, 소리만 제거
-   * - blur: 덧씌운 글자 자동 흐리게 + 소리 제거 (H.264)
-   */
-  async function runXhs(v: ReferenceVideo, save = true, mode: "plain" | "blur" = "plain"): Promise<{ blob: Blob; name: string } | null> {
-    const set = (job: Job) => setJobs((prev) => ({ ...prev, [v.id]: job }));
-    try {
-      const onStage = (stage: XhsStage, progress?: number) => set({ stage, progress });
-      const out = mode === "blur" ? await downloadXhsBlurred(v.url, onStage) : await downloadXhsMuted(v.url, onStage);
-      if (save) downloadBlob(out.blob, out.name);
-      set({
-        stage: "done",
-        note:
-          "found" in out
-            ? out.found
-              ? `글자 ${out.found}곳을 흐리게 처리하고 소리를 뺐습니다`
-              : "덧씌운 글자를 찾지 못해 소리만 뺐습니다"
-            : "워터마크 없는 원본을 소리 없이 저장했습니다",
-      });
-      return out;
-    } catch (e) {
-      set({ stage: "error", error: e instanceof Error ? e.message : "받지 못했습니다." });
-      return null;
-    }
-  }
-
-  /** 샤오홍슈 여러 개: 하나씩 처리해 ZIP 하나로 저장 */
-  async function runAllXhs(mode: "plain" | "blur" = "plain") {
-    if (mode === "blur" && !confirmPermission()) return;
-    const results: { blob: Blob; name: string }[] = [];
-    for (const [i, v] of xhsVideos.entries()) {
-      setBulk(`샤오홍슈 ${i + 1}/${xhsVideos.length} 처리 중…`);
-      const out = await runXhs(v, false, mode);
-      if (out) results.push(out);
-    }
-    setBulk(null);
-    if (results.length === 1) downloadBlob(results[0].blob, results[0].name);
-    else if (results.length > 1) {
-      // 이름이 겹치면 번호를 붙인다
-      const seen = new Map<string, number>();
-      const files = results.map((r) => {
-        const n = (seen.get(r.name) ?? 0) + 1;
-        seen.set(r.name, n);
-        return { name: n > 1 ? r.name.replace(/\.mp4$/, ` (${n}).mp4`) : r.name, blob: r.blob };
-      });
-      downloadBlob(await createZip(files), `샤오홍슈_${mode === "blur" ? "글자흐리게" : "음성없음"}_${files.length}개.zip`);
-    }
-  }
-
   async function copyCommand(v: ReferenceVideo) {
     try {
       await navigator.clipboard.writeText(downloadCommand([v.url]));
@@ -196,7 +118,7 @@ export function VideoImport() {
             <p className="text-xs text-fg-subtle">
               {PLATFORM_LABEL[v.platform] ?? "기타"} · {v.channelName}
             </p>
-            <JobStatus job={jobs[v.id]} />
+            <XhsJobStatus job={jobs[v.id]} />
           </div>
         </div>
       ),
@@ -224,8 +146,7 @@ export function VideoImport() {
       header: "",
       align: "right",
       render: (v) => {
-        const job = jobs[v.id];
-        const running = job && (job.stage === "resolve" || job.stage === "download" || job.stage === "mute");
+        const running = xhs.isRunning(v.id);
         return (
           <div className="flex items-center justify-end gap-1">
             {v.platform === "xiaohongshu" ? (
@@ -234,13 +155,13 @@ export function VideoImport() {
                   size="sm"
                   variant="secondary"
                   icon={Wand2}
-                  disabled={Boolean(running) || Boolean(bulk)}
-                  onClick={() => confirmPermission() && void runXhs(v, true, "blur")}
+                  disabled={running || Boolean(bulk)}
+                  onClick={() => xhs.runOne(v, "blur")}
                   title="AI 가 자막·작성자 이름·글자 로고를 찾아 흐리게 하고 소리를 빼서 저장합니다 (원작자 허락 필요)"
                 >
                   글자 흐리게
                 </Button>
-                <Button size="sm" variant="primary" icon={Download} loading={Boolean(running)} disabled={Boolean(bulk)} onClick={() => void runXhs(v)} title="워터마크 없는 원본, 소리 없이 바로 저장합니다">
+                <Button size="sm" variant="primary" icon={Download} loading={running} disabled={Boolean(bulk)} onClick={() => xhs.runOne(v)} title="워터마크 없는 원본, 소리 없이 바로 저장합니다">
                   다운로드
                 </Button>
               </>
@@ -255,7 +176,7 @@ export function VideoImport() {
                 {copiedId === v.id ? "명령 복사됨" : "다운로드 명령"}
               </Button>
             )}
-            <IconButton icon={Trash2} label="삭제" disabled={Boolean(running)} onClick={() => handleRemove(v)} className="hover:text-danger" />
+            <IconButton icon={Trash2} label="삭제" disabled={running} onClick={() => handleRemove(v)} className="hover:text-danger" />
           </div>
         );
       },
@@ -345,10 +266,10 @@ export function VideoImport() {
             {bulk && <span className="text-xs text-fg-subtle">{bulk}</span>}
             {xhsVideos.length > 1 && (
               <>
-                <Button size="sm" icon={Wand2} disabled={busy || Boolean(bulk)} onClick={() => void runAllXhs("blur")}>
+                <Button size="sm" icon={Wand2} disabled={busy || Boolean(bulk)} onClick={() => void xhs.runAll(xhsVideos, "blur")}>
                   {xhsVideos.length}개 글자 흐리게 (ZIP)
                 </Button>
-                <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(bulk)} disabled={busy} onClick={() => void runAllXhs()}>
+                <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(bulk)} disabled={busy} onClick={() => void xhs.runAll(xhsVideos)}>
                   샤오홍슈 {xhsVideos.length}개 한 번에 받기 (ZIP)
                 </Button>
               </>
@@ -372,32 +293,6 @@ export function VideoImport() {
 
       {otherVideos.length > 0 && (
         <YouTubeGuide open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} command={downloadCommand(otherVideos.map((v) => v.url))} count={otherVideos.length} />
-      )}
-    </div>
-  );
-}
-
-function JobStatus({ job }: { job?: Job }) {
-  if (!job) return null;
-  if (job.stage === "error") return <p className="mt-0.5 text-xs text-danger">{job.error}</p>;
-  if (job.stage === "done")
-    return (
-      <p className="mt-0.5 flex items-center gap-1 text-xs text-success">
-        <CircleCheck className="size-3.5" />
-        {job.note ?? "저장했습니다"}
-      </p>
-    );
-  const pct = job.progress != null ? Math.round(job.progress * 100) : null;
-  return (
-    <div className="mt-1 flex items-center gap-2">
-      <Badge tone="brand">
-        {STAGE_LABEL[job.stage]}
-        {pct != null && job.stage !== "resolve" ? ` ${pct}%` : ""}
-      </Badge>
-      {pct != null && (
-        <div className="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
-          <div className="h-full bg-brand transition-all" style={{ width: `${pct}%` }} />
-        </div>
       )}
     </div>
   );
