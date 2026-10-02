@@ -5,7 +5,10 @@ import { serverConfig } from "../config";
 import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
 
-const MAX_FRAMES = 30;
+/** 한 번에 받는 화면 수 (브라우저는 10장씩 나눠 보낸다) */
+const MAX_FRAMES = 12;
+/** 화면 1장 크기 상한 (가로 360px JPEG 는 보통 30~60KB → base64 40~80K 글자). 요청 전체가 Vercel 4.5MB 를 넘지 않게 */
+const MAX_FRAME_CHARS = 200_000;
 
 export interface DetectInput {
   frames?: { t: number; data: string }[];
@@ -24,9 +27,12 @@ const num = (v: unknown) => Math.max(0, Math.min(1000, Math.round(Number(v) || 0
  */
 export const videoTextDetector = {
   async detect(input: DetectInput): Promise<DetectResult> {
-    const frames = Array.isArray(input.frames) ? input.frames.slice(0, MAX_FRAMES) : [];
+    if (Array.isArray(input.frames) && input.frames.length > MAX_FRAMES) {
+      throw new AppError("VALIDATION", `화면은 한 번에 ${MAX_FRAMES}장까지 보낼 수 있습니다.`);
+    }
+    const frames = Array.isArray(input.frames) ? input.frames : [];
     if (!frames.length) throw new AppError("VALIDATION", "분석할 화면이 없습니다.");
-    if (frames.some((f) => typeof f.data !== "string" || f.data.length < 100 || f.data.length > 400_000)) {
+    if (frames.some((f) => typeof f.data !== "string" || f.data.length < 100 || f.data.length > MAX_FRAME_CHARS)) {
       throw new AppError("VALIDATION", "화면 이미지 형식이 올바르지 않습니다.");
     }
 

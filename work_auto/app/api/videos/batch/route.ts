@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { videoService } from "@/lib/server/services/videos";
 
 export const maxDuration = 60;
@@ -8,6 +9,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("video-import");
+    await rateLimit("video-import");
     const { items, urls, note, productId } = await readJson<{ items?: { url: string; titleHint?: string }[]; urls?: string[]; note?: string; productId?: string | null }>(request);
     return videoService.importMany(items ?? urls ?? [], note, productId);
   });

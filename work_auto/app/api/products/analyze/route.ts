@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { productService } from "@/lib/server/services/products";
 import type { ProductSourceInput } from "@/lib/types";
 
@@ -11,6 +12,7 @@ export const maxDuration = 120;
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("product-learning");
+    await rateLimit("product-analyze");
     const { source } = await readJson<{ source: ProductSourceInput }>(request);
     return productService.analyze(source);
   });

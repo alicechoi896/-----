@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { contentGenerationService } from "@/lib/server/services/content-generation";
 import type { GenerateContentRequest } from "@/lib/types";
 
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
   return handle(async () => {
     const body = await readJson<GenerateContentRequest>(request);
     await requireAccess(String(body.featureId ?? "")); // 생성 기능마다 등급 권한 확인
+    await rateLimit("ai-generate");
     return contentGenerationService.generate(body);
   });
 }

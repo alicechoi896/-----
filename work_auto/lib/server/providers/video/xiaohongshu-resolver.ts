@@ -55,9 +55,21 @@ async function fetchText(url: string): Promise<{ text: string; finalUrl: string 
 }
 
 /** 공유 링크·단축 링크 → 노트 ID 와 xsec_token */
+const shortLinks = new Map<string, string>();
+
 async function normalize(input: string): Promise<{ noteId: string; token: string | null; source: string }> {
   let url = input.trim();
-  if (/xhslink\.com/i.test(url)) url = (await fetchText(url)).finalUrl; // 단축 링크는 실제 노트 주소로 이동한다
+  if (/xhslink\.com/i.test(url)) {
+    // 단축 링크는 실제 노트 주소로 이동한다 (같은 단축 링크는 다시 묻지 않는다)
+    const known = shortLinks.get(url);
+    if (known) url = known;
+    else {
+      const finalUrl = (await fetchText(url)).finalUrl;
+      shortLinks.set(url, finalUrl);
+      if (shortLinks.size > 1000) shortLinks.delete(shortLinks.keys().next().value!);
+      url = finalUrl;
+    }
+  }
   const noteId = url.match(/xiaohongshu\.com\/(?:explore|discovery\/item)\/([0-9a-f]{24})/i)?.[1];
   if (!noteId) throw new AppError("XHS_URL", "샤오홍슈 노트 링크가 아닙니다. 앱에서 공유 → 링크 복사한 주소를 넣어 주세요.", 400);
   const q = new URL(url).searchParams;
@@ -79,8 +91,27 @@ function parseState(html: string): Record<string, unknown> | null {
 type Json = Record<string, unknown>;
 const obj = (v: unknown): Json => (v && typeof v === "object" ? (v as Json) : {});
 
+/**
+ * 같은 노트는 10분 동안 다시 묻지 않는다 (가져오기 → 다운로드 → 글자 흐리게 처럼 같은 영상을 여러 번 찾는다).
+ * 동시에 같은 노트를 찾으면 한 번만 부른다. → 샤오홍슈에 가는 요청 수를 줄여 서버 IP 차단 위험을 낮춘다.
+ * 영상 주소에는 서명(sign)이 붙어 있어 너무 오래 두지 않는다.
+ */
+const RESOLVE_TTL_MS = 10 * 60 * 1000;
+const resolved = new Map<string, { at: number; value: Promise<XhsVideo> }>();
+
 export async function resolveXiaohongshu(input: string): Promise<XhsVideo> {
-  const { noteId, token, source } = await normalize(input);
+  const norm = await normalize(input);
+  const key = `${norm.noteId}:${norm.token ?? ""}`;
+  const hit = resolved.get(key);
+  if (hit && Date.now() - hit.at < RESOLVE_TTL_MS) return hit.value;
+  const value = resolveNote(norm);
+  resolved.set(key, { at: Date.now(), value });
+  value.catch(() => resolved.delete(key)); // 실패는 기억하지 않는다
+  if (resolved.size > 500) resolved.delete(resolved.keys().next().value!);
+  return value;
+}
+
+async function resolveNote({ noteId, token, source }: { noteId: string; token: string | null; source: string }): Promise<XhsVideo> {
   const qs = new URLSearchParams({ ...(token ? { xsec_token: token } : {}), xsec_source: source });
   const { text, finalUrl } = await fetchText(`https://www.xiaohongshu.com/explore/${noteId}?${qs.toString()}`);
   if (/\/login|\/404/.test(finalUrl)) {

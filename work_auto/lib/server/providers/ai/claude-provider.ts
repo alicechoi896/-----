@@ -33,7 +33,8 @@ export class ClaudeProvider implements AIProvider {
     apiKey: string,
     readonly model: string = DEFAULT_CLAUDE_MODEL,
   ) {
-    this.client = new Anthropic({ apiKey });
+    // 응답이 너무 늦으면 서버 실행 시간(120초) 안에 원인이 담긴 오류로 끝낸다 (재시도 1번)
+    this.client = new Anthropic({ apiKey, timeout: 100_000, maxRetries: 1 });
   }
 
   async testConnection() {
@@ -107,6 +108,12 @@ export class ClaudeProvider implements AIProvider {
       if (e instanceof Anthropic.BadRequestError) {
         console.error("[claude] bad request", e.message);
         throw new AppError("AI_BAD_REQUEST", "Claude 가 요청을 처리할 수 없습니다. (이미지가 너무 크거나 형식이 맞지 않을 수 있습니다)", 400);
+      }
+      if (e instanceof Anthropic.APIConnectionTimeoutError) {
+        throw new AppError("AI_TIMEOUT", "Claude 응답이 100초 넘게 없어 중단했습니다. 잠시 후 다시 시도해 주세요.", 504);
+      }
+      if (e instanceof Anthropic.APIConnectionError) {
+        throw new AppError("AI_PROVIDER_ERROR", "Claude 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 502);
       }
       if (e instanceof Anthropic.APIError) {
         console.error("[claude] api error", e.status, e.message);

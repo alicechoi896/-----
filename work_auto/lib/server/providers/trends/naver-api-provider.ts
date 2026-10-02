@@ -30,6 +30,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_CANDIDATES = 20;
 
 const cache = new Map<string, { at: number; value: NaverTrendInsight }>();
+const acCache = new Map<string, { at: number; value: string[] }>();
 
 type Series = { period: string; ratio: number }[];
 
@@ -158,7 +159,21 @@ export class NaverApiProvider implements NaverTrendProvider {
   }
 
   /** 네이버 자동완성 (검색광고 키가 없을 때 관련 키워드 대신 쓴다. 검색량은 없다) */
+  /**
+   * 자동완성은 모든 사용자가 우리 서버 IP 로 부르는 비공식 경로라, 키워드별로 6시간 기억해 요청 수를 줄인다
+   * (사용자 키를 쓰는 데이터랩과 달리 서버 IP 가 막히면 모두가 영향을 받는다).
+   */
   private async autocomplete(keyword: string): Promise<string[]> {
+    const key = keyword.trim().toLowerCase();
+    const hit = acCache.get(key);
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
+    const value = await this.autocompleteFetch(keyword);
+    acCache.set(key, { at: Date.now(), value });
+    if (acCache.size > 2000) acCache.delete(acCache.keys().next().value!);
+    return value;
+  }
+
+  private async autocompleteFetch(keyword: string): Promise<string[]> {
     const qs = new URLSearchParams({ q: keyword, st: "100", r_format: "json", r_enc: "UTF-8", q_enc: "UTF-8", r_unicode: "0", t_koreng: "1", ans: "2", run: "2", rev: "4", con: "0", frm: "nv" });
     const res = await fetch(`https://ac.search.naver.com/nx/ac?${qs.toString()}`, { cache: "no-store", headers: { "User-Agent": "Mozilla/5.0" } });
     if (!res.ok) return [];

@@ -6,7 +6,11 @@
  */
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 
-const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
+/** 엔진 파일 위치: 첫 번째가 안 되면 다음 CDN 에서 받는다 (한 CDN 장애로 모든 사용자가 멈추지 않게) */
+const CORE_BASES = [
+  "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd",
+  "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd",
+];
 /** ffmpeg.wasm 은 파일 전체를 메모리에 올리므로 너무 큰 파일은 막는다 */
 export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 export const VIDEO_ACCEPT = "video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.m4v,.webm,.mkv";
@@ -18,10 +22,18 @@ function engineFiles() {
   if (!coreUrls) {
     coreUrls = (async () => {
       const { toBlobURL } = await import("@ffmpeg/util");
-      return {
-        coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-      };
+      let lastError: unknown = null;
+      for (const base of CORE_BASES) {
+        try {
+          return {
+            coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+            wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+          };
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw new Error(`영상 처리 엔진을 받지 못했습니다. 인터넷 연결을 확인해 주세요. (${lastError instanceof Error ? lastError.message : "CDN 오류"})`);
     })().catch((e) => {
       coreUrls = null; // 실패하면 다음에 다시 받는다
       throw e;

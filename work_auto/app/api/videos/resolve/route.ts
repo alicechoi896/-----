@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { resolveXiaohongshu } from "@/lib/server/providers/video/xiaohongshu-resolver";
 
 /**
@@ -9,6 +10,7 @@ import { resolveXiaohongshu } from "@/lib/server/providers/video/xiaohongshu-res
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("video-import");
+    await rateLimit("xhs-resolve");
     const { url } = await readJson<{ url: string }>(request);
     return resolveXiaohongshu(String(url ?? ""));
   });

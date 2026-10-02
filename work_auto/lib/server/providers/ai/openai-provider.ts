@@ -46,6 +46,8 @@ export class OpenAIProvider implements AIProvider {
       method: "POST",
       headers: this.headers(),
       cache: "no-store",
+      // 응답이 너무 늦으면 서버 실행 시간(120초) 안에 원인이 담긴 오류로 끝낸다
+      signal: AbortSignal.timeout(100_000),
       body: JSON.stringify({
         model: this.model,
         // 이미지 조각은 OpenAI 형식(image_url + data URL)으로 바꾼다
@@ -64,6 +66,13 @@ export class OpenAIProvider implements AIProvider {
         max_tokens: request.maxTokens,
         ...(json ? { response_format: { type: "json_object" } } : {}),
       }),
+    }).catch((e: unknown) => {
+      const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+      throw new AppError(
+        timedOut ? "AI_TIMEOUT" : "AI_PROVIDER_ERROR",
+        timedOut ? "AI 응답이 100초 넘게 없어 중단했습니다. 잠시 후 다시 시도해 주세요." : "OpenAI 서버에 연결할 수 없습니다.",
+        504,
+      );
     });
     if (!res.ok) {
       if (res.status === 401) throw new AppError("AI_KEY", "OpenAI API 키가 올바르지 않습니다. API 연결 센터에서 확인해 주세요.", 400);

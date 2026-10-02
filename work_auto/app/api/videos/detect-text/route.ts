@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { videoTextDetector, type DetectInput } from "@/lib/server/services/video-text-detector";
 
 export const maxDuration = 120;
@@ -8,6 +9,7 @@ export const maxDuration = 120;
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("video-import");
+    await rateLimit("detect-text");
     return videoTextDetector.detect(await readJson<DetectInput>(request));
   });
 }

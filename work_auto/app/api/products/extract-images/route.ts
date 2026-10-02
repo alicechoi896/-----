@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { productAnalyzer } from "@/lib/server/services/product-analyzer";
 
 /** AI 가 이미지를 읽는 데 시간이 걸릴 수 있어 함수 실행 시간을 늘린다 */
@@ -13,6 +14,7 @@ export const maxDuration = 120;
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("product-learning");
+    await rateLimit("product-images");
     const { images, partLabel } = await readJson<{ images: { mediaType: string; data: string }[]; partLabel?: string }>(request);
     return productAnalyzer.extractFromImages(images, partLabel);
   });
