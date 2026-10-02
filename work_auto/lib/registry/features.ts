@@ -236,7 +236,7 @@ export const FEATURES: FeatureDef[] = [
     channelId: "tools",
     order: 3,
     title: "영상 URL 가져오기",
-    description: "샤오홍슈·YouTube 영상 링크를 여러 개 한 번에 등록합니다. 샤오홍슈 영상은 버튼 하나로 소리 없는 mp4 로 바로 저장합니다.",
+    description: "샤오홍슈·YouTube 영상 링크를 여러 개 한 번에 등록합니다. 샤오홍슈 영상은 워터마크 없는 원본을 소리 없이 저장하고, 로고·자막도 지울 수 있습니다.",
     href: "/tools/video-import",
     icon: Link2,
     kind: "tool",

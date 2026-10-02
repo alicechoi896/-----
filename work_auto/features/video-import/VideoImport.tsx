@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, CircleCheck, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, CircleCheck, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2, Scissors } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -10,6 +10,7 @@ import { DOWNLOAD_DIR, INSTALL_COMMANDS, downloadCommand } from "@/lib/video-dow
 import { PLATFORM_LABEL, parseVideoLinks } from "@/lib/video-links";
 import { downloadXhsMuted, type XhsStage } from "@/lib/xhs-download";
 import { createZip } from "@/lib/zip";
+import { VideoEditor, type EditorSource } from "./VideoEditor";
 import {
   Badge,
   Button,
@@ -64,6 +65,9 @@ export function VideoImport() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const [bulk, setBulk] = useState<string | null>(null);
+  // 영상 편집기 (로고·자막 지우기)
+  const [editing, setEditing] = useState<EditorSource | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const links = parseVideoLinks(text);
   const urls = links.map((l) => l.url);
@@ -201,9 +205,21 @@ export function VideoImport() {
         return (
           <div className="flex items-center justify-end gap-1">
             {v.platform === "xiaohongshu" ? (
-              <Button size="sm" variant="primary" icon={Download} loading={Boolean(running)} disabled={Boolean(bulk)} onClick={() => void runXhs(v)} title="소리 없는 mp4 로 바로 저장합니다">
-                다운로드
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={Scissors}
+                  disabled={Boolean(running) || Boolean(bulk)}
+                  onClick={() => setEditing({ kind: "xhs", url: v.url, title: v.title })}
+                  title="로고·자막을 지우고 저장합니다 (원작자 허락 필요)"
+                >
+                  편집
+                </Button>
+                <Button size="sm" variant="primary" icon={Download} loading={Boolean(running)} disabled={Boolean(bulk)} onClick={() => void runXhs(v)} title="워터마크 없는 원본, 소리 없이 바로 저장합니다">
+                  다운로드
+                </Button>
+              </>
             ) : (
               <Button
                 size="sm"
@@ -288,10 +304,24 @@ export function VideoImport() {
 
       <SectionCard
         title="저장된 참고 영상"
-        description="샤오홍슈는 [다운로드]를 누르면 소리 없는 mp4 로 바로 저장됩니다. 영상은 우리 서버에 저장되지 않습니다."
+        description="샤오홍슈 [다운로드] = 워터마크 없는 원본을 소리 없이 바로 저장 · [편집] = 로고·자막을 지우고 저장. 영상은 우리 서버에 저장되지 않습니다."
         flush
         actions={
           <div className="flex items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setEditing({ kind: "file", file });
+                e.target.value = "";
+              }}
+            />
+            <Button size="sm" icon={Scissors} onClick={() => fileRef.current?.click()} title="내 PC 의 영상 파일에서 로고·자막을 지웁니다">
+              내 PC 영상 편집
+            </Button>
             {productOptions.length > 0 && (
               <Combobox
                 className="w-48"
@@ -324,6 +354,8 @@ export function VideoImport() {
         내 영상, 사용 허락을 받은 영상(제조사·판매자 제공 소스 등), 또는 참고(분석)용으로만 쓰세요. 다른 사람 영상은 소리를 빼고 다시 올려도 플랫폼이
         화면으로 찾아내 수익 정지·저작권 경고를 받을 수 있습니다.
       </Notice>
+
+      {editing && <VideoEditor source={editing} onClose={() => setEditing(null)} />}
 
       {otherVideos.length > 0 && (
         <YouTubeGuide open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} command={downloadCommand(otherVideos.map((v) => v.url))} count={otherVideos.length} />

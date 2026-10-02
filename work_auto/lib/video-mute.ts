@@ -11,26 +11,51 @@ const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
 export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 export const VIDEO_ACCEPT = "video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.m4v,.webm,.mkv";
 
-let loading: Promise<FFmpeg> | null = null;
+/** 엔진 파일(약 30MB)은 한 번만 받아 두고 다시 쓴다 */
+let coreUrls: Promise<{ coreURL: string; wasmURL: string }> | null = null;
 
-/** 엔진을 한 번만 불러온다 */
-export function loadEngine(onLog?: (msg: string) => void): Promise<FFmpeg> {
-  if (!loading) {
-    loading = (async () => {
-      const [{ FFmpeg }, { toBlobURL }] = await Promise.all([import("@ffmpeg/ffmpeg"), import("@ffmpeg/util")]);
-      const ffmpeg = new FFmpeg();
-      if (onLog) ffmpeg.on("log", ({ message }) => onLog(message));
-      await ffmpeg.load({
+function engineFiles() {
+  if (!coreUrls) {
+    coreUrls = (async () => {
+      const { toBlobURL } = await import("@ffmpeg/util");
+      return {
         coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
         wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-      });
-      return ffmpeg;
+      };
     })().catch((e) => {
-      loading = null; // 실패하면 다음에 다시 시도할 수 있게
+      coreUrls = null; // 실패하면 다음에 다시 받는다
       throw e;
     });
   }
-  return loading;
+  return coreUrls;
+}
+
+/** 엔진 파일을 미리 받아 둔다 (화면에 "준비 중"을 보여 줄 때) */
+export async function preloadEngine(): Promise<void> {
+  await engineFiles();
+}
+
+/**
+ * 엔진 작업은 한 번에 하나씩, 작업마다 새 엔진으로 한다.
+ * - ffmpeg.wasm(core 0.12.10)은 같은 엔진에서 명령을 두 번째 실행하면 인자 처리가 망가져
+ *   "Unrecognized option 'y'" → Aborted / memory access out of bounds 로 멈춘다 (2026-10 확인)
+ * - 명령 두 개가 동시에 돌아도 같은 문제가 생기므로 줄을 세운다
+ * 새 엔진을 띄우는 데 1초 안팎이 더 든다 (엔진 파일은 메모리에 있어 다시 받지 않는다).
+ */
+let queue: Promise<unknown> = Promise.resolve();
+export function runExclusive<T>(job: (ffmpeg: FFmpeg) => Promise<T>): Promise<T> {
+  const run = queue.then(async () => {
+    const [{ FFmpeg }, urls] = await Promise.all([import("@ffmpeg/ffmpeg"), engineFiles()]);
+    const ffmpeg = new FFmpeg();
+    await ffmpeg.load(urls);
+    try {
+      return await job(ffmpeg);
+    } finally {
+      ffmpeg.terminate();
+    }
+  });
+  queue = run.catch(() => undefined);
+  return run;
 }
 
 const extOf = (name: string) => (name.match(/\.([a-z0-9]{2,4})$/i)?.[1] ?? "mp4").toLowerCase();
@@ -42,9 +67,17 @@ export function mutedFileName(name: string): string {
 }
 
 /** 영상 1개에서 오디오를 뺀다. progress: 0~1 */
-export async function removeAudio(file: File, onProgress?: (ratio: number) => void): Promise<Blob> {
+export async function removeAudio(file: File, onProgress?: (ratio: number) => void, opts: { hevc?: boolean } = {}): Promise<Blob> {
   if (file.size > MAX_VIDEO_BYTES) throw new Error(`${file.name}: 1GB 이하 영상만 처리할 수 있습니다.`);
-  const ffmpeg = await loadEngine();
+  return runExclusive((ffmpeg) => removeAudioWith(ffmpeg, file, onProgress, opts));
+}
+
+async function removeAudioWith(
+  ffmpeg: FFmpeg,
+  file: File,
+  onProgress?: (ratio: number) => void,
+  opts: { hevc?: boolean } = {},
+): Promise<Blob> {
   const { fetchFile } = await import("@ffmpeg/util");
   const ext = extOf(file.name);
   const outExt = ext === "m4v" ? "mp4" : ext;
@@ -56,6 +89,8 @@ export async function removeAudio(file: File, onProgress?: (ratio: number) => vo
     await ffmpeg.writeFile(input, await fetchFile(file));
     const args = ["-i", input, "-map", "0:v", "-c", "copy", "-an"];
     if (outExt === "mp4" || outExt === "mov") args.push("-movflags", "+faststart");
+    // H.265 는 hvc1 표시가 있어야 Mac·iPhone(QuickTime)에서도 열린다
+    if (opts.hevc && (outExt === "mp4" || outExt === "mov")) args.push("-tag:v", "hvc1");
     const code = await ffmpeg.exec([...args, output]);
     if (code !== 0) throw new Error(`${file.name}: 처리하지 못했습니다. 손상되었거나 지원하지 않는 형식일 수 있습니다.`);
     const data = await ffmpeg.readFile(output);

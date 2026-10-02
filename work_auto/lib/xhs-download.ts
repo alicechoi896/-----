@@ -4,6 +4,11 @@
  *  2) 브라우저가 샤오홍슈 영상 서버(xhscdn, CORS 허용)에서 직접 받는다
  *  3) ffmpeg.wasm 으로 소리 트랙만 뺀다 (재인코딩 없음, 화질 그대로)
  * 영상 파일은 우리 서버를 지나가지 않고 어디에도 저장되지 않는다.
+ *
+ * 형식 선택 (2026-10 확인): 같은 노트라도
+ *  - H.265(hevc) 스트림에는 샤오홍슈 워터마크(로고·작성자 이름)가 없고
+ *  - H.264 스트림에는 화면 아래에 워터마크가 들어 있다
+ * → 기본은 H.265 를 먼저 받는다. H.265 가 없으면 H.264.
  */
 import { api } from "@/lib/api-client";
 import { removeAudio } from "@/lib/video-mute";
@@ -11,6 +16,7 @@ import { removeAudio } from "@/lib/video-mute";
 export type XhsStage = "resolve" | "download" | "mute" | "done";
 
 const safeName = (s: string) => (s.replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim() || "샤오홍슈 영상").slice(0, 60);
+const isHevc = (codec: string) => /hevc|h265|hvc/i.test(codec);
 
 async function fetchWithProgress(url: string, onProgress: (ratio: number) => void): Promise<Blob> {
   const res = await fetch(url);
@@ -29,29 +35,48 @@ async function fetchWithProgress(url: string, onProgress: (ratio: number) => voi
   return new Blob(chunks as BlobPart[], { type: "video/mp4" });
 }
 
+export interface XhsSource {
+  blob: Blob;
+  title: string;
+  noteId: string;
+  codec: string;
+  /** 워터마크 없는 스트림인가 (H.265) */
+  clean: boolean;
+}
+
+/** 원본 영상 받기 (소리 포함). 워터마크 없는 H.265 → 백업 주소 → H.264 순서로 시도 */
+export async function fetchXhsSource(url: string, onStage: (stage: XhsStage, progress?: number) => void): Promise<XhsSource> {
+  onStage("resolve");
+  const video = await api.videos.resolve(url);
+  const ordered = [...video.streams].sort((a, b) => Number(isHevc(b.codec)) - Number(isHevc(a.codec)));
+  let lastError: unknown = null;
+  for (const s of ordered) {
+    for (const candidate of [s.url, ...s.backupUrls]) {
+      try {
+        onStage("download", 0);
+        const blob = await fetchWithProgress(candidate, (p) => onStage("download", p));
+        return { blob, title: video.title, noteId: video.noteId, codec: s.codec, clean: isHevc(s.codec) };
+      } catch (e) {
+        lastError = e;
+      }
+    }
+  }
+  throw new Error(lastError instanceof Error ? lastError.message : "영상을 받지 못했습니다.");
+}
+
+export function mutedName(title: string, suffix = "음성없음"): string {
+  return `${safeName(title)}_${suffix}.mp4`;
+}
+
 export async function downloadXhsMuted(
   url: string,
   onStage: (stage: XhsStage, progress?: number) => void,
-): Promise<{ blob: Blob; name: string; title: string }> {
-  onStage("resolve");
-  const video = await api.videos.resolve(url);
-  // h264 가 먼저 온다 (어느 편집 프로그램에서나 열린다). 실패하면 백업 주소 → 다른 형식 순서로 시도
-  const candidates = video.streams.flatMap((s) => [s.url, ...s.backupUrls]);
-  let source: Blob | null = null;
-  let lastError: unknown = null;
-  for (const candidate of candidates) {
-    try {
-      onStage("download", 0);
-      source = await fetchWithProgress(candidate, (p) => onStage("download", p));
-      break;
-    } catch (e) {
-      lastError = e;
-    }
-  }
-  if (!source) throw new Error(lastError instanceof Error ? lastError.message : "영상을 받지 못했습니다.");
-
+): Promise<{ blob: Blob; name: string; title: string; clean: boolean }> {
+  const src = await fetchXhsSource(url, onStage);
   onStage("mute", 0);
-  const muted = await removeAudio(new File([source], `${video.noteId}.mp4`, { type: "video/mp4" }), (p) => onStage("mute", p));
+  const muted = await removeAudio(new File([src.blob], `${src.noteId}.mp4`, { type: "video/mp4" }), (p) => onStage("mute", p), {
+    hevc: isHevc(src.codec),
+  });
   onStage("done");
-  return { blob: muted, name: `${safeName(video.title)}_음성없음.mp4`, title: video.title };
+  return { blob: muted, name: mutedName(src.title), title: src.title, clean: src.clean };
 }

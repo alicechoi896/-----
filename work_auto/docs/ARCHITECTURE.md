@@ -264,6 +264,7 @@ Context가 실제로 비어 있으면(제품 없음, 스타일 없음 등) `cont
 |------|------|----------------|
 | 상세페이지 이미지 학습 | 조각 자르기·압축 (`lib/image-slicer.ts`) | AI 가 읽을 조각 (저장 안 함) |
 | 블로그 제품 사진 | 가로 1080px·JPEG 압축·비율 자르기 (`lib/photo-process.ts`), ZIP (`lib/zip.ts`) | 사진 설명 텍스트만. AI 설명 버튼을 누르면 512px 미리보기 (저장 안 함) |
+| 영상 편집 (로고·자막) | ffmpeg.wasm delogo·boxblur·drawbox + libx264, 미리보기는 rawvideo → 캔버스, 작업마다 새 엔진 (`lib/video-edit.ts`) | 없음 |
 | 샤오홍슈 영상 다운로드 | 서버는 영상 주소만 조회 → 브라우저가 xhscdn 에서 직접 받기 → ffmpeg.wasm 소리 제거 (`lib/xhs-download.ts`) | 노트 링크 (영상 파일은 서버를 지나가지 않음) |
 | 영상 음성 제거 | ffmpeg.wasm `-map 0:v -c copy -an` (`lib/video-mute.ts`) | 없음 (엔진은 unpkg CDN 에서 한 번 받아 캐시) |
 
