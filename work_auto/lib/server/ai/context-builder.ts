@@ -37,37 +37,50 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const repo = getRepositories();
   const notes: string[] = [];
 
+  // 서로 관계없는 조회는 한 번에 병렬로 실행한다 (DB 왕복 횟수만큼 기다리지 않도록)
+  const productId = config.productField ? String(input[config.productField] ?? "") : "";
+  const trendId = config.trendField ? String(input[config.trendField] ?? "") : "";
+  const videoId = String(input.referenceVideoId ?? "");
+
+  const [productRow, styles, featureContents, downFeedback, channelContents, performance, trend, referenceVideo] = await Promise.all([
+    productId ? repo.products.get(productId) : Promise.resolve(null),
+    repo.styles.list((s) => s.userId === userId && s.isDefault),
+    repo.contents.list((c) => c.userId === userId && c.featureId === featureId && c.isExemplar),
+    repo.feedback.list((f) => f.userId === userId && f.featureId === featureId && f.rating === "down"),
+    repo.contents.list((c) => c.userId === userId && c.channelId === channelId),
+    repo.performance.list((m) => m.views != null),
+    trendId ? trendService.findOption(trendId) : Promise.resolve(null),
+    videoId ? repo.videos.get(videoId) : Promise.resolve(null),
+  ]);
+
   // 1) Product Memory — 저장된 분석을 그대로 쓴다 (상세페이지 재분석 없음)
   let product: GenerationContext["product"] = null;
-  const productId = config.productField ? String(input[config.productField] ?? "") : "";
   if (productId) {
-    const p = await repo.products.get(productId);
-    if (!p || p.userId !== userId) throw new AppError("PRODUCT_NOT_FOUND", "선택한 제품을 찾을 수 없습니다.", 404);
-    const analysis = await repo.productAnalyses.get(p.currentAnalysisId);
+    if (!productRow || productRow.userId !== userId) throw new AppError("PRODUCT_NOT_FOUND", "선택한 제품을 찾을 수 없습니다.", 404);
+    const analysis = await repo.productAnalyses.get(productRow.currentAnalysisId);
     if (!analysis) throw new AppError("ANALYSIS_NOT_FOUND", "제품 분석 데이터가 없습니다. 상세페이지 학습을 다시 진행해 주세요.", 404);
-    product = { product: p, analysis };
+    product = { product: productRow, analysis };
   }
 
   // 2) Style Memory
-  const styles = await repo.styles.list((s) => s.userId === userId && s.isDefault);
   const style = styles.find((s) => s.channelId === channelId) ?? styles.find((s) => s.channelId === "all") ?? null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
 
   // 3) Content History — 좋은 결과 (few-shot 예시)
-  const exemplars = (await repo.contents.list((c) => c.userId === userId && c.featureId === featureId && c.isExemplar))
+  const exemplars = featureContents
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, CONTEXT_LIMITS.exemplars);
 
   // 4) Feedback — 별로예요 사유와 수정본
-  const avoid = (await repo.feedback.list((f) => f.userId === userId && f.featureId === featureId && f.rating === "down"))
+  const avoid = downFeedback
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, CONTEXT_LIMITS.avoid)
     .map((f) => ({ reason: f.reason ?? "사유 없음", edited: f.editedOutput }));
 
   // 5) Performance — 같은 채널 성과 상위
-  const channelContents = await repo.contents.list((c) => c.userId === userId && c.channelId === channelId);
   const contentById = new Map(channelContents.map((c) => [c.id, c]));
-  const performanceHints = (await repo.performance.list((m) => contentById.has(m.contentId) && m.views != null))
+  const performanceHints = performance
+    .filter((m) => contentById.has(m.contentId))
     .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
     .slice(0, CONTEXT_LIMITS.performance)
     .map((m) => {
@@ -75,11 +88,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
       return `"${c.headline}" — 조회 ${formatNumber(m.views ?? 0)}${m.ctr != null ? `, CTR ${m.ctr}%` : ""}`;
     });
 
-  // 6) Trend / 참고 영상
-  const trendId = config.trendField ? String(input[config.trendField] ?? "") : "";
-  const trend = trendId ? await trendService.findOption(trendId) : null;
-  const videoId = String(input.referenceVideoId ?? "");
-  const referenceVideo = videoId ? await repo.videos.get(videoId) : null;
+  // 6) Trend / 참고 영상: 위에서 함께 조회함
 
   // 정직성 가드레일: 제품 콘텐츠인데 실제 경험이 없으면 활성화
   const experience = config.experienceField ? String(input[config.experienceField] ?? "").trim() : "";

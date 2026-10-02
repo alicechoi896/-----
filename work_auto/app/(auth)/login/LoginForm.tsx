@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { clearApiCache } from "@/lib/api-client";
 import { LogIn, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -18,6 +19,9 @@ export function LoginForm({ next, callbackError }: { next: string; callbackError
   const [signInState, signInAction, signingIn] = useActionState(signIn, initial);
   const [signUpState, signUpAction, signingUp] = useActionState(signUp, initial);
   const state = mode === "signin" ? signInState : signUpState;
+
+  // 이전 사용자의 조회 캐시가 남지 않도록 로그인 화면에서 비운다
+  useEffect(() => clearApiCache(), []);
 
   return (
     <div className="rounded-card border border-line bg-canvas p-6 shadow-card">

@@ -16,6 +16,7 @@
 | 폰트 | Pretendard Variable (로컬, `next/font/local`) | 한국어 가독성이 좋고 외부 요청이 없다 |
 | 저장소 | 인메모리 Repository (V1) → Supabase/Postgres (V2) | Repository 인터페이스로 교체할 수 있다 |
 | 보안 | Node `crypto` AES-256-GCM | API Key를 서버에서 암호화한다 |
+| 배포 지역 | Vercel 서버 함수 **서울(icn1)** (`vercel.json`), Supabase 서울 | 서버와 DB 를 같은 지역에 두어 DB 왕복 지연을 없앤다. 지역을 바꾸면 반드시 둘을 같이 옮긴다 |
 
 ## 2. 전체 시스템 구조
 

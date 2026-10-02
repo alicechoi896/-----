@@ -40,7 +40,36 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 조회(GET) 결과 짧은 캐시 (브라우저 메모리, 탭 단위).
+ * - 같은 주소를 30초 안에 다시 부르면 서버에 가지 않고 바로 돌려준다 → 화면 이동이 빨라진다
+ * - 동시에 같은 요청이 여러 번 나가면 하나로 합친다
+ * - 저장·수정·삭제(GET 이 아닌 요청)가 성공하면 캐시를 모두 비워 오래된 데이터를 보여주지 않는다
+ * - 실패한 응답은 저장하지 않는다
+ */
+const GET_CACHE_TTL_MS = 30_000;
+const getCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+export function clearApiCache() {
+  getCache.clear();
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isGet = !init?.method || init.method === "GET";
+  if (!isGet) {
+    const result = await send<T>(path, init);
+    clearApiCache();
+    return result;
+  }
+  const hit = getCache.get(path);
+  if (hit && Date.now() - hit.at < GET_CACHE_TTL_MS) return hit.promise as Promise<T>;
+  const promise = send<T>(path, init);
+  getCache.set(path, { at: Date.now(), promise });
+  promise.catch(() => getCache.delete(path));
+  return promise;
+}
+
+async function send<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {

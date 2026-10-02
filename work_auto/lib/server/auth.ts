@@ -60,9 +60,13 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { data } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS);
-    const user = data.user;
-    if (!user) return null;
+    // getClaims(): 로그인 토큰(JWT)을 서버에서 직접 검증한다 (비대칭 서명 키 ES256).
+    // getUser() 와 달리 매번 Supabase Auth 서버에 묻지 않으므로 빠르다.
+    // 탈퇴·삭제된 사용자는 아래 profiles 조회에서 걸러진다 (프로필이 없으면 승인 대기로 취급).
+    const { data } = await withTimeout(supabase.auth.getClaims(), AUTH_TIMEOUT_MS);
+    const claims = data?.claims;
+    if (!claims?.sub) return null;
+    const user = { id: claims.sub, email: typeof claims.email === "string" ? claims.email : "" };
 
     const [profile, overrides] = await Promise.all([
       supabaseRepositories.profiles.get(user.id),
@@ -73,7 +77,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     const status: MemberStatus = profile?.status ?? "pending";
     return {
       mode: "supabase",
-      user: { id: user.id, email: user.email ?? "", name: profile?.name || user.email?.split("@")[0] || "사용자" },
+      user: { id: user.id, email: user.email, name: profile?.name || user.email.split("@")[0] || "사용자" },
       role,
       status,
       // 승인 전(또는 거절된) 사용자는 어떤 메뉴도 쓸 수 없다

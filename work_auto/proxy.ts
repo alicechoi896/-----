@@ -50,8 +50,9 @@ export async function proxy(request: NextRequest) {
 
   let loggedIn: boolean | null = null; // null = 확인 실패 (시간 초과 등)
   try {
-    const { data } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS);
-    loggedIn = Boolean(data.user);
+    // getClaims(): 토큰을 로컬에서 검증 (만료가 가까우면 세션을 갱신하고 쿠키를 다시 쓴다). getUser() 보다 빠르다
+    const { data } = await withTimeout(supabase.auth.getClaims(), AUTH_TIMEOUT_MS);
+    loggedIn = Boolean(data?.claims?.sub);
   } catch {
     loggedIn = null;
   }

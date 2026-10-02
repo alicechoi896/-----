@@ -2,6 +2,23 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.3.1] - 2026-10-02: 속도 개선
+
+### 원인
+- Vercel 서버 함수가 미국 동부(iad1), Supabase 는 서울 → DB 조회마다 태평양 왕복(약 0.2초)
+- 로그인 확인(getUser)이 요청마다 Supabase Auth 서버에 네트워크 호출
+- Mock 기능에 데모용 인위적 지연 0.7초
+- 폰트 파일 2MB 를 첫 방문에 통째로 다운로드
+
+### 변경
+- `vercel.json`: 서버 함수 지역을 **서울(icn1)** 로 → Supabase 와 같은 지역
+- 로그인 확인 `getUser()` → `getClaims()` (비대칭 키로 토큰을 서버에서 직접 검증, 네트워크 호출 없음) — proxy, getSession
+- Mock 지연 기본값 0 (`MOCK_LATENCY_MS` 로만 켬)
+- 폰트: Pretendard 동적 서브셋 (92개 조각, 화면에 쓰인 글자 조각만 다운로드)
+- 브라우저 조회 캐시 30초 (`api-client`): 화면 이동 시 즉시 표시, 저장·수정·삭제·로그아웃·다시 시도 시 비움
+- AI 생성 Context 조회 8개를 병렬 실행
+- DB (`schema.sql`): 사용자별·외래키 인덱스 14개 추가, RLS 정책의 `auth.uid()`·`is_admin()`·`is_active()` 를 `(select …)` 로 감싸 요청당 1번만 계산, `profiles.approved_by` 외래키, `analyze`
+
 ## [0.3.0] - 2026-10-02: 가입 승인 · 활동 기록 · 내 정보 · 약관
 
 ### 추가

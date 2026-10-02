@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clearApiCache } from "@/lib/api-client";
 
 export interface AsyncState<T> {
   data: T | null;
@@ -54,7 +55,11 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick]);
 
-  const reload = useCallback(() => setTick((t) => t + 1), []);
+  // "다시 시도"·새로고침은 조회 캐시를 비우고 서버에서 새로 가져온다
+  const reload = useCallback(() => {
+    clearApiCache();
+    setTick((t) => t + 1);
+  }, []);
   const setData = useCallback((updater: (prev: T | null) => T | null) => setDataState(updater), []);
 
   return { data, error, loading, reload, setData };

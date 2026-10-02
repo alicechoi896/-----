@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+// Pretendard 동적 서브셋: 글자 범위별로 92개 조각(각 40KB 이하)으로 나뉘어,
+// 화면에 실제로 쓰인 글자의 조각만 내려받는다 (전체 2MB 를 한 번에 받지 않음)
+import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./globals.css";
-
-const pretendard = localFont({
-  src: "../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
-  variable: "--font-pretendard",
-  weight: "45 920",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: {
@@ -20,7 +15,7 @@ export const metadata: Metadata = {
 /** 최상위 레이아웃: 폰트와 전역 스타일만. 사이드바는 (app)/layout.tsx 에 있다 */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ko" className={pretendard.variable}>
+    <html lang="ko">
       <body>{children}</body>
     </html>
   );

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { UserX } from "lucide-react";
-import { api } from "@/lib/api-client";
+import { api, clearApiCache } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
@@ -26,6 +26,7 @@ export function WithdrawForm({ label = "회원 탈퇴" }: { label?: string }) {
     setError(null);
     try {
       await api.account.withdraw(password);
+      clearApiCache();
       router.replace("/login?withdrawn=1");
       router.refresh();
     } catch (e) {

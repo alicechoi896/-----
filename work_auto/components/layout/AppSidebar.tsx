@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Boxes, ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-react";
 import { signOut } from "@/app/(auth)/login/actions";
+import { clearApiCache } from "@/lib/api-client";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { CHANNELS, STANDALONE_PAGES, getFeaturesByChannel, type ChannelDef } from "@/lib/registry";
 import type { SessionInfo } from "@/lib/types";
@@ -96,7 +97,7 @@ export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "
               </p>
             </Link>
             {session.mode === "supabase" && (
-              <form action={signOut}>
+              <form action={signOut} onSubmit={() => clearApiCache()}>
                 <button
                   type="submit"
                   aria-label="로그아웃"

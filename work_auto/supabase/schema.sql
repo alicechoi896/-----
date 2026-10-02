@@ -31,6 +31,10 @@ alter table public.profiles add column if not exists terms_agreed_at timestamptz
 do $$ begin
   alter table public.profiles add constraint profiles_status_check check (status in ('pending', 'active', 'rejected'));
 exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.profiles
+    add constraint profiles_approved_by_fkey foreign key (approved_by) references public.profiles (id) on delete set null;
+exception when duplicate_object then null; end $$;
 
 create table if not exists public.role_permissions (
   id              text primary key,                -- '{role}:{permission_key}'
@@ -294,6 +298,24 @@ create index if not exists idx_contents_user_feature on public.generated_content
 create index if not exists idx_feedback_user_feature on public.user_feedback (user_id, feature_id, created_at desc);
 create index if not exists idx_products_user on public.products (user_id, created_at desc);
 
+-- 성능: 사용자별 목록 조회 (RLS 의 user_id = 나 조건 + 최신순 정렬)
+create index if not exists idx_contents_user_created     on public.generated_contents (user_id, created_at desc);
+create index if not exists idx_sources_user              on public.product_sources (user_id);
+create index if not exists idx_analyses_user             on public.product_analyses (user_id);
+create index if not exists idx_styles_user               on public.user_styles (user_id, created_at desc);
+create index if not exists idx_feedback_user_created     on public.user_feedback (user_id, created_at desc);
+create index if not exists idx_performance_user          on public.performance_metrics (user_id);
+create index if not exists idx_videos_user_created       on public.reference_videos (user_id, created_at desc);
+create index if not exists idx_audit_logs_actor          on public.audit_logs (actor_id);
+create index if not exists idx_profiles_status           on public.profiles (status, created_at desc);
+
+-- 성능: 외래키 컬럼 (조인, 부모 삭제 시 cascade 검색이 빨라진다)
+create index if not exists idx_sources_product           on public.product_sources (product_id);
+create index if not exists idx_analyses_product          on public.product_analyses (product_id);
+create index if not exists idx_contents_product          on public.generated_contents (product_id);
+create index if not exists idx_feedback_content          on public.user_feedback (content_id);
+create index if not exists idx_performance_content       on public.performance_metrics (content_id);
+
 -- ───────── 3. RLS (행 단위 보안) ─────────
 
 alter table public.profiles            enable row level security;
@@ -312,29 +334,29 @@ alter table public.reference_videos    enable row level security;
 -- profiles: 본인 또는 관리자만 조회. 역할·승인 변경은 관리자만
 drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles for select to authenticated
-  using (id = auth.uid() or public.is_admin());
+  using (id = (select auth.uid()) or (select public.is_admin()));
 drop policy if exists "profiles_update_admin" on public.profiles;
 create policy "profiles_update_admin" on public.profiles for update to authenticated
-  using (public.is_admin()) with check (public.is_admin());
+  using ((select public.is_admin())) with check ((select public.is_admin()));
 -- 본인 수정은 이름만 (protect_profile_fields 트리거가 나머지를 되돌린다)
 drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_update_self" on public.profiles for update to authenticated
-  using (id = auth.uid()) with check (id = auth.uid());
+  using (id = (select auth.uid())) with check (id = (select auth.uid()));
 
 -- audit_logs: 본인 명의로만 기록, 조회는 관리자만, 수정·삭제 불가
 drop policy if exists "audit_insert_self" on public.audit_logs;
 create policy "audit_insert_self" on public.audit_logs for insert to authenticated
-  with check (actor_id = auth.uid());
+  with check (actor_id = (select auth.uid()));
 drop policy if exists "audit_select_admin" on public.audit_logs;
 create policy "audit_select_admin" on public.audit_logs for select to authenticated
-  using (public.is_admin());
+  using ((select public.is_admin()));
 
 -- role_permissions: 로그인 사용자는 읽기, 변경은 관리자만
 drop policy if exists "role_permissions_select" on public.role_permissions;
 create policy "role_permissions_select" on public.role_permissions for select to authenticated using (true);
 drop policy if exists "role_permissions_write_admin" on public.role_permissions;
 create policy "role_permissions_write_admin" on public.role_permissions for all to authenticated
-  using (public.is_admin()) with check (public.is_admin());
+  using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- 사용자 데이터: 본인 행만 + 관리자 승인된 사용자만
 do $$
@@ -346,11 +368,15 @@ begin
   ] loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(
-      'create policy "own_rows" on public.%I for all to authenticated using (user_id = auth.uid() and public.is_active()) with check (user_id = auth.uid() and public.is_active())',
+      'create policy "own_rows" on public.%I for all to authenticated using (user_id = (select auth.uid()) and (select public.is_active())) with check (user_id = (select auth.uid()) and (select public.is_active()))',
       t
     );
   end loop;
 end $$;
+
+-- 통계 갱신: 쿼리 계획이 새 인덱스를 바로 활용하도록
+analyze public.profiles, public.role_permissions, public.audit_logs, public.products, public.generated_contents,
+        public.user_feedback, public.user_styles, public.performance_metrics, public.reference_videos;
 
 -- API 로 접근할 수 있게 권한 부여 (RLS 가 행 단위로 다시 거른다)
 grant usage on schema public to authenticated;
