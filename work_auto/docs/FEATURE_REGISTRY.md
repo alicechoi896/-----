@@ -9,8 +9,8 @@
 | 채널 | 기능 수 | live | mock | planned |
 |------|--------|------|------|---------|
 | YouTube | 3 | 0 | 3 | 0 |
-| NAVER Clip | 3 | 0 | 3 | 0 |
-| NAVER Blog | 4 | 0 | 4 | 0 |
+| NAVER 클립 | 3 | 0 | 3 | 0 |
+| NAVER 블로그 | 4 | 0 | 4 | 0 |
 | 공통 도구 | 3 | 0 | 3 | 0 |
 | 설정 | 2 | 0 | 1 | 1 |
 | (단독) AI 학습 관리 | 1 | 0 | 1 | 0 |
@@ -23,13 +23,13 @@
 | YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | 🧪 | YouTube Data API | 카테고리, 검색 키워드, 기간(7/14/21일), Shorts/일반, 정렬 | 썸네일, 제목, 채널, 게시일, 조회수, 일평균 조회수, 주요 키워드, Trend Score | `features/youtube-trends` |
 | YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | 🧪 | OpenAI | 제품*, 참고 트렌드, 참고 영상, 주요 키워드, 영상 길이, 콘텐츠 스타일 | 추천 제목 5개, Hook, 대본, 설명글, 주요 키워드, 해시태그 | ContentGenerator |
 | YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | 🧪 | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
-| NAVER Clip | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | 🧪 | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
-| NAVER Clip | `clip-product-content` | 제품 홍보 클립 만들기 | `/naver-clip/product-content` | generator | 🧪 | OpenAI | 제품*, 트렌드, 콘텐츠 스타일, 주요 키워드 | 제목, Hook, 클립 대본, 설명글, 키워드, 해시태그 | ContentGenerator |
-| NAVER Clip | `clip-info-content` | 정보성 클립 만들기 | `/naver-clip/info-content` | generator | 🧪 | OpenAI | 카테고리*, 현재 트렌드, 키워드 | 추천 주제, 제목, 대본, 설명글, 키워드 | ContentGenerator |
-| NAVER Blog | `blog-trends` | 네이버 트렌드·키워드 찾기 | `/naver-blog/trends` | trend | 🧪 | NAVER API | 검색어, 카테고리, 최근 기간 | 관련 검색어, 최근 검색 추이(차트), 급상승 키워드, 시즌 키워드, 콘텐츠 아이디어 | `features/naver-trends` (blog) |
-| NAVER Blog | `blog-product-writing` | 제품 블로그 글 만들기 | `/naver-blog/product-writing` | generator | 🧪 | OpenAI | 제품*, 메인 키워드*, 서브 키워드, 글 스타일, 글 길이, 실제 경험(선택) | 제목 후보 5, 전체 본문, 소제목, 제품 장점, 정보, CTA, 키워드, 해시태그 | ContentGenerator + 정직성 가드레일 |
-| NAVER Blog | `blog-info-writing` | 정보·트렌드 글 만들기 | `/naver-blog/info-writing` | generator | 🧪 | OpenAI | 글 유형*(일반 정보/트렌드/IT/AI/생활정보), 주제*, 참고 트렌드, 메인 키워드, 글 길이 | 제목 후보 5, 전체 본문, 소제목, 키워드, 해시태그 | ContentGenerator |
-| NAVER Blog | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | 🧪 | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
+| NAVER 클립 | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | 🧪 | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
+| NAVER 클립 | `clip-product-content` | 제품 홍보 클립 만들기 | `/naver-clip/product-content` | generator | 🧪 | OpenAI | 제품*, 트렌드, 콘텐츠 스타일, 주요 키워드 | 제목, Hook, 클립 대본, 설명글, 키워드, 해시태그 | ContentGenerator |
+| NAVER 클립 | `clip-info-content` | 정보성 클립 만들기 | `/naver-clip/info-content` | generator | 🧪 | OpenAI | 카테고리*, 현재 트렌드, 키워드 | 추천 주제, 제목, 대본, 설명글, 키워드 | ContentGenerator |
+| NAVER 블로그 | `blog-trends` | 네이버 트렌드·키워드 찾기 | `/naver-blog/trends` | trend | 🧪 | NAVER API | 검색어, 카테고리, 최근 기간 | 관련 검색어, 최근 검색 추이(차트), 급상승 키워드, 시즌 키워드, 콘텐츠 아이디어 | `features/naver-trends` (blog) |
+| NAVER 블로그 | `blog-product-writing` | 제품 블로그 글 만들기 | `/naver-blog/product-writing` | generator | 🧪 | OpenAI | 제품*, 메인 키워드*, 서브 키워드, 글 스타일, 글 길이, 실제 경험(선택) | 제목 후보 5, 전체 본문, 소제목, 제품 장점, 정보, CTA, 키워드, 해시태그 | ContentGenerator + 정직성 가드레일 |
+| NAVER 블로그 | `blog-info-writing` | 정보·트렌드 글 만들기 | `/naver-blog/info-writing` | generator | 🧪 | OpenAI | 글 유형*(일반 정보/트렌드/IT/AI/생활정보), 주제*, 참고 트렌드, 메인 키워드, 글 길이 | 제목 후보 5, 전체 본문, 소제목, 키워드, 해시태그 | ContentGenerator |
+| NAVER 블로그 | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | 🧪 | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
 | 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | 🧪 | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
 | 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | 🧪 | - | 검색어, 카테고리 | 제품 카드/목록, 상세, 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
 | 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | 🧪 | YouTube Data API | 영상 URL, 메모 | 영상 메타데이터, 참고 영상 목록 | `features/video-import` |

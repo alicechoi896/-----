@@ -73,7 +73,7 @@ export const FEATURES: FeatureDef[] = [
     outputs: ["추천 주제", "제목", "Hook", "대본", "설명글", "키워드"],
   },
 
-  // ───────── NAVER Clip ─────────
+  // ───────── NAVER 클립 ─────────
   {
     id: "clip-trends",
     channelId: "naver-clip",
@@ -119,7 +119,7 @@ export const FEATURES: FeatureDef[] = [
     outputs: ["추천 주제", "제목", "대본", "설명글", "키워드"],
   },
 
-  // ───────── NAVER Blog ─────────
+  // ───────── NAVER 블로그 ─────────
   {
     id: "blog-trends",
     channelId: "naver-blog",

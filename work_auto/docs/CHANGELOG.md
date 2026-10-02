@@ -2,6 +2,17 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.1.1] - 2026-10-02
+
+### 변경
+- 채널 표기 변경: `NAVER Clip` → `NAVER 클립`, `NAVER Blog` → `NAVER 블로그` (메뉴, 카드, 페이지 제목, 메타데이터, 문서)
+- 프롬프트 `naver-clip.product-content` v1.0.0 → v1.0.1 (작업 지시 안의 채널 표기 변경)
+- 채널 ID와 URL(`naver-clip`, `naver-blog`)은 그대로 둔다
+
+### 배포
+- GitHub `alicechoi896/-----` 저장소의 `work_auto/` 폴더로 커밋
+- Vercel 프로젝트 `work-auto`(flowai 팀) Production 배포, 환경변수 `ENCRYPTION_KEY` 설정
+
 ## [0.1.0] - 2026-10-01: V1 골격 (Mock)
 
 빈 `work_auto` 폴더에서 새로 시작했다. 기존 코드 삭제나 대규모 변경은 없다.

@@ -28,11 +28,11 @@
 | `/youtube/trends` | YouTube 트렌드 찾기 | 필터 → 요약 → 트렌드 표 | YouTubeTrendExplorer | Static + Client |
 | `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드·참고 영상으로 원고 생성 | ContentGenerator | Dynamic(쿼리) |
 | `/youtube/info-video` | 정보성 영상 만들기 | 주제·트렌드로 원고 생성 | ContentGenerator | Dynamic |
-| `/naver-clip` | NAVER Clip 자동화 | 기능 카드 3개 | ChannelHub | Static |
+| `/naver-clip` | NAVER 클립 자동화 | 기능 카드 3개 | ChannelHub | Static |
 | `/naver-clip/trends` | 네이버 트렌드 소재 찾기 | 급상승 주제·키워드, 시즌·관련 키워드 | NaverTrendExplorer `scope="clip"` | Static + Client |
 | `/naver-clip/product-content` | 제품 홍보 클립 만들기 | 클립 원고 생성 | ContentGenerator | Dynamic |
 | `/naver-clip/info-content` | 정보성 클립 만들기 | 클립 원고 생성 | ContentGenerator | Dynamic |
-| `/naver-blog` | NAVER Blog 자동화 | 기능 카드 4개 | ChannelHub | Static |
+| `/naver-blog` | NAVER 블로그 자동화 | 기능 카드 4개 | ChannelHub | Static |
 | `/naver-blog/trends` | 네이버 트렌드·키워드 찾기 | 검색 추이 차트, 관련 검색어, 아이디어 | NaverTrendExplorer `scope="blog"` | Static + Client |
 | `/naver-blog/product-writing` | 제품 블로그 글 만들기 | 제품 글 생성 (정직성 가드레일) | ContentGenerator | Dynamic |
 | `/naver-blog/info-writing` | 정보·트렌드 글 만들기 | 정보 글 생성 | ContentGenerator | Dynamic |

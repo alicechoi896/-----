@@ -19,12 +19,19 @@ const BASE_SYSTEM = [
 
 const today = "2026-10-01";
 
-function contentTemplate(id: string, description: string, task: string): PromptTemplate {
+/** history: 1.0.0 이후 변경 이력. 마지막 항목의 version 이 현재 버전이 된다 */
+function contentTemplate(
+  id: string,
+  description: string,
+  task: string,
+  history: PromptTemplate["changelog"] = [],
+): PromptTemplate {
+  const changelog = [{ version: "1.0.0", date: today, note: "최초 작성" }, ...history];
   return {
     id,
-    version: "1.0.0",
+    version: changelog[changelog.length - 1].version,
     description,
-    changelog: [{ version: "1.0.0", date: today, note: "최초 작성" }],
+    changelog,
     system: BASE_SYSTEM,
     task,
   };
@@ -57,27 +64,28 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   ),
   contentTemplate(
     "naver-clip.product-content",
-    "NAVER Clip 제품 홍보 클립 원고",
-    "NAVER Clip 용 세로 숏폼(60초 이내) 제품 홍보 원고를 만든다. 대본은 6~8컷, 컷마다 자막 한 줄 길이로 쓴다.",
+    "NAVER 클립 제품 홍보 클립 원고",
+    "NAVER 클립용 세로 숏폼(60초 이내) 제품 홍보 원고를 만든다. 대본은 6~8컷, 컷마다 자막 한 줄 길이로 쓴다.",
+    [{ version: "1.0.1", date: "2026-10-02", note: "채널 표기 변경: NAVER Clip → NAVER 클립" }],
   ),
   contentTemplate(
     "naver-clip.info-content",
-    "NAVER Clip 정보성 클립 원고",
+    "NAVER 클립 정보성 클립 원고",
     "현재 네이버 트렌드를 활용한 정보형 숏폼 클립 원고를 만든다. 대본은 6~8컷으로 쓴다.",
   ),
   contentTemplate(
     "naver-blog.product-writing",
-    "NAVER Blog 제품 글",
+    "NAVER 블로그 제품 글",
     "네이버 블로그 제품 소개 글을 쓴다. 메인 키워드를 제목과 첫 단락에 넣는다. 소제목(##)으로 구조화한다. 사용자의 [실제 경험]이 있으면 그 내용만 경험으로 쓰고, 없으면 경험담을 지어내지 않는다.",
   ),
   contentTemplate(
     "naver-blog.info-writing",
-    "NAVER Blog 정보·트렌드 글",
+    "NAVER 블로그 정보·트렌드 글",
     "제품 없이 정보·트렌드 블로그 글을 쓴다. 글 유형(일반 정보/트렌드/IT/AI/생활정보)에 맞는 구조를 쓰고, 출처가 필요한 수치는 '확인 필요'로 표시한다.",
   ),
   contentTemplate(
     "naver-blog.auto-writing",
-    "NAVER Blog 자동 글쓰기",
+    "NAVER 블로그 자동 글쓰기",
     "최소 입력(주제, 유형)만으로 블로그 글 전체를 완성한다. 부족한 정보는 [스타일], [좋은 예시], [제품 정보]에서 최대한 보완한다.",
   ),
 ];

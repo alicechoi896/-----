@@ -20,8 +20,8 @@ export const CHANNELS: ChannelDef[] = [
   },
   {
     id: "naver-clip",
-    name: "NAVER Clip",
-    hubTitle: "NAVER Clip 자동화",
+    name: "NAVER 클립",
+    hubTitle: "NAVER 클립 자동화",
     description: "네이버 검색 데이터를 활용한 클립 콘텐츠 제작 자동화",
     hubDescription: "네이버 검색·쇼핑 트렌드를 기반으로 숏폼 클립 원고를 만듭니다.",
     href: "/naver-clip",
@@ -31,8 +31,8 @@ export const CHANNELS: ChannelDef[] = [
   },
   {
     id: "naver-blog",
-    name: "NAVER Blog",
-    hubTitle: "NAVER Blog 자동화",
+    name: "NAVER 블로그",
+    hubTitle: "NAVER 블로그 자동화",
     description: "키워드 조사부터 제품글·정보글 자동 작성까지",
     hubDescription: "키워드를 조사하고 제품 글, 정보 글, 자동 글쓰기로 블로그 원고를 만듭니다.",
     href: "/naver-blog",

@@ -81,7 +81,7 @@ export function VideoImport() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="영상 가져오기" description="YouTube, NAVER Clip 등 참고할 영상의 URL을 입력하세요.">
+      <SectionCard title="영상 가져오기" description="YouTube, NAVER 클립 등 참고할 영상의 URL을 입력하세요.">
         <form
           className="grid items-end gap-3 md:grid-cols-[1fr_260px_auto]"
           onSubmit={(e) => {

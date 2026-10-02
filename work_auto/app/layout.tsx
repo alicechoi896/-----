@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     default: "콘텐츠 자동화 센터",
     template: "%s · 콘텐츠 자동화 센터",
   },
-  description: "YouTube, NAVER Clip, NAVER Blog 콘텐츠 제작을 자동화하는 업무용 서비스",
+  description: "YouTube, NAVER 클립, NAVER 블로그 콘텐츠 제작을 자동화하는 업무용 서비스",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

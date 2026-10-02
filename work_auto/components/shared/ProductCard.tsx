@@ -13,8 +13,8 @@ import { ProductThumb } from "./ProductThumb";
 /** "콘텐츠 만들기" 메뉴: 제품이 미리 선택된 생성 화면으로 이동 */
 export const PRODUCT_CONTENT_TARGETS = [
   { label: "YouTube 제품 홍보 영상", href: "/youtube/product-video" },
-  { label: "NAVER Clip 제품 홍보 클립", href: "/naver-clip/product-content" },
-  { label: "NAVER Blog 제품 글", href: "/naver-blog/product-writing" },
+  { label: "NAVER 클립 제품 홍보 클립", href: "/naver-clip/product-content" },
+  { label: "NAVER 블로그 제품 글", href: "/naver-blog/product-writing" },
 ];
 
 export function CreateContentMenu({ productId, size = "sm" }: { productId: string; size?: "sm" | "md" }) {

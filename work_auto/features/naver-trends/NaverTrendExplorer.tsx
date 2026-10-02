@@ -34,7 +34,7 @@ const PERIODS = [
 const COMPETITION = { low: { label: "낮음", tone: "success" }, mid: { label: "보통", tone: "warning" }, high: { label: "높음", tone: "danger" } } as const;
 
 /**
- * 네이버 트렌드 탐색 (NAVER Clip / NAVER Blog 공용).
+ * 네이버 트렌드 탐색 (NAVER 클립 / NAVER 블로그 공용).
  * - scope="clip": 급상승 주제 → 클립 소재 중심
  * - scope="blog": 검색어 중심, 검색 추이 차트, 관련 검색어, 콘텐츠 아이디어
  * YouTube 트렌드와는 데이터 출처(NaverTrendProvider)가 다른 별도 기능이다.
@@ -97,7 +97,7 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
   );
 }
 
-/* ───────── NAVER Clip ───────── */
+/* ───────── NAVER 클립 ───────── */
 
 function ClipView({ insight }: { insight: NaverTrendInsight }) {
   return (
@@ -141,7 +141,7 @@ function ClipView({ insight }: { insight: NaverTrendInsight }) {
   );
 }
 
-/* ───────── NAVER Blog ───────── */
+/* ───────── NAVER 블로그 ───────── */
 
 function BlogView({ insight, keyword }: { insight: NaverTrendInsight; keyword: string }) {
   return (

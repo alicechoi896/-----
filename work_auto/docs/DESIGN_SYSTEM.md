@@ -64,8 +64,8 @@
 | 채널 | 아이콘 색 | 칩 배경 |
 |------|----------|--------|
 | YouTube | `#e5484d` | `#fff1f1` |
-| NAVER Clip | `#0ea472` | `#ebfbf4` |
-| NAVER Blog | `#16a34a` | `#effcf2` |
+| NAVER 클립 | `#0ea472` | `#ebfbf4` |
+| NAVER 블로그 | `#16a34a` | `#effcf2` |
 | 공통 도구 | `#6d5bd0` | `#f4f2ff` |
 | 설정·기타 | `#4b5563` | `#f1f3f6` |
 
