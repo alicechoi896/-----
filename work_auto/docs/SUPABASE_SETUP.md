@@ -30,7 +30,8 @@
 
 왼쪽 메뉴 **Authentication**
 
-1. **Sign In / Providers → Email**: Enabled 인지 확인 (기본값 켜짐)
+1. **Sign In / Providers → Email** 화면에는 스위치가 두 개 있습니다. 헷갈리지 않게 주의하세요.
+   - **Enable Email provider**: 반드시 **켜짐** ✅ (이메일 로그인 자체의 전원. 끄면 "Email logins are disabled" 로 아무도 로그인할 수 없음)
    - **Confirm email** (가입 시 인증 메일): **끄는 것을 추천합니다**
      - 이 서비스는 관리자 승인제라서, 메일 인증 없이도 승인 전에는 아무 메뉴도 쓸 수 없습니다
      - 끄면 가입 즉시 "승인 대기" 화면으로 이동합니다
