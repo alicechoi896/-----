@@ -1,5 +1,9 @@
+import type { PermissionRow } from "@/lib/permissions";
 import type {
   ApiConnectionPublic,
+  MemberRole,
+  MemberTier,
+  UserProfile,
   ApiResult,
   GeneratedContent,
   GenerateContentRequest,
@@ -127,5 +131,15 @@ export const api = {
     list: () => request<ReferenceVideo[]>("/api/videos"),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),
     remove: (id: string) => request<{ id: string }>(`/api/videos/${id}`, { method: "DELETE" }),
+  },
+
+  admin: {
+    users: () => request<UserProfile[]>("/api/admin/users"),
+    updateRole: (userId: string, role: MemberRole) =>
+      request<UserProfile>(`/api/admin/users/${userId}`, { method: "PATCH", body: json({ role }) }),
+    permissions: () => request<PermissionRow[]>("/api/admin/permissions"),
+    setPermission: (role: MemberTier, permissionKey: string, allowed: boolean) =>
+      request<PermissionRow[]>("/api/admin/permissions", { method: "PUT", body: json({ role, permissionKey, allowed }) }),
+    resetPermissions: () => request<PermissionRow[]>("/api/admin/permissions", { method: "DELETE" }),
   },
 };

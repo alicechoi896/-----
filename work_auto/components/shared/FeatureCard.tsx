@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Lock } from "lucide-react";
 import type { AccentColor, FeatureDef } from "@/lib/registry";
-import { Tag } from "@/components/ui/Badge";
+import { Badge, Tag } from "@/components/ui/Badge";
 import { IconChip } from "@/components/ui/IconChip";
 import { cardClass } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -11,9 +11,19 @@ const PROVIDER_LABEL = { openai: "OpenAI", youtube: "YouTube Data API", naver: "
 
 /**
  * 2차(채널 허브) 화면의 기능 카드. Registry 의 FeatureDef 하나를 그대로 받는다.
- * status 가 planned 면 클릭할 수 없는 상태로 보여준다.
+ * - status 가 planned 면 클릭할 수 없는 상태로 보여준다.
+ * - lockedLabel 이 있으면 현재 등급으로 쓸 수 없는 기능이다 (잠금 배지 + 흐리게). 누르면 안내 화면으로 간다.
  */
-export function FeatureCard({ feature, accent }: { feature: FeatureDef; accent: AccentColor }) {
+export function FeatureCard({
+  feature,
+  accent,
+  lockedLabel,
+}: {
+  feature: FeatureDef;
+  accent: AccentColor;
+  /** 예: "골드 이상" */
+  lockedLabel?: string;
+}) {
   const disabled = feature.status === "planned";
   const body = (
     <>
@@ -22,7 +32,14 @@ export function FeatureCard({ feature, accent }: { feature: FeatureDef; accent: 
           <IconChip icon={feature.icon} accent={accent} />
           <span className="tabular text-xs font-semibold text-fg-subtle">{String(feature.order).padStart(2, "0")}</span>
         </div>
-        <StatusBadge status={feature.status} />
+        {lockedLabel ? (
+          <Badge tone="neutral">
+            <Lock className="size-3" />
+            {lockedLabel}
+          </Badge>
+        ) : (
+          <StatusBadge status={feature.status} />
+        )}
       </div>
       <h3 className="mt-4 text-[15.5px] font-semibold text-fg">{feature.title}</h3>
       <p className="mt-1.5 flex-1 text-[13.5px] leading-relaxed text-fg-subtle">{feature.description}</p>
@@ -54,7 +71,10 @@ export function FeatureCard({ feature, accent }: { feature: FeatureDef; accent: 
     );
   }
   return (
-    <Link href={feature.href} className={cn(className, "hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card-hover")}>
+    <Link
+      href={feature.href}
+      className={cn(className, "hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card-hover", lockedLabel && "bg-subtle/60 [&_h3]:text-fg-muted")}
+    >
       {body}
     </Link>
   );

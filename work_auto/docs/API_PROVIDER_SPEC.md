@@ -60,7 +60,7 @@ interface ProductDataCollector {          // 수집만 한다. 분석하지 않�
 | AI | MockAIProvider | `ai/mock-ai-provider.ts`, `ai/mock-writer.ts` | ✅ 동작 (결정적 출력, Context 반영) |
 | AI | OpenAIProvider | `ai/openai-provider.ts` | ✅ 코드 완료 (fetch, Chat Completions JSON mode). `PROVIDER_MODE=live` + 연결 시 사용 |
 | YouTube | MockYouTubeTrendProvider | `trends/mock-youtube-provider.ts` | ✅ 동작 |
-| YouTube | YouTubeDataApiProvider | `trends/youtube-data-api-provider.ts` | ⚠️ testConnection만 실제 동작, 조회는 501 |
+| YouTube | YouTubeDataApiProvider | `trends/youtube-data-api-provider.ts` | ✅ 구현 (트렌드, 영상 메타데이터, 연결 테스트). 서버 메모리 6시간 캐시 |
 | NAVER | MockNaverTrendProvider | `trends/mock-naver-provider.ts` | ✅ 동작 |
 | NAVER | NaverApiProvider | `trends/naver-api-provider.ts` | ⚠️ testConnection만 실제 동작, 조회는 501 |
 | 상품 | MockUrlCollector | `product/collectors.ts` | ✅ Mock (URL → 카탈로그) |
@@ -104,7 +104,10 @@ const collector = getProductCollector(source);  // supports()가 true인 첫 번
 | 트렌드 구현 순서 | ① `search.list`(type=video, publishedAfter, q, regionCode=KR, videoDuration) **100 units** → ② `videos.list`(statistics, contentDetails; 최대 50개) 1 unit → ③ `channels.list`(statistics) 1 unit → ④ `calcTrendScore()` → `YouTubeTrendItem` |
 | 할당량 | 기본 10,000 units/일. `search.list`가 비싸므로 (카테고리, 키워드, 기간) 조합을 6시간 캐시한다 |
 | 영상 메타 | URL에서 videoId 추출 → `videos.list` |
-| 발급 | Google Cloud Console → YouTube Data API v3 사용 설정 → 사용자 인증 정보 → API 키 |
+| Shorts 판별 | 길이 180초 이하 (2024년 10월부터 Shorts 최대 3분) |
+| 오류 안내 | quotaExceeded → 할당량 소진 안내(429), keyInvalid → 키 확인 안내, 403 → API 사용 설정·키 제한 확인 안내. 오류 메시지에 키를 넣지 않는다 |
+| 발급 | Google Cloud Console → YouTube Data API v3 사용 설정 → 사용자 인증 정보 → **API 키** (OAuth 클라이언트 아님). 키 제한: YouTube Data API v3 |
+| 참고 | YouTube Analytics / Reporting API 는 "내 채널" 데이터라 API 키로 호출할 수 없고 OAuth 로그인이 필요하다 (성과 데이터 연동 단계에서 사용) |
 
 ### 5.3 NAVER Open API
 | 항목 | 내용 |

@@ -2,6 +2,30 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.2.0] - 2026-10-02: 로그인 · 등급 권한 · Supabase · 실제 YouTube 트렌드
+
+### 추가
+- **실제 YouTube 트렌드 조회** (`YouTubeDataApiProvider`): search.list → videos.list → channels.list → Trend Score, 실제 썸네일, 6시간 캐시, 할당량·키 오류 안내. 영상 URL 가져오기도 실제 메타데이터 조회
+- **Supabase 저장소** (`supabase-store.ts`): Repository 인터페이스 구현. 환경변수가 있으면 Supabase, 없으면 인메모리(데모 모드)
+- **DB 스키마** `supabase/schema.sql`: 테이블 11개, RLS, 가입 트리거(실버), `is_admin()`
+- **로그인 / 회원가입** `/login` (이메일 + 비밀번호), 인증 메일 콜백 `/auth/callback`, 로그아웃
+- **역할**: 관리자 / 실버 / 골드 / VIP (`profiles.role`)
+- **권한 체계**: Registry `defaultTiers` + `role_permissions`(바꾼 칸만 저장), `lib/permissions.ts`
+- **사이트 관리** (관리자 전용 메뉴): 사용자 관리(역할 변경), 권한 관리(등급 × 메뉴 체크 표)
+- 화면 차단 `FeaturePage` / `AdminPage`, 허브 잠금 카드("골드 이상"), 사이드바 권한 필터, 사용자 정보·로그아웃
+- API 권한 확인 `requireAccess` / `requireAnyAccess` / `requireAdmin`
+- `proxy.ts`: 세션 갱신 + 비로그인 시 로그인 화면으로 (3초 타임아웃)
+- 공용 컴포넌트 `Checkbox`, `VideoThumb`
+- `DEMO_ROLE` 환경변수 (데모 모드에서 등급별 화면 미리보기)
+- 문서: `SUPABASE_SETUP.md`, `AUTH_AND_PERMISSIONS.md`
+
+### 변경
+- 화면 폴더를 `app/(app)/`(사이드바 있는 화면)와 `app/(auth)/`(로그인)로 나눔. URL 은 그대로
+- 기능 페이지를 `FeaturePage`로 감쌈 (권한 확인 포함)
+- `getCurrentUserId()`가 실제 로그인 사용자를 반환 (데모 모드는 `demo-user`)
+- 사용하지 않던 `User` Entity·저장소 제거 → `UserProfile`(profiles)로 대체
+- 기능 상태: YouTube 트렌드 찾기, 영상 URL 가져오기, API 연결 센터 → `live`
+
 ## [0.1.1] - 2026-10-02
 
 ### 변경

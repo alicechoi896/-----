@@ -53,7 +53,8 @@ function createCollection<K extends keyof StoreState>(key: K): Repository<StoreS
 }
 
 export const memoryRepositories: Repositories = {
-  users: createCollection("users"),
+  profiles: createCollection("profiles"),
+  rolePermissions: createCollection("rolePermissions"),
   connections: createCollection("connections"),
   products: createCollection("products"),
   productSources: createCollection("productSources"),

@@ -2,12 +2,12 @@
 
 > 타입 정의: `lib/types/*.ts` (클라이언트·서버 공용, 단일 기준)
 > V1 저장소: `lib/server/repositories/memory-store.ts` (인메모리, Seed: `lib/mock/seed.ts`)
-> 아래 테이블 설계는 V2(Supabase/Postgres) 전환 기준이다.
+> Supabase 저장소: `lib/server/repositories/supabase-store.ts`, **실제 스키마: `supabase/schema.sql`** (이 문서 4장보다 우선)
 
 ## 1. 전체 관계도
 
 ```
-User 1─┬─N ApiConnection            (BYOK 자격증명, 암호화)
+UserProfile 1─┬─N ApiConnection          (profiles: 역할 admin/silver/gold/vip)            (BYOK 자격증명, 암호화)
        ├─N Product 1─┬─N ProductSource      (수집 원문: Collector 출력)
        │             ├─N ProductAnalysis    (AI 분석: Analyzer 출력, version)
        │             └─N GeneratedContent   (이 제품으로 만든 콘텐츠)
@@ -34,16 +34,27 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 
 ## 3. Entity 상세
 
-### User
-**왜 필요한가**: 모든 데이터의 소유자이고, BYOK 키와 스타일이 사용자 단위로 갈린다. V1은 `demo-user` 하나다.
+### UserProfile (profiles)
+**왜 필요한가**: 모든 데이터의 소유자이고 **역할(권한)**을 가진다. Supabase `auth.users`와 1:1이며, 가입하면 트리거가 `silver`로 만든다. 데모 모드는 `demo-user`(관리자) 하나다.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| id | string | PK (V2: auth.users.id) |
+| id | uuid | PK = auth.users.id |
 | email | string | |
-| name | string | |
-| plan | `free` \| `pro` | 사용량 제한 기준 (V2) |
-| createdAt | ISO | |
+| name | string | 가입 시 입력한 이름 |
+| role | `admin` \| `silver` \| `gold` \| `vip` | 변경은 관리자만 (RLS) |
+| createdAt / updatedAt | ISO | |
+
+### RolePermission (role_permissions)
+**왜 필요한가**: 관리자가 권한 관리에서 **기본값과 다르게 바꾼 칸만** 저장한다. 나머지는 Registry `defaultTiers`를 따르므로 새 메뉴를 추가해도 DB 작업이 필요 없다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | string | `{role}:{permissionKey}` |
+| role | `silver` \| `gold` \| `vip` | 관리자는 항상 전체 허용이라 저장하지 않는다 |
+| permissionKey | string | 기능 ID 또는 단독 페이지 ID |
+| allowed | boolean | |
+| updatedAt | ISO | |
 
 ### ApiConnection
 **왜 필요한가**: 사용자가 자기 API Key를 연결한다(BYOK). Provider 선택(`getAIProvider`)이 이 테이블을 본다.
@@ -51,7 +62,7 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | id | string | PK |
-| userId | FK User | |
+| userId | FK UserProfile | |
 | provider | `openai` \| `youtube` \| `naver` | 사용자당 provider 1개 (unique) |
 | status | `disconnected` \| `connected` \| `error` | |
 | encryptedCredentials | string \| null | AES-256-GCM `iv.tag.cipher` (base64). **절대 클라이언트로 보내지 않는다** |

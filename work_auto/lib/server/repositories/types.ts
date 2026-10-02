@@ -7,7 +7,8 @@ import type {
   ProductAnalysis,
   ProductSource,
   ReferenceVideo,
-  User,
+  RolePermission,
+  UserProfile,
   UserFeedback,
   UserStyle,
 } from "@/lib/types";
@@ -29,7 +30,8 @@ export interface Repository<T extends { id: string }> {
 }
 
 export interface Repositories {
-  users: Repository<User>;
+  profiles: Repository<UserProfile>;
+  rolePermissions: Repository<RolePermission>;
   connections: Repository<ApiConnection>;
   products: Repository<Product>;
   productSources: Repository<ProductSource>;

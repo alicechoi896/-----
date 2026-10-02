@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { AppShell } from "@/components/layout/AppShell";
-import { getProviderMode } from "@/lib/server/config";
 import "./globals.css";
 
 const pretendard = localFont({
@@ -19,12 +17,11 @@ export const metadata: Metadata = {
   description: "YouTube, NAVER 클립, NAVER 블로그 콘텐츠 제작을 자동화하는 업무용 서비스",
 };
 
+/** 최상위 레이아웃: 폰트와 전역 스타일만. 사이드바는 (app)/layout.tsx 에 있다 */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className={pretendard.variable}>
-      <body>
-        <AppShell providerMode={getProviderMode()}>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

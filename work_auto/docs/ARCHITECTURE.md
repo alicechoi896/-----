@@ -56,12 +56,19 @@
 
 ```
 work_auto/
+├── proxy.ts                          # 세션 갱신 + 비로그인 시 /login (Next 16 의 middleware)
 ├── app/                              # 라우팅 (페이지 = 얇은 껍데기)
-│   ├── layout.tsx                    # 폰트, AppShell(사이드바 + 메인)
-│   ├── page.tsx                      # 1차: 채널 선택
-│   ├── youtube/ naver-clip/ naver-blog/ tools/   # 2차: 채널 허브(page.tsx) + 3차: 기능 폴더
-│   ├── ai-learning/  settings/
+│   ├── layout.tsx                    # 폰트, 전역 스타일만
+│   ├── (app)/                        # 로그인 후 화면 (URL 에는 안 나타나는 그룹)
+│   │   ├── layout.tsx                # 세션 확인 + AppShell(사이드바 + 메인)
+│   │   ├── page.tsx                  # 1차: 채널 선택
+│   │   ├── youtube/ naver-clip/ naver-blog/ tools/   # 2차: 채널 허브(page.tsx) + 3차: 기능 폴더
+│   │   ├── ai-learning/  settings/
+│   │   └── admin/                    # 사이트 관리 (관리자 전용)
+│   ├── (auth)/login/                 # 로그인·회원가입 (사이드바 없음)
+│   ├── auth/callback/                # 인증 메일 링크 처리
 │   └── api/                          # Route Handler (Backend for Frontend)
+├── supabase/schema.sql               # DB 테이블, RLS, 가입 트리거
 ├── components/
 │   ├── ui/                           # 원자 컴포넌트 (Button, Input, Tabs, DataTable …)
 │   ├── layout/                       # AppShell, AppSidebar, PageHeader, PageContainer
@@ -170,11 +177,21 @@ work_auto/
 
 ### 4.4 Repository Pattern
 
-`lib/server/repositories/types.ts`에 저장소 인터페이스(`ProductRepository`, `ContentRepository` …)를 두고,
-V1은 `memory-store.ts`(globalThis 싱글톤 + Seed 데이터)로 구현한다.
-Service는 `getRepositories()`만 호출하므로, Supabase 구현으로 바꿀 때는 이 함수 하나만 수정하면 된다.
+`lib/server/repositories/types.ts`에 저장소 인터페이스(`Repository<T>`, `Repositories`)를 두고 구현체 두 개가 있다.
 
-> 주의: 인메모리 저장소는 서버를 재시작하면 Seed 상태로 돌아간다. V1 데모용이다.
+| 구현 | 파일 | 언제 |
+|------|------|------|
+| 인메모리 | `memory-store.ts` (globalThis + Seed) | Supabase 환경변수가 없을 때 (데모 모드) |
+| Supabase | `supabase-store.ts` (테이블 = Entity 의 snake_case, 로그인 세션으로 접근 → RLS) | `NEXT_PUBLIC_SUPABASE_URL` + anon key 가 있을 때 |
+
+Service는 `getRepositories()`만 호출하므로 어느 쪽이든 코드가 같다.
+
+### 4.5 인증과 권한
+
+- 세션: `lib/server/auth.ts`의 `getSession()` (요청당 1회, Supabase 응답 3초 제한)
+- 규칙: `lib/permissions.ts` — 관리자는 전체, 그 외는 `role_permissions`(바꾼 값) ?? Registry `defaultTiers`
+- 차단: proxy(비로그인) → `FeaturePage`/`AdminPage`(화면) → `requireAccess`/`requireAdmin`(API) → RLS(DB)
+- 자세한 내용: [AUTH_AND_PERMISSIONS.md](./AUTH_AND_PERMISSIONS.md), 설정: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)
 
 ## 5. 데이터 흐름
 
@@ -254,7 +271,8 @@ URL 쿼리(`?productId=`)로 받는 값은 페이지(Server)에서 `await search
 | 새 생성형 기능 | Registry 항목 + Generator Config + Prompt 템플릿 + `app/.../page.tsx` |
 | 새 조회형 기능 | Registry 항목 + `features/<name>/` + 필요하면 Provider 메서드와 API route |
 | 새 AI 모델 | `lib/server/providers/ai/<name>-provider.ts` + registry 분기 |
-| 영구 DB | `lib/server/repositories/` 아래 새 구현 + `getRepositories()` 교체 |
+| 다른 DB | `lib/server/repositories/` 아래 새 구현 + `getRepositories()` 분기 |
+| 새 메뉴의 등급 권한 | Registry `defaultTiers` + 페이지를 `FeaturePage`로 감싸기 |
 | 디자인 변경 | `app/globals.css`의 `@theme` 토큰 (컴포넌트 수정 없이 반영) |
 
 자세한 절차는 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)를 본다.

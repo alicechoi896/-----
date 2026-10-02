@@ -21,14 +21,14 @@ npm run build        # 프로덕션 빌드
 1. `lib/types/common.ts`: `ChannelId`에 `"instagram"` 추가
 2. `lib/registry/channels.ts`: `CHANNELS`에 항목 추가 (name, hubTitle, description, hubDescription, href, icon, accent, showOnHome)
 3. (선택) 새 포인트 컬러: `globals.css`에 `--color-ch-insta`, `--color-ch-insta-soft` → `lib/registry/types.ts`의 `AccentColor` → `components/ui/IconChip.tsx`의 `ACCENTS`
-4. `app/instagram/page.tsx`:
+4. `app/(app)/instagram/page.tsx`:
    ```tsx
    import { ChannelHub } from "@/components/shared/ChannelHub";
    import { getChannel } from "@/lib/registry";
    export const metadata = { title: getChannel("instagram").hubTitle };
    export default function Page() { return <ChannelHub channelId="instagram" />; }
    ```
-5. 메인 카드, 사이드바, 브레드크럼은 **자동으로** 나타난다
+5. 메인 카드, 사이드바, 브레드크럼, 권한 관리 표는 **자동으로** 나타난다
 6. 문서: FEATURE_REGISTRY 1장, ROUTES 2장
 
 ## 2. 새 FeatureCard (기능) 추가
@@ -36,16 +36,16 @@ npm run build        # 프로덕션 빌드
 1. `lib/registry/features.ts`의 `FEATURES`에 `FeatureDef` 추가
    - `id`는 전역 고유이고 **나중에 바꾸지 않는다** (생성 이력, 프롬프트, Config의 키다)
    - 아직 화면이 없으면 `status: "planned"` → 카드가 비활성으로 보인다
-2. 채널 허브 카드와 사이드바 하위 메뉴가 자동으로 나타난다
+   - **`defaultTiers` 필수**: 기본으로 쓸 수 있는 등급 (`ALL` / `GOLD_UP` / `VIP_ONLY`). 관리자는 항상 허용 ([AUTH_AND_PERMISSIONS.md](./AUTH_AND_PERMISSIONS.md))
+2. 채널 허브 카드, 사이드바 하위 메뉴, 사이트 관리 → 권한 관리 표에 자동으로 나타난다
 3. 화면을 만들면 `status`를 `mock` 또는 `live`로 바꾼다
 4. FEATURE_REGISTRY.md에 한 줄 추가
 
 ## 3. 새 페이지 추가
 
 ```tsx
-// app/<channel>/<feature>/page.tsx: 페이지는 얇게
-import { FeaturePageHeader } from "@/components/layout/FeaturePageHeader";
-import { PageContainer } from "@/components/layout/PageContainer";
+// app/(app)/<channel>/<feature>/page.tsx: 페이지는 얇게
+import { FeaturePage } from "@/components/layout/FeaturePage";
 import { MyFeature } from "@/features/my-feature/MyFeature";
 import { getFeature } from "@/lib/registry";
 
@@ -54,14 +54,16 @@ export const metadata = { title: getFeature(FEATURE_ID).title };
 
 export default function Page() {
   return (
-    <PageContainer width="wide">
-      <FeaturePageHeader featureId={FEATURE_ID} />
+    <FeaturePage featureId={FEATURE_ID} width="wide">
       <MyFeature />
-    </PageContainer>
+    </FeaturePage>
   );
 }
 ```
 
+- `FeaturePage`가 헤더와 **권한 확인**을 함께 한다. 권한이 없으면 안내 화면이 나오고 `MyFeature`는 실행되지 않는다
+- 이 기능 전용 API를 만들면 Route Handler 첫 줄에 `await requireAccess("my-feature")`
+- 관리자 전용 화면은 `AdminPage`, API는 `requireAdmin()`
 - 화면 로직은 `features/my-feature/`에 Client Component로 둔다
 - 서버 데이터는 `lib/api-client`에 함수를 추가하고 `useAsync`로 불러온다
 - Loading / Empty / Error 세 상태를 모두 처리한다
@@ -107,7 +109,7 @@ API, 저장, 이력, 피드백, Memory 주입, 결과 UI는 **추가 작업 없�
 
 | 필요 | 쓸 것 | 비고 |
 |------|------|------|
-| 페이지 틀 | `PageContainer` + `PageHeader` / `FeaturePageHeader` | width `default`(1200) / `wide`(1440) |
+| 페이지 틀 | 기능 페이지는 `FeaturePage`(권한 확인 포함), 그 외 `PageContainer` + `PageHeader` | width `default`(1200) / `wide`(1440) |
 | 제목 있는 블록 | `SectionCard` | `actions`, `footer`, `flush`(표용) |
 | 버튼 | `Button`, `LinkButton`, `IconButton`, `SaveButton` | primary는 화면에 1개 |
 | 입력 | `FormField` + `Input` / `Textarea` / `Select` / `SegmentedControl` | |
@@ -126,15 +128,14 @@ API, 저장, 이력, 피드백, Memory 주입, 결과 UI는 **추가 작업 없�
 
 import는 `@/components/ui`(배럴)에서 한다. 상세 규격은 [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)를 본다.
 
-## 7. 저장소 교체 (인메모리 → Supabase)
+## 7. 저장소 (인메모리 / Supabase)
 
-1. `lib/server/repositories/supabase-store.ts`에서 `Repositories` 인터페이스를 구현한다
-2. `list(filter)`의 함수 필터는 SQL로 바꿀 수 없으므로, 쓰이는 조회를 **전용 메서드로 승격**한다
-   (예: `contents.listExemplars(userId, featureId, limit)`, `feedback.listRecentDown(userId, featureId, limit)`)
-   → `context-builder.ts`, `memory.ts`의 호출부를 함께 고친다
-3. `repositories/index.ts`의 `getRepositories()`에서 환경변수로 선택한다
-4. `getCurrentUserId()`를 세션 기반으로 바꾼다 (Supabase Auth)
-5. 테이블과 RLS는 [DATA_MODEL.md](./DATA_MODEL.md) 4장을 본다
+- Supabase 환경변수가 있으면 `supabase-store.ts`, 없으면 `memory-store.ts` (`getRepositories()`가 선택)
+- 새 Entity 를 추가하면: `lib/types` 타입 → `Repositories`에 추가 → `memory-store`(StoreState, Seed) → `supabase-store`(테이블 이름) → `supabase/schema.sql`(테이블, RLS `own_rows`) 순서
+- 컬럼 이름은 Entity 필드의 snake_case, 중첩 객체는 jsonb, 문자열 배열은 text[]
+- 사용자 데이터 테이블에는 `user_id uuid default auth.uid()`와 RLS `own_rows` 정책을 꼭 둔다
+- `list(filter)`는 RLS 로 걸러진 내 데이터를 가져온 뒤 함수로 거른다. 데이터가 많아지면 자주 쓰는 조회를 전용 메서드(SQL where)로 승격한다
+- 설정 절차: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)
 
 ## 8. 절대 하면 안 되는 구조 🚫
 
@@ -153,7 +154,9 @@ import는 `@/components/ui`(배럴)에서 한다. 상세 규격은 [DESIGN_SYSTE
 | AI 원본 결과를 덮어쓰기 | 학습 데이터(원본 ↔ 수정본)가 사라진다 | 수정본은 별도 저장 |
 | `gray-500`, `#xxxxxx` 색 하드코딩, 새 그림자·반경 값 | 디자인이 흩어진다 | 디자인 토큰 |
 | 다크 배경을 기본으로 사용 | 디자인 원칙 위반 | 흰색 기반 |
-| Feature `id` 변경 | 이력, Config, 프롬프트 연결이 끊어진다 | 새 ID로 추가하고 이전 것은 planned/삭제 |
+| Feature `id` 변경 | 이력, Config, 프롬프트, **권한** 연결이 끊어진다 | 새 ID로 추가하고 이전 것은 planned/삭제 |
+| 기능 페이지를 `FeaturePage` 없이 만들기 / 전용 API 에 `requireAccess` 빼기 | 등급 권한이 무시된다 | `FeaturePage`, `requireAccess` |
+| 앱에 Supabase service_role 키 넣기 | 유출되면 RLS 를 모두 우회한다 | anon key + 로그인 세션 + RLS(`is_admin()`) |
 | 실제 경험 없이 "직접 써봤다"는 문구 생성 허용 | 허위·과장 광고 위험 | 정직성 가드레일 유지 |
 
 ## 9. 코드 규칙

@@ -3,21 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Boxes, ChevronRight, House, Menu, X, type LucideIcon } from "lucide-react";
+import { Boxes, ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-react";
+import { signOut } from "@/app/(auth)/login/actions";
+import { ROLE_LABEL } from "@/lib/permissions";
 import { CHANNELS, STANDALONE_PAGES, getFeaturesByChannel, type ChannelDef } from "@/lib/registry";
+import type { SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
  * 왼쪽 사이드바. 메뉴는 전부 Feature Registry 에서 만든다 (하드코딩 금지).
  * - 현재 경로가 속한 채널만 하위 기능을 펼쳐 보여준다 → 기능이 30개 이상이어도 길어지지 않는다.
+ * - 권한이 있는 기능만 보여준다 (session.allowed). "사이트 관리"는 관리자에게만 보인다.
  * - lg 미만에서는 상단 바 + 슬라이드 메뉴로 바뀐다.
  */
-export function AppSidebar({ providerMode }: { providerMode: "mock" | "live" }) {
+export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "live"; session: SessionInfo }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const allowed = new Set(session.allowed);
+  const isAdmin = session.role === "admin";
 
-  const channels = CHANNELS.filter((c) => c.id !== "settings");
+  const channels = CHANNELS.filter((c) => c.id !== "settings" && !c.adminOnly);
   const settings = CHANNELS.find((c) => c.id === "settings")!;
+  const admin = CHANNELS.find((c) => c.id === "admin")!;
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4" onClick={() => setMobileOpen(false)}>
@@ -27,16 +34,22 @@ export function AppSidebar({ providerMode }: { providerMode: "mock" | "live" }) 
 
       <NavGroup label="채널">
         {channels.map((c) => (
-          <ChannelNav key={c.id} channel={c} pathname={pathname} />
+          <ChannelNav key={c.id} channel={c} pathname={pathname} allowed={allowed} />
         ))}
       </NavGroup>
 
       <NavGroup label="관리">
-        {STANDALONE_PAGES.map((p) => (
+        {STANDALONE_PAGES.filter((p) => allowed.has(p.id)).map((p) => (
           <NavLink key={p.id} href={p.href} icon={p.icon} label={p.title} active={pathname.startsWith(p.href)} />
         ))}
-        <ChannelNav channel={settings} pathname={pathname} />
+        <ChannelNav channel={settings} pathname={pathname} allowed={allowed} />
       </NavGroup>
+
+      {isAdmin && (
+        <NavGroup label="관리자">
+          <ChannelNav channel={admin} pathname={pathname} allowed={allowed} />
+        </NavGroup>
+      )}
     </nav>
   );
 
@@ -69,11 +82,31 @@ export function AppSidebar({ providerMode }: { providerMode: "mock" | "live" }) 
         </div>
         {nav}
         <div className="shrink-0 border-t border-line px-4 py-3">
-          <div className="flex items-center gap-2 text-xs text-fg-subtle">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-medium text-fg">{session.user.name}</p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-fg-subtle">
+                <span className="rounded bg-canvas px-1.5 py-px font-medium text-fg-muted ring-1 ring-line">{ROLE_LABEL[session.role]}</span>
+                <span className="truncate">{session.mode === "demo" ? "데모 모드" : session.user.email}</span>
+              </p>
+            </div>
+            {session.mode === "supabase" && (
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  aria-label="로그아웃"
+                  title="로그아웃"
+                  className="rounded-control p-1.5 text-fg-subtle hover:bg-muted hover:text-fg"
+                >
+                  <LogOut className="size-4" />
+                </button>
+              </form>
+            )}
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-xs text-fg-subtle">
             <span className={cn("size-1.5 rounded-full", providerMode === "live" ? "bg-success" : "bg-info")} />
             {providerMode === "live" ? "실제 API 모드" : "Mock 모드로 실행 중"}
           </div>
-          <p className="mt-1 text-xs text-fg-subtle">데모 사용자 · demo-user</p>
         </div>
       </aside>
     </>
@@ -129,9 +162,11 @@ function NavLink({
   );
 }
 
-function ChannelNav({ channel, pathname }: { channel: ChannelDef; pathname: string }) {
+function ChannelNav({ channel, pathname, allowed }: { channel: ChannelDef; pathname: string; allowed: Set<string> }) {
   const inChannel = pathname === channel.href || pathname.startsWith(channel.href + "/");
-  const features = getFeaturesByChannel(channel.id).filter((f) => f.status !== "planned" && f.href !== channel.href);
+  const features = getFeaturesByChannel(channel.id).filter(
+    (f) => f.status !== "planned" && f.href !== channel.href && allowed.has(f.id),
+  );
 
   return (
     <div>

@@ -1,4 +1,4 @@
-import { Brain, FileText, Film, MonitorPlay, Settings, Wrench } from "lucide-react";
+import { Brain, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -62,6 +62,18 @@ export const CHANNELS: ChannelDef[] = [
     accent: "neutral",
     showOnHome: false,
   },
+  {
+    id: "admin",
+    name: "사이트 관리",
+    hubTitle: "사이트 관리",
+    description: "사용자와 권한 관리 (관리자 전용)",
+    hubDescription: "사용자 역할과 등급별 접근 권한을 관리합니다. 관리자에게만 보이는 메뉴입니다.",
+    href: "/admin",
+    icon: ShieldCheck,
+    accent: "neutral",
+    showOnHome: false,
+    adminOnly: true,
+  },
 ];
 
 /** 채널에 속하지 않는 단독 페이지 */
@@ -72,5 +84,6 @@ export const STANDALONE_PAGES: StandalonePageDef[] = [
     description: "제품, 스타일, 히스토리, 피드백, 성과 데이터를 관리합니다. 생성할 때마다 이 데이터가 Context로 쓰입니다.",
     href: "/ai-learning",
     icon: Brain,
+    defaultTiers: ["silver", "gold", "vip"],
   },
 ];

@@ -8,19 +8,20 @@
 
 | 채널 | 기능 수 | live | mock | planned |
 |------|--------|------|------|---------|
-| YouTube | 3 | 0 | 3 | 0 |
+| YouTube | 3 | 1 | 2 | 0 |
 | NAVER 클립 | 3 | 0 | 3 | 0 |
 | NAVER 블로그 | 4 | 0 | 4 | 0 |
-| 공통 도구 | 3 | 0 | 3 | 0 |
-| 설정 | 2 | 0 | 1 | 1 |
+| 공통 도구 | 3 | 1 | 2 | 0 |
+| 설정 | 2 | 1 | 0 | 1 |
+| 사이트 관리 (관리자 전용) | 2 | 2 | 0 | 0 |
 | (단독) AI 학습 관리 | 1 | 0 | 1 | 0 |
-| **합계** | **16** | 0 | 15 | 1 |
+| **합계** | **18** | 5 | 12 | 1 |
 
 ## 2. 전체 기능 표
 
 | 채널 | ID | 기능 | Route | 종류 | 상태 | 필요 API | 입력 데이터 | 출력 데이터 | 구현 |
 |------|----|------|-------|------|------|----------|-------------|-------------|------|
-| YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | 🧪 | YouTube Data API | 카테고리, 검색 키워드, 기간(7/14/21일), Shorts/일반, 정렬 | 썸네일, 제목, 채널, 게시일, 조회수, 일평균 조회수, 주요 키워드, Trend Score | `features/youtube-trends` |
+| YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | ✅ | YouTube Data API | 카테고리, 검색 키워드, 기간(7/14/21일), Shorts/일반, 정렬 | 썸네일, 제목, 채널, 게시일, 조회수, 일평균 조회수, 주요 키워드, Trend Score | `features/youtube-trends` |
 | YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | 🧪 | OpenAI | 제품*, 참고 트렌드, 참고 영상, 주요 키워드, 영상 길이, 콘텐츠 스타일 | 추천 제목 5개, Hook, 대본, 설명글, 주요 키워드, 해시태그 | ContentGenerator |
 | YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | 🧪 | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
 | NAVER 클립 | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | 🧪 | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
@@ -32,12 +33,25 @@
 | NAVER 블로그 | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | 🧪 | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
 | 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | 🧪 | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
 | 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | 🧪 | - | 검색어, 카테고리 | 제품 카드/목록, 상세, 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
-| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | 🧪 | YouTube Data API | 영상 URL, 메모 | 영상 메타데이터, 참고 영상 목록 | `features/video-import` |
-| 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | 🧪 | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
+| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL, 메모 | 영상 메타데이터, 참고 영상 목록 | `features/video-import` |
+| 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | ✅ | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
 | 설정 | `general-settings` | 일반 설정 | `/settings` | settings | ⏳ | - | - | - | (미구현) |
+| 사이트 관리 | `admin-users` | 사용자 관리 | `/admin/users` | admin | ✅ | - | 역할 | 사용자 목록, 역할 변경 | `features/admin` (관리자 전용) |
+| 사이트 관리 | `admin-permissions` | 권한 관리 | `/admin/permissions` | admin | ✅ | - | 등급별 허용 여부 | 권한표 | `features/admin` (관리자 전용) |
 | (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | 🧪 | - | - | 제품 데이터, 나의 스타일, 콘텐츠 히스토리, 피드백, 성과 데이터 | `features/ai-learning` |
 
 `*` = 필수 입력
+
+## 2-1. 기본 접근 등급 (defaultTiers)
+
+| 등급 묶음 | 기능 |
+|-----------|------|
+| `ALL` (실버·골드·VIP) | yt-trends, yt-info-video, clip-trends, clip-info-content, blog-trends, blog-info-writing, video-import, api-center, general-settings, ai-learning |
+| `GOLD_UP` (골드·VIP) | yt-product-video, clip-product-content, blog-product-writing, product-learning, product-library |
+| `VIP_ONLY` | blog-auto-writing |
+| 관리자 전용 | admin-users, admin-permissions |
+
+관리자는 모든 기능에 접근한다. 실제 적용 값은 **사이트 관리 → 권한 관리**에서 바꿀 수 있다 ([AUTH_AND_PERMISSIONS.md](./AUTH_AND_PERMISSIONS.md)).
 
 ## 3. 생성형 기능 상세 (Generator Config)
 
@@ -69,6 +83,7 @@
 ## 5. 새 기능을 추가할 때 이 표에 적을 것
 
 1. 2장 표에 한 줄: 채널, ID, 기능, Route, 종류, 상태, 필요 API, 입력, 출력, 구현 위치
+1. 2-1장에 기본 접근 등급
 2. 생성형이면 3장 표에 한 줄
 3. 다른 기능과 연결되면 4장에 한 줄
 4. 1장 요약의 숫자

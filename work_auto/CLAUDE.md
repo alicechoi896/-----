@@ -5,6 +5,7 @@
 작업 전에 `docs/DEVELOPMENT_GUIDE.md`를 읽는다. 기능 목록은 `docs/FEATURE_REGISTRY.md`에 있다.
 
 - 메뉴, 카드, 페이지 제목은 `lib/registry`에서 만든다. 하드코딩하지 않는다.
+- 새 기능은 `defaultTiers`(기본 접근 등급)를 반드시 정하고, 페이지는 `FeaturePage`로 감싼다. 전용 API 는 `requireAccess()`.
 - 생성형 기능은 `lib/generators/configs.ts` + `ContentGenerator`로 추가한다.
 - 외부 API는 `lib/server/providers`의 Provider를 통해서만 호출한다 (`getAIProvider()` 등).
 - AI 호출은 반드시 `buildGenerationContext()`를 거친다. 프롬프트를 바꾸면 version을 올린다.

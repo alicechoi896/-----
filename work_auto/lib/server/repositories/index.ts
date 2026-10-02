@@ -1,22 +1,24 @@
 import "server-only";
-import { DEMO_USER_ID } from "@/lib/mock/seed";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { getSession } from "../auth";
+import { AppError } from "../http";
 import { memoryRepositories } from "./memory-store";
+import { supabaseRepositories } from "./supabase-store";
 import type { Repositories } from "./types";
 
 export type { Repositories, Repository } from "./types";
 
 /**
- * 저장소 진입점. DB 를 바꿀 때는 이 함수만 수정한다.
- * 예) return process.env.DATABASE_URL ? supabaseRepositories : memoryRepositories;
+ * 저장소 진입점.
+ * - Supabase 환경변수가 있으면 Supabase(Postgres), 없으면 인메모리(데모 모드).
  */
 export function getRepositories(): Repositories {
-  return memoryRepositories;
+  return isSupabaseConfigured() ? supabaseRepositories : memoryRepositories;
 }
 
-/**
- * 현재 사용자 ID. V1 은 인증이 없으므로 데모 사용자 고정.
- * 인증을 붙이면 세션에서 읽도록 이 함수만 바꾼다.
- */
+/** 현재 로그인 사용자 ID. 로그인하지 않았으면 401 */
 export async function getCurrentUserId(): Promise<string> {
-  return DEMO_USER_ID;
+  const session = await getSession();
+  if (!session) throw new AppError("UNAUTHORIZED", "로그인이 필요합니다.", 401);
+  return session.user.id;
 }

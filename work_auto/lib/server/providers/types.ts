@@ -90,6 +90,7 @@ export interface VideoMeta {
   channelName: string;
   durationSec: number;
   thumbnailColor: string;
+  thumbnailUrl?: string;
 }
 
 export interface YouTubeTrendProvider extends BaseProvider {

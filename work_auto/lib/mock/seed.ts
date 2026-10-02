@@ -6,7 +6,8 @@ import type {
   ProductAnalysis,
   ProductSource,
   ReferenceVideo,
-  User,
+  RolePermission,
+  UserProfile,
   UserFeedback,
   UserStyle,
 } from "@/lib/types";
@@ -16,7 +17,8 @@ export const DEMO_USER_ID = "demo-user";
 
 /** 저장소 전체 상태. 실제 DB 의 테이블과 1:1 로 대응한다 (docs/DATA_MODEL.md) */
 export interface StoreState {
-  users: User[];
+  profiles: UserProfile[];
+  rolePermissions: RolePermission[];
   connections: ApiConnection[];
   products: Product[];
   productSources: ProductSource[];
@@ -270,7 +272,9 @@ export function createSeedState(now: number = Date.now()): StoreState {
   ];
 
   return {
-    users: [{ id: userId, email: "demo@example.com", name: "데모 사용자", plan: "free", createdAt: iso(60) }],
+    // 데모 모드(Supabase 미설정)의 사용자는 관리자로 시작한다
+    profiles: [{ id: userId, email: "demo@example.com", name: "데모 관리자", role: "admin", createdAt: iso(60), updatedAt: iso(60) }],
+    rolePermissions: [],
     connections: [],
     products,
     productSources,

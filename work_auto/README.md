@@ -3,7 +3,9 @@
 YouTube, NAVER 클립, NAVER 블로그 콘텐츠 제작(소재 조사 → 제목·대본·글 → 키워드·해시태그)을 자동화하는 **업무용 웹서비스**입니다.
 제품 정보, 내 스타일, 좋은 결과, 피드백, 성과를 저장해 두고 **생성할 때마다 Context로 주입**하므로, 쓸수록 결과가 나에게 맞춰집니다.
 
-> 현재 버전 **v0.1.0 (V1 골격)**: 전체 화면과 구조는 완성되어 있고, 외부 API는 **Mock**으로 동작합니다. 키 없이 바로 실행해 볼 수 있습니다.
+> 현재 버전 **v0.2.0**: 로그인, 등급 권한(관리자·실버·골드·VIP), 사이트 관리, Supabase 저장소, 실제 YouTube 트렌드 조회가 추가되었습니다.
+> Supabase 를 연결하지 않으면 **데모 모드**(로그인 없이 데모 관리자, 메모리 저장)로 바로 실행됩니다.
+> 배포 주소: https://work-auto-blush.vercel.app
 
 ---
 
@@ -31,8 +33,10 @@ npm run dev
 | `ENCRYPTION_KEY` | (개발용 키) | API Key 암호화 키. **운영 환경에서는 필수**입니다 |
 | `OPENAI_MODEL` | `gpt-4o-mini` | live 모드의 OpenAI 모델 |
 | `MOCK_LATENCY_MS` | `700` | Mock 응답 지연 (로딩 화면 확인용) |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (없음) | 설정하면 로그인 + DB 모드. 방법: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) |
+| `DEMO_ROLE` | (없음) | 데모 모드에서 등급별 화면 미리보기 (`silver` 등) |
 
-> 데이터는 인메모리 저장소에 있습니다. 서버를 재시작하면 Seed 데이터(제품 3개, 스타일 3개, 생성 이력 3건 등)로 초기화됩니다.
+> 데모 모드의 데이터는 서버 메모리에 있어 재시작하면 Seed 데이터로 초기화됩니다. Supabase 모드에서는 DB 에 저장됩니다.
 
 ## 둘러보기 (5분 데모)
 
@@ -53,7 +57,8 @@ npm run dev
 ├── NAVER 블로그     트렌드·키워드 · 제품 글 · 정보·트렌드 글 · 자동 글쓰기
 ├── 공통 도구      제품 상세페이지 학습 · 제품 라이브러리 · 영상 URL 가져오기
 ├── AI 학습 관리   제품 / 스타일 / 히스토리 / 피드백 / 성과
-└── 설정           API 연결 센터
+├── 설정           API 연결 센터
+└── 사이트 관리    사용자 관리 · 권한 관리 (관리자에게만 보임)
 ```
 
 ## 어디를 보면 되나
@@ -66,6 +71,8 @@ npm run dev
 | 화면 경로, API 경로 | [docs/ROUTES.md](docs/ROUTES.md) |
 | 디자인 규칙 (다른 프로젝트에도 재사용) | [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) |
 | 데이터 모델, DB 설계 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) |
+| **Supabase 연결 방법 (DB + 로그인)** | [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) |
+| 로그인, 역할, 등급 권한 구조 | [docs/AUTH_AND_PERMISSIONS.md](docs/AUTH_AND_PERMISSIONS.md) |
 | OpenAI, YouTube, NAVER 연동과 키 보안, Claude/Gemini 추가 | [docs/API_PROVIDER_SPEC.md](docs/API_PROVIDER_SPEC.md) |
 | AI 학습(Memory + Context Injection) 설계 | [docs/AI_LEARNING_SYSTEM.md](docs/AI_LEARNING_SYSTEM.md) |
 | **이어서 개발하는 방법, 금지 사항** | [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) |
@@ -75,7 +82,11 @@ npm run dev
 ## 폴더 한눈에 보기
 
 ```
-app/                 페이지(얇은 껍데기) + app/api Route Handler
+app/(app)            로그인 후 화면 (사이드바)
+app/(auth)/login     로그인 · 회원가입
+app/api              Route Handler
+proxy.ts             세션 갱신 + 비로그인 시 로그인 화면으로
+supabase/schema.sql  DB 테이블 · RLS · 가입 트리거
 components/ui        원자 컴포넌트 (Button, DataTable, Tabs, States …)
 components/layout    AppShell, AppSidebar, PageHeader
 components/shared    FeatureCard, ProductCard, ResultPanel, ApiConnectionCard …
@@ -104,4 +115,4 @@ docs/                설계 문서
 
 ## 기술 스택
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · lucide-react · Pretendard
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · Supabase (Auth + Postgres) · lucide-react · Pretendard

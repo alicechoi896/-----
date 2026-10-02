@@ -13,13 +13,5 @@ export type ProviderId = "openai" | "youtube" | "naver";
 /** 기능 구현 상태: live=실제 API 연동, mock=Mock 데이터로 동작, planned=준비 중 */
 export type FeatureStatus = "live" | "mock" | "planned";
 
-export interface User {
-  id: ID;
-  email: string;
-  name: string;
-  plan: "free" | "pro";
-  createdAt: ISODate;
-}
-
 /** Route Handler 가 돌려주는 응답의 공통 형태 */
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };

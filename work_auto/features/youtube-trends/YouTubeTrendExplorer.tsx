@@ -25,7 +25,8 @@ import {
   Tag,
   type Column,
 } from "@/components/ui";
-import { formatCompact, formatDate, formatDuration, formatNumber } from "@/lib/utils";
+import { VideoThumb } from "@/components/shared/VideoThumb";
+import { formatCompact, formatDate, formatNumber } from "@/lib/utils";
 
 const PERIODS = [
   { value: "7", label: "7일" },
@@ -80,14 +81,13 @@ export function YouTubeTrendExplorer() {
       header: "썸네일",
       width: "104px",
       render: (r) => (
-        <div className="relative h-[48px] w-[84px] overflow-hidden rounded-md ring-1 ring-line" style={{ background: r.thumbnailColor }}>
-          {r.format === "shorts" && (
-            <span className="absolute top-1 left-1 rounded bg-fg/75 px-1 text-[10px] font-semibold text-white">Shorts</span>
-          )}
-          <span className="tabular absolute right-1 bottom-1 rounded bg-fg/75 px-1 text-[10px] text-white">
-            {formatDuration(r.durationSec)}
-          </span>
-        </div>
+        <VideoThumb
+          className="h-[48px] w-[84px]"
+          thumbnailUrl={r.thumbnailUrl}
+          color={r.thumbnailColor}
+          durationSec={r.durationSec}
+          shorts={r.format === "shorts"}
+        />
       ),
     },
     {

@@ -1,3 +1,4 @@
+import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
 import { videoService } from "@/lib/server/services/videos";
 
@@ -9,6 +10,7 @@ export async function GET() {
 /** POST /api/videos { url, note? } — 영상 메타데이터를 가져와 저장 */
 export async function POST(request: Request) {
   return handle(async () => {
+    await requireAccess("video-import");
     const { url, note } = await readJson<{ url: string; note?: string }>(request);
     return videoService.import(url, note);
   });

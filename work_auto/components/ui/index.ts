@@ -19,3 +19,4 @@ export { SaveButton } from "./SaveButton";
 export { IconChip } from "./IconChip";
 export { StatTile } from "./StatTile";
 export { TrendLineChart } from "./TrendLineChart";
+export { Checkbox } from "./Checkbox";

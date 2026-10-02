@@ -66,6 +66,7 @@ export interface ReferenceVideo {
   channelName: string;
   durationSec: number;
   thumbnailColor: string;
+  thumbnailUrl?: string;
   note: string | null;
   createdAt: ISODate;
 }

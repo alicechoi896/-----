@@ -32,8 +32,10 @@ export interface YouTubeTrendItem extends TrendItemBase {
   url: string;
   channelName: string;
   channelSubscribers: number;
-  /** Mock 썸네일 색 (실제 연동 시 thumbnailUrl 로 대체) */
+  /** 썸네일이 없을 때(Mock) 쓰는 배경색 */
   thumbnailColor: string;
+  /** 실제 썸네일 이미지 URL (YouTube Data API) */
+  thumbnailUrl?: string;
   publishedAt: ISODate;
   durationSec: number;
   format: "shorts" | "long";

@@ -17,7 +17,8 @@ import {
   SectionCard,
   type Column,
 } from "@/components/ui";
-import { formatDuration, formatRelative } from "@/lib/utils";
+import { VideoThumb } from "@/components/shared/VideoThumb";
+import { formatRelative } from "@/lib/utils";
 
 const PLATFORM = { youtube: "YouTube", naver: "NAVER", other: "기타" } as const;
 
@@ -55,9 +56,7 @@ export function VideoImport() {
       header: "영상",
       render: (v) => (
         <div className="flex items-center gap-3">
-          <div className="relative h-11 w-20 shrink-0 rounded-md ring-1 ring-line" style={{ background: v.thumbnailColor }}>
-            <span className="tabular absolute right-1 bottom-1 rounded bg-fg/75 px-1 text-[10px] text-white">{formatDuration(v.durationSec)}</span>
-          </div>
+          <VideoThumb className="h-11 w-20" thumbnailUrl={v.thumbnailUrl} color={v.thumbnailColor} durationSec={v.durationSec} />
           <div className="min-w-0">
             <a href={v.url} target="_blank" rel="noreferrer" className="line-clamp-1 font-medium text-fg hover:text-brand">
               {v.title}

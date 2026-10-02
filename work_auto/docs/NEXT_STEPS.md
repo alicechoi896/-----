@@ -1,6 +1,6 @@
 # NEXT STEPS: 현재 상태와 다음 개발 순서
 
-> 기준일: 2026-10-01 (v0.1.0)
+> 기준일: 2026-10-02 (v0.2.0)
 
 ## 1. 현재 구현 상태
 
@@ -15,9 +15,10 @@
 | 제품 학습 파이프라인 | ✅ 구조 완료 | 텍스트 수집은 실제 동작, URL·이미지는 Mock |
 | API 연결 센터 / 암호화 | ✅ 완료 | 서버 AES-256-GCM, 마스킹 |
 | OpenAI 실제 호출 | 🟡 코드 완료, 미검증 | `PROVIDER_MODE=live` + 키 연결 후 검증 필요 |
-| YouTube / NAVER 실제 조회 | 🔴 미구현 | testConnection만 실제 동작 |
-| 영구 저장소 | 🔴 미구현 | 인메모리 (재시작하면 Seed로 초기화) |
-| 인증 / 다중 사용자 | 🔴 미구현 | `demo-user` 고정 |
+| YouTube 실제 조회 | ✅ 구현 (실키 검증 대기) | 트렌드 + 영상 메타데이터. `PROVIDER_MODE=live` + 키 연결 시 동작 |
+| NAVER 실제 조회 | 🔴 미구현 | testConnection만 실제 동작 |
+| 영구 저장소 (Supabase) | ✅ 구현 (연결 대기) | `docs/SUPABASE_SETUP.md` 대로 연결하면 동작. 미연결 시 데모 모드 |
+| 로그인 / 역할 / 권한 | ✅ 구현 | 관리자·실버·골드·VIP, 사이트 관리(사용자·권한) |
 | 성과 자동 수집 | 🔴 미구현 | Mock / 수동 |
 | 일반 설정 | ⏳ planned | 카드만 노출 |
 
@@ -26,17 +27,22 @@
 - AI 생성 전체 (MockAIProvider: 입력과 Context를 반영한 결정적 템플릿 문장)
 - 제품 분석 (카탈로그 제품은 준비된 분석, 그 외는 규칙 기반 요약)
 - URL 상세페이지 수집, 이미지 OCR
-- YouTube 트렌드, 영상 메타데이터
+- YouTube 트렌드, 영상 메타데이터 (키를 연결하고 live 모드면 실제 데이터)
 - NAVER 트렌드 (검색 추이, 급상승, 시즌, 관련 키워드, 아이디어)
 - 성과 데이터
 - API 연결 테스트 (Mock 모드에서는 저장·복호화만 확인)
 
 ## 3. 다음 개발 순서 (추천)
 
-### Step 1. 영구 저장소 + 인증 (가장 먼저)
-- 이유: 지금은 서버를 재시작하면 데이터가 사라진다. 다른 모든 기능의 전제다
-- 작업: Supabase 프로젝트 → DATA_MODEL 4장 테이블과 RLS → `supabase-store.ts` → 조회 전용 메서드 승격 → Supabase Auth → `getCurrentUserId()` 교체
-- 형제 프로젝트(`auto_genie`, `mbti-test`)의 Supabase 설정을 참고한다
+### Step 1. Supabase 연결 + 실제 YouTube 확인 (사용자 작업 필요)
+- `docs/SUPABASE_SETUP.md` 1~7단계 → 첫 관리자 지정 → YouTube 키 연결 → 트렌드 화면 확인
+- (코드 작업 완료: 저장소, 로그인, 역할, 권한, YouTube Provider)
+
+### Step 1-1. 운영 보완 (Supabase 연결 후)
+- 비밀번호 재설정(비밀번호 찾기) 화면, 내 정보(이름 변경) 화면
+- 등급별 사용량 한도 (예: 실버 하루 생성 20회) → `usage_logs` 테이블 + 생성 API 에서 확인
+- 데이터가 많아지면 `list(filter)` 를 SQL 조건 조회로 승격 (DEVELOPMENT_GUIDE 7장)
+- 권한·역할 변경 이력(감사 로그)
 
 ### Step 2. OpenAI 실제 연동 검증
 - `PROVIDER_MODE=live`, `ENCRYPTION_KEY` 설정 → API 연결 센터에서 키 연결 → 생성 7종과 제품 분석 실행
@@ -49,9 +55,10 @@
 - URL: 스마트스토어 → 쿠팡 순서로 서버 측 수집기를 만든다 (약관 확인, 실패 시 이미지·텍스트 입력 안내)
 - 재분석 기능 (원문 보존 → 분석 version 증가)
 
-### Step 4. YouTube Data API 연동
-- `YouTubeDataApiProvider.searchTrends` / `getVideoMeta` 구현 (API_PROVIDER_SPEC 5.2)
-- 트렌드 결과 캐시 테이블(`trend_snapshots`, 6시간)로 할당량을 관리한다
+### Step 4. YouTube 고도화
+- ✅ `searchTrends` / `getVideoMeta` 구현 완료 (서버 메모리 6시간 캐시)
+- 남은 것: 캐시를 DB(`trend_snapshots`)로 옮겨 서버 인스턴스끼리 공유, 카테고리를 YouTube videoCategoryId 와 매핑
+- API 키 정책 결정: 사용자별 키(현재) vs 관리자 공용 키 + 등급별 사용량 한도
 
 ### Step 5. NAVER API 연동
 - DataLab 검색어 트렌드, 쇼핑인사이트 → `NaverApiProvider.getInsight`

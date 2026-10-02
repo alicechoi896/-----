@@ -21,30 +21,38 @@
 
 ## 2. 페이지 목록
 
+> 로그인 후 화면은 모두 `app/(app)/` 폴더에 있다 (괄호 폴더는 URL에 나타나지 않는 그룹). 사용자마다 메뉴와 권한이 달라서 모든 화면을 요청할 때마다 렌더링한다(Dynamic).
+> "권한" 열의 키가 권한 관리 표의 한 줄이다. 기본 등급은 [AUTH_AND_PERMISSIONS.md](./AUTH_AND_PERMISSIONS.md)를 본다.
+
 | Route | 화면 | 역할 | 주요 컴포넌트 | 렌더링 |
 |-------|------|------|---------------|--------|
-| `/` | 콘텐츠 자동화 센터 | 채널 카드 4개 + 최근 생성·제품·API 상태 요약 | ChannelCard, HomeOverview | Static + Client |
-| `/youtube` | YouTube 자동화 | 기능 카드 3개 | ChannelHub | Static |
-| `/youtube/trends` | YouTube 트렌드 찾기 | 필터 → 요약 → 트렌드 표 | YouTubeTrendExplorer | Static + Client |
-| `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드·참고 영상으로 원고 생성 | ContentGenerator | Dynamic(쿼리) |
+| `/login` | 로그인 / 회원가입 | 이메일 + 비밀번호. 데모 모드에서는 안내만 표시 | LoginForm, server actions | Dynamic |
+| `/auth/callback` | (화면 없음) | 가입 인증 메일 링크 처리 → 홈으로 | route.ts | - |
+| `/admin` | 사이트 관리 | 관리자 전용 허브 | ChannelHub | Dynamic |
+| `/admin/users` | 사용자 관리 | 사용자 목록, 역할 변경 | UserManagement | Dynamic |
+| `/admin/permissions` | 권한 관리 | 등급 × 메뉴 체크 표 | PermissionMatrix | Dynamic |
+| `/` | 콘텐츠 자동화 센터 | 채널 카드 4개 + 최근 생성·제품·API 상태 요약 | ChannelCard, HomeOverview | Dynamic |
+| `/youtube` | YouTube 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
+| `/youtube/trends` | YouTube 트렌드 찾기 | 필터 → 요약 → 트렌드 표 | YouTubeTrendExplorer | Dynamic |
+| `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드·참고 영상으로 원고 생성 | ContentGenerator | Dynamic |
 | `/youtube/info-video` | 정보성 영상 만들기 | 주제·트렌드로 원고 생성 | ContentGenerator | Dynamic |
-| `/naver-clip` | NAVER 클립 자동화 | 기능 카드 3개 | ChannelHub | Static |
-| `/naver-clip/trends` | 네이버 트렌드 소재 찾기 | 급상승 주제·키워드, 시즌·관련 키워드 | NaverTrendExplorer `scope="clip"` | Static + Client |
+| `/naver-clip` | NAVER 클립 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
+| `/naver-clip/trends` | 네이버 트렌드 소재 찾기 | 급상승 주제·키워드, 시즌·관련 키워드 | NaverTrendExplorer `scope="clip"` | Dynamic |
 | `/naver-clip/product-content` | 제품 홍보 클립 만들기 | 클립 원고 생성 | ContentGenerator | Dynamic |
 | `/naver-clip/info-content` | 정보성 클립 만들기 | 클립 원고 생성 | ContentGenerator | Dynamic |
-| `/naver-blog` | NAVER 블로그 자동화 | 기능 카드 4개 | ChannelHub | Static |
-| `/naver-blog/trends` | 네이버 트렌드·키워드 찾기 | 검색 추이 차트, 관련 검색어, 아이디어 | NaverTrendExplorer `scope="blog"` | Static + Client |
+| `/naver-blog` | NAVER 블로그 자동화 | 기능 카드 4개 | ChannelHub | Dynamic |
+| `/naver-blog/trends` | 네이버 트렌드·키워드 찾기 | 검색 추이 차트, 관련 검색어, 아이디어 | NaverTrendExplorer `scope="blog"` | Dynamic |
 | `/naver-blog/product-writing` | 제품 블로그 글 만들기 | 제품 글 생성 (정직성 가드레일) | ContentGenerator | Dynamic |
 | `/naver-blog/info-writing` | 정보·트렌드 글 만들기 | 정보 글 생성 | ContentGenerator | Dynamic |
 | `/naver-blog/auto-writing` | 자동 글쓰기 | 최소 입력으로 전체 글 생성 | ContentGenerator | Dynamic |
-| `/tools` | 공통 도구 | 기능 카드 3개 | ChannelHub | Static |
-| `/tools/product-learning` | 제품 상세페이지 학습 | URL/이미지/텍스트 → 분석 → 저장 | ProductLearningWorkspace | Static + Client |
-| `/tools/product-library` | 제품 라이브러리 | 카드/목록, 검색, 삭제, 콘텐츠 만들기 | ProductLibrary | Static + Client |
+| `/tools` | 공통 도구 | 기능 카드 3개 | ChannelHub | Dynamic |
+| `/tools/product-learning` | 제품 상세페이지 학습 | URL/이미지/텍스트 → 분석 → 저장 | ProductLearningWorkspace | Dynamic |
+| `/tools/product-library` | 제품 라이브러리 | 카드/목록, 검색, 삭제, 콘텐츠 만들기 | ProductLibrary | Dynamic |
 | `/tools/product-library/[productId]` | 제품 상세 | 전체 분석·원본·생성 이력, `?mode=edit` 수정 | ProductDetailView | Dynamic |
-| `/tools/video-import` | 영상 URL 가져오기 | 참고 영상 저장 | VideoImport | Static + Client |
-| `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Static + Client |
-| `/settings` | 설정 | 설정 카드 (API 연결 센터, 일반 설정 준비 중) | ChannelHub | Static |
-| `/settings/api` | API 연결 센터 | OpenAI / YouTube / NAVER 연결·테스트 | ApiCenter, ApiConnectionCard | Static + Client |
+| `/tools/video-import` | 영상 URL 가져오기 | 참고 영상 저장 | VideoImport | Dynamic |
+| `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |
+| `/settings` | 설정 | 설정 카드 (API 연결 센터, 일반 설정 준비 중) | ChannelHub | Dynamic |
+| `/settings/api` | API 연결 센터 | OpenAI / YouTube / NAVER 연결·테스트 | ApiCenter, ApiConnectionCard | Dynamic |
 | (그 외) | 404 | 홈으로 이동 | not-found.tsx | - |
 
 ## 3. 화면 이동 관계
@@ -95,3 +103,8 @@
 | POST | `/api/connections/:provider/test` | 연결 테스트 | connectionService.test |
 | GET/POST | `/api/videos` | 참고 영상 조회 / 가져오기 | videoService |
 | DELETE | `/api/videos/:id` | 참고 영상 삭제 | videoService.remove |
+| GET | `/api/admin/users` | 사용자 목록 (관리자) | adminService.listUsers |
+| PATCH | `/api/admin/users/:userId` | 역할 변경 `{role}` (관리자, 자기 자신 제외) | adminService.updateRole |
+| GET / PUT / DELETE | `/api/admin/permissions` | 권한표 조회 / 한 칸 변경 `{role, permissionKey, allowed}` / 기본값 복원 | adminService |
+
+**API 권한**: 로그인하지 않으면 401, 등급 권한이 없으면 403. 트렌드·제품·생성·연결·영상 API는 해당 기능 권한을 확인한다 (`requireAccess`).
