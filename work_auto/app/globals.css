@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/*
+ * ─────────────────────────────────────────────────────────────
+ *  Design Tokens — 콘텐츠 자동화 센터
+ *  모든 색, 그림자, 반경은 여기서만 정의한다. (docs/DESIGN_SYSTEM.md)
+ *  컴포넌트에서는 semantic 클래스(bg-canvas, text-fg-muted, border-line …)를 쓴다.
+ *  라이트 테마 전용: 다크 테마는 기본값으로 쓰지 않는다.
+ * ─────────────────────────────────────────────────────────────
+ */
+@theme {
+  /* Surface */
+  --color-canvas: #ffffff; /* 페이지, 카드 배경 */
+  --color-subtle: #f8f9fb; /* 섹션 구분, 사이드바, 표 헤더 */
+  --color-muted: #f1f3f6; /* hover, 비활성 입력 배경 */
+
+  /* Border */
+  --color-line: #e7e9ee; /* 기본 테두리 */
+  --color-line-strong: #d5d9e0; /* 입력창 테두리, 강조 구분선 */
+
+  /* Text */
+  --color-fg: #111827; /* 제목, 본문 */
+  --color-fg-muted: #4b5563; /* 보조 본문 */
+  --color-fg-subtle: #8a909c; /* 설명, 캡션, placeholder */
+
+  /* Brand (액션, 포커스, 선택 상태에만 사용) */
+  --color-brand: #2563eb;
+  --color-brand-hover: #1d4ed8;
+  --color-brand-soft: #eef4ff;
+  --color-brand-line: #c7d7fe;
+
+  /* Status */
+  --color-success: #15803d;
+  --color-success-soft: #ecfdf3;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+  --color-info: #0369a1;
+  --color-info-soft: #f0f9ff;
+
+  /* Channel accent (아이콘 칩에만 사용. 넓은 면적에 쓰지 않는다) */
+  --color-ch-youtube: #e5484d;
+  --color-ch-youtube-soft: #fff1f1;
+  --color-ch-clip: #0ea472;
+  --color-ch-clip-soft: #ebfbf4;
+  --color-ch-blog: #16a34a;
+  --color-ch-blog-soft: #effcf2;
+  --color-ch-tools: #6d5bd0;
+  --color-ch-tools-soft: #f4f2ff;
+  --color-ch-neutral: #4b5563;
+  --color-ch-neutral-soft: #f1f3f6;
+
+  /* Radius */
+  --radius-control: 8px; /* 버튼, 입력창 */
+  --radius-card: 12px; /* 카드, 패널 */
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.03);
+  --shadow-card-hover: 0 4px 12px rgb(16 24 40 / 0.07), 0 1px 3px rgb(16 24 40 / 0.04);
+  --shadow-pop: 0 10px 28px rgb(16 24 40 / 0.12), 0 2px 6px rgb(16 24 40 / 0.05);
+
+  /* Typography */
+  --font-sans: var(--font-pretendard), "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Malgun Gothic", "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 0;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 표, 숫자 데이터는 고정폭 숫자 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 키보드 포커스 링 통일 */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brand-soft);
+}

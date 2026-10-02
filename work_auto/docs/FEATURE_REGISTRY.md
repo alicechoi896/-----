@@ -1,0 +1,76 @@
+# FEATURE REGISTRY: 전체 기능 목록
+
+> **이 파일만 봐도 서비스 전체를 파악할 수 있어야 한다.**
+> 코드의 단일 기준은 `lib/registry/features.ts`(기능)와 `lib/generators/configs.ts`(생성 폼)이다. 기능을 추가하거나 바꾸면 이 표도 같이 고친다.
+> 상태: ✅ live (실제 연동) · 🧪 mock (Mock 데이터로 전체 흐름 동작) · ⏳ planned (준비 중, 카드만 노출)
+
+## 1. 요약
+
+| 채널 | 기능 수 | live | mock | planned |
+|------|--------|------|------|---------|
+| YouTube | 3 | 0 | 3 | 0 |
+| NAVER Clip | 3 | 0 | 3 | 0 |
+| NAVER Blog | 4 | 0 | 4 | 0 |
+| 공통 도구 | 3 | 0 | 3 | 0 |
+| 설정 | 2 | 0 | 1 | 1 |
+| (단독) AI 학습 관리 | 1 | 0 | 1 | 0 |
+| **합계** | **16** | 0 | 15 | 1 |
+
+## 2. 전체 기능 표
+
+| 채널 | ID | 기능 | Route | 종류 | 상태 | 필요 API | 입력 데이터 | 출력 데이터 | 구현 |
+|------|----|------|-------|------|------|----------|-------------|-------------|------|
+| YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | 🧪 | YouTube Data API | 카테고리, 검색 키워드, 기간(7/14/21일), Shorts/일반, 정렬 | 썸네일, 제목, 채널, 게시일, 조회수, 일평균 조회수, 주요 키워드, Trend Score | `features/youtube-trends` |
+| YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | 🧪 | OpenAI | 제품*, 참고 트렌드, 참고 영상, 주요 키워드, 영상 길이, 콘텐츠 스타일 | 추천 제목 5개, Hook, 대본, 설명글, 주요 키워드, 해시태그 | ContentGenerator |
+| YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | 🧪 | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
+| NAVER Clip | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | 🧪 | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
+| NAVER Clip | `clip-product-content` | 제품 홍보 클립 만들기 | `/naver-clip/product-content` | generator | 🧪 | OpenAI | 제품*, 트렌드, 콘텐츠 스타일, 주요 키워드 | 제목, Hook, 클립 대본, 설명글, 키워드, 해시태그 | ContentGenerator |
+| NAVER Clip | `clip-info-content` | 정보성 클립 만들기 | `/naver-clip/info-content` | generator | 🧪 | OpenAI | 카테고리*, 현재 트렌드, 키워드 | 추천 주제, 제목, 대본, 설명글, 키워드 | ContentGenerator |
+| NAVER Blog | `blog-trends` | 네이버 트렌드·키워드 찾기 | `/naver-blog/trends` | trend | 🧪 | NAVER API | 검색어, 카테고리, 최근 기간 | 관련 검색어, 최근 검색 추이(차트), 급상승 키워드, 시즌 키워드, 콘텐츠 아이디어 | `features/naver-trends` (blog) |
+| NAVER Blog | `blog-product-writing` | 제품 블로그 글 만들기 | `/naver-blog/product-writing` | generator | 🧪 | OpenAI | 제품*, 메인 키워드*, 서브 키워드, 글 스타일, 글 길이, 실제 경험(선택) | 제목 후보 5, 전체 본문, 소제목, 제품 장점, 정보, CTA, 키워드, 해시태그 | ContentGenerator + 정직성 가드레일 |
+| NAVER Blog | `blog-info-writing` | 정보·트렌드 글 만들기 | `/naver-blog/info-writing` | generator | 🧪 | OpenAI | 글 유형*(일반 정보/트렌드/IT/AI/생활정보), 주제*, 참고 트렌드, 메인 키워드, 글 길이 | 제목 후보 5, 전체 본문, 소제목, 키워드, 해시태그 | ContentGenerator |
+| NAVER Blog | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | 🧪 | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
+| 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | 🧪 | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
+| 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | 🧪 | - | 검색어, 카테고리 | 제품 카드/목록, 상세, 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
+| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | 🧪 | YouTube Data API | 영상 URL, 메모 | 영상 메타데이터, 참고 영상 목록 | `features/video-import` |
+| 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | 🧪 | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
+| 설정 | `general-settings` | 일반 설정 | `/settings` | settings | ⏳ | - | - | - | (미구현) |
+| (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | 🧪 | - | - | 제품 데이터, 나의 스타일, 콘텐츠 히스토리, 피드백, 성과 데이터 | `features/ai-learning` |
+
+`*` = 필수 입력
+
+## 3. 생성형 기능 상세 (Generator Config)
+
+| Feature ID | promptId | submitLabel | productField | trendField | experienceField | headlineKey |
+|------------|----------|-------------|--------------|------------|-----------------|-------------|
+| `yt-product-video` | `youtube.product-video` | 영상 원고 생성하기 | productId | trendId | - | titles |
+| `yt-info-video` | `youtube.info-video` | 영상 원고 생성하기 | - | trendId | - | titles |
+| `clip-product-content` | `naver-clip.product-content` | 클립 원고 생성하기 | productId | trendId | - | title |
+| `clip-info-content` | `naver-clip.info-content` | 클립 원고 생성하기 | - | trendId | - | title |
+| `blog-product-writing` | `naver-blog.product-writing` | 블로그 글 생성하기 | productId | - | experience | titles |
+| `blog-info-writing` | `naver-blog.info-writing` | 블로그 글 생성하기 | - | trendId | - | titles |
+| `blog-auto-writing` | `naver-blog.auto-writing` | 자동으로 글 완성하기 | productId | - | - | titles |
+
+모든 생성 기능은 `POST /api/contents/generate`로 실행되고, `GeneratedContent`로 저장되며, Memory(제품, 스타일, 예시, 피드백, 성과, 트렌드)를 주입받는다.
+
+## 4. 기능 간 연결
+
+| From | 행동 | To |
+|------|------|----|
+| 제품 상세페이지 학습 | [제품 라이브러리에 저장] | 제품 라이브러리 / 제품 상세 |
+| 제품 라이브러리 | [콘텐츠 만들기] | 제품 홍보 영상 · 클립 · 블로그 (`?productId=`) |
+| YouTube 트렌드 | [↗] | 정보성 영상 (`?trendId=`) |
+| 네이버 트렌드 (Clip) | [클립 만들기] | 정보성 클립 (`?trendId=`) |
+| 네이버 트렌드 (Blog) | [글쓰기] | 정보·트렌드 글 (`?topic=`) |
+| 영상 URL 가져오기 | 저장 | 제품 홍보 영상의 "참고 영상" 선택지 |
+| 모든 생성 결과 | 좋은 결과 / 피드백 | AI 학습 관리 → 다음 생성 Context |
+| API 연결 센터 | 연결 | Provider Registry (live 모드에서 실제 API) |
+
+## 5. 새 기능을 추가할 때 이 표에 적을 것
+
+1. 2장 표에 한 줄: 채널, ID, 기능, Route, 종류, 상태, 필요 API, 입력, 출력, 구현 위치
+2. 생성형이면 3장 표에 한 줄
+3. 다른 기능과 연결되면 4장에 한 줄
+4. 1장 요약의 숫자
+
+절차는 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)를 본다.

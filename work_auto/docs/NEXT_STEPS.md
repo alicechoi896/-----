@@ -1,0 +1,82 @@
+# NEXT STEPS: 현재 상태와 다음 개발 순서
+
+> 기준일: 2026-10-01 (v0.1.0)
+
+## 1. 현재 구현 상태
+
+| 영역 | 상태 | 비고 |
+|------|------|------|
+| 화면 / UI / 디자인 시스템 | ✅ 완료 | 23개 경로, 공통 컴포넌트 UI 28 + 레이아웃 5 + 공용 9 |
+| 라우팅 / Registry | ✅ 완료 | 기능 추가 = Registry 한 줄 |
+| 생성형 기능 7개 (흐름) | ✅ 완료 (Mock AI) | 입력 검증 → Context → Prompt → AI → 저장 → 피드백 |
+| AI Memory (Context Injection) | ✅ 완료 (규칙 기반) | 제품, 스타일, 예시, 피드백, 성과, 트렌드 |
+| 프롬프트 버전 관리 | ✅ 코드 기반 | 결과에 version 저장 |
+| 정직성 가드레일 | ✅ 완료 | 프롬프트 + 생성 후 검사 + 고지 문구 |
+| 제품 학습 파이프라인 | ✅ 구조 완료 | 텍스트 수집은 실제 동작, URL·이미지는 Mock |
+| API 연결 센터 / 암호화 | ✅ 완료 | 서버 AES-256-GCM, 마스킹 |
+| OpenAI 실제 호출 | 🟡 코드 완료, 미검증 | `PROVIDER_MODE=live` + 키 연결 후 검증 필요 |
+| YouTube / NAVER 실제 조회 | 🔴 미구현 | testConnection만 실제 동작 |
+| 영구 저장소 | 🔴 미구현 | 인메모리 (재시작하면 Seed로 초기화) |
+| 인증 / 다중 사용자 | 🔴 미구현 | `demo-user` 고정 |
+| 성과 자동 수집 | 🔴 미구현 | Mock / 수동 |
+| 일반 설정 | ⏳ planned | 카드만 노출 |
+
+## 2. 아직 Mock인 기능
+
+- AI 생성 전체 (MockAIProvider: 입력과 Context를 반영한 결정적 템플릿 문장)
+- 제품 분석 (카탈로그 제품은 준비된 분석, 그 외는 규칙 기반 요약)
+- URL 상세페이지 수집, 이미지 OCR
+- YouTube 트렌드, 영상 메타데이터
+- NAVER 트렌드 (검색 추이, 급상승, 시즌, 관련 키워드, 아이디어)
+- 성과 데이터
+- API 연결 테스트 (Mock 모드에서는 저장·복호화만 확인)
+
+## 3. 다음 개발 순서 (추천)
+
+### Step 1. 영구 저장소 + 인증 (가장 먼저)
+- 이유: 지금은 서버를 재시작하면 데이터가 사라진다. 다른 모든 기능의 전제다
+- 작업: Supabase 프로젝트 → DATA_MODEL 4장 테이블과 RLS → `supabase-store.ts` → 조회 전용 메서드 승격 → Supabase Auth → `getCurrentUserId()` 교체
+- 형제 프로젝트(`auto_genie`, `mbti-test`)의 Supabase 설정을 참고한다
+
+### Step 2. OpenAI 실제 연동 검증
+- `PROVIDER_MODE=live`, `ENCRYPTION_KEY` 설정 → API 연결 센터에서 키 연결 → 생성 7종과 제품 분석 실행
+- 출력 JSON 형식이 어긋나는 경우 정규화 로직 보강, 필요하면 JSON Schema(Structured Outputs)로 전환
+- 사용량(토큰)을 `GeneratedContent`에 저장하고, 사용자별 일일 상한을 둔다
+- 프롬프트를 실제 결과에 맞춰 다듬는다 → version 1.1.0
+
+### Step 3. 제품 수집 실제화
+- 이미지: Vision 모델로 상세 이미지 → 텍스트 (`VisionImageCollector`, AIProvider 사용)
+- URL: 스마트스토어 → 쿠팡 순서로 서버 측 수집기를 만든다 (약관 확인, 실패 시 이미지·텍스트 입력 안내)
+- 재분석 기능 (원문 보존 → 분석 version 증가)
+
+### Step 4. YouTube Data API 연동
+- `YouTubeDataApiProvider.searchTrends` / `getVideoMeta` 구현 (API_PROVIDER_SPEC 5.2)
+- 트렌드 결과 캐시 테이블(`trend_snapshots`, 6시간)로 할당량을 관리한다
+
+### Step 5. NAVER API 연동
+- DataLab 검색어 트렌드, 쇼핑인사이트 → `NaverApiProvider.getInsight`
+- 연관 키워드·검색량용 검색광고 API Provider 추가 (자격증명 3개)
+- `contentIdeas`는 Service에서 AI로 생성한다
+
+### Step 6. AI Memory 고도화
+- 결과 섹션별 편집기 + 수정본 저장 (`content_revisions`)
+- 좋은 결과, 수정본 임베딩 → 의미 검색 RAG (pgvector)
+- 피드백 통계 화면 (기능별·프롬프트 버전별 좋아요 비율)
+- 평가 세트로 프롬프트 변경 회귀 테스트
+
+### Step 7. 성과 데이터 연동
+- YouTube Analytics API (OAuth 필요), 블로그 통계, 판매 데이터 (쿠팡 파트너스 리포트 등)
+- 콘텐츠 ↔ 게시 URL 연결 UI → 자동 수집 배치
+
+### Step 8. 운영 기능
+- 일반 설정 (기본 채널, 기본 AI, 생성 기본값), ContentProject UI
+- Claude / Gemini Provider 추가 (API_PROVIDER_SPEC 8장)
+- 암호화 키 회전, 감사 로그, 오류 모니터링
+- 테스트: 서비스 단위 테스트(Vitest), 주요 흐름 E2E(Playwright)
+
+### 이후 후보 기능 (Registry에 planned로 먼저 추가)
+- YouTube: 썸네일 문구, 쇼츠 자막 분할, 댓글 분석
+- Clip: 장면 구성표(콘티), 자막 파일 생성
+- Blog: 이미지 배치 가이드, 상위 노출 글 구조 분석, 발행 일정
+- 공통: 무음 제거 + 자막(V1 제외 항목), 일괄 생성(여러 제품 × 채널), 결과 내보내기(Docs, txt)
+- 신규 채널: Instagram Reels, TikTok, Threads
