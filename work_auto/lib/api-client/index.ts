@@ -226,6 +226,12 @@ export const api = {
         durationSec: number;
         streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
       }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
+    /** 영상 화면들에서 덧씌운 글자 위치 (AI Vision). 0~1000 정규화 */
+    detectText: (frames: { t: number; data: string }[]) =>
+      request<{ frames: { t: number; boxes: { x: number; y: number; w: number; h: number }[] }[]; provider: string }>(
+        "/api/videos/detect-text",
+        { method: "POST", body: json({ frames }) },
+      ),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
     importMany: (items: { url: string; titleHint?: string }[], note?: string, productId?: string | null) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {

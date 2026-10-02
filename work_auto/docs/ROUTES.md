@@ -60,6 +60,7 @@
 | `/tools/video-import` | 영상 URL 가져오기 | URL 여러 개 저장 + 소리 없는 영상 다운로드 명령 | VideoImport | Dynamic |
 | POST | `/api/memory/delete` { kind, ids[] } | AI 학습 관리 체크 삭제 (contents·products·feedback·performance) | memoryService.deleteMany |
 | PATCH | `/api/videos/:id` { productId } | 영상의 연관 제품 바꾸기 | videoService.setProduct |
+| POST | `/api/videos/detect-text` { frames[{t,data}] } | 영상 화면에서 덧씌운 글자 위치 (AI Vision, 0~1000 좌표, 저장 안 함) | videoTextDetector |
 | POST | `/api/videos/resolve` { url } | 샤오홍슈 노트의 영상 주소 (주소만, 파일은 브라우저가 직접 받음) | resolveXiaohongshu |
 | POST | `/api/videos/batch` { urls[], note? } | 여러 영상 한 번에 가져오기 (최대 20개, URL 별 결과) | videoService.importMany |
 | `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |

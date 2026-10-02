@@ -11,9 +11,10 @@
  * → 기본은 H.265 를 먼저 받는다. H.265 가 없으면 H.264.
  */
 import { api } from "@/lib/api-client";
+import { blurAndMute, sampleFrames, toBlurBoxes } from "@/lib/video-edit";
 import { removeAudio } from "@/lib/video-mute";
 
-export type XhsStage = "resolve" | "download" | "mute" | "done";
+export type XhsStage = "resolve" | "download" | "mute" | "analyze" | "blur" | "done";
 
 const safeName = (s: string) => (s.replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim() || "샤오홍슈 영상").slice(0, 60);
 const isHevc = (codec: string) => /hevc|h265|hvc/i.test(codec);
@@ -79,4 +80,23 @@ export async function downloadXhsMuted(
   });
   onStage("done");
   return { blob: muted, name: mutedName(src.title), title: src.title, clean: src.clean };
+}
+
+/**
+ * 글자 자동 흐리게: 워터마크 없는 원본 받기 → 화면 뽑기 → AI 가 덧씌운 글자 위치 찾기 → 그 구간만 흐리게 + 소리 제거 → H.264
+ * 원작자에게 사용과 로고·자막 제거 허락을 받은 영상에만 쓴다 (화면에서 확인).
+ */
+export async function downloadXhsBlurred(
+  url: string,
+  onStage: (stage: XhsStage, progress?: number) => void,
+): Promise<{ blob: Blob; name: string; title: string; found: number }> {
+  const src = await fetchXhsSource(url, onStage);
+  onStage("analyze");
+  const sampled = await sampleFrames(src.blob);
+  const detected = await api.videos.detectText(sampled.frames);
+  const boxes = toBlurBoxes(detected.frames, sampled.width, sampled.height, sampled.duration);
+  onStage("blur", 0);
+  const blob = await blurAndMute(src.blob, boxes, sampled, (p) => onStage("blur", p));
+  onStage("done");
+  return { blob, name: mutedName(src.title, "글자흐리게"), title: src.title, found: boxes.length };
 }
