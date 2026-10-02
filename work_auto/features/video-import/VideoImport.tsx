@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Film, Trash2 } from "lucide-react";
+import { Download, Film, Info, Trash2 } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -14,9 +14,11 @@ import {
   IconButton,
   Input,
   LoadingState,
+  Notice,
   SectionCard,
   type Column,
 } from "@/components/ui";
+import Link from "next/link";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { formatRelative } from "@/lib/utils";
 
@@ -80,6 +82,14 @@ export function VideoImport() {
 
   return (
     <div className="space-y-5">
+      <Notice tone="neutral" icon={Info}>
+        다른 사람의 영상 파일 다운로드는 YouTube·NAVER 이용약관과 저작권 때문에 제공하지 않습니다. 여기서는 제목·채널·길이 같은 정보만 저장합니다.
+        내가 가진 영상의 소리를 빼려면{" "}
+        <Link href="/tools/video-mute" className="font-medium text-brand hover:underline">
+          영상 음성 제거
+        </Link>
+        를 쓰세요.
+      </Notice>
       <SectionCard title="영상 가져오기" description="YouTube, NAVER 클립 등 참고할 영상의 URL을 입력하세요.">
         <form
           className="grid items-end gap-3 md:grid-cols-[1fr_260px_auto]"

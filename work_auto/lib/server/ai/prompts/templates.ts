@@ -31,7 +31,7 @@ function contentTemplate(
     ...history,
     { version: "1.1.0", date: "2026-10-02", note: "스타일 블록에 Hook·CTA 목록 추가, 생성 폼에서 고른 스타일 적용" },
     { version: "1.2.0", date: "2026-10-02", note: "[콘텐츠 프로필] 블록 추가 (관심분야·관심 키워드·제외 키워드)" },
-  ];
+  ].sort((a, b) => a.version.localeCompare(b.version, undefined, { numeric: true }));
   return {
     id,
     version: changelog[changelog.length - 1].version,
@@ -127,6 +127,21 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     task: "아래 참고 자료의 스타일을 분석해 스타일 초안을 만든다.",
   },
   {
+    id: "photo.caption",
+    version: "1.0.0",
+    description: "블로그 제품 사진마다 무엇이 보이는지 짧게 설명 (본문 사진 배치용)",
+    changelog: [{ version: "1.0.0", date: "2026-10-02", note: "최초 작성" }],
+    system: [
+      "당신은 쇼핑 블로그 편집자다. 제품 사진을 보고 사진마다 무엇이 보이는지 짧게 설명한다.",
+      "규칙:",
+      "1. captions 는 사진 순서와 같은 개수로 쓴다.",
+      "2. 각 설명은 25자 이내. 예: '정면 전체 모습', '구성품 펼친 모습', '손잡이 버튼 확대', '사용 장면(거실)'.",
+      "3. 사진에 보이는 것만 쓴다. 성능·효과를 추측하지 않는다. 글자가 보이면 핵심 단어만 쓴다.",
+      "응답은 지정된 JSON 형식으로만 한다.",
+    ].join("\n"),
+    task: "아래 제품 사진들을 순서대로 설명한다.",
+  },
+  {
     id: "youtube.trend-topics",
     version: "1.0.0",
     description: "불러온 트렌드 영상 목록에서 지금 만들 만한 영상 주제 추천",
@@ -165,7 +180,9 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   contentTemplate(
     "naver-blog.product-writing",
     "NAVER 블로그 제품 글",
-    "네이버 블로그 제품 소개 글을 쓴다. 메인 키워드를 제목과 첫 단락에 넣는다. 소제목(##)으로 구조화한다. 사용자의 [실제 경험]이 있으면 그 내용만 경험으로 쓰고, 없으면 경험담을 지어내지 않는다.",
+    "네이버 블로그 제품 소개 글을 쓴다. 메인 키워드를 제목과 첫 단락에 넣는다. 소제목(##)으로 구조화한다. 사용자의 [실제 경험]이 있으면 그 내용만 경험으로 쓰고, 없으면 경험담을 지어내지 않는다. " +
+      "사용자 입력에 '제품 사진' 목록이 있으면 본문(body)의 알맞은 위치에 [사진1], [사진2] … 처럼 사진 자리를 한 줄씩 넣는다. 모든 사진을 번호 순서대로 한 번씩 쓰고, 사진 설명과 내용이 맞는 문단 바로 아래에 둔다. 사진에 보이지 않는 내용을 사진 설명처럼 지어내지 않는다.",
+    [{ version: "1.3.0", date: "2026-10-02", note: "제품 사진 자리 표시([사진n]) 지시 추가" }],
   ),
   contentTemplate(
     "naver-blog.info-writing",

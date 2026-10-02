@@ -75,6 +75,8 @@ function RemoteSelectField({
 }) {
   const { data, loading, error } = useRemoteOptions(field.source!, field.sourceParam);
   const loaded = data ?? [];
+  // 고를 것이 1개 이하면 묻지 않는다 (자동 적용)
+  if (field.hideIfSingle && !loading && loaded.length <= 1 && !value) return null;
   // 다른 화면에서 넘어온 값(예: 트렌드 화면의 영상)이 목록에 없어도 선택된 상태로 보여준다
   const options =
     value && !loading && !loaded.some((o) => o.value === value)

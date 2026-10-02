@@ -16,6 +16,7 @@ import {
   UserCheck,
   Users,
   Wand2,
+  VolumeX,
 } from "lucide-react";
 import type { MemberTier } from "@/lib/types";
 import type { FeatureDef } from "./types";
@@ -245,6 +246,21 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: ["youtube"],
     inputs: ["영상 URL", "메모"],
     outputs: ["영상 메타데이터", "참고 영상 목록"],
+  },
+  {
+    id: "video-mute",
+    channelId: "tools",
+    order: 4,
+    title: "영상 음성 제거",
+    description: "내 영상 파일에서 소리만 빼고 원본 화질 그대로 내려받습니다. 파일은 브라우저 안에서만 처리합니다.",
+    href: "/tools/video-mute",
+    icon: VolumeX,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: [],
+    inputs: ["내 영상 파일 (MP4·MOV·WEBM·MKV)"],
+    outputs: ["음성 없는 영상 (원본 화질)", "여러 개 ZIP"],
   },
 
   // ───────── 설정 ─────────

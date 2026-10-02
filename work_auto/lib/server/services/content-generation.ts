@@ -32,6 +32,11 @@ export const contentGenerationService = {
 
     // 1) 입력 검증
     for (const field of config.fields) {
+      if (field.type === "images") {
+        // 사진은 브라우저에만 있고, 서버에는 "사진 n: 설명" 목록만 온다
+        const raw = Array.isArray(input[field.name]) ? (input[field.name] as unknown[]) : [];
+        input[field.name] = raw.slice(0, 10).map((c, i) => `사진${i + 1}: ${String(c ?? "").trim().slice(0, 80) || "제품 사진"}`);
+      }
       const v = input[field.name];
       const empty = v == null || v === "" || (Array.isArray(v) && v.length === 0);
       if (field.required && empty) throw new AppError("VALIDATION", `${field.label}을(를) 입력해 주세요.`);

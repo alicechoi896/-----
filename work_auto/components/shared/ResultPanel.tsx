@@ -11,7 +11,9 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SaveButton } from "@/components/ui/SaveButton";
 import { cardClass } from "@/components/ui/SectionCard";
+import type { ProcessedPhoto } from "@/lib/photo-process";
 import { cn } from "@/lib/utils";
+import { BodyWithPhotos } from "./BodyWithPhotos";
 
 /**
  * 생성 결과 패널 — 모든 생성형 기능이 같이 쓴다.
@@ -26,9 +28,12 @@ export function ResultPanel({
   outputs,
   headlineKey,
   onChange,
+  photos = [],
 }: {
   content: GeneratedContent;
   outputs: OutputSection[];
+  /** 이번 생성에 쓴 사진 (브라우저 메모리). 있으면 본문의 [사진n] 자리에 보여준다 */
+  photos?: ProcessedPhoto[];
   /** "별로예요" 수정본을 받을 출력 key (Generator Config 의 headlineKey) */
   headlineKey?: string;
   onChange?: (content: GeneratedContent) => void;
@@ -65,7 +70,7 @@ export function ResultPanel({
       <ContextSummaryBox content={content} />
 
       {outputs.map((section) => (
-        <OutputBlock key={section.key} section={section} value={content.output[section.key]} />
+        <OutputBlock key={section.key} section={section} value={content.output[section.key]} photos={photos} />
       ))}
 
       <FeedbackBar content={content} headlineKey={headlineKey ?? outputs[0]?.key} onChange={onChange} />
@@ -78,7 +83,7 @@ function toText(value: GeneratedValue | undefined): string {
   return Array.isArray(value) ? value.join("\n") : value;
 }
 
-function OutputBlock({ section, value }: { section: OutputSection; value: GeneratedValue | undefined }) {
+function OutputBlock({ section, value, photos }: { section: OutputSection; value: GeneratedValue | undefined; photos: ProcessedPhoto[] }) {
   const list = Array.isArray(value) ? value : value ? [value] : [];
   return (
     <section className={cardClass}>
@@ -108,6 +113,8 @@ function OutputBlock({ section, value }: { section: OutputSection; value: Genera
               </li>
             ))}
           </ol>
+        ) : section.format === "longtext" && photos.length > 0 && section.key === "body" ? (
+          <BodyWithPhotos text={list[0]} photos={photos} />
         ) : section.format === "longtext" ? (
           <div className="max-h-[420px] overflow-y-auto rounded-control bg-subtle px-4 py-3 text-sm leading-7 whitespace-pre-wrap text-fg">
             {list[0]}

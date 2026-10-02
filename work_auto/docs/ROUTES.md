@@ -58,6 +58,7 @@
 | `/tools/product-library` | 제품 라이브러리 | 카드/목록, 검색, 삭제, 콘텐츠 만들기 | ProductLibrary | Dynamic |
 | `/tools/product-library/[productId]` | 제품 상세 | 전체 분석·원본·생성 이력, `?mode=edit` 수정 | ProductDetailView | Dynamic |
 | `/tools/video-import` | 영상 URL 가져오기 | 참고 영상 저장 | VideoImport | Dynamic |
+| `/tools/video-mute` | 영상 음성 제거 | 내 영상에서 소리만 빼기 (브라우저 처리) | VideoMuteTool | Dynamic |
 | `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |
 | `/settings` | 설정 | 설정 카드 (API 연결 센터, 일반 설정 준비 중) | ChannelHub | Dynamic |
 | `/settings/api` | API 연결 센터 | OpenAI / YouTube / NAVER 연결·테스트 | ApiCenter, ApiConnectionCard | Dynamic |
@@ -110,6 +111,7 @@
 | GET/POST | `/api/feedback` | 피드백 조회 / 등록 | memoryService |
 | GET/POST | `/api/styles` | 스타일 조회 / 생성 | memoryService |
 | PUT/PATCH/DELETE | `/api/styles/:id` | 수정 / 기본 지정 / 삭제 | memoryService |
+| POST | `/api/contents/describe-photos` { images[{mediaType,data}], productName? } | 블로그 사진 설명 (AI Vision, 512px 미리보기만, 저장 안 함) | photoCaptioner |
 | GET/POST | `/api/profiles` | 콘텐츠 프로필 목록 / 만들기 (`{ example: true }` = 가전 콘텐츠 예시) | contentProfileService |
 | PUT/PATCH/DELETE | `/api/profiles/:id` | 수정 / 기본 프로필로 설정 / 삭제 | contentProfileService |
 | POST | `/api/styles/extract` { text, channelIds } | 참고 자료 → 스타일 초안 (AI, 원문 저장 안 함) | styleExtractor |

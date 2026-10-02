@@ -44,6 +44,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const trendId = config.trendField ? String(input[config.trendField] ?? "") : "";
   const videoId = String(input.referenceVideoId ?? "");
   const styleId = String(input.styleId ?? "");
+  const pickedProfileId = String(input.profileId ?? "");
 
   const [productRow, styles, featureContents, downFeedback, channelContents, performance, trend, referenceVideo, profiles] = await Promise.all([
     productId ? repo.products.get(productId) : Promise.resolve(null),
@@ -77,8 +78,12 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
 
-  // 0) Content Profile — 스타일에 연결된 프로필이 우선, 없으면 기본 프로필
+  // 0) Content Profile — 생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필
+  if (pickedProfileId && !profiles.some((p) => p.id === pickedProfileId)) {
+    throw new AppError("PROFILE_NOT_FOUND", "선택한 콘텐츠 프로필을 찾을 수 없습니다. 삭제되었거나 사용 중이 아닐 수 있습니다.", 404);
+  }
   const contentProfile =
+    (pickedProfileId ? profiles.find((p) => p.id === pickedProfileId) : undefined) ??
     (style?.profileId ? profiles.find((p) => p.id === style.profileId) : undefined) ??
     profiles.find((p) => p.isDefault) ??
     profiles[0] ??

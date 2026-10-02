@@ -127,7 +127,7 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
         .trim(),
     keywords: (n) => keywords.slice(0, n),
     hashtags: (n) => keywords.slice(0, n).map(hashtag),
-    body: () => body.trim(),
+    body: () => withPhotoMarkers(body.trim(), asList(input.photos).length),
     headings: (n) => headings.slice(0, n),
     benefits: (n) => benefits.slice(0, n),
     info: (n) =>
@@ -153,4 +153,19 @@ function specsOf(context: GenerationContext): Record<string, string> {
   // 제품 분석에는 스펙 원문이 없으므로 핵심 특징을 "항목: 값" 형태로 바꿔서 쓴다
   const features = context.product?.analysis.summary.keyFeatures ?? [];
   return Object.fromEntries(features.map((f, i) => [`특징 ${i + 1}`, f]));
+}
+
+/** 데모: 소제목 아래 첫 문단 뒤에 사진 자리를 하나씩, 남는 사진은 끝에 넣는다 */
+function withPhotoMarkers(body: string, count: number): string {
+  if (!count) return body;
+  const lines = body.split("\n");
+  const out: string[] = [];
+  let next = 1;
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i]);
+    const prev = lines[i - 1] ?? "";
+    if (prev.startsWith("## ") && lines[i].trim() && next <= count) out.push("", `[사진${next++}]`);
+  }
+  while (next <= count) out.push("", `[사진${next++}]`);
+  return out.join("\n");
 }

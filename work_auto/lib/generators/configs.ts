@@ -197,6 +197,12 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { name: "style", label: "글 스타일", type: "select", options: BLOG_STYLE_OPTIONS, defaultValue: "정보 전달형", span: 1 },
       { name: "length", label: "글 길이", type: "select", options: BLOG_LENGTH_OPTIONS, defaultValue: "medium", span: 1 },
       {
+        name: "photos",
+        label: "제품 사진",
+        type: "images",
+        hint: "5장 정도를 권장합니다. 브라우저에서 블로그용으로 줄이고 압축하며, 서버에 저장하지 않습니다. 본문에 [사진1]처럼 자리가 표시됩니다.",
+      },
+      {
         name: "experience",
         label: "실제 경험",
         type: "textarea",
@@ -258,8 +264,20 @@ function styleChannelOf(featureId: string): string {
   return featureId.startsWith("yt-") ? "youtube" : featureId.startsWith("clip-") ? "naver-clip" : "naver-blog";
 }
 
-// 모든 생성 기능 폼 마지막에 "스타일" 선택을 붙인다 (비우면 채널 기본 스타일 자동 적용)
+// 모든 생성 기능 폼 마지막에 "스타일"·"콘텐츠 프로필" 선택을 붙인다
+//  - 스타일: 비우면 채널 기본 스타일 자동 적용
+//  - 콘텐츠 프로필: 프로필이 2개 이상일 때만 보인다. 비우면 스타일에 연결된 프로필 → 기본 프로필
 for (const config of Object.values(GENERATOR_CONFIGS)) {
+  if (!config.fields.some((f) => f.name === "profileId")) {
+    config.fields.push({
+      name: "profileId",
+      label: "콘텐츠 프로필",
+      type: "remote-select",
+      source: "profiles",
+      placeholder: "자동 (스타일 연결 → 기본 프로필)",
+      hideIfSingle: true,
+    });
+  }
   if (!config.fields.some((f) => f.name === "styleId")) {
     config.fields.push({
       name: "styleId",

@@ -124,9 +124,8 @@ ContentProfile ──(resolveScope)──▶ TrendScope { mainCategory, subCateg
 - 지금은 기본 프로필 1개를 자동 적용하는 흐름이 중심이다. 프로필은 최대 10개까지 만들 수 있다.
 - 2개 이상이면 다음과 같이 쓴다.
   - 트렌드 화면: "현재 분석 기준" 바에서 전환한다. 브라우저별로 기억한다.
-  - 생성: 스타일에 연결된 프로필 → 기본 프로필 순서로 쓴다.
+  - 생성: 생성 폼의 **"콘텐츠 프로필"** 선택(v0.8.0, 프로필이 2개 이상일 때만 보임) → 스타일에 연결된 프로필 → 기본 프로필 순서로 쓴다.
 - 이후 확장 후보:
-  - 생성 폼에 "콘텐츠 프로필" 선택 필드 추가 (`styleId`처럼 `profileId`)
   - 프로필별 저장 조건 묶기 (`saved_filters.profile_id`)
   - 프로필별 성과 통계
 
@@ -136,7 +135,7 @@ ContentProfile ──(resolveScope)──▶ TrendScope { mainCategory, subCateg
 
 ```
 고정 프롬프트
- + 현재 콘텐츠 프로필   contentProfile   (스타일에 연결된 프로필 → 기본 프로필)
+ + 현재 콘텐츠 프로필   contentProfile   (생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필)
  + 현재 채널 스타일     style            (생성 폼에서 고른 스타일 → 채널 기본 스타일)
  + 제품 데이터          product
  + 현재 트렌드 데이터   trend

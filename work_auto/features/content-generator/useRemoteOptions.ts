@@ -28,6 +28,15 @@ const LOADERS: Record<RemoteSource, (param?: string) => Promise<RemoteOption[]>>
     (await api.trends.options("naver")).map((t) => ({ value: t.id, label: t.title, description: t.keywords.join(", ") })),
   videos: async () =>
     (await api.videos.list()).map((v) => ({ value: v.id, label: v.title, description: `${v.channelName}${v.note ? ` · ${v.note}` : ""}` })),
+  // 사용 중인 콘텐츠 프로필 (기본 = ★)
+  profiles: async () =>
+    (await api.profiles.list())
+      .filter((p) => p.isActive)
+      .map((p) => ({
+        value: p.id,
+        label: `${p.isDefault ? "★ " : ""}${p.name}`,
+        description: [p.mainCategory, ...p.subCategories].join(" · "),
+      })),
   // 이 채널에 쓸 수 있는 스타일(적용 채널에 포함되거나 모든 채널)만. 기본 스타일은 ★
   styles: async (channelId) =>
     (await api.styles.list())

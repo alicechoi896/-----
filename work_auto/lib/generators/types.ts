@@ -13,7 +13,7 @@ export interface FieldOption {
  * 원격 데이터로 채우는 선택 목록의 출처.
  * 새 출처를 추가하면 features/content-generator/useRemoteOptions.ts 에도 추가한다.
  */
-export type RemoteSource = "products" | "youtube-trends" | "naver-trends" | "videos" | "styles";
+export type RemoteSource = "products" | "youtube-trends" | "naver-trends" | "videos" | "styles" | "profiles";
 
 export type FieldType =
   | "text" // 한 줄 입력
@@ -21,7 +21,8 @@ export type FieldType =
   | "select" // 고정 옵션 드롭다운
   | "segmented" // 고정 옵션 2~5개 버튼형
   | "tags" // 쉼표로 구분하는 키워드 입력 → string[]
-  | "remote-select"; // 서버 데이터 선택 (제품, 트렌드, 영상, 스타일)
+  | "remote-select" // 서버 데이터 선택 (제품, 트렌드, 영상, 스타일)
+  | "images"; // 브라우저에서 처리하는 사진 (서버에는 사진 설명 목록만 간다 → string[])
 
 export interface FieldDef {
   name: string;
@@ -34,6 +35,8 @@ export interface FieldDef {
   source?: RemoteSource;
   /** 원격 목록을 거르는 값 (예: styles 는 채널 ID 로 그 채널에 쓸 수 있는 스타일만 보여준다) */
   sourceParam?: string;
+  /** 고를 것이 1개 이하이면 필드를 숨긴다 (예: 콘텐츠 프로필이 1개면 자동 적용이라 묻지 않는다) */
+  hideIfSingle?: boolean;
   defaultValue?: string;
   /** 2열 그리드에서 차지할 칸 수 (기본 2 = 한 줄 전체) */
   span?: 1 | 2;

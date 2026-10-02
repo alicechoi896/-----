@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState, Notice } from "@/components/ui/St
 import { ResultPanel } from "@/components/shared/ResultPanel";
 import { cn, formatRelative } from "@/lib/utils";
 import { DynamicField, type FormValues } from "./DynamicField";
+import { PhotoField, type PhotoItem } from "./PhotoField";
 
 /**
  * ★ 범용 콘텐츠 생성기 — 생성형 기능 7개가 모두 이 컴포넌트를 쓴다.
@@ -26,6 +27,10 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
   const [result, setResult] = useState<GeneratedContent | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 사진(브라우저에서만 처리, 서버에 올리지 않음). 결과 미리보기와 ZIP 다운로드에 쓴다
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // 이 결과를 만들 때 쓴 사진 (생성 후 사진을 바꿔도 결과 미리보기는 그대로)
+  const [resultPhotos, setResultPhotos] = useState<PhotoItem[]>([]);
   const history = useAsync(() => api.contents.list({ featureId }), [featureId]);
 
   const missing = config.fields.filter((f) => f.required && !values[f.name]?.trim());
@@ -35,8 +40,9 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
     setGenerating(true);
     setError(null);
     try {
-      const content = await api.contents.generate({ featureId, input: toInput(config, values) });
+      const content = await api.contents.generate({ featureId, input: toInput(config, values, photos) });
       setResult(content);
+      setResultPhotos(photos);
       history.setData((prev) => [content, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "생성에 실패했습니다.");
@@ -76,14 +82,24 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               if (missing.length === 0) generate();
             }}
           >
-            {config.fields.map((field) => (
-              <DynamicField
-                key={field.name}
-                field={field}
-                value={values[field.name] ?? ""}
-                onChange={(v) => setValues((prev) => ({ ...prev, [field.name]: v }))}
-              />
-            ))}
+            {config.fields.map((field) =>
+              field.type === "images" ? (
+                <PhotoField
+                  key={field.name}
+                  field={field}
+                  photos={photos}
+                  onChange={setPhotos}
+                  baseName={values.mainKeyword || values.topic || "제품사진"}
+                />
+              ) : (
+                <DynamicField
+                  key={field.name}
+                  field={field}
+                  value={values[field.name] ?? ""}
+                  onChange={(v) => setValues((prev) => ({ ...prev, [field.name]: v }))}
+                />
+              ),
+            )}
           </form>
           {showHonesty && (
             <Notice tone="neutral" icon={ShieldCheck} className="mt-5">
@@ -103,7 +119,13 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               <ErrorState message={error} onRetry={generate} />
             </SectionCard>
           ) : result ? (
-            <ResultPanel content={result} outputs={config.outputs} headlineKey={config.headlineKey} onChange={updateContent} />
+            <ResultPanel
+              content={result}
+              outputs={config.outputs}
+              headlineKey={config.headlineKey}
+              onChange={updateContent}
+              photos={result.id === history.data?.[0]?.id ? resultPhotos : []}
+            />
           ) : (
             <SectionCard>
               <EmptyState
@@ -132,6 +154,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
                 <button
                   type="button"
                   onClick={() => setResult(c)}
+                  title={c.id === history.data?.[0]?.id ? undefined : "사진은 저장하지 않아 이전 결과에는 사진 미리보기가 없습니다"}
                   className={cn(
                     "flex w-full items-center justify-between gap-4 px-5 py-3 text-left transition-colors hover:bg-subtle",
                     result?.id === c.id && "bg-brand-soft/50",
@@ -161,10 +184,14 @@ function defaultValues(config: GeneratorConfig, initial?: FormValues): FormValue
   return values;
 }
 
-/** 폼 문자열 값 → API 입력 (tags 는 배열로) */
-function toInput(config: GeneratorConfig, values: FormValues): Record<string, unknown> {
+/** 폼 문자열 값 → API 입력 (tags 는 배열로, 사진은 설명 목록만) */
+function toInput(config: GeneratorConfig, values: FormValues, photos: PhotoItem[]): Record<string, unknown> {
   const input: Record<string, unknown> = {};
   for (const f of config.fields) {
+    if (f.type === "images") {
+      input[f.name] = photos.map((p) => p.caption.trim());
+      continue;
+    }
     const v = (values[f.name] ?? "").trim();
     input[f.name] =
       f.type === "tags"

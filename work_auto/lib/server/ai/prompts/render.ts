@@ -108,7 +108,7 @@ export function renderContentPrompt(
 ): ChatMessage[] {
   const labels = Object.fromEntries(config.fields.map((f) => [f.name, f.label]));
   const userInput = Object.entries(input)
-    .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId" && key !== "styleId")
+    .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId" && key !== "styleId" && key !== "profileId")
     .map(([key, v]) => `${labels[key] ?? key}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
 
   const user = [
