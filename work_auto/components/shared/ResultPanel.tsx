@@ -70,13 +70,16 @@ export function ResultPanel({
       <ContextSummaryBox content={content} />
 
       {outputs.map((section) => (
-        <OutputBlock key={section.key} section={section} value={content.output[section.key]} photos={photos} />
+        <OutputBlock key={section.key} section={section} value={content.output[section.key] ?? content.output[LEGACY_KEY[section.key] ?? ""]} photos={photos} />
       ))}
 
       <FeedbackBar content={content} headlineKey={headlineKey ?? outputs[0]?.key} onChange={onChange} />
     </div>
   );
 }
+
+/** v0.9.13 에서 바뀐 출력 키: 예전 결과는 옛 키로 저장되어 있다 */
+const LEGACY_KEY: Record<string, string> = { hooks: "hook", titles: "title", tags: "hashtags" };
 
 function toText(value: GeneratedValue | undefined): string {
   if (!value) return "";

@@ -73,23 +73,61 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
   );
   titleCandidates.splice(0, titleCandidates.length, ...uniq(titleCandidates));
 
-  const scriptCuts = isClip
+  // 대본: 말할 문장만 (장면·컷·시간 표시 없음)
+  const scriptLines = isClip
     ? [
-        `[컷1] ${hook}`,
-        `[컷2] ${p ? `${shortName}, ${features[0] ?? "핵심 기능"}` : `${topic} 핵심 하나`}`,
-        `[컷3] ${benefits[0]}`,
-        `[컷4] ${benefits[1] ?? "두 번째 포인트"}`,
-        `[컷5] ${p?.summary.cautions[0] ? `단, ${p.summary.cautions[0]}` : "주의할 점도 체크!"}`,
-        `[컷6] ${phrase ?? "저장해 두고 필요할 때 보세요"}`,
+        hook,
+        p ? `${shortName}, ${features[0] ?? "핵심 기능"}부터 볼게요.` : `${topic}, 핵심 하나만 짚을게요.`,
+        benefits[0],
+        benefits[1] ?? "두 번째 포인트도 있어요.",
+        p?.summary.cautions[0] ? `다만 ${p.summary.cautions[0]}` : "주의할 점도 꼭 확인하세요.",
+        phrase ?? "저장해 두고 필요할 때 보세요.",
       ]
     : [
-        `[오프닝 0~5초] ${hook}`,
-        `[소개] ${p ? p.summary.oneLiner : `오늘은 ${topic}에 대해 핵심만 정리해 보겠습니다.`}`,
-        ...(p?.contentData.videoPoints ?? ["핵심 개념 설명", "실제 예시", "따라 하는 방법"]).map((v, i) => `[포인트 ${i + 1}] ${v}`),
-        `[정리] ${benefits.slice(0, 3).join(" / ")}`,
-        p?.summary.cautions.length ? `[주의] ${p.summary.cautions[0]}` : "[주의] 상황에 따라 결과가 다를 수 있습니다.",
-        `[마무리] ${phrase ?? "도움이 되셨다면 구독과 좋아요 부탁드립니다."}`,
+        hook,
+        p ? p.summary.oneLiner : `오늘은 ${topic}에 대해 핵심만 정리해 보겠습니다.`,
+        ...(p?.contentData.videoPoints ?? ["먼저 기본 개념부터 볼게요.", "실제 예시로 확인해 보면 이렇습니다.", "따라 하는 방법은 어렵지 않습니다."]),
+        `정리하면 ${benefits.slice(0, 3).join(", ")}입니다.`,
+        p?.summary.cautions.length ? `다만 ${p.summary.cautions[0]}` : "상황에 따라 결과는 다를 수 있습니다.",
+        phrase ?? "도움이 되셨다면 구독과 좋아요 부탁드립니다.",
       ];
+
+  // 30개까지 채우는 키워드 (데모)
+  const keywordPool = uniq([
+    ...keywords,
+    ...uniq([topic, shortName, keywords[0] ?? "", asString(input.category), topic.split(" ").slice(0, 2).join(" "), ...topic.split(" ").filter((w) => w.length >= 2)])
+      .slice(0, 4)
+      .flatMap((k) =>
+        ["추천", "후기", "비교", "가격", "장단점", "사용법", "고르는 법", "2026", "정리", "꿀팁", "방법", "주의사항", "초보", "순위", "효과"].map((s) => `${k} ${s}`),
+      ),
+    ...(p?.contentData.keywords ?? []).map((k) => `${k} 추천`),
+  ]);
+  const hookPool = uniq([
+    ...(context.styleContext?.hooks ?? []),
+    hook,
+    `${topic}, 이것만 알면 됩니다`,
+    `아직도 ${topic} 이렇게 하세요?`,
+    `${shortName || topic} 사기 전에 30초만 보세요`,
+    `많이들 놓치는 ${topic} 포인트`,
+    `결론부터 말할게요`,
+    `3가지만 기억하세요`,
+    `이건 직접 비교해 봤어요`,
+    `요즘 ${topic} 많이 찾는 이유`,
+    `처음이라면 꼭 보세요`,
+  ]);
+  const ctaPool = uniq([
+    ...(context.styleContext?.ctas ?? []),
+    "도움이 됐다면 저장해 두세요",
+    "궁금한 점은 댓글로 남겨 주세요",
+    "다음 영상도 놓치지 않으려면 구독해 주세요",
+    p ? `${shortName} 정보는 설명란에서 확인하세요` : "자세한 내용은 설명란에 정리해 뒀어요",
+    "비슷한 고민 하는 분께 공유해 주세요",
+    "여러분 생각도 댓글로 알려 주세요",
+    "좋아요 한 번이 큰 힘이 돼요",
+    "관련 영상도 이어서 보세요",
+    "알림 설정하면 새 영상 바로 받아 보실 수 있어요",
+    "오늘 내용 요약은 고정 댓글에 있어요",
+  ]);
 
   const disclosure = context.honestyGuard
     ? "※ 이 글은 제품 공식 정보와 공개된 스펙을 바탕으로 정리했습니다."
@@ -104,20 +142,20 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
   const body = [
     disclosure,
     "",
-    `## ${headings[0]}`,
+    `${headings[0]}`,
     p ? `${p.summary.oneLiner}. ${p.basicInfo.brand}에서 판매하는 제품으로 ${p.basicInfo.seller}에서 구매할 수 있습니다.` : `${topic}에 대해 검색하는 분들이 가장 궁금해하는 내용을 순서대로 정리했습니다.`,
     "",
-    `## ${headings[1]}`,
+    `${headings[1]}`,
     ...(features.length ? features.map((f) => `- ${f}`) : benefits.map((b) => `- ${b}`)),
     "",
-    `## ${headings[2]}`,
+    `${headings[2]}`,
     ...(p?.summary.targetAudience ?? ["처음 알아보는 분", "빠르게 핵심만 알고 싶은 분"]).map((t) => `- ${t}`),
-    ...(experience ? ["", "## 직접 사용해 본 경험", experience] : []),
+    ...(experience ? ["", "직접 사용해 본 경험", experience] : []),
     "",
-    `## ${headings[3]}`,
+    `${headings[3]}`,
     ...(p?.summary.cautions ?? ["상황에 따라 다를 수 있으니 공식 정보를 함께 확인하세요."]).map((c) => `- ${c}`),
     "",
-    `## ${headings[4]}`,
+    `${headings[4]}`,
     `${keywords.slice(0, 3).join(", ")}를 찾는 분이라면 위 내용을 기준으로 비교해 보세요.`,
   ].join("\n");
 
@@ -130,12 +168,24 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
         : [`${topic} 핵심 정리`, `${topic} 흔한 오해 3가지`, `${topic} 시작하는 법`]
       ).slice(0, n),
     hook: () => hook,
-    script: () => scriptCuts.join("\n"),
+    hooks: (n) => hookPool.slice(0, n),
+    ctas: (n) => ctaPool.slice(0, n),
+    script: () => scriptLines.join("\n\n"),
     description: () =>
       [
         p ? `${p.summary.oneLiner}.` : `${topic}에 대해 핵심만 정리했습니다.`,
         "",
+        p
+          ? `이번 영상에서는 ${shortName}의 주요 기능과 실제로 쓸 때 확인할 점을 순서대로 살펴봅니다.`
+          : `이번 영상에서는 ${topic}을(를) 처음 알아보는 분도 이해할 수 있게 핵심부터 차근차근 정리했습니다.`,
+        "",
         ...benefits.slice(0, 3).map((b) => `✔ ${b}`),
+        "",
+        `이런 분께 추천합니다: ${(p?.summary.targetAudience ?? ["처음 알아보는 분", "빠르게 핵심만 알고 싶은 분"]).join(", ")}`,
+        "",
+        p?.summary.cautions.length ? `구매 전에 ${p.summary.cautions[0]} 부분은 꼭 확인해 보세요.` : "상황에 따라 다를 수 있으니 공식 정보도 함께 확인해 보세요.",
+        "",
+        "궁금한 점은 댓글로 남겨 주시면 다음 영상에서 답해 드릴게요.",
         "",
         context.honestyGuard && p ? "본 콘텐츠는 제품 공식 정보를 바탕으로 제작되었습니다." : "",
         isBlog ? "" : keywords.slice(0, 5).map(hashtag).join(" "),
@@ -143,9 +193,10 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
         .filter((l, i, arr) => !(l === "" && arr[i - 1] === ""))
         .join("\n")
         .trim(),
-    keywords: (n) => keywords.slice(0, n),
-    hashtags: (n) => keywords.slice(0, n).map(hashtag),
-    body: () => withPhotoMarkers(body.trim(), asList(input.photos).length),
+    keywords: (n) => keywordPool.slice(0, n),
+    hashtags: (n) => keywordPool.slice(0, n).map(hashtag),
+    tags: (n) => keywordPool.slice(0, n),
+    body: () => withPhotoMarkers(body.trim(), asList(input.photos).length, headings),
     headings: (n) => headings.slice(0, n),
     benefits: (n) => benefits.slice(0, n),
     info: (n) =>
@@ -174,7 +225,7 @@ function specsOf(context: GenerationContext): Record<string, string> {
 }
 
 /** 데모: 소제목 아래 첫 문단 뒤에 사진 자리를 하나씩, 남는 사진은 끝에 넣는다 */
-function withPhotoMarkers(body: string, count: number): string {
+function withPhotoMarkers(body: string, count: number, headings: string[]): string {
   if (!count) return body;
   const lines = body.split("\n");
   const out: string[] = [];
@@ -182,7 +233,7 @@ function withPhotoMarkers(body: string, count: number): string {
   for (let i = 0; i < lines.length; i++) {
     out.push(lines[i]);
     const prev = lines[i - 1] ?? "";
-    if (prev.startsWith("## ") && lines[i].trim() && next <= count) out.push("", `[사진${next++}]`);
+    if (headings.includes(prev.trim()) && lines[i].trim() && next <= count) out.push("", `[사진${next++}]`);
   }
   while (next <= count) out.push("", `[사진${next++}]`);
   return out.join("\n");

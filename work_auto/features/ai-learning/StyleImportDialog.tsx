@@ -219,14 +219,14 @@ export function StyleImportDialog({
             파일 고르기 (.txt / .csv)
           </Button>
           <Button size="sm" variant="secondary" icon={Sparkles} disabled={loading} onClick={() => void loadStarter()}>
-            추천 예시 300개 불러오기
+            추천 예시 불러오기 (Hook·CTA·제목 패턴 각 100개)
           </Button>
           <Button size="sm" variant="ghost" icon={Download} onClick={downloadSample}>
             CSV 형식 예시 받기
           </Button>
-          <a href={STARTER_URL} download="추천예시-300개.csv" className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] text-fg-muted hover:bg-subtle hover:text-fg">
+          <a href={STARTER_URL} download="추천예시-각100개.csv" className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] text-fg-muted hover:bg-subtle hover:text-fg">
             <Download className="size-3.5" />
-            추천 예시 CSV 받기
+            추천 예시 CSV 받기 (각 100개)
           </a>
           {fileName && <span className="truncate text-xs text-fg-subtle">{fileName}</span>}
         </div>
