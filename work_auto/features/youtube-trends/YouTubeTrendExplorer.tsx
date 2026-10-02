@@ -106,6 +106,7 @@ export function YouTubeTrendExplorer() {
 
   // 처음 열 때: 저장한 조건·찜·콘텐츠 프로필을 읽는다.
   // 검색 조건 = 기본 저장 조건 → 없으면 콘텐츠 프로필의 국가·분석기간 → 없으면 기본값 (한국, 최근 7일)
+  // 기간은 기본 저장 조건이 있어도 콘텐츠 프로필의 기본 분석기간을 쓴다 (프로필이 기간의 기준)
   useEffect(() => {
     let active = true;
     Promise.all([
@@ -120,7 +121,13 @@ export function YouTubeTrendExplorer() {
         const startProfile = pickProfile(profileList);
         profileIdRef.current = startProfile?.id ?? "none";
         const def = filterList.find((f) => f.isDefault);
-        const query = def ? fromSaved(def) : startProfile ? withProfileDefaults(defaultYouTubeQuery(), startProfile) : defaultYouTubeQuery();
+        const query = def
+          ? startProfile
+            ? withProfilePeriod(fromSaved(def), startProfile)
+            : fromSaved(def)
+          : startProfile
+            ? withProfileDefaults(defaultYouTubeQuery(), startProfile)
+            : defaultYouTubeQuery();
         setDraft(query);
         setActiveFilterId(def?.id ?? "");
         void runSearch(query);
@@ -468,6 +475,11 @@ function fromSaved(f: SavedFilter): TrendDraft {
   const { country, format, publishedFrom, publishedTo } = defaultYouTubeQuery();
   const base: TrendDraft = { country, format, publishedFrom, publishedTo };
   return refreshRecentRange({ ...base, ...f.params });
+}
+
+/** 콘텐츠 프로필의 기본 분석기간만 넣는다 (기본 저장 조건의 나머지는 유지) */
+function withProfilePeriod(q: TrendDraft, p: ContentProfile): TrendDraft {
+  return { ...q, recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
 }
 
 /** 콘텐츠 프로필의 국가·기본 분석기간을 검색 조건에 넣는다 (나머지 조건은 유지) */

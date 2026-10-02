@@ -1,4 +1,5 @@
 import "server-only";
+import { NAVER_LIST_COUNTS, SEASON_LABEL, buildTrendIdeas, relatedFirst, seasonOf, seasonalCandidates } from "@/lib/domain/naver-trend-lists";
 import { categorySeedKeywords } from "@/lib/mock/naver-trends";
 import { hasExcluded } from "@/lib/types/profile";
 import type { Keyword, NaverKeywordStats, NaverRisingTopic, NaverTrendInsight, NaverTrendQuery } from "@/lib/types";
@@ -15,19 +16,21 @@ import { SearchAdError, fetchKeywordTool, type SearchAdCredentials, type SearchA
  *  3) 데이터랩 검색어트렌드:
  *     - 검색 추이: 검색어의 기간 내 상대 지수 (7일 ~ 3년)
  *     - 급상승: 후보 키워드 각각의 "기간 끝 1/4 평균 ÷ 앞부분 평균"
- *     - 시즌: 작년 다음 달 지수 ÷ 연평균 (다음 달에 오를 키워드)
+ *     - 시즌: 작년 이번 달·다음 달 지수 ÷ 연평균이 높은 후보 → 부족하면 지금 계절에 많이 찾는 키워드(분야별 목록)로 채운다
  *  4) 블로그 검색 API: 검색어의 블로그 누적 문서 수 (발행량 지표)
  *  5) 글감 아이디어: 위 키워드로 규칙 기반 생성 (AI 호출 없음, 비용 0)
+ *  목록은 각 최대 30개 (NAVER_LIST_COUNTS). 검색어가 있으면 관련 검색어는 검색어가 들어간 것을 먼저 보여 준다.
  *  제외 키워드가 들어간 키워드는 모든 목록에서 뺀다.
  *
- * 호출량: 조회 1회 ≈ 데이터랩 최대 9회 + 검색광고 1~2회 + 블로그 검색 1회. 같은 조건은 6시간 캐시.
+ * 호출량: 조회 1회 ≈ 데이터랩 최대 17회 (후보 40개 ÷ 5개씩 × 일·월 + 추이 1) + 검색광고 1회 + 자동완성 1회 + 블로그 검색 1회. 같은 조건은 6시간 캐시.
  * (데이터랩 하루 1,000회, 검색 API 하루 25,000회)
  */
 
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const BLOG_URL = "https://openapi.naver.com/v1/search/blog.json";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const MAX_CANDIDATES = 20;
+/** 급상승·시즌 후보 수 (30개를 채우려면 데이터가 없는 후보를 감안해 넉넉히) */
+const MAX_CANDIDATES = 40;
 
 const cache = new Map<string, { at: number; value: NaverTrendInsight }>();
 const acCache = new Map<string, { at: number; value: string[] }>();
@@ -245,10 +248,19 @@ export class NaverApiProvider implements NaverTrendProvider {
           : "검색광고 API 키가 없어 관련 키워드는 네이버 자동완성으로 보여주고, 월간 검색량은 표시하지 않습니다. (설정 → API 연결 센터 → NAVER 에 검색광고 키 3개 입력)",
       );
     }
+    if (kw && relatedFromAd) {
+      // 검색광고 연관 키워드는 검색량순이라 큰 일반 키워드(냉장고·에어컨 등)가 위에 몰린다 → 검색어 자동완성도 합친다
+      const ac = await this.autocomplete(kw).catch(() => [] as string[]);
+      const have = new Set(related.map((r) => norm(r.text)));
+      for (const text of ac) {
+        if (!have.has(norm(text)) && norm(text) !== norm(kw) && ok(text)) related.push({ text, source: "naver" as const, monthlyPc: 0, monthlyMobile: 0 });
+      }
+    }
+    related = relatedFirst(related, kw);
     const volumeOf = new Map(related.filter((r) => r.volume).map((r) => [r.text, r]));
 
     // 3) 급상승 후보 = 출발점 + 연관 키워드
-    const candidates = uniq([...seeds, ...related.slice(0, 30).map((r) => r.text)]).slice(0, MAX_CANDIDATES);
+    const candidates = uniq([...seeds, ...related.slice(0, MAX_CANDIDATES).map((r) => r.text)]).slice(0, MAX_CANDIDATES);
     const periodDays = query.periodDays;
     const timeUnit = periodDays <= 90 ? "date" : periodDays <= 365 ? "week" : "month";
     const fail = (what: string) => (e: unknown) => {
@@ -282,27 +294,34 @@ export class NaverApiProvider implements NaverTrendProvider {
     const risingKeywords = withData
       .map((k) => ({ k, g: growthOf(candidateSeries.get(k) ?? []) }))
       .sort((a, b) => b.g - a.g)
-      .slice(0, 8)
+      .slice(0, NAVER_LIST_COUNTS.risingKeywords)
       .map((x) => toKeyword(x.k, x.g));
 
-    // 시즌: 작년 "다음 달" 지수가 연평균보다 높은 키워드
-    const nextMonth = new Date();
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-    const lastYearNext = `${nextMonth.getFullYear() - 1}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}`;
-    const seasonalKeywords = candidates
+    // 시즌: ① 후보 중 작년 이번 달·다음 달 지수가 연평균보다 높은 키워드 (데이터 근거, 증가율 표시)
+    //       ② 부족하면 지금 계절에 많이 찾는 키워드로 채운다 (프로필 분야 묶음 먼저)
+    const ym = (offset: number) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + offset);
+      return `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    };
+    const [thisMonth, nextMonth] = [ym(0), ym(1)];
+    const dataSeasonal = candidates
       .map((k) => {
-        const s = monthly.get(k) ?? [];
-        const base = avg(s.map((p) => p.ratio));
-        const target = s.find((p) => p.period.startsWith(lastYearNext))?.ratio ?? 0;
-        return { k, idx: base > 0 ? target / base : 0 };
+        const series = monthly.get(k) ?? [];
+        const base = avg(series.map((p) => p.ratio));
+        const peak = Math.max(...[thisMonth, nextMonth].map((m) => series.find((p) => p.period.startsWith(m))?.ratio ?? 0));
+        return { k, idx: base > 0 ? peak / base : 0 };
       })
-      .filter((x) => x.idx >= 1.15)
+      .filter((x) => x.idx >= 1.1)
       .sort((a, b) => b.idx - a.idx)
-      .slice(0, 6)
       .map((x) => toKeyword(x.k, Math.round((x.idx - 1) * 100)));
-    if (monthly.size > 0 && !seasonalKeywords.length) notes.push("다음 달에 오를 시즌 키워드가 후보 중에 없습니다 (작년 같은 시기 기준).");
+    const seasonFill = seasonalCandidates(scope?.mainCategory ?? query.category)
+      .filter((t) => ok(t) && !dataSeasonal.some((d) => norm(d.text) === norm(t)))
+      .map((t) => toKeyword(t));
+    const seasonalKeywords = [...dataSeasonal, ...seasonFill].slice(0, NAVER_LIST_COUNTS.seasonalKeywords);
+    if (!dataSeasonal.length) notes.push(`시즌 키워드는 지금 계절(${SEASON_LABEL[seasonOf()]})에 많이 찾는 키워드로 보여 줍니다.`);
 
-    const relatedKeywords = related.slice(0, 15).map((r) => toKeyword(r.text));
+    const relatedKeywords = related.slice(0, NAVER_LIST_COUNTS.relatedKeywords).map((r) => toKeyword(r.text));
     const searchTrend = (trendSeries.get(trendGroup.groupName) ?? []).map((p) => ({ date: chartLabel(p.period, timeUnit), value: Math.round(p.ratio) }));
 
     const keywordStats: NaverKeywordStats | null = kw
@@ -316,7 +335,7 @@ export class NaverApiProvider implements NaverTrendProvider {
       : null;
 
     const now = new Date().toISOString();
-    const risingTopics: NaverRisingTopic[] = risingKeywords.slice(0, 5).map((k, i) => ({
+    const risingTopics: NaverRisingTopic[] = risingKeywords.slice(0, NAVER_LIST_COUNTS.risingTopics).map((k, i) => ({
       id: `nv_${seededNumber(k.text, 100000, 999999)}`,
       source: "naver",
       title: k.text,
@@ -324,7 +343,7 @@ export class NaverApiProvider implements NaverTrendProvider {
       category: scope?.mainCategory ?? query.category ?? "",
       keywords: [k.text, ...related.filter((r) => r.text.includes(k.text) && r.text !== k.text).slice(0, 3).map((r) => r.text)],
       growthRate: k.growthRate ?? 0,
-      trendScore: Math.max(30, 95 - i * 8),
+      trendScore: Math.max(30, 95 - i * 2),
       collectedAt: now,
     }));
 
@@ -336,7 +355,7 @@ export class NaverApiProvider implements NaverTrendProvider {
       relatedKeywords,
       searchTrend,
       searchTrendLabel: kw ? kw : `${scopeName} 전체`,
-      contentIdeas: buildIdeas(kw, relatedKeywords, risingKeywords, seasonalKeywords, scope?.mainCategory ?? query.category),
+      contentIdeas: buildTrendIdeas(kw, relatedKeywords, risingKeywords, seasonalKeywords, scope?.mainCategory ?? query.category),
       keywordStats,
       dataSource: "live",
       notes,
@@ -348,23 +367,3 @@ export class NaverApiProvider implements NaverTrendProvider {
   }
 }
 
-/** 글감 아이디어 (규칙 기반, AI 호출 없음) */
-function buildIdeas(kw: string, related: Keyword[], rising: Keyword[], seasonal: Keyword[], category?: string): string[] {
-  const r = related.map((k) => k.text);
-  const ideas = kw
-    ? [
-        `${kw} 고르는 기준 5가지`,
-        `${kw} 가격대별 비교 정리`,
-        r[0] && r[1] ? `${r[0]} vs ${r[1]} 차이 한눈에 보기` : "",
-        `${kw} 장단점 솔직 정리`,
-        r[2] ? `${r[2]}, 사기 전에 확인할 것` : "",
-      ]
-    : [
-        rising[0] ? `요즘 '${rising[0].text}' 검색이 늘어난 이유` : "",
-        rising[1] ? `${rising[1].text} 처음 사는 사람을 위한 가이드` : "",
-        seasonal[0] ? `다음 달 대비: ${seasonal[0].text} 미리 준비하기` : "",
-        category ? `${category} 입문자가 많이 묻는 질문 정리` : "",
-        rising[2] ? `${rising[2].text} 가격대별 추천` : "",
-      ];
-  return ideas.filter(Boolean).slice(0, 5);
-}

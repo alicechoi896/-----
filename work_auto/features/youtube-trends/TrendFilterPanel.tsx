@@ -20,6 +20,7 @@ const QUICK_RANGES = [
   { days: 3, label: "3일" },
   { days: 7, label: "7일" },
   { days: 14, label: "14일" },
+  { days: 21, label: "21일" },
   { days: 30, label: "30일" },
   { days: 90, label: "3개월" },
 ];

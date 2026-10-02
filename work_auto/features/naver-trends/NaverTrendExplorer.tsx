@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowUpRight, CalendarRange, Info, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
 import { ProfileBar } from "@/features/content-profile/ProfileBar";
 import { useContentProfile } from "@/features/content-profile/useContentProfile";
 import { CATEGORY_OPTIONS } from "@/lib/generators/configs";
-import type { Keyword, NaverTrendInsight } from "@/lib/types";
+import type { Keyword, NaverRisingTopic, NaverTrendInsight } from "@/lib/types";
+import { SEASON_LABEL, seasonOf } from "@/lib/domain/naver-trend-lists";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
 import {
   Badge,
   Button,
+  CopyButton,
   DataTable,
   ErrorState,
   FilterBar,
@@ -32,6 +34,7 @@ import { formatNumber } from "@/lib/utils";
 const PERIODS = [
   { value: "7", label: "7일" },
   { value: "14", label: "14일" },
+  { value: "21", label: "21일" },
   { value: "30", label: "30일" },
   { value: "90", label: "3개월" },
   { value: "180", label: "6개월" },
@@ -39,6 +42,9 @@ const PERIODS = [
   { value: "730", label: "2년" },
   { value: "1095", label: "3년" },
 ];
+
+/** 프로필이 없을 때 기본 기간 */
+const DEFAULT_PERIOD = "14";
 
 const COMPETITION = {
   low: { label: "낮음", tone: "success" },
@@ -56,10 +62,14 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
   const [category, setCategory] = useState("생활/주방");
   const [keywordInput, setKeywordInput] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [period, setPeriod] = useState("14");
+  // 기간: 직접 고르기 전까지는 콘텐츠 프로필의 기본 분석기간 (프로필을 바꾸면 다시 프로필 값으로)
+  const [periodOverride, setPeriodOverride] = useState<string | null>(null);
   // 콘텐츠 프로필: "무엇을 조사할지" (카테고리·관심 키워드·제외 키워드). 분석은 NAVER 방식으로 따로 한다
-  const profile = useContentProfile();
+  const profile = useContentProfile(() => setPeriodOverride(null));
   const useProfile = Boolean(profile.selected && profile.applied);
+  const profilePeriod = useProfile && profile.selected ? String(profile.selected.defaultTrendPeriod) : DEFAULT_PERIOD;
+  const period = periodOverride ?? (PERIODS.some((p) => p.value === profilePeriod) ? profilePeriod : DEFAULT_PERIOD);
+  const setPeriod = (v: string) => setPeriodOverride(v);
 
   const { data, loading, error, reload } = useAsync(
     () =>
@@ -157,42 +167,15 @@ function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
     <div className="space-y-4">
       {keyword && <ActiveKeyword keyword={keyword} onClear={onClear} />}
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <SectionCard title="급상승 주제" icon={Zap} description="클립 소재로 쓰기 좋은 주제입니다." flush>
-          {insight.risingTopics.length === 0 && <EmptyNote text="급상승 주제를 찾지 못했습니다. 위쪽 안내 문구를 확인하거나 다른 검색어로 조회해 보세요." />}
-          <ul className="divide-y divide-line">
-            {insight.risingTopics.map((t) => (
-              <li key={t.id} className="flex items-start justify-between gap-4 px-5 py-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-fg">{t.title}</p>
-                    <Badge tone="danger">+{t.growthRate}%</Badge>
-                  </div>
-                  <p className="mt-1 text-[13px] text-fg-subtle">{t.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {t.keywords.map((k) => (
-                      <KeywordButton key={k} text={k} onClick={onKeyword} />
-                    ))}
-                  </div>
-                </div>
-                <Link
-                  href={`/naver-clip/info-content?trendId=${t.id}`}
-                  className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand"
-                >
-                  클립 만들기
-                  <ArrowUpRight className="size-3.5" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
+        <RisingTopicsCard topics={insight.risingTopics} onKeyword={onKeyword} description="클립 소재로 쓰기 좋은 주제입니다." makeHref={(t) => `/naver-clip/info-content?trendId=${t.id}`} makeLabel="클립 만들기" />
 
         <div className="space-y-4">
-          <SectionCard title="급상승 키워드" icon={TrendingUp} description="키워드를 누르면 그 키워드로 조회합니다." flush>
-            <KeywordTable keywords={insight.risingKeywords} onKeyword={onKeyword} />
+          <SectionCard title={`급상승 키워드 · ${insight.risingKeywords.length}개`} icon={TrendingUp} description="키워드를 누르면 그 키워드로 조회합니다." flush>
+            <Expandable items={insight.risingKeywords} limit={10} render={(rows) => <KeywordTable keywords={rows} onKeyword={onKeyword} />} />
           </SectionCard>
           {/* 시즌 키워드는 검색어와 무관한 지표라 검색어가 없을 때만 보여준다 */}
-          {!keyword && <KeywordChips title="시즌 키워드" icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} />}
-          <KeywordChips title="관련 키워드" icon={Link2} keywords={insight.relatedKeywords} onKeyword={onKeyword} />
+          {!keyword && <KeywordChips title={`시즌 키워드 · 지금(${SEASON_LABEL[seasonOf()]})`} icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} copyAll />}
+          <KeywordChips title={`관련 키워드 · ${insight.relatedKeywords.length}개`} icon={Link2} keywords={insight.relatedKeywords} onKeyword={onKeyword} copyAll />
         </div>
       </div>
     </div>
@@ -208,9 +191,18 @@ function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
  */
 function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTrendInsight } & KeywordHandlers) {
   const ideas = (
-    <SectionCard title={keyword ? `'${keyword}' 글 아이디어` : "콘텐츠 아이디어"} icon={Lightbulb} flush>
+    <SectionCard
+      title={`${keyword ? `'${keyword}' 글 아이디어` : "콘텐츠 아이디어"} · ${insight.contentIdeas.length}개`}
+      icon={Lightbulb}
+      actions={insight.contentIdeas.length > 0 && <CopyButton value={insight.contentIdeas} label="전체 복사" />}
+      flush
+    >
+      <Expandable
+        items={insight.contentIdeas}
+        limit={10}
+        render={(rows) => (
       <ul className="divide-y divide-line">
-        {insight.contentIdeas.map((idea) => (
+        {rows.map((idea) => (
           <li key={idea} className="flex items-center justify-between gap-3 px-5 py-3">
             <span className="text-sm text-fg">{idea}</span>
             <Link
@@ -223,6 +215,20 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
           </li>
         ))}
       </ul>
+        )}
+      />
+    </SectionCard>
+  );
+
+  const relatedCard = (
+    <SectionCard
+      title={`관련 검색어 · ${insight.relatedKeywords.length}개`}
+      icon={Link2}
+      description={keyword ? "누르면 그 검색어로 다시 조회합니다." : "누르면 그 검색어로 조회합니다."}
+      actions={insight.relatedKeywords.length > 0 && <CopyButton value={insight.relatedKeywords.map((k) => k.text)} label="전체 복사" />}
+      flush
+    >
+      <Expandable items={insight.relatedKeywords} limit={10} render={(rows) => <KeywordTable keywords={rows} showGrowth={false} onKeyword={onKeyword} />} />
     </SectionCard>
   );
 
@@ -241,15 +247,18 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
           >
             {insight.searchTrend.length ? <TrendLineChart data={insight.searchTrend} /> : <EmptyNote text="검색 추이 데이터를 받지 못했습니다." />}
           </SectionCard>
-          <SectionCard title="관련 검색어" icon={Link2} description="누르면 그 검색어로 조회합니다." flush>
-            <KeywordTable keywords={insight.relatedKeywords} showGrowth={false} onKeyword={onKeyword} />
-          </SectionCard>
+          {relatedCard}
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <SectionCard title="급상승 키워드" icon={Zap} description="현재 분석 기준" flush>
-            <KeywordTable keywords={insight.risingKeywords} compact onKeyword={onKeyword} />
-          </SectionCard>
-          <KeywordChips title="시즌 키워드" icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} />
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <RisingTopicsCard
+            topics={insight.risingTopics}
+            onKeyword={onKeyword}
+            description="현재 분석 기준에서 검색이 늘고 있는 주제입니다."
+            makeHref={(t) => `/naver-blog/info-writing?${new URLSearchParams({ topic: t.title }).toString()}`}
+            makeLabel="글쓰기"
+            compact
+          />
+          <KeywordChips title={`시즌 키워드 · 지금(${SEASON_LABEL[seasonOf()]})`} icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} copyAll />
           {ideas}
         </div>
       </div>
@@ -264,11 +273,9 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
         <SectionCard title={`최근 검색 추이 · ${keyword}`} icon={TrendingUp} description="기간 내 최대값을 100으로 둔 상대 지수입니다.">
           <TrendLineChart data={insight.searchTrend} />
         </SectionCard>
-        <SectionCard title="관련 검색어" icon={Link2} description="누르면 그 검색어로 다시 조회합니다." flush>
-          <KeywordTable keywords={insight.relatedKeywords} showGrowth={false} onKeyword={onKeyword} />
-        </SectionCard>
+        {relatedCard}
       </div>
-      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
         {ideas}
         <SectionCard title="다른 키워드 둘러보기" icon={Zap} description="검색어와 별개로, 현재 분석 기준(프로필·카테고리)에서 요즘 뜨는 키워드입니다.">
           <p className="mb-1.5 text-[11.5px] font-medium text-fg-subtle">급상승</p>
@@ -290,6 +297,86 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
 }
 
 /* ───────── 공용 조각 ───────── */
+
+/** 처음에는 limit 개만, [나머지 N개 더 보기] 로 전체 */
+function Expandable<T>({ items, limit, render }: { items: T[]; limit: number; render: (rows: T[]) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const rows = open ? items : items.slice(0, limit);
+  return (
+    <>
+      {render(rows)}
+      {items.length > limit && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="w-full border-t border-line px-5 py-2.5 text-center text-xs font-medium text-fg-subtle hover:bg-subtle hover:text-brand"
+        >
+          {open ? "접기" : `나머지 ${items.length - limit}개 더 보기`}
+        </button>
+      )}
+    </>
+  );
+}
+
+function RisingTopicsCard({
+  topics,
+  onKeyword,
+  description,
+  makeHref,
+  makeLabel,
+  compact,
+}: {
+  topics: NaverRisingTopic[];
+  onKeyword: (k: string) => void;
+  description: string;
+  makeHref: (t: NaverRisingTopic) => string;
+  makeLabel: string;
+  compact?: boolean;
+}) {
+  return (
+    <SectionCard
+      title={`급상승 주제 · ${topics.length}개`}
+      icon={Zap}
+      description={description}
+      actions={topics.length > 0 && <CopyButton value={topics.map((t) => t.title)} label="전체 복사" />}
+      flush
+    >
+      {topics.length === 0 && <EmptyNote text="급상승 주제를 찾지 못했습니다. 위쪽 안내 문구를 확인하거나 다른 검색어로 조회해 보세요." />}
+      <Expandable
+        items={topics}
+        limit={compact ? 8 : 10}
+        render={(rows) => (
+          <ul className="divide-y divide-line">
+            {rows.map((t) => (
+              <li key={t.id} className={compact ? "flex items-center justify-between gap-3 px-5 py-2.5" : "flex items-start justify-between gap-4 px-5 py-4"}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => onKeyword(t.title)} className="truncate text-left font-medium text-fg hover:text-brand" title={`'${t.title}' 로 조회`}>
+                      {t.title}
+                    </button>
+                    <Badge tone="danger">+{t.growthRate}%</Badge>
+                  </div>
+                  {!compact && <p className="mt-1 text-[13px] text-fg-subtle">{t.description}</p>}
+                  {!compact && t.keywords.length > 1 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {t.keywords.map((k) => (
+                        <KeywordButton key={k} text={k} onClick={onKeyword} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Link href={makeHref(t)} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand">
+                  {makeLabel}
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      />
+    </SectionCard>
+  );
+}
 
 function ActiveKeyword({ keyword, onClear }: { keyword: string; onClear: () => void }) {
   return (
@@ -410,15 +497,18 @@ function KeywordChips({
   keywords,
   showGrowth,
   onKeyword,
+  copyAll,
 }: {
   title: string;
   icon: typeof Zap;
   keywords: Keyword[];
   showGrowth?: boolean;
   onKeyword?: (k: string) => void;
+  /** 오른쪽 위에 [전체 복사] (키워드를 줄마다 하나씩) */
+  copyAll?: boolean;
 }) {
   return (
-    <SectionCard title={title} icon={icon}>
+    <SectionCard title={title} icon={icon} actions={copyAll && keywords.length > 0 && <CopyButton value={keywords.map((k) => k.text)} label="전체 복사" />}>
       {keywords.length === 0 && <p className="text-[13px] text-fg-subtle">표시할 키워드가 없습니다.</p>}
       <div className="flex flex-wrap gap-1.5">
         {keywords.map((k) => {

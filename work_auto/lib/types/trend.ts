@@ -139,7 +139,8 @@ export interface YouTubeTopicSuggestion {
 }
 
 /** NAVER 트렌드 기간(일): 7일 ~ 3년 */
-export const NAVER_PERIODS = [7, 14, 30, 90, 180, 365, 730, 1095] as const;
+/** 21 은 콘텐츠 프로필의 기본 분석기간 선택지 (7·14·21·30·90) 와 맞추기 위해 있다 */
+export const NAVER_PERIODS = [7, 14, 21, 30, 90, 180, 365, 730, 1095] as const;
 export type NaverPeriod = (typeof NAVER_PERIODS)[number];
 
 export interface NaverTrendQuery {
