@@ -5,6 +5,7 @@ import { getSession } from "@/lib/server/auth";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { LinkButton } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/States";
+import { AuthFooter } from "../AuthFooter";
 import { LoginForm } from "./LoginForm";
 
 export const metadata = { title: "로그인" };
@@ -12,7 +13,7 @@ export const metadata = { title: "로그인" };
 /** 로그인 / 회원가입 화면 (사이드바 없는 단독 화면) */
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   await connection();
-  const { next, error } = await searchParams;
+  const { next, error, withdrawn } = await searchParams;
   const configured = isSupabaseConfigured();
   if (configured && (await getSession())) redirect(typeof next === "string" ? next : "/");
 
@@ -27,6 +28,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <p className="mt-1 text-sm text-fg-subtle">YouTube · NAVER 클립 · NAVER 블로그 콘텐츠 자동화</p>
         </div>
 
+        {withdrawn && (
+          <Notice tone="info" className="mb-4">
+            탈퇴가 완료되었습니다. 그동안 이용해 주셔서 감사합니다.
+          </Notice>
+        )}
         {configured ? (
           <LoginForm next={typeof next === "string" ? next : "/"} callbackError={error === "callback"} />
         ) : (
@@ -39,6 +45,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             </LinkButton>
           </div>
         )}
+        <AuthFooter />
       </div>
     </main>
   );

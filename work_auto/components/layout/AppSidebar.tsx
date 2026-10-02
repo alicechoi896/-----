@@ -83,13 +83,18 @@ export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "
         {nav}
         <div className="shrink-0 border-t border-line px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
+            <Link
+              href="/account"
+              title="내 정보"
+              onClick={() => setMobileOpen(false)}
+              className={cn("-mx-1.5 min-w-0 flex-1 rounded-control px-1.5 py-1 hover:bg-muted", pathname === "/account" && "bg-canvas ring-1 ring-line")}
+            >
               <p className="truncate text-[13px] font-medium text-fg">{session.user.name}</p>
               <p className="mt-0.5 flex items-center gap-1.5 text-xs text-fg-subtle">
                 <span className="rounded bg-canvas px-1.5 py-px font-medium text-fg-muted ring-1 ring-line">{ROLE_LABEL[session.role]}</span>
                 <span className="truncate">{session.mode === "demo" ? "데모 모드" : session.user.email}</span>
               </p>
-            </div>
+            </Link>
             {session.mode === "supabase" && (
               <form action={signOut}>
                 <button

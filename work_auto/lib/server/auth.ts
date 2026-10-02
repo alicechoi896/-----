@@ -4,7 +4,7 @@ import { DEMO_USER_ID } from "@/lib/mock/seed";
 import { canAccess, resolveAllowedKeys } from "@/lib/permissions";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { MemberRole, SessionInfo } from "@/lib/types";
+import type { MemberRole, MemberStatus, SessionInfo } from "@/lib/types";
 import { AppError } from "./http";
 import { memoryRepositories } from "./repositories/memory-store";
 import { supabaseRepositories } from "./repositories/supabase-store";
@@ -53,6 +53,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
         name: role === "admin" ? (profile?.name ?? "데모 관리자") : "데모 사용자",
       },
       role,
+      status: "active",
       allowed: resolveAllowedKeys(role, overrides),
     };
   }
@@ -67,13 +68,16 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       supabaseRepositories.profiles.get(user.id),
       supabaseRepositories.rolePermissions.list(),
     ]);
-    // 프로필은 가입 트리거가 만든다. 혹시 없으면 가장 낮은 권한으로 본다
+    // 프로필은 가입 트리거가 만든다. 혹시 없으면 승인 전 실버로 본다
     const role: MemberRole = profile?.role ?? "silver";
+    const status: MemberStatus = profile?.status ?? "pending";
     return {
       mode: "supabase",
       user: { id: user.id, email: user.email ?? "", name: profile?.name || user.email?.split("@")[0] || "사용자" },
       role,
-      allowed: resolveAllowedKeys(role, overrides),
+      status,
+      // 승인 전(또는 거절된) 사용자는 어떤 메뉴도 쓸 수 없다
+      allowed: status === "active" ? resolveAllowedKeys(role, overrides) : [],
     };
   } catch (e) {
     console.error("[auth] session check failed", e instanceof Error ? e.message : e);
@@ -81,10 +85,19 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
   }
 });
 
-/** API 용: 로그인 필수 */
-export async function requireSession(): Promise<SessionInfo> {
+/** 로그인만 확인 (승인 전 사용자도 통과). 내 정보, 탈퇴 등 승인과 무관한 기능용 */
+export async function requireLogin(): Promise<SessionInfo> {
   const session = await getSession();
   if (!session) throw new AppError("UNAUTHORIZED", "로그인이 필요합니다.", 401);
+  return session;
+}
+
+/** API 용: 로그인 + 관리자 승인 완료 필수 */
+export async function requireSession(): Promise<SessionInfo> {
+  const session = await requireLogin();
+  if (session.status !== "active") {
+    throw new AppError("NOT_APPROVED", "관리자 승인 후 사용할 수 있습니다.", 403);
+  }
   return session;
 }
 

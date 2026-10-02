@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { LogIn, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -58,6 +59,9 @@ export function LoginForm({ next, callbackError }: { next: string; callbackError
           <Button type="submit" variant="primary" size="lg" icon={LogIn} loading={signingIn} className="mt-2 w-full">
             로그인
           </Button>
+          <Link href="/forgot-password" className="text-center text-[13px] text-fg-subtle hover:text-fg">
+            비밀번호를 잊으셨나요?
+          </Link>
         </form>
       ) : (
         <form action={signUpAction} className="grid gap-4">
@@ -73,12 +77,35 @@ export function LoginForm({ next, callbackError }: { next: string; callbackError
           <FormField label="비밀번호 확인" htmlFor="su-password2">
             <Input id="su-password2" name="passwordConfirm" type="password" autoComplete="new-password" required minLength={8} />
           </FormField>
+          <div className="grid gap-2 rounded-control border border-line bg-subtle/60 px-3 py-3 text-[13px]">
+            <AgreeCheck name="agreeTerms" href="/terms" label="이용약관" />
+            <AgreeCheck name="agreePrivacy" href="/privacy" label="개인정보 수집·이용" />
+          </div>
           <Button type="submit" variant="primary" size="lg" icon={UserPlus} loading={signingUp} className="mt-2 w-full">
-            회원가입
+            가입 신청
           </Button>
-          <p className="text-center text-xs text-fg-subtle">가입하면 실버 등급으로 시작합니다. 등급은 관리자가 변경합니다.</p>
+          <p className="text-center text-xs leading-relaxed text-fg-subtle">
+            가입 신청 후 관리자가 승인하면 사용할 수 있습니다.
+            <br />
+            승인 전까지는 로그인해도 &lsquo;승인 대기&rsquo; 안내만 보입니다.
+          </p>
         </form>
       )}
     </div>
+  );
+}
+
+/** 약관 동의 체크 (필수). 새 탭으로 전문을 볼 수 있다 */
+function AgreeCheck({ name, href, label }: { name: string; href: string; label: string }) {
+  return (
+    <label className="flex items-center gap-2 text-fg-muted">
+      <input type="checkbox" name={name} required className="size-4 accent-[var(--color-brand)]" />
+      <span>
+        <span className="text-danger">[필수]</span> {label}에 동의합니다
+      </span>
+      <a href={href} target="_blank" rel="noreferrer" className="ml-auto text-xs text-fg-subtle underline hover:text-fg">
+        보기
+      </a>
+    </label>
   );
 }

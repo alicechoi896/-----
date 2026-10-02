@@ -27,7 +27,15 @@
 | Route | 화면 | 역할 | 주요 컴포넌트 | 렌더링 |
 |-------|------|------|---------------|--------|
 | `/login` | 로그인 / 회원가입 | 이메일 + 비밀번호. 데모 모드에서는 안내만 표시 | LoginForm, server actions | Dynamic |
-| `/auth/callback` | (화면 없음) | 가입 인증 메일 링크 처리 → 홈으로 | route.ts | - |
+| `/auth/callback` | (화면 없음) | 인증·재설정 메일 링크 처리 → 홈 또는 `next` | route.ts | - |
+| `/pending` | 승인 대기 | 승인 전·거절된 사용자 안내, 로그아웃, 가입 취소 | WithdrawForm | Dynamic |
+| `/forgot-password` | 비밀번호 찾기 | 재설정 링크 메일 발송 | ForgotPasswordForm | Dynamic |
+| `/reset-password` | 비밀번호 재설정 | 메일 링크로 들어와 새 비밀번호 저장 | ResetPasswordForm | Dynamic |
+| `/terms` | 이용약관 | 로그인 없이 공개 | LegalDocument | Static |
+| `/privacy` | 개인정보처리방침 | 로그인 없이 공개 | LegalDocument | Static |
+| `/account` | 내 정보 | 이름·비밀번호 변경, 회원 탈퇴 | AccountSettings | Dynamic |
+| `/admin/approvals` | 가입 승인 | 승인 대기·거절 목록, 등급 선택 승인 | ApprovalQueue | Dynamic |
+| `/admin/audit-logs` | 활동 기록 | 주요 활동 이력 (관리자) | AuditLogView | Dynamic |
 | `/admin` | 사이트 관리 | 관리자 전용 허브 | ChannelHub | Dynamic |
 | `/admin/users` | 사용자 관리 | 사용자 목록, 역할 변경 | UserManagement | Dynamic |
 | `/admin/permissions` | 권한 관리 | 등급 × 메뉴 체크 표 | PermissionMatrix | Dynamic |
@@ -105,6 +113,12 @@
 | DELETE | `/api/videos/:id` | 참고 영상 삭제 | videoService.remove |
 | GET | `/api/admin/users` | 사용자 목록 (관리자) | adminService.listUsers |
 | PATCH | `/api/admin/users/:userId` | 역할 변경 `{role}` (관리자, 자기 자신 제외) | adminService.updateRole |
+| POST | `/api/admin/users/:userId/approve` | 가입 승인 `{role}` | adminService.approve |
+| POST | `/api/admin/users/:userId/reject` | 가입 거절 `{reason?}` | adminService.reject |
+| GET | `/api/admin/audit-logs` | 활동 기록 (관리자) | adminService.listAuditLogs |
+| GET / PATCH | `/api/account` | 내 프로필 / 이름 변경 (승인 전에도 가능) | accountService |
+| POST | `/api/account/password` | 비밀번호 변경 `{currentPassword, newPassword}` | accountService.changePassword |
+| POST | `/api/account/withdraw` | 회원 탈퇴 `{password}` | accountService.withdraw |
 | GET / PUT / DELETE | `/api/admin/permissions` | 권한표 조회 / 한 칸 변경 `{role, permissionKey, allowed}` / 기본값 복원 | adminService |
 
 **API 권한**: 로그인하지 않으면 401, 등급 권한이 없으면 403. 트렌드·제품·생성·연결·영상 API는 해당 기능 권한을 확인한다 (`requireAccess`).

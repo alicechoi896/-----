@@ -74,6 +74,7 @@ function createTable<T extends { id: string }>(table: string): Repository<T> {
 export const supabaseRepositories: Repositories = {
   profiles: createTable("profiles"),
   rolePermissions: createTable("role_permissions"),
+  auditLogs: createTable("audit_logs"),
   connections: createTable("api_connections"),
   products: createTable("products"),
   productSources: createTable("product_sources"),

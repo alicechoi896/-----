@@ -30,7 +30,8 @@ export function UserManagement({ currentUserId }: { currentUserId: string }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
 
-  const users = data ?? [];
+  // 승인된 사용자만 (승인 대기·거절은 가입 승인 화면에서 관리)
+  const users = (data ?? []).filter((u) => u.status === "active");
   const filtered = users.filter((u) => {
     const q = query.trim().toLowerCase();
     return !q || `${u.name} ${u.email}`.toLowerCase().includes(q);
@@ -81,6 +82,7 @@ export function UserManagement({ currentUserId }: { currentUserId: string }) {
         />
       ),
     },
+    { key: "approvedAt", header: "승인일", render: (u) => <span className="tabular text-fg-muted">{formatDate(u.approvedAt)}</span> },
     { key: "createdAt", header: "가입일", render: (u) => <span className="tabular text-fg-muted">{formatDate(u.createdAt)}</span> },
     { key: "updatedAt", header: "최근 변경", render: (u) => <span className="tabular text-fg-muted">{formatDate(u.updatedAt)}</span> },
   ];
@@ -98,7 +100,7 @@ export function UserManagement({ currentUserId }: { currentUserId: string }) {
       <SectionCard
         title="사용자 목록"
         icon={Users}
-        description="역할을 바꾸면 다음 화면 이동부터 바로 적용됩니다. 자기 자신의 역할은 바꿀 수 없습니다."
+        description="승인된 사용자입니다. 역할을 바꾸면 다음 화면 이동부터 바로 적용되고 활동 기록에 남습니다. 자기 자신의 역할은 바꿀 수 없습니다."
         actions={<SearchInput className="w-60" value={query} onValueChange={setQuery} placeholder="이름, 이메일" />}
         flush
       >

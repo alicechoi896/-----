@@ -1,6 +1,7 @@
 import type { PermissionRow } from "@/lib/permissions";
 import type {
   ApiConnectionPublic,
+  AuditLog,
   MemberRole,
   MemberTier,
   UserProfile,
@@ -141,5 +142,18 @@ export const api = {
     setPermission: (role: MemberTier, permissionKey: string, allowed: boolean) =>
       request<PermissionRow[]>("/api/admin/permissions", { method: "PUT", body: json({ role, permissionKey, allowed }) }),
     resetPermissions: () => request<PermissionRow[]>("/api/admin/permissions", { method: "DELETE" }),
+    approve: (userId: string, role: MemberRole) =>
+      request<UserProfile>(`/api/admin/users/${userId}/approve`, { method: "POST", body: json({ role }) }),
+    reject: (userId: string, reason?: string) =>
+      request<UserProfile>(`/api/admin/users/${userId}/reject`, { method: "POST", body: json({ reason }) }),
+    auditLogs: () => request<AuditLog[]>("/api/admin/audit-logs"),
+  },
+
+  account: {
+    me: () => request<UserProfile>("/api/account"),
+    updateName: (name: string) => request<UserProfile>("/api/account", { method: "PATCH", body: json({ name }) }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ ok: true }>("/api/account/password", { method: "POST", body: json({ currentPassword, newPassword }) }),
+    withdraw: (password: string) => request<{ ok: true }>("/api/account/withdraw", { method: "POST", body: json({ password }) }),
   },
 };

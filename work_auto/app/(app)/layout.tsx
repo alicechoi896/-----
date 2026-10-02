@@ -13,6 +13,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   await connection();
   const session = await getSession();
   if (!session) redirect("/login");
+  // 관리자 승인 전(또는 거절된) 사용자는 안내 화면만 볼 수 있다
+  if (session.status !== "active") redirect("/pending");
 
   return (
     <AppShell providerMode={getProviderMode()} session={session}>

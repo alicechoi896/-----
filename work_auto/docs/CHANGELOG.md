@@ -2,6 +2,25 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.3.0] - 2026-10-02: 가입 승인 · 활동 기록 · 내 정보 · 약관
+
+### 추가
+- **가입 승인제**: `profiles.status` (pending / active / rejected). 승인 전에는 `/pending` 안내 화면만. 사이트 관리 → **가입 승인** 화면 (등급 선택 승인, 거절 사유, 다시 승인)
+- **활동 기록**: `audit_logs` 테이블, `auditService`, 사이트 관리 → **활동 기록** 화면 (종류 필터, 검색)
+- **내 정보** `/account`: 이름 변경, 비밀번호 변경, 회원 탈퇴 (`delete_my_account()`)
+- **비밀번호 찾기** `/forgot-password` → 재설정 메일 → `/reset-password`
+- **이용약관** `/terms`, **개인정보처리방침** `/privacy` (운영자 정보는 `lib/legal.ts`), 회원가입 시 필수 동의 체크
+- 보관 기간이 지난 데이터 자동 삭제 `purge_expired_data()` + pg_cron (거절 30일, 탈퇴자 기록 1년)
+- DB: `is_active()`, 본인 프로필 수정 정책 + 보호 트리거, 승인된 사용자만 서비스 데이터 접근
+- 데모 모드 예시 회원 3명 (승인 대기 2명)
+
+### 수정
+- 보호 트리거가 SQL Editor 의 첫 관리자 지정까지 되돌리던 문제 → `security invoker` + `current_user` 로 앱 요청만 제한 (PGlite 로 검증)
+
+### 결정
+- 사용량 제한 없음: 외부 API 는 회원 본인 키로 호출되므로 비용이 회원에게 청구된다. 등급은 메뉴 접근만 정한다
+- 메일 발송 서비스(SMTP)는 나중에. 비밀번호 재설정은 Supabase 기본 메일 사용
+
 ## [0.2.0] - 2026-10-02: 로그인 · 등급 권한 · Supabase · 실제 YouTube 트렌드
 
 ### 추가

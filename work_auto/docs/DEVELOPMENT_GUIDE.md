@@ -157,6 +157,8 @@ import는 `@/components/ui`(배럴)에서 한다. 상세 규격은 [DESIGN_SYSTE
 | Feature `id` 변경 | 이력, Config, 프롬프트, **권한** 연결이 끊어진다 | 새 ID로 추가하고 이전 것은 planned/삭제 |
 | 기능 페이지를 `FeaturePage` 없이 만들기 / 전용 API 에 `requireAccess` 빼기 | 등급 권한이 무시된다 | `FeaturePage`, `requireAccess` |
 | 앱에 Supabase service_role 키 넣기 | 유출되면 RLS 를 모두 우회한다 | anon key + 로그인 세션 + RLS(`is_admin()`) |
+| 상태를 바꾸는 관리 기능에서 활동 기록 생략 | 사고가 나도 원인을 알 수 없다 | `auditService.log(session, {...})` |
+| SQL 파일을 JS `replace()` 로 고치기 | 치환 문자열의 `$$` 가 `$` 로 바뀌어 함수 정의가 깨진다 | 직접 편집하거나 `split().join()` |
 | 실제 경험 없이 "직접 써봤다"는 문구 생성 허용 | 허위·과장 광고 위험 | 정직성 가드레일 유지 |
 
 ## 9. 코드 규칙

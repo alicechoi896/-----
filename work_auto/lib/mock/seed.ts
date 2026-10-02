@@ -1,5 +1,6 @@
 import type {
   ApiConnection,
+  AuditLog,
   GeneratedContent,
   PerformanceMetric,
   Product,
@@ -19,6 +20,7 @@ export const DEMO_USER_ID = "demo-user";
 export interface StoreState {
   profiles: UserProfile[];
   rolePermissions: RolePermission[];
+  auditLogs: AuditLog[];
   connections: ApiConnection[];
   products: Product[];
   productSources: ProductSource[];
@@ -273,8 +275,17 @@ export function createSeedState(now: number = Date.now()): StoreState {
 
   return {
     // 데모 모드(Supabase 미설정)의 사용자는 관리자로 시작한다
-    profiles: [{ id: userId, email: "demo@example.com", name: "데모 관리자", role: "admin", createdAt: iso(60), updatedAt: iso(60) }],
+    profiles: [
+      { id: userId, email: "demo@example.com", name: "데모 관리자", role: "admin", status: "active", approvedAt: iso(60), approvedBy: null, termsAgreedAt: iso(60), createdAt: iso(60), updatedAt: iso(60) },
+      // 승인 화면을 데모로 볼 수 있도록 넣어 둔 예시 회원 (가상)
+      { id: "demo-member-1", email: "kim.creator@example.com", name: "김크리", role: "gold", status: "active", approvedAt: iso(10), approvedBy: userId, termsAgreedAt: iso(11), createdAt: iso(11), updatedAt: iso(10) },
+      { id: "demo-member-2", email: "lee.blog@example.com", name: "이블로", role: "silver", status: "pending", approvedAt: null, approvedBy: null, termsAgreedAt: iso(1), createdAt: iso(1), updatedAt: iso(1) },
+      { id: "demo-member-3", email: "park.clip@example.com", name: "박클립", role: "silver", status: "pending", approvedAt: null, approvedBy: null, termsAgreedAt: iso(0.2), createdAt: iso(0.2), updatedAt: iso(0.2) },
+    ],
     rolePermissions: [],
+    auditLogs: [
+      { id: "log_seed1", actorId: userId, actorEmail: "demo@example.com", actorName: "데모 관리자", action: "user.approve", targetType: "user", targetId: "demo-member-1", targetLabel: "김크리", detail: { role: "gold", roleLabel: "골드" }, createdAt: iso(10) },
+    ],
     connections: [],
     products,
     productSources,

@@ -13,9 +13,9 @@
 | NAVER 블로그 | 4 | 0 | 4 | 0 |
 | 공통 도구 | 3 | 1 | 2 | 0 |
 | 설정 | 2 | 1 | 0 | 1 |
-| 사이트 관리 (관리자 전용) | 2 | 2 | 0 | 0 |
+| 사이트 관리 (관리자 전용) | 4 | 4 | 0 | 0 |
 | (단독) AI 학습 관리 | 1 | 0 | 1 | 0 |
-| **합계** | **18** | 5 | 12 | 1 |
+| **합계** | **20** | 7 | 12 | 1 |
 
 ## 2. 전체 기능 표
 
@@ -36,8 +36,10 @@
 | 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL, 메모 | 영상 메타데이터, 참고 영상 목록 | `features/video-import` |
 | 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | ✅ | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
 | 설정 | `general-settings` | 일반 설정 | `/settings` | settings | ⏳ | - | - | - | (미구현) |
-| 사이트 관리 | `admin-users` | 사용자 관리 | `/admin/users` | admin | ✅ | - | 역할 | 사용자 목록, 역할 변경 | `features/admin` (관리자 전용) |
+| 사이트 관리 | `admin-approvals` | 가입 승인 | `/admin/approvals` | admin | ✅ | - | 승인 등급, 거절 사유 | 승인 대기 목록 | `features/admin` (관리자 전용) |
+| 사이트 관리 | `admin-users` | 사용자 관리 | `/admin/users` | admin | ✅ | - | 역할 | 승인된 사용자 목록, 역할 변경 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-permissions` | 권한 관리 | `/admin/permissions` | admin | ✅ | - | 등급별 허용 여부 | 권한표 | `features/admin` (관리자 전용) |
+| 사이트 관리 | `admin-audit-logs` | 활동 기록 | `/admin/audit-logs` | admin | ✅ | - | 종류 필터, 검색 | 활동 기록 | `features/admin` (관리자 전용) |
 | (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | 🧪 | - | - | 제품 데이터, 나의 스타일, 콘텐츠 히스토리, 피드백, 성과 데이터 | `features/ai-learning` |
 
 `*` = 필수 입력
@@ -49,7 +51,8 @@
 | `ALL` (실버·골드·VIP) | yt-trends, yt-info-video, clip-trends, clip-info-content, blog-trends, blog-info-writing, video-import, api-center, general-settings, ai-learning |
 | `GOLD_UP` (골드·VIP) | yt-product-video, clip-product-content, blog-product-writing, product-learning, product-library |
 | `VIP_ONLY` | blog-auto-writing |
-| 관리자 전용 | admin-users, admin-permissions |
+| 관리자 전용 | admin-approvals, admin-users, admin-permissions, admin-audit-logs |
+| 권한 대상 아님 (모든 승인 사용자) | 내 정보 `/account` |
 
 관리자는 모든 기능에 접근한다. 실제 적용 값은 **사이트 관리 → 권한 관리**에서 바꿀 수 있다 ([AUTH_AND_PERMISSIONS.md](./AUTH_AND_PERMISSIONS.md)).
 

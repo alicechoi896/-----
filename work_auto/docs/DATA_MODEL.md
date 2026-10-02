@@ -42,8 +42,25 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | id | uuid | PK = auth.users.id |
 | email | string | |
 | name | string | 가입 시 입력한 이름 |
-| role | `admin` \| `silver` \| `gold` \| `vip` | 변경은 관리자만 (RLS) |
+| role | `admin` \| `silver` \| `gold` \| `vip` | 변경은 관리자만 (RLS + 보호 트리거) |
+| status | `pending` \| `active` \| `rejected` | 가입 승인 상태. 가입 시 pending |
+| approvedAt / approvedBy | ISO / uuid | 승인·거절 처리 시각과 관리자 |
+| termsAgreedAt | ISO | 약관·개인정보처리방침 동의 시각 |
 | createdAt / updatedAt | ISO | |
+
+### AuditLog (audit_logs)
+**왜 필요한가**: 누가 언제 무엇을 했는지 남긴다 (승인, 등급·권한 변경, 로그인, 탈퇴 등). 보안 사고 대응과 분쟁 해결용.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | string | PK |
+| actorId / actorEmail / actorName | uuid / string | 수행자. FK 없이 복사해 두어 탈퇴 후에도 읽을 수 있다 |
+| action | string | `user.approve`, `permission.change`, `auth.login` … (`lib/audit-labels.ts`) |
+| targetType / targetId / targetLabel | string | 대상 |
+| detail | jsonb | 변경 전후 값, 거절 사유 등 |
+| createdAt | ISO | |
+
+보관: 탈퇴한 사용자의 기록은 1년 후 자동 삭제. 조회는 관리자만, 수정·삭제 불가.
 
 ### RolePermission (role_permissions)
 **왜 필요한가**: 관리자가 권한 관리에서 **기본값과 다르게 바꾼 칸만** 저장한다. 나머지는 Registry `defaultTiers`를 따르므로 새 메뉴를 추가해도 DB 작업이 필요 없다.

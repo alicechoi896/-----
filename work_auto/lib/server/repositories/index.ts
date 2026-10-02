@@ -1,7 +1,6 @@
 import "server-only";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { getSession } from "../auth";
-import { AppError } from "../http";
+import { requireSession } from "../auth";
 import { memoryRepositories } from "./memory-store";
 import { supabaseRepositories } from "./supabase-store";
 import type { Repositories } from "./types";
@@ -16,9 +15,11 @@ export function getRepositories(): Repositories {
   return isSupabaseConfigured() ? supabaseRepositories : memoryRepositories;
 }
 
-/** 현재 로그인 사용자 ID. 로그인하지 않았으면 401 */
+/**
+ * 현재 로그인 사용자 ID (서비스 데이터용).
+ * 로그인하지 않았으면 401, 관리자 승인 전이면 403.
+ */
 export async function getCurrentUserId(): Promise<string> {
-  const session = await getSession();
-  if (!session) throw new AppError("UNAUTHORIZED", "로그인이 필요합니다.", 401);
+  const session = await requireSession();
   return session.user.id;
 }

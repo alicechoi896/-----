@@ -12,7 +12,8 @@ import { isSupabaseConfigured, supabaseEnv } from "@/lib/supabase/config";
  */
 
 const AUTH_TIMEOUT_MS = 3000;
-const PUBLIC_PATHS = ["/login", "/auth/"];
+/** 로그인하지 않아도 볼 수 있는 경로 */
+const PUBLIC_PATHS = ["/login", "/auth/", "/forgot-password", "/reset-password", "/terms", "/privacy"];
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {

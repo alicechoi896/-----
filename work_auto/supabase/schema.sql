@@ -6,7 +6,8 @@
 --  규칙
 --  - 컬럼 이름 = 앱 Entity 필드의 snake_case (productId → product_id)
 --  - 사용자 데이터 테이블은 user_id 기본값이 auth.uid() → RLS 로 "내 데이터만" 접근
---  - 역할은 profiles.role (admin / silver / gold / vip). 신규 가입자는 silver
+--  - 역할은 profiles.role (admin / silver / gold / vip). 신규 가입자는 silver + 승인 대기(pending)
+--  - 가입은 관리자 승인제: profiles.status (pending / active / rejected)
 --  - 관리자 기능은 is_admin() 함수로 RLS 에서 허용 (service_role 키를 앱에 두지 않는다)
 -- ════════════════════════════════════════════════════════════════
 
@@ -17,9 +18,19 @@ create table if not exists public.profiles (
   email       text not null default '',
   name        text not null default '',
   role        text not null default 'silver' check (role in ('admin', 'silver', 'gold', 'vip')),
+  status      text not null default 'pending',
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- (이전 버전 스키마를 이미 실행했어도 안전하게 컬럼을 추가한다)
+alter table public.profiles add column if not exists status text not null default 'pending';
+alter table public.profiles add column if not exists approved_at timestamptz;
+alter table public.profiles add column if not exists approved_by uuid;
+alter table public.profiles add column if not exists terms_agreed_at timestamptz;
+do $$ begin
+  alter table public.profiles add constraint profiles_status_check check (status in ('pending', 'active', 'rejected'));
+exception when duplicate_object then null; end $$;
 
 create table if not exists public.role_permissions (
   id              text primary key,                -- '{role}:{permission_key}'
@@ -39,10 +50,21 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and status = 'active');
 $$;
 
--- 가입하면 프로필 자동 생성 (기본 역할 silver)
+-- 승인된 사용자 여부 (서비스 데이터는 승인된 사용자만 쓸 수 있다)
+create or replace function public.is_active()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and status = 'active');
+$$;
+
+-- 가입하면 프로필 자동 생성 (실버 + 승인 대기, 약관 동의 시각 기록)
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -50,12 +72,14 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, name, role)
+  insert into public.profiles (id, email, name, role, status, terms_agreed_at)
   values (
     new.id,
     coalesce(new.email, ''),
     coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), split_part(coalesce(new.email, ''), '@', 1)),
-    'silver'
+    'silver',
+    'pending',
+    nullif(new.raw_user_meta_data ->> 'terms_agreed_at', '')::timestamptz
   )
   on conflict (id) do nothing;
   return new;
@@ -67,11 +91,70 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- 본인이 프로필을 수정할 때는 이름만 바뀌도록 한다 (역할·승인 상태는 관리자만)
+-- security invoker: current_user 로 "앱(로그인 사용자)을 통한 요청"인지 구분한다.
+-- SQL Editor(postgres) 에서 실행하는 첫 관리자 지정 SQL 은 막지 않는다.
+create or replace function public.protect_profile_fields()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') and not public.is_admin() then
+    new.role := old.role;
+    new.status := old.status;
+    new.approved_at := old.approved_at;
+    new.approved_by := old.approved_by;
+    new.email := old.email;
+    new.terms_agreed_at := old.terms_agreed_at;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_profile_fields on public.profiles;
+create trigger protect_profile_fields
+  before update on public.profiles
+  for each row execute function public.protect_profile_fields();
+
+-- 회원 탈퇴: 본인 계정 삭제 → 내 데이터는 on delete cascade 로 함께 삭제된다
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
+
 -- 이 스키마를 만들기 전에 가입한 사용자가 있으면 프로필을 채운다
 insert into public.profiles (id, email, name)
 select u.id, coalesce(u.email, ''), coalesce(nullif(u.raw_user_meta_data ->> 'name', ''), split_part(coalesce(u.email, ''), '@', 1))
 from auth.users u
 on conflict (id) do nothing;
+
+-- 활동 기록 (감사 로그). 수행자가 탈퇴해도 남도록 FK 없이 이메일·이름을 복사해 둔다
+create table if not exists public.audit_logs (
+  id            text primary key,
+  actor_id      uuid not null,
+  actor_email   text not null default '',
+  actor_name    text not null default '',
+  action        text not null,
+  target_type   text not null,
+  target_id     text,
+  target_label  text,
+  detail        jsonb not null default '{}',
+  created_at    timestamptz not null default now()
+);
+create index if not exists idx_audit_logs_created on public.audit_logs (created_at desc);
 
 -- ───────── 2. 서비스 데이터 ─────────
 
@@ -215,6 +298,7 @@ create index if not exists idx_products_user on public.products (user_id, create
 
 alter table public.profiles            enable row level security;
 alter table public.role_permissions    enable row level security;
+alter table public.audit_logs          enable row level security;
 alter table public.api_connections     enable row level security;
 alter table public.products            enable row level security;
 alter table public.product_sources     enable row level security;
@@ -225,13 +309,25 @@ alter table public.user_feedback       enable row level security;
 alter table public.performance_metrics enable row level security;
 alter table public.reference_videos    enable row level security;
 
--- profiles: 본인 또는 관리자만 조회, 역할 변경은 관리자만
+-- profiles: 본인 또는 관리자만 조회. 역할·승인 변경은 관리자만
 drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles for select to authenticated
   using (id = auth.uid() or public.is_admin());
 drop policy if exists "profiles_update_admin" on public.profiles;
 create policy "profiles_update_admin" on public.profiles for update to authenticated
   using (public.is_admin()) with check (public.is_admin());
+-- 본인 수정은 이름만 (protect_profile_fields 트리거가 나머지를 되돌린다)
+drop policy if exists "profiles_update_self" on public.profiles;
+create policy "profiles_update_self" on public.profiles for update to authenticated
+  using (id = auth.uid()) with check (id = auth.uid());
+
+-- audit_logs: 본인 명의로만 기록, 조회는 관리자만, 수정·삭제 불가
+drop policy if exists "audit_insert_self" on public.audit_logs;
+create policy "audit_insert_self" on public.audit_logs for insert to authenticated
+  with check (actor_id = auth.uid());
+drop policy if exists "audit_select_admin" on public.audit_logs;
+create policy "audit_select_admin" on public.audit_logs for select to authenticated
+  using (public.is_admin());
 
 -- role_permissions: 로그인 사용자는 읽기, 변경은 관리자만
 drop policy if exists "role_permissions_select" on public.role_permissions;
@@ -240,7 +336,7 @@ drop policy if exists "role_permissions_write_admin" on public.role_permissions;
 create policy "role_permissions_write_admin" on public.role_permissions for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
--- 사용자 데이터: 본인 행만
+-- 사용자 데이터: 본인 행만 + 관리자 승인된 사용자만
 do $$
 declare t text;
 begin
@@ -250,7 +346,7 @@ begin
   ] loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(
-      'create policy "own_rows" on public.%I for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid())',
+      'create policy "own_rows" on public.%I for all to authenticated using (user_id = auth.uid() and public.is_active()) with check (user_id = auth.uid() and public.is_active())',
       t
     );
   end loop;
@@ -260,7 +356,50 @@ end $$;
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 
+-- ───────── 4. 보관 기간이 지난 데이터 자동 삭제 (개인정보처리방침 제3조) ─────────
+--  - 거절된 가입 신청: 거절 후 30일
+--  - 탈퇴한 사용자의 활동 기록: 탈퇴 후 1년
+create or replace function public.purge_expired_data()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from auth.users u
+  using public.profiles p
+  where p.id = u.id and p.status = 'rejected' and p.approved_at < now() - interval '30 days';
+
+  delete from public.audit_logs l
+  where not exists (select 1 from auth.users u where u.id = l.actor_id)
+    and exists (
+      select 1 from public.audit_logs w
+      where w.actor_id = l.actor_id and w.action = 'account.withdraw' and w.created_at < now() - interval '1 year'
+    );
+end;
+$$;
+revoke all on function public.purge_expired_data() from public, anon, authenticated;
+
+-- 매일 새벽 3시(UTC)에 자동 실행 (Supabase 의 pg_cron 확장).
+-- 확장을 켤 수 없는 환경이어도 나머지 스키마는 그대로 적용되도록 예외를 삼킨다.
+-- 결과에 'pg_cron 예약 실패' 알림이 보이면 대시보드 Integrations → Cron 을 켠 뒤 이 블록만 다시 실행한다.
+do $$
+begin
+  execute 'create extension if not exists pg_cron with schema pg_catalog';
+  begin
+    perform cron.unschedule('purge-expired-data');
+  exception when others then null;
+  end;
+  perform cron.schedule('purge-expired-data', '0 3 * * *', 'select public.purge_expired_data()');
+exception when others then
+  raise notice 'pg_cron 예약 실패: %', sqlerrm;
+end $$;
+
 -- ════════════════════════════════════════════════════════════════
 --  첫 관리자 지정: 사이트에서 회원가입을 한 뒤, 아래 이메일을 바꿔서 한 번 실행한다
---  update public.profiles set role = 'admin', updated_at = now() where email = 'you@example.com';
+--  (승인 대기 상태로 가입되므로 status 도 함께 바꾼다)
+--
+--  update public.profiles
+--  set role = 'admin', status = 'active', approved_at = now(), updated_at = now()
+--  where email = 'you@example.com';
 -- ════════════════════════════════════════════════════════════════
