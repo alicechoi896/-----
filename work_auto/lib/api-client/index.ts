@@ -222,6 +222,9 @@ export const api = {
     /** 블로그 사진 설명 (AI Vision). 작은 미리보기만 보내고 저장하지 않는다 */
     describe: (images: { mediaType: string; data: string }[], productName?: string) =>
       request<{ captions: string[]; provider: string }>("/api/contents/describe-photos", { method: "POST", body: json({ images, productName }) }),
+    /** 제품 사진 배경만 AI 로 바꾸기 (OpenAI 이미지). 사진은 저장하지 않는다 */
+    aiEdit: (image: string, style: string) =>
+      request<{ image: string; mediaType: string; demo: boolean; styleLabel: string }>("/api/photos/ai-edit", { method: "POST", body: json({ image, style }) }),
   },
 
   /** 콘텐츠 프로필 ("무엇을 다룰 것인가") */

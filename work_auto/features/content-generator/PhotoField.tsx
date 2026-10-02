@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ImagePlus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, Sparkles, Trash2, Undo2, Wand2 } from "lucide-react";
 import type { FieldDef } from "@/lib/generators/types";
 import {
   MAX_PHOTOS,
   RECOMMENDED_PHOTOS,
+  base64ToPhoto,
+  imageForAi,
   photoFileName,
   processPhoto,
   thumbnailBase64,
@@ -18,6 +20,9 @@ import { FormField } from "@/components/ui/FormField";
 import { IconButton } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/Tabs";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Select } from "@/components/ui/Input";
+import { PHOTO_AI_STYLE_OPTIONS } from "@/lib/photo-ai-styles";
 import { cn } from "@/lib/utils";
 
 /** 처리 전 원본도 함께 들고 있어야 비율을 바꿔 다시 처리할 수 있다 */
@@ -49,6 +54,11 @@ export function PhotoField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [ratio, setRatio] = useState<PhotoRatio>("original");
+  // A. 중복 방지 자동 변형 (기본 켜짐): 판매처 사진과 같은 이미지로 보이지 않게
+  const [vary, setVary] = useState(true);
+  // B. AI 배경 연출: 사진마다 고른 배경, 처리 중인 사진
+  const [aiStyle, setAiStyle] = useState<Record<string, string>>({});
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +78,7 @@ export function PhotoField({
     for (const [i, file] of picked.slice(0, room).entries()) {
       setBusy(`사진 처리 중… (${i + 1}/${Math.min(picked.length, room)})`);
       try {
-        const out = await processPhoto(file, ratio);
+        const out = await processPhoto(file, ratio, { vary });
         added.push({
           id: `${Date.now()}-${i}-${file.name}`,
           name: "",
@@ -79,6 +89,8 @@ export function PhotoField({
           height: out.height,
           sizeBefore: file.size,
           caption: "",
+          varied: vary,
+          aiStyle: null,
           file,
         });
       } catch (e) {
@@ -92,19 +104,67 @@ export function PhotoField({
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  /** 비율을 바꾸면 이미 넣은 사진도 원본에서 다시 처리한다 */
-  async function changeRatio(next: PhotoRatio) {
-    setRatio(next);
+  /** 비율·자동 변형을 바꾸면 이미 넣은 사진도 원본에서 다시 처리한다 (AI 연출한 사진은 그대로 둔다) */
+  async function reprocess(nextRatio: PhotoRatio, nextVary: boolean) {
     if (!photos.length) return;
-    setBusy("비율을 바꿔 다시 처리하는 중…");
+    setBusy("사진을 다시 처리하는 중…");
     const redone: PhotoItem[] = [];
     for (const p of photos) {
-      const out = await processPhoto(p.file, next);
+      if (p.aiStyle) {
+        redone.push(p);
+        continue;
+      }
+      const out = await processPhoto(p.file, nextRatio, { vary: nextVary });
       URL.revokeObjectURL(p.url);
-      redone.push({ ...p, blob: out.blob, url: URL.createObjectURL(out.blob), width: out.width, height: out.height });
+      redone.push({ ...p, blob: out.blob, url: URL.createObjectURL(out.blob), width: out.width, height: out.height, varied: nextVary });
     }
     setBusy(null);
     onChange(rename(redone));
+  }
+  async function changeRatio(next: PhotoRatio) {
+    setRatio(next);
+    await reprocess(next, vary);
+  }
+  async function changeVary(next: boolean) {
+    setVary(next);
+    await reprocess(ratio, next);
+  }
+
+  /** B. 배경만 AI 로 바꾸기 (OpenAI). 제품은 그대로 두도록 지시하고, 설명에 "AI 배경 연출"을 붙인다 */
+  async function aiEdit(index: number) {
+    const p = photos[index];
+    const style = aiStyle[p.id] ?? PHOTO_AI_STYLE_OPTIONS[0].value;
+    setAiBusy(p.id);
+    setError(null);
+    try {
+      const res = await api.photos.aiEdit(await imageForAi(p.blob), style);
+      const out = await base64ToPhoto(res.image, res.mediaType);
+      URL.revokeObjectURL(p.url);
+      const caption = p.caption.includes("AI 배경") ? p.caption : `${p.caption ? `${p.caption} ` : ""}(AI 배경 연출: ${res.styleLabel})`.slice(0, 60);
+      onChange(
+        photos.map((x, j) =>
+          j === index ? { ...x, blob: out.blob, url: URL.createObjectURL(out.blob), width: out.width, height: out.height, aiStyle: res.styleLabel, caption } : x,
+        ),
+      );
+      if (res.demo) setError("데모 모드에서는 실제로 바꾸지 않고 원본을 그대로 돌려줍니다 (운영에서 OpenAI 키로 동작).");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "AI 배경 연출에 실패했습니다.");
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  /** AI 연출을 취소하고 원본에서 다시 처리 */
+  async function revertAi(index: number) {
+    const p = photos[index];
+    const out = await processPhoto(p.file, ratio, { vary });
+    URL.revokeObjectURL(p.url);
+    const caption = p.caption.replace(/\s*\(AI 배경 연출[^)]*\)/, "").trim();
+    onChange(
+      photos.map((x, j) =>
+        j === index ? { ...x, blob: out.blob, url: URL.createObjectURL(out.blob), width: out.width, height: out.height, aiStyle: null, varied: vary, caption } : x,
+      ),
+    );
   }
 
   function move(index: number, dir: -1 | 1) {
@@ -146,6 +206,13 @@ export function PhotoField({
             사진 추가
           </Button>
           <SegmentedControl size="sm" options={RATIOS} value={ratio} onChange={(v) => void changeRatio(v)} />
+          <label
+            className="flex items-center gap-1.5 text-xs text-fg-muted"
+            title="판매처 사진과 같은 이미지로 보이지 않게 사진마다 미세 회전·확대·색감을 다르게 합니다 (무료, 브라우저에서 처리)"
+          >
+            <Checkbox checked={vary} onChange={(v) => void changeVary(v)} label="중복 방지 자동 변형" />
+            중복 방지 자동 변형
+          </label>
           {photos.length > 0 && (
             <Button size="sm" variant="ghost" icon={Sparkles} disabled={Boolean(busy)} onClick={() => void describe()} title="비어 있는 설명만 채웁니다">
               AI로 사진 설명 채우기
@@ -187,6 +254,38 @@ export function PhotoField({
                     className="h-8"
                     onChange={(e) => onChange(photos.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)))}
                   />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {p.aiStyle ? (
+                      <>
+                        <span className="rounded bg-brand-soft px-1.5 py-px text-[11px] font-medium text-brand">AI 배경 · {p.aiStyle}</span>
+                        <Button size="sm" variant="ghost" icon={Undo2} className="h-7" onClick={() => void revertAi(i)}>
+                          원본으로
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Select
+                          className="h-7 w-[140px] text-xs"
+                          value={aiStyle[p.id] ?? PHOTO_AI_STYLE_OPTIONS[0].value}
+                          options={PHOTO_AI_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                          onChange={(e) => setAiStyle((st) => ({ ...st, [p.id]: e.target.value }))}
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon={Wand2}
+                          className="h-7"
+                          loading={aiBusy === p.id}
+                          disabled={Boolean(aiBusy) || Boolean(busy)}
+                          onClick={() => void aiEdit(i)}
+                          title="배경만 AI 로 바꿉니다 (OpenAI, 장당 약 50~250원). 제품 모양·글자가 바뀌지 않았는지 꼭 확인하세요"
+                        >
+                          AI 배경 연출
+                        </Button>
+                      </>
+                    )}
+                    {p.varied && !p.aiStyle && <span className="text-[11px] text-fg-subtle">자동 변형됨</span>}
+                  </div>
                 </div>
                 <div className="flex shrink-0 flex-col">
                   <IconButton icon={ArrowUp} label="앞으로" size="sm" disabled={i === 0} onClick={() => move(i, -1)} />
@@ -203,6 +302,12 @@ export function PhotoField({
             {busy ??
               error ??
               `원본 ${kb(totalBefore)} → ${kb(totalAfter)} · 사진은 이 화면에만 있고 새로고침하면 사라집니다. 결과 화면에서 ZIP 으로 내려받으세요.`}
+          </p>
+        )}
+        {photos.some((p) => p.aiStyle) && (
+          <p className="rounded-control bg-warning/10 px-3 py-2 text-xs leading-relaxed text-fg-muted">
+            AI 배경 연출 사진은 제품 모양·색·로고·글자가 실제와 같은지 꼭 확인하세요. 실제와 다른 사진은 과장 광고가 될 수 있습니다. 사진 설명에
+            &lsquo;AI 배경 연출&rsquo;이 붙어 글에서도 연출 사진으로 소개됩니다.
           </p>
         )}
       </div>

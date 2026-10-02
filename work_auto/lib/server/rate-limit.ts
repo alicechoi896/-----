@@ -17,6 +17,7 @@ export const LIMITS = {
   "video-import": 10, // 영상 여러 개 가져오기 (한 번에 최대 20개)
   "detect-text": 12, // 글자 위치 찾기 (영상 1개 = 3번 호출)
   "describe-photos": 10,
+  "photo-ai": 10, // 제품 사진 AI 배경 연출 (OpenAI 이미지, 장당 비용)
   "style-import": 20, // 나의 스타일 파일 일괄 추가 미리보기 (파일 파싱만, 외부 호출 없음)
   "ai-generate": 20, // 콘텐츠 생성·분석·주제 추천 등 AI 호출
   "product-analyze": 10,

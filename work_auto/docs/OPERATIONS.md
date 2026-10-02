@@ -38,6 +38,7 @@
 | trends-youtube / trends-naver | 30 / 20 | 각자 키지만 반복 조회 방지, NAVER 는 자동완성 포함 |
 | describe-photos | 10 | |
 | style-import | 20 | 나의 스타일 파일 미리보기 (파일 파싱만) |
+| photo-ai | 10 | 제품 사진 AI 배경 연출 (OpenAI 이미지, 사용자 키·장당 비용) |
 
 한도는 서버 인스턴스마다 따로 센다 (엄격한 한도가 아니라 폭주 방지용). 사용자가 수백 명이 되면 Upstash Redis 등으로 바꾼다.
 
