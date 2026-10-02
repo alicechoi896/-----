@@ -1,4 +1,4 @@
-# DATA MODEL: 콘텐츠 자동화 센터
+# DATA MODEL: 자동화 지니
 
 > 타입 정의: `lib/types/*.ts` (클라이언트·서버 공용, 단일 기준)
 > V1 저장소: `lib/server/repositories/memory-store.ts` (인메모리, Seed: `lib/mock/seed.ts`)

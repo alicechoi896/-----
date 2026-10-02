@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# 콘텐츠 자동화 센터: 작업 규칙
+# 자동화 지니: 작업 규칙
 
 작업 전에 `docs/DEVELOPMENT_GUIDE.md`를 읽는다. 기능 목록은 `docs/FEATURE_REGISTRY.md`에 있다.
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { BrandMark } from "@/components/layout/BrandMark";
+import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import { connection } from "next/server";
-import { Boxes } from "lucide-react";
 import { getSession } from "@/lib/server/auth";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { LinkButton } from "@/components/ui/Button";
@@ -21,11 +22,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     <main className="flex min-h-screen items-center justify-center bg-subtle px-4 py-12">
       <div className="w-full max-w-[400px]">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-fg text-white">
-            <Boxes className="size-5" />
-          </span>
-          <h1 className="mt-4 text-xl font-bold tracking-tight text-fg">콘텐츠 자동화 센터</h1>
-          <p className="mt-1 text-sm text-fg-subtle">YouTube · NAVER 클립 · NAVER 블로그 콘텐츠 자동화</p>
+          <BrandMark size={52} className="rounded-xl" />
+          <h1 className="mt-4 text-xl font-bold tracking-tight text-fg">{SITE_NAME}</h1>
+          <p className="mt-1 text-sm text-fg-subtle">{SITE_TAGLINE}</p>
         </div>
 
         {withdrawn && (

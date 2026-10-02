@@ -140,7 +140,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
       </div>
 
       {/* 이 기능의 최근 생성 이력 */}
-      <SectionCard title="최근 생성 이력" icon={History} description="이력을 누르면 결과를 다시 볼 수 있습니다." flush>
+      <SectionCard title="최근 생성 이력" icon={History} description="이력을 누르면 결과를 다시 볼 수 있습니다. 오래된 이력은 자동으로 정리됩니다." flush>
         {history.loading ? (
           <LoadingState variant="skeleton" rows={3} className="p-5" />
         ) : history.error ? (

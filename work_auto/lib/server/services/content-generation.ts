@@ -10,6 +10,7 @@ import { getPromptTemplate } from "../ai/prompts/templates";
 import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
 import { getCurrentUserId, getRepositories } from "../repositories";
+import { pruneContentHistory } from "./content-history";
 import { productService } from "./products";
 
 /**
@@ -119,6 +120,7 @@ export const contentGenerationService = {
     };
     await getRepositories().contents.insert(content);
     if (context.product) await productService.touch(context.product.product.id);
+    await pruneContentHistory(userId).catch(() => 0); // 오래된 이력 정리 (실패해도 생성은 성공)
     return content;
   },
 };

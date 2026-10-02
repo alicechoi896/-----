@@ -2,6 +2,17 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.6] - 2026-10-02: 이름 "자동화 지니", 새 로고, 생성 이력 300건 정리
+
+### 변경
+- 서비스 이름 "콘텐츠 자동화 센터" → **자동화 지니** (`lib/site.ts` 한 곳에서 관리)
+- 로고를 램프 이미지로 교체 (`components/layout/BrandMark.tsx`, `public/logo.png`), 파비콘·홈 화면 아이콘 (`app/icon.png`, `app/apple-icon.png`, `app/favicon.ico`). 원본은 `assets/brand/icon-original.png`
+
+### 추가
+- **생성 이력 자동 정리**: 사용자별 최근 300건만 보관 (`lib/server/services/content-history.ts`)
+  - ★ 우수 사례, 👍/👎 피드백, 성과가 있는 이력은 지우지 않고 개수에도 세지 않는다
+  - 콘텐츠 히스토리·최근 생성 이력에 "오래된 이력은 자동으로 정리됩니다" 안내
+
 ## [0.9.5] - 2026-10-02: 부하·장애 대비 (사용자 100명 기준 점검)
 
 자세한 내용은 docs/OPERATIONS.md 참고.

@@ -1,4 +1,5 @@
 import { PageContainer } from "@/components/layout/PageContainer";
+import { SITE_NAME } from "@/lib/site";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ChannelCard } from "@/components/shared/ChannelCard";
 import { HomeOverview } from "@/features/home/HomeOverview";
@@ -9,7 +10,7 @@ export default function HomePage() {
   const channels = getHomeChannels();
   return (
     <PageContainer>
-      <PageHeader title="콘텐츠 자동화 센터" description="작업할 채널을 선택하세요." />
+      <PageHeader title={SITE_NAME} description="작업할 채널을 선택하세요." />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {channels.map((c) => (
           <ChannelCard key={c.id} channel={c} featureCount={getFeaturesByChannel(c.id).length} />

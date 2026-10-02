@@ -1,4 +1,4 @@
-# ARCHITECTURE — 콘텐츠 자동화 센터
+# ARCHITECTURE — 자동화 지니
 
 > 이 문서는 "코드가 어디에 있고, 데이터가 어떻게 흐르며, 무엇을 어디에 추가해야 하는가"를 설명한다.
 > 새 기능을 만들기 전에 반드시 읽는다. 구체적인 추가 절차는 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)에 있다.

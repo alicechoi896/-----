@@ -80,7 +80,7 @@ export function ContentHistoryTab({ onChanged }: { onChanged?: () => void }) {
   return (
     <SectionCard
       title="콘텐츠 히스토리 (Content History)"
-      description="★를 누르면 '좋은 결과'로 저장되어 같은 기능의 다음 생성에 예시로 쓰입니다. 체크해서 삭제할 수 있습니다."
+      description="★를 누르면 '좋은 결과'로 저장되어 같은 기능의 다음 생성에 예시로 쓰입니다. 체크해서 삭제할 수 있습니다. 오래된 이력은 자동으로 정리됩니다 (최근 300건 보관, ★·피드백·성과가 있는 이력은 남습니다)."
       actions={
         <BulkDeleteButton
           count={selected.size}

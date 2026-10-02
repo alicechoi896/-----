@@ -39,7 +39,7 @@
 | `/admin` | 사이트 관리 | 관리자 전용 허브 | ChannelHub | Dynamic |
 | `/admin/users` | 사용자 관리 | 사용자 목록, 역할 변경 | UserManagement | Dynamic |
 | `/admin/permissions` | 권한 관리 | 등급 × 메뉴 체크 표 | PermissionMatrix | Dynamic |
-| `/` | 콘텐츠 자동화 센터 | 채널 카드 4개 + 최근 생성·제품·API 상태 요약 | ChannelCard, HomeOverview | Dynamic |
+| `/` | 자동화 지니 | 채널 카드 4개 + 최근 생성·제품·API 상태 요약 | ChannelCard, HomeOverview | Dynamic |
 | `/youtube` | YouTube 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
 | `/youtube/trends` | YouTube 트렌드 찾기 | 검색 조건(저장·기본) → 추천 키워드·주제 → 정렬 가능한 표 + 더 불러오기 → 상세 패널(AI 분석) | YouTubeTrendExplorer | Dynamic |
 | `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드·참고 영상으로 원고 생성 | ContentGenerator | Dynamic |

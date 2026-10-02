@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { BrandMark } from "./BrandMark";
+import { SITE_NAME } from "@/lib/site";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Boxes, ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-react";
+import { ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-react";
 import { signOut } from "@/app/(auth)/login/actions";
 import { clearApiCache } from "@/lib/api-client";
 import { ROLE_LABEL } from "@/lib/permissions";
@@ -122,10 +124,8 @@ export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "
 function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2">
-      <span className="flex size-7 items-center justify-center rounded-lg bg-fg text-white">
-        <Boxes className="size-4" />
-      </span>
-      <span className="text-[14.5px] font-semibold tracking-tight text-fg">콘텐츠 자동화 센터</span>
+      <BrandMark size={28} />
+      <span className="text-[14.5px] font-semibold tracking-tight text-fg">{SITE_NAME}</span>
     </Link>
   );
 }

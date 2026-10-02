@@ -1,4 +1,4 @@
-# DESIGN SYSTEM: 콘텐츠 자동화 센터
+# DESIGN SYSTEM: 자동화 지니
 
 > 이 문서는 **다른 프로젝트에서도 그대로 가져다 쓸 수 있는** 업무용 SaaS 디자인 시스템이다.
 > 토큰 정의는 `app/globals.css`의 `@theme` 한 곳에만 있고, 컴포넌트는 `components/ui`에 있다.
