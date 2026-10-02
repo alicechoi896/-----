@@ -50,6 +50,20 @@ export class MockAIProvider implements AIProvider {
       return { data: data as unknown as T, provider: this.id, model: "mock-analyzer-v1" };
     }
 
+    if (request.task.startsWith("content-regenerate:")) {
+      const data = writeMockContent({
+        featureId: v.featureId as string,
+        outputs: v.outputs as OutputSection[],
+        input: v.input as Record<string, unknown>,
+        context: v.context as GenerationContext,
+      });
+      const shuffle = <X,>(xs: X[]) => xs.map((x) => [Math.random(), x] as const).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+      const remixed = Object.fromEntries(
+        Object.entries(data).map(([k, val]) => [k, Array.isArray(val) ? shuffle(val) : typeof val === "string" ? `${val}\n\n(다시 만든 데모 결과 ${new Date().toLocaleTimeString("ko-KR")})` : val]),
+      );
+      return { data: remixed as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task.startsWith("content:")) {
       const data = writeMockContent({
         featureId: v.featureId as string,

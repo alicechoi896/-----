@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, Brain, CalendarPlus, ThumbsDown, ThumbsUp } from "lucide-react";
+import { BookmarkPlus, Brain, CalendarPlus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -44,6 +44,21 @@ export function ResultPanel({
 
   // 업로드 상태 (업로드 관리 기록에서 계산)
   const uploads = useUploadStatus([content.id]);
+  // 항목별 [다시 만들기]: 한 번에 하나씩 (AI 1회)
+  const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [regenError, setRegenError] = useState<{ key: string; message: string } | null>(null);
+
+  async function regenerate(key: string) {
+    setRegenerating(key);
+    setRegenError(null);
+    try {
+      onChange?.(await api.contents.regenerate(content.id, key));
+    } catch (e) {
+      setRegenError({ key, message: e instanceof Error ? e.message : "다시 만들지 못했습니다." });
+    } finally {
+      setRegenerating(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -84,7 +99,17 @@ export function ResultPanel({
       <ContextSummaryBox content={content} />
 
       {outputs.map((section) => (
-        <OutputBlock key={section.key} section={section} value={content.output[section.key] ?? content.output[LEGACY_KEY[section.key] ?? ""]} photos={photos} />
+        <OutputBlock
+          key={section.key}
+          section={section}
+          value={content.output[section.key] ?? content.output[LEGACY_KEY[section.key] ?? ""]}
+          photos={photos}
+          // 소제목은 본문을 다시 만들 때 함께 바뀐다
+          onRegenerate={onChange && section.key !== "headings" ? () => void regenerate(section.key) : undefined}
+          regenerating={regenerating === section.key || (regenerating === "body" && section.key === "headings")}
+          busy={Boolean(regenerating)}
+          error={regenError?.key === section.key ? regenError.message : null}
+        />
       ))}
 
       <FeedbackBar content={content} headlineKey={headlineKey ?? outputs[0]?.key} onChange={onChange} />
@@ -93,14 +118,30 @@ export function ResultPanel({
 }
 
 /** v0.9.13 에서 바뀐 출력 키: 예전 결과는 옛 키로 저장되어 있다 */
-const LEGACY_KEY: Record<string, string> = { hooks: "hook", titles: "title", tags: "hashtags" };
+const LEGACY_KEY: Record<string, string> = { hooks: "hook", titles: "title", tags: "hashtags", ctas: "cta" };
 
 function toText(value: GeneratedValue | undefined): string {
   if (!value) return "";
   return Array.isArray(value) ? value.join("\n") : value;
 }
 
-function OutputBlock({ section, value, photos }: { section: OutputSection; value: GeneratedValue | undefined; photos: ProcessedPhoto[] }) {
+function OutputBlock({
+  section,
+  value,
+  photos,
+  onRegenerate,
+  regenerating,
+  busy,
+  error,
+}: {
+  section: OutputSection;
+  value: GeneratedValue | undefined;
+  photos: ProcessedPhoto[];
+  onRegenerate?: () => void;
+  regenerating?: boolean;
+  busy?: boolean;
+  error?: string | null;
+}) {
   const list = Array.isArray(value) ? value : value ? [value] : [];
   return (
     <section className={cardClass}>
@@ -109,9 +150,25 @@ function OutputBlock({ section, value, photos }: { section: OutputSection; value
           {section.label}
           {section.description && <span className="ml-2 text-xs font-normal text-fg-subtle">{section.description}</span>}
         </h3>
-        <CopyButton value={section.format === "tags" ? list.join(" ") : toText(value)} />
+        <div className="flex items-center gap-1">
+          {onRegenerate && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={RefreshCw}
+              loading={regenerating}
+              disabled={busy && !regenerating}
+              onClick={onRegenerate}
+              title={section.key === "body" ? "본문을 다른 내용으로 다시 만듭니다 (소제목도 본문에 맞게 바뀝니다)" : "이 항목만 다른 것으로 다시 만듭니다"}
+            >
+              다시 만들기
+            </Button>
+          )}
+          <CopyButton value={section.format === "tags" ? list.join(" ") : toText(value)} />
+        </div>
       </header>
-      <div className="px-5 py-4">
+      {error && <p className="border-b border-line bg-danger/5 px-5 py-2 text-xs text-danger">{error}</p>}
+      <div className={cn("px-5 py-4", regenerating && "opacity-50")}>
         {list.length === 0 ? (
           <p className="text-sm text-fg-subtle">결과 없음</p>
         ) : section.format === "tags" ? (

@@ -18,6 +18,8 @@ export interface ContextSummary {
   trend: { id: ID; title: string } | null;
   /** 경고나 참고 (예: "실제 경험 미입력 → 사용 후기 표현 금지") */
   notes: string[];
+  /** [다시 만들기] 기록 (항목 key, 시각) — 최근 20개 */
+  regenerated?: { key: string; at: ISODate; provider: string }[];
   /** 이번 생성에 실제로 보낸 스타일 표본 (v0.9.9~, 예전 결과에는 없다) */
   styleSamples?: StyleSampleSnapshot | null;
 }

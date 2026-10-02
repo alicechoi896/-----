@@ -164,6 +164,9 @@ export const api = {
       request<GeneratedContent[]>(`/api/contents${qs(filter)}`),
     generate: (req: GenerateContentRequest) =>
       request<GeneratedContent>("/api/contents/generate", { method: "POST", body: json(req) }),
+    /** 결과의 한 항목만 다시 만들기 (블로그 본문은 소제목도 함께) */
+    regenerate: (id: string, key: string) =>
+      request<GeneratedContent>(`/api/contents/${id}/regenerate`, { method: "POST", body: json({ key }) }),
     setExemplar: (id: string, isExemplar: boolean) =>
       request<GeneratedContent>(`/api/contents/${id}`, { method: "PATCH", body: json({ isExemplar }) }),
   },
