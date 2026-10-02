@@ -1,15 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { Product } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { DataTable, EmptyState, ErrorState, LinkButton, LoadingState, SectionCard, Tag, type Column } from "@/components/ui";
+import { BulkDeleteButton, DataTable, EmptyState, ErrorState, LinkButton, LoadingState, SectionCard, Tag, type Column } from "@/components/ui";
 import { formatDate, formatRelative } from "@/lib/utils";
 
 /** Product Memory: 제품별 고정 정보. 편집은 제품 라이브러리에서 한다 */
-export function ProductMemoryTab() {
-  const { data, loading, error, reload } = useAsync(() => api.products.list(), []);
+export function ProductMemoryTab({ onChanged }: { onChanged?: () => void }) {
+  const { data, loading, error, reload, setData } = useAsync(() => api.products.list(), []);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  async function deleteSelected() {
+    const ids = [...selected];
+    await api.memory.deleteMany("products", ids);
+    const gone = new Set(ids);
+    setData((prev) => prev?.filter((x) => !gone.has(x.id)) ?? null);
+    setSelected(new Set());
+    onChanged?.();
+  }
 
   const columns: Column<Product>[] = [
     {
@@ -41,7 +52,21 @@ export function ProductMemoryTab() {
     <SectionCard
       title="제품 데이터 (Product Memory)"
       description="제품 상세페이지 학습으로 만든 구조화 데이터입니다. 콘텐츠 생성 시 상세페이지를 다시 분석하지 않고 이 데이터를 씁니다."
-      actions={<LinkButton href="/tools/product-library" size="sm">제품 라이브러리 열기</LinkButton>}
+      actions={
+        selected.size ? (
+          <BulkDeleteButton
+            count={selected.size}
+            noun="제품"
+            warning="제품의 분석 데이터도 함께 삭제됩니다. 이 제품으로 만든 콘텐츠는 남습니다."
+            onDelete={deleteSelected}
+            onClear={() => setSelected(new Set())}
+          />
+        ) : (
+          <LinkButton href="/tools/product-library" size="sm">
+            제품 라이브러리 열기
+          </LinkButton>
+        )
+      }
       flush
     >
       {loading ? (
@@ -49,7 +74,13 @@ export function ProductMemoryTab() {
       ) : error ? (
         <ErrorState message={error} onRetry={reload} />
       ) : (
-        <DataTable columns={columns} rows={data ?? []} rowKey={(p) => p.id} empty={<EmptyState compact title="저장된 제품이 없습니다" />} />
+        <DataTable
+          columns={columns}
+          rows={data ?? []}
+          rowKey={(p) => p.id}
+          selection={{ selected, onChange: setSelected }}
+          empty={<EmptyState compact title="저장된 제품이 없습니다" />}
+        />
       )}
     </SectionCard>
   );

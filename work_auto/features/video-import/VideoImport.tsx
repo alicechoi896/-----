@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { Check, CircleCheck, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2 } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
@@ -14,6 +13,7 @@ import { createZip } from "@/lib/zip";
 import {
   Badge,
   Button,
+  Combobox,
   CopyButton,
   DataTable,
   EmptyState,
@@ -52,6 +52,9 @@ const STAGE_LABEL: Record<XhsStage, string> = {
  */
 export function VideoImport() {
   const list = useAsync(() => api.videos.list(), []);
+  const products = useAsync(() => api.products.list(), []);
+  const [productId, setProductId] = useState("");
+  const [productFilter, setProductFilter] = useState("");
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
   const [importing, setImporting] = useState(false);
@@ -64,7 +67,13 @@ export function VideoImport() {
 
   const links = parseVideoLinks(text);
   const urls = links.map((l) => l.url);
-  const videos = list.data ?? [];
+  const allVideos = list.data ?? [];
+  // 제품별 보기 ("none" = 연결 안 된 영상)
+  const videos = !productFilter
+    ? allVideos
+    : allVideos.filter((v) => (productFilter === "none" ? !v.productId : v.productId === productFilter));
+  const productOptions = (products.data ?? []).map((p) => ({ value: p.id, label: p.name, description: [p.brand, p.category].filter(Boolean).join(" · ") }));
+  const productName = new Map((products.data ?? []).map((p) => [p.id, p.name]));
   const xhsVideos = videos.filter((v) => v.platform === "xiaohongshu");
   const otherVideos = videos.filter((v) => v.platform !== "xiaohongshu");
   const busy = Object.values(jobs).some((j) => j.stage === "resolve" || j.stage === "download" || j.stage === "mute");
@@ -75,7 +84,7 @@ export function VideoImport() {
     setError(null);
     setResults(null);
     try {
-      const res = await api.videos.importMany(links.slice(0, MAX_BATCH), note);
+      const res = await api.videos.importMany(links.slice(0, MAX_BATCH), note, productId || null);
       const added = res.filter((r) => r.ok && r.video).map((r) => r.video!);
       list.setData((prev) => [...added, ...(prev ?? [])]);
       setResults(res.map(({ url, ok, error: e }) => ({ url, ok, error: e })));
@@ -87,6 +96,11 @@ export function VideoImport() {
     } finally {
       setImporting(false);
     }
+  }
+
+  async function changeProduct(v: ReferenceVideo, next: string) {
+    const updated = await api.videos.setProduct(v.id, next || null);
+    list.setData((prev) => prev?.map((x) => (x.id === v.id ? updated : x)) ?? null);
   }
 
   async function handleRemove(v: ReferenceVideo) {
@@ -159,6 +173,22 @@ export function VideoImport() {
         </div>
       ),
     },
+    {
+      key: "product",
+      header: "연관 제품",
+      width: "200px",
+      render: (v) => (
+        <Combobox
+          className="w-[190px]"
+          value={v.productId ?? ""}
+          options={productOptions}
+          placeholder="제품 연결 안 함"
+          searchPlaceholder="제품 이름·브랜드로 검색"
+          emptyText={productOptions.length ? "검색 결과가 없습니다" : "저장된 제품이 없습니다"}
+          onChange={(next) => void changeProduct(v, next)}
+        />
+      ),
+    },
     { key: "note", header: "메모", render: (v) => <span className="text-fg-muted">{v.note ?? "-"}</span> },
     { key: "createdAt", header: "가져온 시각", render: (v) => <span className="whitespace-nowrap text-fg-muted">{formatRelative(v.createdAt)}</span> },
     {
@@ -220,7 +250,18 @@ export function VideoImport() {
               onChange={(e) => setText(e.target.value)}
             />
           </FormField>
-          <div className="grid items-end gap-3 md:grid-cols-[1fr_auto]">
+          <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <FormField label="연관 제품 (모든 영상에 같이 저장)" htmlFor="video-product" optional>
+              <Combobox
+                id="video-product"
+                value={productId}
+                options={productOptions}
+                placeholder={products.loading ? "불러오는 중…" : "제품 연결 안 함"}
+                searchPlaceholder="제품 이름·브랜드로 검색"
+                emptyText={productOptions.length ? "검색 결과가 없습니다" : "저장된 제품이 없습니다"}
+                onChange={setProductId}
+              />
+            </FormField>
             <FormField label="메모 (모든 영상에 같이 저장)" htmlFor="video-note" optional>
               <Input id="video-note" placeholder="예: Hook 구성 참고" value={note} onChange={(e) => setNote(e.target.value)} />
             </FormField>
@@ -251,6 +292,16 @@ export function VideoImport() {
         flush
         actions={
           <div className="flex items-center gap-2">
+            {productOptions.length > 0 && (
+              <Combobox
+                className="w-48"
+                value={productFilter}
+                options={[{ value: "none", label: "제품 연결 안 된 영상" }, ...productOptions]}
+                placeholder="전체 제품"
+                searchPlaceholder="제품으로 보기"
+                onChange={setProductFilter}
+              />
+            )}
             {bulk && <span className="text-xs text-fg-subtle">{bulk}</span>}
             {xhsVideos.length > 1 && (
               <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(bulk)} disabled={busy} onClick={() => void runAllXhs()}>
@@ -265,7 +316,7 @@ export function VideoImport() {
         ) : list.error ? (
           <ErrorState message={list.error} onRetry={list.reload} />
         ) : (
-          <DataTable columns={columns} rows={videos} rowKey={(v) => v.id} empty={<EmptyState compact title="가져온 영상이 없습니다" />} />
+          <DataTable columns={columns} rows={videos} rowKey={(v) => v.id} empty={<EmptyState compact title={productFilter ? `'${productFilter === "none" ? "제품 연결 안 됨" : (productName.get(productFilter) ?? "")}' 영상이 없습니다` : "가져온 영상이 없습니다"} />} />
         )}
       </SectionCard>
 
@@ -339,13 +390,6 @@ function YouTubeGuide({ open, onToggle, command, count }: { open: boolean; onTog
               </div>
             </Step>
           </ol>
-          <p className="text-xs text-fg-subtle">
-            이미 소리 있는 파일을 갖고 있다면{" "}
-            <Link href="/tools/video-mute" className="font-medium text-brand hover:underline">
-              영상 음성 제거
-            </Link>
-            에 넣어도 됩니다.
-          </p>
         </div>
       )}
     </section>

@@ -305,6 +305,9 @@ create table if not exists public.reference_videos (
   unique (user_id, url)
 );
 
+-- v0.9.2: 참고 영상 ↔ 연관 제품 (선택). 제품을 지우면 연결만 풀린다
+alter table public.reference_videos add column if not exists product_id text references public.products (id) on delete set null;
+
 -- 사용자별 설정 (한 사람당 1행, id = 사용자 ID). 기본 AI 등 작은 값만 담는다
 create table if not exists public.user_settings (
   id            uuid primary key references auth.users (id) on delete cascade,

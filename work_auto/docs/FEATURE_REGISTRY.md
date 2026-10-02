@@ -22,25 +22,24 @@
 | 채널 | ID | 기능 | Route | 종류 | 상태 | 필요 API | 입력 데이터 | 출력 데이터 | 구현 |
 |------|----|------|-------|------|------|----------|-------------|-------------|------|
 | YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | ✅ | YouTube Data API | 국가, 카테고리, 키워드, 게시일 범위(최근 N일), 구독자·조회수·댓글 범위, Shorts/롱폼, 저장한 조건 | Shorts/롱폼, 키워드·태그, 정렬(Trend Score·조회수·게시일·일평균·댓글), 추천 키워드, AI 추천 주제, 잘된 이유·추천 제목, 찜, 50개씩 더 불러오기 | `features/youtube-trends` |
-| YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | 🧪 | OpenAI | 제품*, 참고 트렌드, 참고 영상, 주요 키워드, 영상 길이, 콘텐츠 스타일 | 추천 제목 5개, Hook, 대본, 설명글, 주요 키워드, 해시태그 | ContentGenerator |
-| YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | 🧪 | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
-| NAVER 클립 | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | 🧪 | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
-| NAVER 클립 | `clip-product-content` | 제품 홍보 클립 만들기 | `/naver-clip/product-content` | generator | 🧪 | OpenAI | 제품*, 트렌드, 콘텐츠 스타일, 주요 키워드 | 제목, Hook, 클립 대본, 설명글, 키워드, 해시태그 | ContentGenerator |
-| NAVER 클립 | `clip-info-content` | 정보성 클립 만들기 | `/naver-clip/info-content` | generator | 🧪 | OpenAI | 카테고리*, 현재 트렌드, 키워드 | 추천 주제, 제목, 대본, 설명글, 키워드 | ContentGenerator |
-| NAVER 블로그 | `blog-trends` | 네이버 트렌드·키워드 찾기 | `/naver-blog/trends` | trend | 🧪 | NAVER API | 검색어, 카테고리, 최근 기간 | 관련 검색어, 최근 검색 추이(차트), 급상승 키워드, 시즌 키워드, 콘텐츠 아이디어 | `features/naver-trends` (blog) |
-| NAVER 블로그 | `blog-product-writing` | 제품 블로그 글 만들기 | `/naver-blog/product-writing` | generator | 🧪 | OpenAI | 제품*, 메인 키워드*, 서브 키워드, 글 스타일, 글 길이, **제품 사진(최대 10장, 브라우저 처리)**, 실제 경험(선택) | 제목 후보 5, 전체 본문(+[사진n] 자리 · 사진 미리보기 · ZIP), 소제목, 제품 장점, 정보, CTA, 키워드, 해시태그 | ContentGenerator + PhotoField + 정직성 가드레일 |
-| NAVER 블로그 | `blog-info-writing` | 정보·트렌드 글 만들기 | `/naver-blog/info-writing` | generator | 🧪 | OpenAI | 글 유형*(일반 정보/트렌드/IT/AI/생활정보), 주제*, 참고 트렌드, 메인 키워드, 글 길이 | 제목 후보 5, 전체 본문, 소제목, 키워드, 해시태그 | ContentGenerator |
-| NAVER 블로그 | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | 🧪 | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
-| 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | 🧪 | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
-| 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | 🧪 | - | 검색어, 카테고리 | 제품 카드/목록, 상세, 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
+| YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | ✅ | OpenAI | 제품*, 참고 트렌드, 참고 영상, 주요 키워드, 영상 길이, 콘텐츠 스타일 | 추천 제목 5개, Hook, 대본, 설명글, 주요 키워드, 해시태그 | ContentGenerator |
+| YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | ✅ | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
+| NAVER 클립 | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | ✅ | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
+| NAVER 클립 | `clip-product-content` | 제품 홍보 클립 만들기 | `/naver-clip/product-content` | generator | ✅ | OpenAI | 제품*, 트렌드, 콘텐츠 스타일, 주요 키워드 | 제목, Hook, 클립 대본, 설명글, 키워드, 해시태그 | ContentGenerator |
+| NAVER 클립 | `clip-info-content` | 정보성 클립 만들기 | `/naver-clip/info-content` | generator | ✅ | OpenAI | 카테고리*, 현재 트렌드, 키워드 | 추천 주제, 제목, 대본, 설명글, 키워드 | ContentGenerator |
+| NAVER 블로그 | `blog-trends` | 네이버 트렌드·키워드 찾기 | `/naver-blog/trends` | trend | ✅ | NAVER API | 검색어, 카테고리, 최근 기간 | 관련 검색어, 최근 검색 추이(차트), 급상승 키워드, 시즌 키워드, 콘텐츠 아이디어 | `features/naver-trends` (blog) |
+| NAVER 블로그 | `blog-product-writing` | 제품 블로그 글 만들기 | `/naver-blog/product-writing` | generator | ✅ | OpenAI | 제품*, 메인 키워드*, 서브 키워드, 글 스타일, 글 길이, **제품 사진(최대 10장, 브라우저 처리)**, 실제 경험(선택) | 제목 후보 5, 전체 본문(+[사진n] 자리 · 사진 미리보기 · ZIP), 소제목, 제품 장점, 정보, CTA, 키워드, 해시태그 | ContentGenerator + PhotoField + 정직성 가드레일 |
+| NAVER 블로그 | `blog-info-writing` | 정보·트렌드 글 만들기 | `/naver-blog/info-writing` | generator | ✅ | OpenAI | 글 유형*(일반 정보/트렌드/IT/AI/생활정보), 주제*, 참고 트렌드, 메인 키워드, 글 길이 | 제목 후보 5, 전체 본문, 소제목, 키워드, 해시태그 | ContentGenerator |
+| NAVER 블로그 | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | ✅ | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
+| 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | ✅ | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
+| 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | ✅ | - | 검색어, 카테고리 | 제품 카드/목록, 상세, 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
 | 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL 여러 개(줄바꿈, 최대 20), 메모 | 영상 메타데이터, 참고 영상 목록, 샤오홍슈: 소리 없는 mp4 바로 저장·ZIP (브라우저 처리) / YouTube: 다운로드 명령(yt-dlp, 내 PC) | `features/video-import`, `lib/video-download.ts`, `lib/video-links.ts` |
-| 공통 도구 | `video-mute` | 영상 음성 제거 | `/tools/video-mute` | tool | ✅ | - (브라우저 ffmpeg.wasm) | 내 영상 파일 (MP4·MOV·WEBM·MKV, 1GB 이하) | 음성 없는 영상(원본 화질), 여러 개 ZIP | `features/video-mute`, `lib/video-mute.ts` |
 | 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | ✅ | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
 | 사이트 관리 | `admin-approvals` | 가입 승인 | `/admin/approvals` | admin | ✅ | - | 승인 등급, 거절 사유 | 승인 대기 목록 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-users` | 사용자 관리 | `/admin/users` | admin | ✅ | - | 역할 | 승인된 사용자 목록, 역할 변경 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-permissions` | 권한 관리 | `/admin/permissions` | admin | ✅ | - | 등급별 허용 여부 | 권한표 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-audit-logs` | 활동 기록 | `/admin/audit-logs` | admin | ✅ | - | 종류 필터, 검색 | 활동 기록 | `features/admin` (관리자 전용) |
-| (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | 🧪 | - | - | 제품 데이터, 나의 스타일, 콘텐츠 히스토리, 피드백, 성과 데이터 | `features/ai-learning` |
+| (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | ✅ | - | - | 제품 데이터, 나의 스타일, 콘텐츠 히스토리, 피드백, 성과 데이터 | `features/ai-learning` |
 
 `*` = 필수 입력
 
@@ -48,7 +47,7 @@
 
 | 등급 묶음 | 기능 |
 |-----------|------|
-| `ALL` (실버·골드·VIP) | yt-trends, yt-info-video, clip-trends, clip-info-content, blog-trends, blog-info-writing, video-import, video-mute, api-center, ai-learning |
+| `ALL` (실버·골드·VIP) | yt-trends, yt-info-video, clip-trends, clip-info-content, blog-trends, blog-info-writing, video-import, api-center, ai-learning |
 | `GOLD_UP` (골드·VIP) | yt-product-video, clip-product-content, blog-product-writing, product-learning, product-library |
 | `VIP_ONLY` | blog-auto-writing |
 | 관리자 전용 | admin-approvals, admin-users, admin-permissions, admin-audit-logs |

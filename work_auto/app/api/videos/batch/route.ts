@@ -8,7 +8,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("video-import");
-    const { items, urls, note } = await readJson<{ items?: { url: string; titleHint?: string }[]; urls?: string[]; note?: string }>(request);
-    return videoService.importMany(items ?? urls ?? [], note);
+    const { items, urls, note, productId } = await readJson<{ items?: { url: string; titleHint?: string }[]; urls?: string[]; note?: string; productId?: string | null }>(request);
+    return videoService.importMany(items ?? urls ?? [], note, productId);
   });
 }

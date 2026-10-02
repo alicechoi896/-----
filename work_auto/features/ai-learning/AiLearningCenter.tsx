@@ -67,11 +67,11 @@ export function AiLearningCenter({ initialTab, styleRef, styleChannel }: { initi
         <Tabs items={items} value={tab} onChange={setTab} />
         <div className="pt-5">
           {tab === "profiles" && <ContentProfileTab />}
-          {tab === "products" && <ProductMemoryTab />}
+          {tab === "products" && <ProductMemoryTab onChanged={overview.reload} />}
           {tab === "styles" && <StyleTab initialReference={styleRef} initialChannel={styleChannel} />}
-          {tab === "contents" && <ContentHistoryTab />}
-          {tab === "feedback" && <FeedbackTab />}
-          {tab === "performance" && <PerformanceTab />}
+          {tab === "contents" && <ContentHistoryTab onChanged={overview.reload} />}
+          {tab === "feedback" && <FeedbackTab onChanged={overview.reload} />}
+          {tab === "performance" && <PerformanceTab onChanged={overview.reload} />}
         </div>
       </div>
     </div>

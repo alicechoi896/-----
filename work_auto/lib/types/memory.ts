@@ -74,5 +74,7 @@ export interface ReferenceVideo {
   thumbnailColor: string;
   thumbnailUrl?: string;
   note: string | null;
+  /** 연관 제품 (선택). '제품 홍보 영상 만들기'에서 참고 영상을 고를 때 함께 보인다 */
+  productId?: ID | null;
   createdAt: ISODate;
 }

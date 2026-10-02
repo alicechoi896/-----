@@ -263,6 +263,7 @@ UserStyle 에 `profileId` (선택, `on delete set null`) 를 추가했다. 이 �
 | platform | `youtube` \| `naver` \| `other` |
 | title, channelName, durationSec, thumbnailColor | 메타데이터 |
 | note | 메모 |
+| productId | 연관 제품 (선택, `on delete set null`) |
 | createdAt | |
 
 ### SavedFilter (saved_filters)

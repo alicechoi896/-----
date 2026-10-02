@@ -195,6 +195,9 @@ export const api = {
   },
 
   memory: {
+    /** 체크한 항목 삭제 (콘텐츠 히스토리·제품·피드백·성과) */
+    deleteMany: (kind: "contents" | "products" | "feedback" | "performance", ids: string[]) =>
+      request<{ deleted: number }>("/api/memory/delete", { method: "POST", body: json({ kind, ids }) }),
     overview: () =>
       request<{ counts: Record<"profiles" | "products" | "styles" | "contents" | "exemplars" | "feedback" | "performance", number> }>(
         "/api/memory",
@@ -224,11 +227,13 @@ export const api = {
         streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
       }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
-    importMany: (items: { url: string; titleHint?: string }[], note?: string) =>
+    importMany: (items: { url: string; titleHint?: string }[], note?: string, productId?: string | null) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {
         method: "POST",
-        body: json({ items, note }),
+        body: json({ items, note, productId: productId || null }),
       }),
+    setProduct: (id: string, productId: string | null) =>
+      request<ReferenceVideo>(`/api/videos/${id}`, { method: "PATCH", body: json({ productId }) }),
     remove: (id: string) => request<{ id: string }>(`/api/videos/${id}`, { method: "DELETE" }),
   },
 

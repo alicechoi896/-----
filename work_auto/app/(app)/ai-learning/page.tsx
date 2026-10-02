@@ -23,7 +23,7 @@ export default async function Page({ searchParams }: PageProps<"/ai-learning">) 
           description={page.description}
           icon={page.icon}
           accent="tools"
-          status="mock"
+          status="live"
           crumbs={[{ label: "홈", href: "/" }, { label: page.title }]}
         />
       }

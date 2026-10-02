@@ -12,6 +12,7 @@ import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
 import { contentProfileService } from "./content-profiles";
+import { productService } from "./products";
 
 /**
  * AI Memory 관리 유스케이스 (AI 학습 관리 화면).
@@ -60,6 +61,9 @@ async function assertOwnProfile(profileId: string | null | undefined) {
   if (!profileId) return;
   if (!(await contentProfileService.get(profileId))) throw new AppError("VALIDATION", "연결할 콘텐츠 프로필을 찾을 수 없습니다.");
 }
+
+export type MemoryKind = "contents" | "products" | "feedback" | "performance";
+const MEMORY_KINDS: MemoryKind[] = ["contents", "products", "feedback", "performance"];
 
 export const memoryService = {
   /* ── Content History ── */
@@ -170,6 +174,43 @@ export const memoryService = {
         channelIds.length === 0 ? s.channelIds.length === 0 : s.channelIds.some((c) => channelIds.includes(c));
       if (overlap) await repo.styles.update(s.id, { isDefault: false });
     }
+  },
+
+  /* ── 여러 개 삭제 (AI 학습 관리의 체크 삭제) ── */
+
+  /**
+   * 내 데이터만 지운다 (다른 사람 ID 는 조용히 건너뛴다).
+   * - contents: 그 콘텐츠의 피드백·성과도 함께 지운다 (DB 는 on delete cascade, 데모 저장소는 직접)
+   * - products: 수집 원문·분석도 함께 지운다. 이 제품으로 만든 콘텐츠는 남는다 (제품 연결만 끊김)
+   */
+  async deleteMany(kind: MemoryKind, ids: string[]): Promise<{ deleted: number }> {
+    if (!MEMORY_KINDS.includes(kind)) throw new AppError("VALIDATION", "지울 수 없는 항목입니다.");
+    const want = new Set((Array.isArray(ids) ? ids : []).map(String).slice(0, 500));
+    if (!want.size) return { deleted: 0 };
+    const repo = getRepositories();
+    const userId = await getCurrentUserId();
+    let deleted = 0;
+
+    if (kind === "contents") {
+      const mine = await repo.contents.list((c) => c.userId === userId && want.has(c.id));
+      const mineIds = new Set(mine.map((c) => c.id));
+      for (const f of await repo.feedback.list((f) => mineIds.has(f.contentId))) await repo.feedback.remove(f.id);
+      for (const m of await repo.performance.list((m) => mineIds.has(m.contentId))) await repo.performance.remove(m.id);
+      for (const c of mine) if (await repo.contents.remove(c.id)) deleted++;
+    } else if (kind === "products") {
+      const mine = await repo.products.list((p) => p.userId === userId && want.has(p.id));
+      for (const p of mine) {
+        await productService.remove(p.id);
+        deleted++;
+      }
+    } else if (kind === "feedback") {
+      for (const f of await repo.feedback.list((f) => f.userId === userId && want.has(f.id))) if (await repo.feedback.remove(f.id)) deleted++;
+    } else {
+      // 성과: 내 콘텐츠에 달린 것만
+      const mine = (await this.listPerformance()).filter((m) => want.has(m.id));
+      for (const m of mine) if (await repo.performance.remove(m.id)) deleted++;
+    }
+    return { deleted };
   },
 
   /* ── Performance ── */

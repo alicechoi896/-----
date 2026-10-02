@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "./Checkbox";
 
 export interface Column<T> {
   key: string;
@@ -40,6 +41,7 @@ export function DataTable<T>({
   className,
   dense,
   defaultSort,
+  selection,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -51,6 +53,8 @@ export function DataTable<T>({
   dense?: boolean;
   /** 처음 정렬 상태 */
   defaultSort?: SortState;
+  /** 체크 선택 (선택한 행의 rowKey 집합). 주면 맨 앞에 체크 열이 생긴다 */
+  selection?: { selected: Set<string>; onChange: (next: Set<string>) => void };
 }) {
   const [sort, setSort] = useState<SortState | null>(defaultSort ?? null);
   const sortedRows = useMemo(() => {
@@ -65,6 +69,38 @@ export function DataTable<T>({
     });
   }, [rows, columns, sort]);
 
+  const cols: Column<T>[] = selection
+    ? [
+        {
+          key: "__select",
+          width: "44px",
+          header: (
+            <Checkbox
+              label="전체 선택"
+              checked={rows.length > 0 && rows.every((r) => selection.selected.has(rowKey(r)))}
+              onChange={(on) => selection.onChange(on ? new Set(rows.map(rowKey)) : new Set())}
+            />
+          ),
+          render: (r) => (
+            // 행 클릭(상세 열기 등)과 겹치지 않게 막는다
+            <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+              <Checkbox
+                label="선택"
+                checked={selection.selected.has(rowKey(r))}
+                onChange={(on) => {
+                  const next = new Set(selection.selected);
+                  if (on) next.add(rowKey(r));
+                  else next.delete(rowKey(r));
+                  selection.onChange(next);
+                }}
+              />
+            </span>
+          ),
+        },
+        ...columns,
+      ]
+    : columns;
+
   function toggleSort(key: string) {
     setSort((prev) => (prev?.key === key ? { key, dir: prev.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
   }
@@ -74,7 +110,7 @@ export function DataTable<T>({
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-line bg-subtle">
-            {columns.map((col) => (
+            {cols.map((col) => (
               <th
                 key={col.key}
                 scope="col"
@@ -113,7 +149,7 @@ export function DataTable<T>({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="p-0">
+              <td colSpan={cols.length} className="p-0">
                 {empty ?? <p className="py-10 text-center text-sm text-fg-subtle">데이터가 없습니다.</p>}
               </td>
             </tr>
@@ -124,10 +160,11 @@ export function DataTable<T>({
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={cn(
                   "border-b border-line last:border-b-0 transition-colors hover:bg-subtle/70",
+                  selection?.selected.has(rowKey(row)) && "bg-brand-soft/40",
                   onRowClick && "cursor-pointer",
                 )}
               >
-                {columns.map((col) => (
+                {cols.map((col) => (
                   <td
                     key={col.key}
                     className={cn(

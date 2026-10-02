@@ -1,16 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { Star } from "lucide-react";
 import type { GeneratedContent } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { findFeature } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { Badge, DataTable, EmptyState, ErrorState, LoadingState, SectionCard, type Column } from "@/components/ui";
+import { Badge, BulkDeleteButton, DataTable, EmptyState, ErrorState, LoadingState, SectionCard, type Column } from "@/components/ui";
 import { cn, formatRelative } from "@/lib/utils";
 
 /** Content History: 과거 생성물. ★(좋은 결과)는 같은 기능의 다음 생성에 few-shot 예시로 쓰인다 */
-export function ContentHistoryTab() {
+export function ContentHistoryTab({ onChanged }: { onChanged?: () => void }) {
   const { data, loading, error, reload, setData } = useAsync(() => api.contents.list(), []);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  async function deleteSelected() {
+    const ids = [...selected];
+    await api.memory.deleteMany("contents", ids);
+    const gone = new Set(ids);
+    setData((prev) => prev?.filter((x) => !gone.has(x.id)) ?? null);
+    setSelected(new Set());
+    onChanged?.();
+  }
 
   async function toggleExemplar(c: GeneratedContent) {
     const next = await api.contents.setExemplar(c.id, !c.isExemplar);
@@ -67,13 +78,32 @@ export function ContentHistoryTab() {
   ];
 
   return (
-    <SectionCard title="콘텐츠 히스토리 (Content History)" description="★를 누르면 '좋은 결과'로 저장되어 같은 기능의 다음 생성에 예시로 쓰입니다." flush>
+    <SectionCard
+      title="콘텐츠 히스토리 (Content History)"
+      description="★를 누르면 '좋은 결과'로 저장되어 같은 기능의 다음 생성에 예시로 쓰입니다. 체크해서 삭제할 수 있습니다."
+      actions={
+        <BulkDeleteButton
+          count={selected.size}
+          noun="콘텐츠"
+          warning="콘텐츠에 달린 피드백·성과 데이터도 함께 삭제됩니다."
+          onDelete={deleteSelected}
+          onClear={() => setSelected(new Set())}
+        />
+      }
+      flush
+    >
       {loading ? (
         <LoadingState variant="skeleton" rows={4} className="p-5" />
       ) : error ? (
         <ErrorState message={error} onRetry={reload} />
       ) : (
-        <DataTable columns={columns} rows={data ?? []} rowKey={(c) => c.id} empty={<EmptyState compact title="생성 이력이 없습니다" />} />
+        <DataTable
+          columns={columns}
+          rows={data ?? []}
+          rowKey={(c) => c.id}
+          selection={{ selected, onChange: setSelected }}
+          empty={<EmptyState compact title="생성 이력이 없습니다" />}
+        />
       )}
     </SectionCard>
   );

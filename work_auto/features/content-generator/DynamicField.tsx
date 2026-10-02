@@ -6,6 +6,7 @@ import { FormField } from "@/components/ui/FormField";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
+import { Combobox } from "@/components/ui/Combobox";
 import { useRemoteOptions } from "./useRemoteOptions";
 
 export type FormValues = Record<string, string>;
@@ -111,13 +112,16 @@ function RemoteSelectField({
 
   return (
     <FormField label={field.label} htmlFor={`field-${field.name}`} required={field.required} optional={!field.required} hint={hint} className={className}>
-      <Select
+      {/* 검색할 수 있는 선택 상자: 제품·트렌드가 많아도 글자를 입력해 바로 찾는다 */}
+      <Combobox
         id={`field-${field.name}`}
         value={value}
         disabled={loading}
-        options={options.map((o) => ({ value: o.value, label: o.label }))}
+        options={options}
         placeholder={loading ? "불러오는 중…" : (field.placeholder ?? "선택")}
-        onChange={(e) => onChange(e.target.value)}
+        searchPlaceholder={field.source === "products" ? "제품 이름·브랜드로 검색" : "검색"}
+        clearable={!field.required}
+        onChange={onChange}
         className={cn(loading && "animate-pulse")}
       />
     </FormField>

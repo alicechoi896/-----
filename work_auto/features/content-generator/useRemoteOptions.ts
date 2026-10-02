@@ -26,8 +26,15 @@ const LOADERS: Record<RemoteSource, (param?: string) => Promise<RemoteOption[]>>
     })),
   "naver-trends": async () =>
     (await api.trends.options("naver")).map((t) => ({ value: t.id, label: t.title, description: t.keywords.join(", ") })),
-  videos: async () =>
-    (await api.videos.list()).map((v) => ({ value: v.id, label: v.title, description: `${v.channelName}${v.note ? ` · ${v.note}` : ""}` })),
+  videos: async () => {
+    const [videos, products] = await Promise.all([api.videos.list(), api.products.list().catch(() => [])]);
+    const productName = new Map(products.map((p) => [p.id, p.name]));
+    return videos.map((v) => ({
+      value: v.id,
+      label: v.title,
+      description: [v.productId ? `제품: ${productName.get(v.productId) ?? "-"}` : "", v.channelName, v.note ?? ""].filter(Boolean).join(" · "),
+    }));
+  },
   // 사용 중인 콘텐츠 프로필 (기본 = ★)
   profiles: async () =>
     (await api.profiles.list())
