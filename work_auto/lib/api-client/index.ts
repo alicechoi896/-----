@@ -24,8 +24,13 @@ import type {
   UserFeedbackInput,
   UserStyle,
   UserStyleInput,
+  SavedFilter,
+  SavedTrend,
+  YouTubeTopicSuggestion,
   YouTubeTrendItem,
+  YouTubeTrendPage,
   YouTubeTrendQuery,
+  YouTubeVideoAnalysis,
 } from "@/lib/types";
 
 /**
@@ -99,10 +104,29 @@ function qs(params: Record<string, string | number | undefined>) {
 
 export const api = {
   trends: {
+    /** 한 페이지(최대 50개 조회). 이어서 부를 때는 q.pageToken 에 nextPageToken 을 넣는다 */
     youtube: (q: YouTubeTrendQuery) =>
-      request<{ items: YouTubeTrendItem[]; provider: string }>(
-        `/api/trends/youtube${qs({ category: q.category, keyword: q.keyword, period: q.periodDays, format: q.format, sort: q.sort })}`,
-      ),
+      request<YouTubeTrendPage & { query: YouTubeTrendQuery; provider: string }>(`/api/trends/youtube${qs({ ...q })}`),
+    analyzeVideo: (video: YouTubeTrendItem) =>
+      request<YouTubeVideoAnalysis & { provider: string }>("/api/trends/youtube/analyze", { method: "POST", body: json({ video }) }),
+    suggestTopics: (videos: YouTubeTrendItem[], keywords: string[]) =>
+      request<{ topics: YouTubeTopicSuggestion[]; provider: string }>("/api/trends/youtube/topics", {
+        method: "POST",
+        body: json({ videos, keywords }),
+      }),
+    filters: {
+      list: () => request<SavedFilter[]>("/api/trends/youtube/filters"),
+      save: (input: { name: string; params: Omit<YouTubeTrendQuery, "pageToken">; isDefault?: boolean }) =>
+        request<SavedFilter>("/api/trends/youtube/filters", { method: "POST", body: json(input) }),
+      update: (id: string, patch: { name?: string; isDefault?: boolean }) =>
+        request<SavedFilter>(`/api/trends/youtube/filters/${id}`, { method: "PATCH", body: json(patch) }),
+      remove: (id: string) => request<{ id: string }>(`/api/trends/youtube/filters/${id}`, { method: "DELETE" }),
+    },
+    saved: {
+      list: () => request<SavedTrend[]>("/api/trends/youtube/saved"),
+      add: (item: YouTubeTrendItem) => request<SavedTrend>("/api/trends/youtube/saved", { method: "POST", body: json({ item }) }),
+      remove: (id: string) => request<{ id: string }>(`/api/trends/youtube/saved/${id}`, { method: "DELETE" }),
+    },
     naver: (q: { scope: "clip" | "blog"; category?: string; keyword?: string; periodDays: number }) =>
       request<{ insight: NaverTrendInsight; provider: string }>(
         `/api/trends/naver${qs({ scope: q.scope, category: q.category, keyword: q.keyword, period: q.periodDays })}`,

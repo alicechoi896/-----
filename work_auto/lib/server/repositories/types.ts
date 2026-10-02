@@ -10,6 +10,8 @@ import type {
   ProductSource,
   ReferenceVideo,
   RolePermission,
+  SavedFilter,
+  SavedTrend,
   UserProfile,
   UserFeedback,
   UserStyle,
@@ -45,4 +47,6 @@ export interface Repositories {
   feedback: Repository<UserFeedback>;
   performance: Repository<PerformanceMetric>;
   videos: Repository<ReferenceVideo>;
+  savedFilters: Repository<SavedFilter>;
+  savedTrends: Repository<SavedTrend>;
 }

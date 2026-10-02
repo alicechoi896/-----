@@ -9,6 +9,8 @@ import type {
   ProductSource,
   ReferenceVideo,
   RolePermission,
+  SavedFilter,
+  SavedTrend,
   UserProfile,
   UserFeedback,
   UserStyle,
@@ -32,6 +34,8 @@ export interface StoreState {
   feedback: UserFeedback[];
   performance: PerformanceMetric[];
   videos: ReferenceVideo[];
+  savedFilters: SavedFilter[];
+  savedTrends: SavedTrend[];
 }
 
 const DAY = 86_400_000;
@@ -298,5 +302,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
     feedback,
     performance,
     videos,
+    savedFilters: [],
+    savedTrends: [],
   };
 }

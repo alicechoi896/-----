@@ -48,26 +48,46 @@ const SEEDS: Seed[] = [
 
 const THUMB_COLORS = ["#dbe4ff", "#ffe3e3", "#d3f9d8", "#fff3bf", "#e5dbff", "#c5f6fa", "#ffe8cc", "#f1f3f5"];
 
+/** Mock 카테고리 → YouTube 공식 카테고리 ID */
+const CATEGORY_ID: Record<string, string> = {
+  "생활/주방": "26",
+  "IT/가전": "28",
+  "건강/식품": "26",
+  재테크: "27",
+  반려동물: "15",
+  육아: "22",
+  여행: "19",
+  뷰티: "26",
+  자기계발: "27",
+};
+
 /** 기준 시각을 받아 YouTubeTrendItem 목록을 만든다 (Mock Provider 가 호출) */
-export function buildYouTubeTrendItems(now: number, periodDays: number): YouTubeTrendItem[] {
+export function buildYouTubeTrendItems(now: number, periodDays: number): (YouTubeTrendItem & { categoryId: string })[] {
   return SEEDS.map((s, i) => {
     const viewsPerDay = Math.round(s.views / Math.max(s.ageDays, 1));
-    const id = `yt_${String(i + 1).padStart(3, "0")}`;
+    const id = `yt_mock${String(i + 1).padStart(3, "0")}`;
     return {
       id,
       source: "youtube",
-      videoId: `mock${seededNumber(s.title, 100000, 999999)}`,
+      videoId: `mock${String(i + 1).padStart(3, "0")}`,
       url: `https://www.youtube.com/watch?v=mock${i + 1}`,
       title: s.title,
+      channelId: `mockch${seededNumber(s.channelName, 1000, 9999)}`,
       channelName: s.channelName,
       channelSubscribers: s.subs,
       thumbnailColor: THUMB_COLORS[i % THUMB_COLORS.length],
       category: s.category,
+      categoryId: CATEGORY_ID[s.category] ?? "22",
       keywords: s.keywords,
+      tags: [...new Set([...s.keywords, s.category.split("/")[0], `${s.keywords[0]} 추천`, `${s.keywords[0]} 꿀팁`])],
+      description: `${s.title}. (데모용 예시 영상입니다)`,
+      country: "KR",
       format: s.format,
       durationSec: s.durationSec,
       views: s.views,
       viewsPerDay,
+      commentCount: Math.round(s.views * (seededNumber(s.title + "c", 2, 12) / 1000)),
+      likeCount: Math.round(s.views * (seededNumber(s.title + "l", 15, 45) / 1000)),
       publishedAt: new Date(now - s.ageDays * 86_400_000).toISOString(),
       collectedAt: new Date(now).toISOString(),
       trendScore: calcTrendScore({

@@ -1,4 +1,7 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -12,6 +15,13 @@ export interface Column<T> {
   /** 숫자 열: 오른쪽 정렬 + 고정폭 숫자 */
   numeric?: boolean;
   className?: string;
+  /** 정렬 기준 값. 있으면 헤더를 눌러 정렬할 수 있다 (처음 누르면 큰 값부터) */
+  sortValue?: (row: T) => number | string;
+}
+
+export interface SortState {
+  key: string;
+  dir: "asc" | "desc";
 }
 
 /**
@@ -19,6 +29,7 @@ export interface Column<T> {
  * - 헤더: subtle 배경, 12px 회색
  * - 행: hover 시 subtle 배경, 구분선 1px
  * - 숫자 열은 numeric 으로 지정한다 (오른쪽 정렬 + tabular-nums)
+ * - 열에 sortValue 를 주면 헤더 클릭으로 정렬한다 (내림차순 → 오름차순)
  */
 export function DataTable<T>({
   columns,
@@ -28,6 +39,7 @@ export function DataTable<T>({
   onRowClick,
   className,
   dense,
+  defaultSort,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -37,7 +49,26 @@ export function DataTable<T>({
   onRowClick?: (row: T) => void;
   className?: string;
   dense?: boolean;
+  /** 처음 정렬 상태 */
+  defaultSort?: SortState;
 }) {
+  const [sort, setSort] = useState<SortState | null>(defaultSort ?? null);
+  const sortedRows = useMemo(() => {
+    const col = sort && columns.find((c) => c.key === sort.key);
+    if (!col?.sortValue) return rows;
+    const get = col.sortValue;
+    const sign = sort!.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const x = get(a);
+      const y = get(b);
+      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * sign;
+    });
+  }, [rows, columns, sort]);
+
+  function toggleSort(key: string) {
+    setSort((prev) => (prev?.key === key ? { key, dir: prev.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
+  }
+
   return (
     <div className={cn("w-full overflow-x-auto", className)}>
       <table className="w-full border-collapse text-sm">
@@ -48,13 +79,33 @@ export function DataTable<T>({
                 key={col.key}
                 scope="col"
                 style={{ width: col.width }}
+                aria-sort={sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
                 className={cn(
                   "px-3 py-2.5 text-left text-xs font-medium whitespace-nowrap text-fg-subtle first:pl-5 last:pr-5",
                   (col.numeric || col.align === "right") && "text-right",
                   col.align === "center" && "text-center",
                 )}
               >
-                {col.header}
+                {col.sortValue ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(col.key)}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded hover:text-fg",
+                      sort?.key === col.key && "text-fg",
+                      (col.numeric || col.align === "right") && "flex-row-reverse",
+                    )}
+                  >
+                    {col.header}
+                    {sort?.key === col.key ? (
+                      sort.dir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />
+                    ) : (
+                      <ArrowUpDown className="size-3 opacity-40" />
+                    )}
+                  </button>
+                ) : (
+                  col.header
+                )}
               </th>
             ))}
           </tr>
@@ -67,7 +118,7 @@ export function DataTable<T>({
               </td>
             </tr>
           ) : (
-            rows.map((row, i) => (
+            sortedRows.map((row, i) => (
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}

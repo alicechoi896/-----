@@ -17,8 +17,13 @@ export interface RemoteOption {
 const LOADERS: Record<RemoteSource, () => Promise<RemoteOption[]>> = {
   products: async () =>
     (await api.products.list()).map((p) => ({ value: p.id, label: `${p.name} · ${p.brand}`, description: p.oneLiner })),
+  // 찜한 영상(★)이 먼저, 그다음 기본 검색 조건의 상위 영상
   "youtube-trends": async () =>
-    (await api.trends.options("youtube")).map((t) => ({ value: t.id, label: t.title, description: t.keywords.join(", ") })),
+    (await api.trends.options("youtube")).map((t) => ({
+      value: t.id,
+      label: t.group === "찜한 영상" ? `★ ${t.title}` : t.title,
+      description: [t.group, t.keywords.join(", ")].filter(Boolean).join(" · "),
+    })),
   "naver-trends": async () =>
     (await api.trends.options("naver")).map((t) => ({ value: t.id, label: t.title, description: t.keywords.join(", ") })),
   videos: async () =>

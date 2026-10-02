@@ -302,7 +302,41 @@ create table if not exists public.user_settings (
   updated_at    timestamptz not null default now()
 );
 
+-- 저장한 검색 조건 (YouTube 트렌드 필터 등). params 는 조건 JSON
+create table if not exists public.saved_filters (
+  id          text primary key,
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  kind        text not null default 'youtube-trend',
+  name        text not null,
+  params      jsonb not null default '{}'::jsonb,
+  is_default  boolean not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- 찜한 트렌드 영상 (영상 정보 텍스트만 저장, 썸네일은 YouTube 주소만)
+create table if not exists public.saved_trends (
+  id             text primary key,
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  source         text not null default 'youtube',
+  trend_id       text not null,
+  video_id       text not null,
+  title          text not null,
+  format         text not null default 'long',
+  url            text not null,
+  channel_name   text not null default '',
+  thumbnail_url  text,
+  keywords       text[] not null default '{}',
+  tags           text[] not null default '{}',
+  views          bigint not null default 0,
+  published_at   timestamptz,
+  analysis       jsonb,
+  created_at     timestamptz not null default now(),
+  unique (user_id, trend_id)
+);
+
 -- 자주 쓰는 조회용 인덱스
+create index if not exists idx_saved_filters_user on public.saved_filters (user_id, created_at desc);
 create index if not exists idx_contents_user_feature on public.generated_contents (user_id, feature_id, created_at desc);
 create index if not exists idx_feedback_user_feature on public.user_feedback (user_id, feature_id, created_at desc);
 create index if not exists idx_products_user on public.products (user_id, created_at desc);
@@ -340,6 +374,8 @@ alter table public.user_feedback       enable row level security;
 alter table public.performance_metrics enable row level security;
 alter table public.reference_videos    enable row level security;
 alter table public.user_settings       enable row level security;
+alter table public.saved_filters       enable row level security;
+alter table public.saved_trends        enable row level security;
 
 -- profiles: 본인 또는 관리자만 조회. 역할·승인 변경은 관리자만
 drop policy if exists "profiles_select" on public.profiles;
@@ -374,7 +410,8 @@ declare t text;
 begin
   foreach t in array array[
     'api_connections', 'products', 'product_sources', 'product_analyses', 'generated_contents',
-    'user_styles', 'user_feedback', 'performance_metrics', 'reference_videos', 'user_settings'
+    'user_styles', 'user_feedback', 'performance_metrics', 'reference_videos', 'user_settings',
+    'saved_filters', 'saved_trends'
   ] loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(

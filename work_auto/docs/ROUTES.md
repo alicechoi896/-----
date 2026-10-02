@@ -41,7 +41,7 @@
 | `/admin/permissions` | 권한 관리 | 등급 × 메뉴 체크 표 | PermissionMatrix | Dynamic |
 | `/` | 콘텐츠 자동화 센터 | 채널 카드 4개 + 최근 생성·제품·API 상태 요약 | ChannelCard, HomeOverview | Dynamic |
 | `/youtube` | YouTube 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
-| `/youtube/trends` | YouTube 트렌드 찾기 | 필터 → 요약 → 트렌드 표 | YouTubeTrendExplorer | Dynamic |
+| `/youtube/trends` | YouTube 트렌드 찾기 | 검색 조건(저장·기본) → 추천 키워드·주제 → 정렬 가능한 표 + 더 불러오기 → 상세 패널(AI 분석) | YouTubeTrendExplorer | Dynamic |
 | `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드·참고 영상으로 원고 생성 | ContentGenerator | Dynamic |
 | `/youtube/info-video` | 정보성 영상 만들기 | 주제·트렌드로 원고 생성 | ContentGenerator | Dynamic |
 | `/naver-clip` | NAVER 클립 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
@@ -89,7 +89,13 @@
 
 | Method | Path | 설명 | Service |
 |--------|------|------|---------|
-| GET | `/api/trends/youtube?category&keyword&period&format&sort` | YouTube 트렌드 | trendService.searchYouTube |
+| GET | `/api/trends/youtube?country&categoryId&keyword&publishedFrom&publishedTo&recentDays&format&minSubscribers&maxSubscribers&minViews&maxViews&minComments&pageToken` | YouTube 트렌드 한 페이지 (50개 조회 후 범위 조건으로 거름) | trendService.searchYouTube |
+| POST | `/api/trends/youtube/analyze` { video } | 잘된 이유 + 추천 제목 (AI) | youtubeInsightService.analyzeVideo |
+| POST | `/api/trends/youtube/topics` { videos, keywords } | 추천 주제 (AI) | youtubeInsightService.suggestTopics |
+| GET/POST | `/api/trends/youtube/filters` | 저장한 검색 조건 목록 / 저장 (같은 이름 덮어씀) | savedTrendService |
+| PATCH/DELETE | `/api/trends/youtube/filters/:id` | 이름·기본 지정 / 삭제 | savedTrendService |
+| GET/POST | `/api/trends/youtube/saved` | 찜 목록 / 찜하기 | savedTrendService |
+| DELETE | `/api/trends/youtube/saved/:id` | 찜 해제 | savedTrendService |
 | GET | `/api/trends/naver?scope&category&keyword&period` | NAVER 인사이트 | trendService.getNaverInsight |
 | GET | `/api/trends/options?source=youtube\|naver` | 생성 폼의 트렌드 선택지 | trendService.listOptions |
 | GET | `/api/products` | 제품 목록 | productService.list |

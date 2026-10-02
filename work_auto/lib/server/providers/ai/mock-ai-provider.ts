@@ -60,8 +60,59 @@ export class MockAIProvider implements AIProvider {
       return { data: data as unknown as T, provider: this.id, model: this.model };
     }
 
+    if (request.task === "youtube-video-analysis") {
+      return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
+    }
+
+    if (request.task === "youtube-trend-topics") {
+      return { data: mockTrendTopics(v.videos as MockVideo[], v.keywords as string[]) as unknown as T, provider: this.id, model: this.model };
+    }
+
     throw new Error(`MockAIProvider: 지원하지 않는 task 입니다 (${request.task})`);
   }
+}
+
+interface MockVideo {
+  title: string;
+  channelSubscribers: number;
+  views: number;
+  viewsPerDay: number;
+  format: "shorts" | "long";
+  tags: string[];
+}
+
+function mockVideoAnalysis(video: MockVideo) {
+  const ratio = video.views / Math.max(video.channelSubscribers, 1);
+  const main = video.tags[0] ?? video.title.split(/\s+/)[0];
+  return {
+    reasons: [
+      `구독자 ${video.channelSubscribers.toLocaleString("ko-KR")}명 대비 조회수 ${ratio.toFixed(1)}배 → 구독자 밖 추천 유입이 컸을 가능성이 큽니다.`,
+      `하루 평균 ${video.viewsPerDay.toLocaleString("ko-KR")}회 조회 → 게시 직후 반응이 빨랐습니다.`,
+      /\d/.test(video.title) ? "제목에 숫자가 있어 내용 범위가 분명하고 클릭 부담이 적습니다." : "제목이 시청자의 상황을 직접 짚어 공감을 부릅니다.",
+      video.format === "shorts" ? "짧은 Shorts 형식이라 끝까지 보는 비율이 높았을 가능성이 있습니다." : "충분한 길이로 정리형 정보를 담아 저장·공유하기 좋습니다.",
+    ],
+    titleSuggestions: [
+      `${main} 처음이라면 이것부터 확인하세요`,
+      `${main} 3가지 비교, 직접 써 보고 정리했습니다`,
+      `${main} 하기 전에 알았으면 좋았을 것`,
+      `10분 만에 끝내는 ${main} 정리`,
+      `${main}, 이렇게 하면 실패하지 않습니다`,
+    ],
+    keywords: [...new Set([...video.tags.slice(0, 6), `${main} 추천`, `${main} 방법`])].slice(0, 8),
+  };
+}
+
+function mockTrendTopics(videos: MockVideo[], keywords: string[]) {
+  const picks = (keywords.length ? keywords : videos.map((v) => v.tags[0] ?? v.title.split(/\s+/)[0])).slice(0, 6);
+  const patterns = ["처음 시작하는 사람을 위한 정리", "직접 비교해 본 결과", "자주 하는 실수 5가지", "10분 루틴", "가격대별 추천", "모르면 손해인 꿀팁"];
+  return {
+    topics: picks.map((k, i) => ({
+      title: `${k} ${patterns[i % patterns.length]}`,
+      angle: `불러온 영상에서 '${k}' 관련 영상의 일평균 조회수가 높게 나타납니다.`,
+      keywords: [k, `${k} 추천`, `${k} 방법`],
+      format: i % 2 === 0 ? "shorts" : "long",
+    })),
+  };
 }
 
 /** 카탈로그에 있는 제품은 준비된 분석을, 없는 제품은 원문에서 규칙 기반으로 요약한다 */

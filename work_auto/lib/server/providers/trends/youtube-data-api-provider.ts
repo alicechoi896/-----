@@ -1,6 +1,7 @@
 import "server-only";
 import { calcTrendScore } from "@/lib/domain/trend-score";
-import type { YouTubeTrendItem, YouTubeTrendQuery } from "@/lib/types";
+import { SHORTS_MAX_SEC, YOUTUBE_COUNTRIES, categoryLabel, matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
+import type { YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { AppError } from "../../http";
 import type { VideoMeta, YouTubeTrendProvider } from "../types";
 
@@ -24,9 +25,13 @@ const SITE_ORIGIN =
   process.env.APP_ORIGIN ??
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const SHORTS_MAX_SEC = 180;
 
-const cache = new Map<string, { at: number; items: YouTubeTrendItem[] }>();
+interface CachedPage {
+  at: number;
+  items: YouTubeTrendItem[];
+  nextPageToken: string | null;
+}
+const cache = new Map<string, CachedPage>();
 
 const THUMB_FALLBACK = ["#dbe4ff", "#ffe3e3", "#d3f9d8", "#fff3bf", "#e5dbff", "#c5f6fa"];
 
@@ -34,19 +39,22 @@ const STOPWORDS = new Set(["the", "and", "with", "shorts", "short", "영상", "�
 
 interface SearchResponse {
   items: { id: { videoId?: string } }[];
+  nextPageToken?: string;
 }
 interface VideosResponse {
   items: {
     id: string;
     snippet: {
       title: string;
+      description?: string;
+      categoryId?: string;
       channelId: string;
       channelTitle: string;
       publishedAt: string;
       tags?: string[];
       thumbnails?: Record<string, { url: string }>;
     };
-    statistics: { viewCount?: string };
+    statistics: { viewCount?: string; likeCount?: string; commentCount?: string };
     contentDetails: { duration: string };
   }[];
 }
@@ -82,6 +90,54 @@ function keywordsFromTitle(title: string): string[] {
         .filter((w) => w.length >= 2 && !STOPWORDS.has(w.toLowerCase()) && !/^\d+$/.test(w)),
     ),
   ).slice(0, 3);
+}
+
+type VideoResource = VideosResponse["items"][number];
+
+/** videos.list 응답 1건 → YouTubeTrendItem */
+function toItem(
+  v: VideoResource,
+  index: number,
+  now: number,
+  periodDays: number,
+  subscribers: number | null | undefined,
+  country: string,
+): YouTubeTrendItem {
+  const views = Number(v.statistics.viewCount ?? 0);
+  const ageDays = Math.max((now - new Date(v.snippet.publishedAt).getTime()) / 86_400_000, 1 / 24);
+  const viewsPerDay = Math.round(views / Math.max(ageDays, 1));
+  const durationSec = parseIsoDuration(v.contentDetails.duration);
+  // 구독자 수를 숨긴 채널은 조회수와 같다고 보고 비율 점수를 중립(1배)으로 둔다
+  const subs = subscribers ?? views;
+  const thumbs = v.snippet.thumbnails ?? {};
+  // 대소문자만 다른 중복 태그는 하나로
+  const tags = [...new Map((v.snippet.tags ?? []).map((t) => [t.trim().toLowerCase(), t.trim()])).values()].filter(Boolean);
+  return {
+    id: `yt_${v.id}`,
+    source: "youtube",
+    videoId: v.id,
+    url: `https://www.youtube.com/watch?v=${v.id}`,
+    title: v.snippet.title,
+    channelId: v.snippet.channelId,
+    channelName: v.snippet.channelTitle,
+    channelSubscribers: subs,
+    thumbnailColor: THUMB_FALLBACK[index % THUMB_FALLBACK.length],
+    thumbnailUrl: (thumbs.medium ?? thumbs.default ?? thumbs.high)?.url,
+    category: categoryLabel(v.snippet.categoryId),
+    keywords: tags.length ? tags.slice(0, 3) : keywordsFromTitle(v.snippet.title),
+    tags: tags.slice(0, 30),
+    description: (v.snippet.description ?? "").slice(0, 500),
+    country,
+    format: durationSec > 0 && durationSec <= SHORTS_MAX_SEC ? "shorts" : "long",
+    durationSec,
+    views,
+    viewsPerDay,
+    commentCount: v.statistics.commentCount != null ? Number(v.statistics.commentCount) : null,
+    likeCount: v.statistics.likeCount != null ? Number(v.statistics.likeCount) : null,
+    publishedAt: v.snippet.publishedAt,
+    collectedAt: new Date(now).toISOString(),
+    trendScore: calcTrendScore({ views, viewsPerDay, channelSubscribers: subs, ageDays, periodDays }),
+  };
 }
 
 export class YouTubeDataApiProvider implements YouTubeTrendProvider {
@@ -159,41 +215,50 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     }
   }
 
-  async searchTrends(query: YouTubeTrendQuery): Promise<YouTubeTrendItem[]> {
-    const q = [query.keyword?.trim(), query.category?.replace("/", " ")].filter(Boolean).join(" ");
-    const cacheKey = JSON.stringify({ q, p: query.periodDays, f: query.format ?? "all" });
+  async searchTrends(query: YouTubeTrendQuery): Promise<YouTubeTrendPage> {
+    // 검색 API 가 지원하는 조건만 캐시 키에 넣는다. 구독자·조회수·댓글 조건은 받아온 뒤 거른다
+    const cacheKey = JSON.stringify([
+      query.country,
+      query.categoryId ?? "",
+      query.keyword?.trim() ?? "",
+      query.publishedFrom,
+      query.publishedTo ?? "",
+      query.format === "shorts" ? "short" : "",
+      query.pageToken ?? "",
+    ]);
     const hit = cache.get(cacheKey);
-    let items: YouTubeTrendItem[];
-
+    let page: CachedPage;
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
-      items = hit.items;
+      page = hit;
     } else {
-      items = await this.fetchTrends(q, query);
-      cache.set(cacheKey, { at: Date.now(), items });
+      page = { at: Date.now(), ...(await this.fetchPage(query)) };
+      cache.set(cacheKey, page);
+      if (cache.size > 300) cache.delete(cache.keys().next().value!);
     }
-
-    const filtered = items.filter((i) => !query.format || query.format === "all" || i.format === query.format);
-    const sort = query.sort ?? "trendScore";
-    return [...filtered].sort((a, b) =>
-      sort === "publishedAt" ? b.publishedAt.localeCompare(a.publishedAt) : (b[sort] as number) - (a[sort] as number),
-    );
+    return { items: page.items.filter((i) => matchesRanges(i, query)), nextPageToken: page.nextPageToken, fetched: page.items.length };
   }
 
-  private async fetchTrends(q: string, query: YouTubeTrendQuery): Promise<YouTubeTrendItem[]> {
+  private async fetchPage(query: YouTubeTrendQuery): Promise<{ items: YouTubeTrendItem[]; nextPageToken: string | null }> {
     const now = Date.now();
+    const country = YOUTUBE_COUNTRIES.find((c) => c.code === query.country) ?? YOUTUBE_COUNTRIES[0];
+    const periodDays = periodDaysOf(query, now);
     const search = await this.get<SearchResponse>("search", {
       part: "snippet",
       type: "video",
       order: "viewCount",
-      regionCode: "KR",
-      relevanceLanguage: "ko",
+      regionCode: country.code,
+      relevanceLanguage: country.lang,
       maxResults: 50,
-      publishedAfter: new Date(now - query.periodDays * 86_400_000).toISOString(),
+      publishedAfter: new Date(query.publishedFrom).toISOString(),
+      publishedBefore: query.publishedTo ? new Date(new Date(query.publishedTo).getTime() + 86_400_000).toISOString() : undefined,
+      videoCategoryId: query.categoryId,
       videoDuration: query.format === "shorts" ? "short" : undefined,
-      q: q || undefined,
+      q: query.keyword?.trim() || undefined,
+      pageToken: query.pageToken,
     });
+    const nextPageToken = search.nextPageToken ?? null;
     const ids = search.items.map((i) => i.id.videoId).filter((id): id is string => Boolean(id));
-    if (ids.length === 0) return [];
+    if (ids.length === 0) return { items: [], nextPageToken };
 
     const videos = await this.get<VideosResponse>("videos", {
       part: "snippet,statistics,contentDetails",
@@ -206,35 +271,19 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
       channels.items.map((c) => [c.id, c.statistics.hiddenSubscriberCount ? null : Number(c.statistics.subscriberCount ?? 0)]),
     );
 
-    return videos.items.map((v, i) => {
-      const views = Number(v.statistics.viewCount ?? 0);
-      const ageDays = Math.max((now - new Date(v.snippet.publishedAt).getTime()) / 86_400_000, 1 / 24);
-      const viewsPerDay = Math.round(views / Math.max(ageDays, 1));
-      const durationSec = parseIsoDuration(v.contentDetails.duration);
-      // 구독자 수를 숨긴 채널은 조회수와 같다고 보고 비율 점수를 중립(1배)으로 둔다
-      const subs = subsByChannel.get(v.snippet.channelId) ?? views;
-      const thumbs = v.snippet.thumbnails ?? {};
-      return {
-        id: `yt_${v.id}`,
-        source: "youtube",
-        videoId: v.id,
-        url: `https://www.youtube.com/watch?v=${v.id}`,
-        title: v.snippet.title,
-        channelName: v.snippet.channelTitle,
-        channelSubscribers: subs,
-        thumbnailColor: THUMB_FALLBACK[i % THUMB_FALLBACK.length],
-        thumbnailUrl: (thumbs.medium ?? thumbs.default ?? thumbs.high)?.url,
-        category: query.category ?? "전체",
-        keywords: (v.snippet.tags?.slice(0, 3) ?? []).length ? v.snippet.tags!.slice(0, 3) : keywordsFromTitle(v.snippet.title),
-        format: durationSec > 0 && durationSec <= SHORTS_MAX_SEC ? "shorts" : "long",
-        durationSec,
-        views,
-        viewsPerDay,
-        publishedAt: v.snippet.publishedAt,
-        collectedAt: new Date(now).toISOString(),
-        trendScore: calcTrendScore({ views, viewsPerDay, channelSubscribers: subs, ageDays, periodDays: query.periodDays }),
-      } satisfies YouTubeTrendItem;
-    });
+    const items = videos.items.map((v, i) => toItem(v, i, now, periodDays, subsByChannel.get(v.snippet.channelId), country.code));
+    return { items, nextPageToken };
+  }
+
+  /** 영상 ID 로 트렌드 항목 1개 조회 (북마크·생성 화면의 참고 트렌드용, 2 units) */
+  async getTrendItem(videoId: string): Promise<YouTubeTrendItem | null> {
+    const res = await this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: videoId });
+    const v = res.items[0];
+    if (!v) return null;
+    const ch = await this.get<ChannelsResponse>("channels", { part: "statistics", id: v.snippet.channelId });
+    const c = ch.items[0];
+    const subs = c && !c.statistics.hiddenSubscriberCount ? Number(c.statistics.subscriberCount ?? 0) : undefined;
+    return toItem(v, 0, Date.now(), 30, subs, "KR");
   }
 
   async getVideoMeta(url: string): Promise<VideoMeta> {

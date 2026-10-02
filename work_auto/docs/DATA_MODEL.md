@@ -172,7 +172,9 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 
 | YouTube 전용 | NAVER 전용 |
 |--------------|------------|
-| videoId, url, channelName, channelSubscribers, thumbnailColor, publishedAt, durationSec, format(`shorts`/`long`), views, viewsPerDay | description, growthRate |
+| videoId, url, channelId, channelName, channelSubscribers, thumbnailColor/Url, publishedAt, durationSec, format(`shorts`/`long`, 3분 이하 Shorts), views, viewsPerDay, commentCount, likeCount, tags[], description(500자), country | description, growthRate |
+
+`YouTubeTrendQuery` = { country, categoryId, keyword, publishedFrom/To, recentDays, format, min/maxSubscribers, min/maxViews(미만), minComments, pageToken } → `YouTubeTrendPage` = { items, nextPageToken, fetched }
 
 `NaverTrendInsight` = { risingTopics, risingKeywords, seasonalKeywords, relatedKeywords, searchTrend[{date,value}], contentIdeas }
 
@@ -235,6 +237,25 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | platform | `youtube` \| `naver` \| `other` |
 | title, channelName, durationSec, thumbnailColor | 메타데이터 |
 | note | 메모 |
+| createdAt | |
+
+### SavedFilter (saved_filters)
+**왜 필요한가**: 자주 쓰는 트렌드 검색 조건을 저장한다. 기본 조건(isDefault, 사용자당 1개)은 화면을 열 때 자동 적용되고 생성 화면 "참고 트렌드" 목록의 기준이 된다.
+
+| 필드 | 설명 |
+|------|------|
+| id, userId, kind(`youtube-trend`), name(사용자당 같은 이름은 덮어씀) | 사용자당 30개 |
+| params (jsonb) | YouTubeTrendQuery (pageToken 제외). recentDays 가 있으면 쓸 때 오늘 기준으로 날짜 재계산 |
+| isDefault, createdAt, updatedAt | |
+
+### SavedTrend (saved_trends)
+**왜 필요한가**: 찜한 트렌드 영상. 생성 화면 "참고 트렌드"에 ★로 먼저 나온다. 영상 정보 텍스트만 저장한다 (썸네일은 YouTube 주소만).
+
+| 필드 | 설명 |
+|------|------|
+| id, userId, trendId(`yt_{videoId}`, 사용자당 unique), videoId, source | 사용자당 300개 |
+| title, format, url, channelName, thumbnailUrl, keywords[], tags[], views, publishedAt | |
+| analysis (jsonb) | AI 분석 결과 { reasons, titleSuggestions, keywords } — 찜한 영상을 분석하면 함께 저장 |
 | createdAt | |
 
 ## 4. V2 테이블 설계 (Postgres)

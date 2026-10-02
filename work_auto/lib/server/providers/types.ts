@@ -6,6 +6,7 @@ import type {
   ProductSourceInput,
   RawProductData,
   YouTubeTrendItem,
+  YouTubeTrendPage,
   YouTubeTrendQuery,
 } from "@/lib/types";
 
@@ -113,7 +114,10 @@ export interface VideoMeta {
 
 export interface YouTubeTrendProvider extends BaseProvider {
   readonly kind: "youtube-trend";
-  searchTrends(query: YouTubeTrendQuery): Promise<YouTubeTrendItem[]>;
+  /** 조건에 맞는 영상 한 페이지 (최대 50개 조회 → 구독자·조회수·댓글 조건으로 거른 결과) */
+  searchTrends(query: YouTubeTrendQuery): Promise<YouTubeTrendPage>;
+  /** 영상 1개를 트렌드 항목으로 조회 (북마크한 영상, 생성 화면의 참고 트렌드) */
+  getTrendItem(videoId: string): Promise<YouTubeTrendItem | null>;
   getVideoMeta(url: string): Promise<VideoMeta>;
 }
 

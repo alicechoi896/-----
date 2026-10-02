@@ -66,4 +66,6 @@ export const memoryRepositories: Repositories = {
   feedback: createCollection("feedback"),
   performance: createCollection("performance"),
   videos: createCollection("videos"),
+  savedFilters: createCollection("savedFilters"),
+  savedTrends: createCollection("savedTrends"),
 };

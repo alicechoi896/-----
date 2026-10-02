@@ -1,93 +1,221 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowUpRight, Flame, Search, TrendingUp } from "lucide-react";
-import { CATEGORY_OPTIONS } from "@/lib/generators/configs";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpRight, ChevronDown, Flame, Info, PanelRightOpen, Star, TrendingUp } from "lucide-react";
 import { trendScoreLevel } from "@/lib/domain/trend-score";
-import type { TrendPeriod, YouTubeTrendItem, YouTubeTrendQuery } from "@/lib/types";
+import { countryLabel, defaultYouTubeQuery, refreshRecentRange } from "@/lib/domain/youtube";
+import type { SavedFilter, SavedTrend, YouTubeTrendItem } from "@/lib/types";
 import { api } from "@/lib/api-client";
-import { useAsync } from "@/lib/hooks/useAsync";
-import {
-  Badge,
-  Button,
-  DataTable,
-  EmptyState,
-  ErrorState,
-  FilterBar,
-  FilterItem,
-  LoadingState,
-  SearchInput,
-  SectionCard,
-  SegmentedControl,
-  Select,
-  StatTile,
-  Tag,
-  type Column,
-} from "@/components/ui";
+import { Badge, Button, DataTable, EmptyState, ErrorState, LoadingState, Notice, SectionCard, Tag, type Column } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
-import { formatCompact, formatDate, formatNumber } from "@/lib/utils";
+import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils";
+import { TrendFilterPanel, type TrendDraft } from "./TrendFilterPanel";
+import { TrendInsights } from "./TrendInsights";
+import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
+import { infoVideoHref, trendPrefill } from "./trend-links";
 
-const PERIODS = [
-  { value: "7", label: "7일" },
-  { value: "14", label: "14일" },
-  { value: "21", label: "21일" },
-];
-const FORMATS = [
-  { value: "all", label: "전체" },
-  { value: "shorts", label: "Shorts" },
-  { value: "long", label: "일반 영상" },
-];
-const SORTS = [
-  { value: "trendScore", label: "Trend Score 높은 순" },
-  { value: "viewsPerDay", label: "일평균 조회수 높은 순" },
-  { value: "views", label: "조회수 높은 순" },
-  { value: "publishedAt", label: "최신순" },
-];
+const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 /**
  * YouTube 트렌드 찾기.
- * 필터 → GET /api/trends/youtube → 요약 타일 + 결과 표.
- * 실제 연동 시 바뀌는 것은 서버의 YouTubeTrendProvider 구현뿐이다.
+ *
+ * - 조건 → GET /api/trends/youtube (한 번에 최대 50개 조회) → [더 불러오기] 로 다음 50개를 이어 붙인다.
+ * - 구독자·조회수·댓글 조건은 YouTube 검색 API 가 지원하지 않아 받아온 50개 중에서 거른다.
+ * - 저장한 조건·찜은 DB 에 저장된다. 기본 조건은 화면을 열 때 자동 적용되고, 생성 화면 "참고 트렌드" 기준이 된다.
  */
 export function YouTubeTrendExplorer() {
-  const [category, setCategory] = useState("");
-  const [keywordInput, setKeywordInput] = useState("");
-  const [keyword, setKeyword] = useState("");
-  const [period, setPeriod] = useState("7");
-  const [format, setFormat] = useState<NonNullable<YouTubeTrendQuery["format"]>>("all");
-  const [sort, setSort] = useState<NonNullable<YouTubeTrendQuery["sort"]>>("trendScore");
+  const [draft, setDraft] = useState<TrendDraft>(() => defaultYouTubeQuery());
+  const [applied, setApplied] = useState<TrendDraft | null>(null);
+  const [items, setItems] = useState<YouTubeTrendItem[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [fetched, setFetched] = useState(0);
+  const [provider, setProvider] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
 
-  const query: YouTubeTrendQuery = { category, keyword, periodDays: Number(period) as TrendPeriod, format, sort };
-  const { data, loading, error, reload } = useAsync(
-    () => api.trends.youtube(query),
-    [category, keyword, period, format, sort],
-  );
-  const items = useMemo(() => data?.items ?? [], [data]);
+  const [filters, setFilters] = useState<SavedFilter[]>([]);
+  const [activeFilterId, setActiveFilterId] = useState("");
+  const [saved, setSaved] = useState<SavedTrend[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [detail, setDetail] = useState<YouTubeTrendItem | null>(null);
 
-  const stats = useMemo(() => {
-    if (!items.length) return null;
-    const avg = items.reduce((s, i) => s + i.trendScore, 0) / items.length;
-    const fastest = [...items].sort((a, b) => b.viewsPerDay - a.viewsPerDay)[0];
-    const freq = new Map<string, number>();
-    items.forEach((i) => i.keywords.forEach((k) => freq.set(k, (freq.get(k) ?? 0) + 1)));
-    const topKeywords = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
-    return { avg, fastest, topKeywords };
-  }, [items]);
+  const requestId = useRef(0);
+
+  const runSearch = useCallback(async (query: TrendDraft) => {
+    const id = ++requestId.current;
+    setApplied(query);
+    setLoading(true);
+    setError(null);
+    setMoreError(null);
+    try {
+      const page = await api.trends.youtube(query);
+      if (id !== requestId.current) return;
+      setItems(page.items);
+      setNextPageToken(page.nextPageToken);
+      setFetched(page.fetched);
+      setProvider(page.provider);
+    } catch (e) {
+      if (id !== requestId.current) return;
+      setItems([]);
+      setNextPageToken(null);
+      setFetched(0);
+      setError(errorText(e, "트렌드를 불러오지 못했습니다."));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, []);
+
+  // 처음 열 때: 저장한 조건·찜을 읽고, 기본 조건이 있으면 그 조건으로 검색한다
+  useEffect(() => {
+    let active = true;
+    Promise.all([api.trends.filters.list().catch(() => [] as SavedFilter[]), api.trends.saved.list().catch(() => [] as SavedTrend[])]).then(
+      ([filterList, savedList]) => {
+        if (!active) return;
+        setFilters(filterList);
+        setSaved(savedList);
+        const def = filterList.find((f) => f.isDefault);
+        const query = def ? fromSaved(def) : defaultYouTubeQuery();
+        setDraft(query);
+        setActiveFilterId(def?.id ?? "");
+        void runSearch(query);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [runSearch]);
+
+  async function loadMore() {
+    if (!applied || !nextPageToken) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    const id = requestId.current;
+    try {
+      const page = await api.trends.youtube({ ...applied, pageToken: nextPageToken });
+      if (id !== requestId.current) return;
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...page.items.filter((i) => !seen.has(i.id))];
+      });
+      setNextPageToken(page.nextPageToken);
+      setFetched((n) => n + page.fetched);
+    } catch (e) {
+      setMoreError(errorText(e, "더 불러오지 못했습니다."));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  function searchKeyword(keyword: string) {
+    const next = { ...draft, keyword };
+    setDraft(next);
+    setActiveFilterId("");
+    setDetail(null);
+    void runSearch(next);
+  }
+
+  /* ───────── 저장한 조건 ───────── */
+
+  function pickFilter(id: string) {
+    setActiveFilterId(id);
+    const f = filters.find((x) => x.id === id);
+    if (!f) return;
+    const query = fromSaved(f);
+    setDraft(query);
+    void runSearch(query);
+  }
+
+  async function saveFilter(name: string, isDefault: boolean) {
+    try {
+      const savedFilter = await api.trends.filters.save({ name, params: draft, isDefault });
+      setFilters((prev) => [
+        savedFilter,
+        ...prev.filter((f) => f.id !== savedFilter.id).map((f) => (isDefault ? { ...f, isDefault: false } : f)),
+      ]);
+      setActiveFilterId(savedFilter.id);
+      setNotice(isDefault ? `'${name}' 조건을 저장하고 기본 조건으로 지정했습니다.` : `'${name}' 조건을 저장했습니다.`);
+    } catch (e) {
+      setNotice(errorText(e, "조건을 저장하지 못했습니다."));
+      throw e;
+    }
+  }
+
+  async function makeDefault(id: string) {
+    try {
+      await api.trends.filters.update(id, { isDefault: true });
+      setFilters((prev) => prev.map((f) => ({ ...f, isDefault: f.id === id })));
+      setNotice("기본 조건으로 지정했습니다. 다음에 화면을 열 때 자동으로 적용됩니다.");
+    } catch (e) {
+      setNotice(errorText(e, "기본 조건으로 지정하지 못했습니다."));
+    }
+  }
+
+  async function deleteFilter(id: string) {
+    const f = filters.find((x) => x.id === id);
+    if (!f || !window.confirm(`'${f.name}' 조건을 삭제할까요?`)) return;
+    try {
+      await api.trends.filters.remove(id);
+      setFilters((prev) => prev.filter((x) => x.id !== id));
+      setActiveFilterId("");
+    } catch (e) {
+      setNotice(errorText(e, "조건을 삭제하지 못했습니다."));
+    }
+  }
+
+  /* ───────── 찜 ───────── */
+
+  const savedByVideo = useMemo(() => new Map(saved.map((s) => [s.videoId, s])), [saved]);
+
+  async function toggleSave(item: YouTubeTrendItem) {
+    const existing = savedByVideo.get(item.videoId);
+    try {
+      if (existing) {
+        setSaved((prev) => prev.filter((s) => s.id !== existing.id));
+        await api.trends.saved.remove(existing.id);
+      } else {
+        const created = await api.trends.saved.add(item);
+        setSaved((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
+      }
+    } catch (e) {
+      setNotice(errorText(e, "찜을 저장하지 못했습니다."));
+      setSaved(await api.trends.saved.list().catch(() => saved));
+    }
+  }
+
+  /* ───────── 표 ───────── */
 
   const columns: Column<YouTubeTrendItem>[] = [
     {
+      key: "save",
+      header: <Star className="size-3.5" aria-label="찜" />,
+      width: "44px",
+      render: (r) => {
+        const on = savedByVideo.has(r.videoId);
+        return (
+          <button
+            type="button"
+            aria-label={on ? "찜 해제" : "찜하기"}
+            title={on ? "찜 해제" : "찜하기 (생성 화면 참고 트렌드에 먼저 나옵니다)"}
+            onClick={(e) => {
+              e.stopPropagation();
+              void toggleSave(r);
+            }}
+            className="inline-flex size-7 items-center justify-center rounded-control hover:bg-muted"
+          >
+            <Star className={cn("size-4", on ? "fill-warning text-warning" : "text-fg-subtle")} />
+          </button>
+        );
+      },
+    },
+    {
       key: "thumb",
       header: "썸네일",
-      width: "104px",
+      width: "100px",
       render: (r) => (
-        <VideoThumb
-          className="h-[48px] w-[84px]"
-          thumbnailUrl={r.thumbnailUrl}
-          color={r.thumbnailColor}
-          durationSec={r.durationSec}
-          shorts={r.format === "shorts"}
-        />
+        <VideoThumb className="h-[46px] w-[82px]" thumbnailUrl={r.thumbnailUrl} color={r.thumbnailColor} durationSec={r.durationSec} shorts={r.format === "shorts"} />
       ),
     },
     {
@@ -95,121 +223,214 @@ export function YouTubeTrendExplorer() {
       header: "제목",
       render: (r) => (
         <div className="min-w-[220px]">
-          <a href={r.url} target="_blank" rel="noreferrer" className="line-clamp-2 font-medium text-fg hover:text-brand">
-            {r.title}
-          </a>
-          <p className="mt-0.5 text-xs text-fg-subtle">{r.category}</p>
+          <p className="line-clamp-2 font-medium text-fg">{r.title}</p>
+          <div className="mt-1 flex items-center gap-1.5">
+            <FormatBadge format={r.format} />
+            <span className="truncate text-xs text-fg-subtle">{r.category}</span>
+          </div>
         </div>
       ),
     },
+    { key: "trendScore", header: "Trend Score", width: "120px", sortValue: (r) => r.trendScore, render: (r) => <TrendScore score={r.trendScore} /> },
     {
       key: "channel",
       header: "채널",
+      sortValue: (r) => r.channelSubscribers,
       render: (r) => (
-        <div className="whitespace-nowrap">
-          <p className="text-fg-muted">{r.channelName}</p>
+        <div className="max-w-[140px]">
+          <p className="truncate text-fg-muted">{r.channelName}</p>
           <p className="tabular text-xs text-fg-subtle">구독자 {formatCompact(r.channelSubscribers)}</p>
         </div>
       ),
     },
-    { key: "publishedAt", header: "게시일", render: (r) => <span className="tabular whitespace-nowrap text-fg-muted">{formatDate(r.publishedAt)}</span> },
-    { key: "views", header: "조회수", numeric: true, render: (r) => formatNumber(r.views) },
-    { key: "viewsPerDay", header: "일평균 조회수", numeric: true, render: (r) => <span className="font-medium">{formatNumber(r.viewsPerDay)}</span> },
     {
-      key: "keywords",
-      header: "주요 키워드",
-      render: (r) => (
-        <div className="flex gap-1" title={r.keywords.join(", ")}>
-          {r.keywords.slice(0, 2).map((k) => (
-            <Tag key={k}>{k}</Tag>
-          ))}
-          {r.keywords.length > 2 && <span className="self-center text-xs text-fg-subtle">+{r.keywords.length - 2}</span>}
-        </div>
-      ),
+      key: "publishedAt",
+      header: "게시일",
+      sortValue: (r) => r.publishedAt,
+      render: (r) => <span className="tabular whitespace-nowrap text-fg-muted">{formatDate(r.publishedAt)}</span>,
     },
-    { key: "trendScore", header: "Trend Score", width: "112px", render: (r) => <TrendScore score={r.trendScore} /> },
+    { key: "views", header: "조회수", numeric: true, sortValue: (r) => r.views, render: (r) => formatNumber(r.views) },
+    {
+      key: "viewsPerDay",
+      header: "일평균 조회수",
+      numeric: true,
+      sortValue: (r) => r.viewsPerDay,
+      render: (r) => <span className="font-medium">{formatNumber(r.viewsPerDay)}</span>,
+    },
+    {
+      key: "comments",
+      header: "댓글",
+      numeric: true,
+      sortValue: (r) => r.commentCount ?? -1,
+      render: (r) => <span className="text-fg-muted">{r.commentCount == null ? "-" : formatCompact(r.commentCount)}</span>,
+    },
+    { key: "tags", header: "키워드 · 태그", render: (r) => <KeywordTags item={r} /> },
     {
       key: "action",
       header: "",
       align: "right",
       render: (r) => (
-        <Link
-          href={`/youtube/info-video?trendId=${r.id}`}
-          aria-label="이 트렌드로 정보성 영상 만들기"
-          title="이 트렌드로 정보성 영상 만들기"
-          className="inline-flex size-8 items-center justify-center rounded-control text-fg-subtle hover:bg-muted hover:text-brand"
-        >
-          <ArrowUpRight className="size-4" />
-        </Link>
+        <div className="flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            title="상세 · AI 분석"
+            aria-label="상세 · AI 분석"
+            onClick={() => setDetail(r)}
+            className="inline-flex size-8 items-center justify-center rounded-control text-fg-subtle hover:bg-muted hover:text-brand"
+          >
+            <PanelRightOpen className="size-4" />
+          </button>
+          <Link
+            href={infoVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis))}
+            aria-label="이 트렌드로 정보성 영상 만들기"
+            title="이 트렌드로 정보성 영상 만들기"
+            className="inline-flex size-8 items-center justify-center rounded-control text-fg-subtle hover:bg-muted hover:text-brand"
+          >
+            <ArrowUpRight className="size-4" />
+          </Link>
+        </div>
       ),
     },
   ];
 
+  const isMock = provider.startsWith("mock");
+  const summary = applied
+    ? `${countryLabel(applied.country)} · ${applied.recentDays ? `최근 ${applied.recentDays}일` : `${applied.publishedFrom} ~ ${applied.publishedTo ?? "오늘"}`}${applied.keyword ? ` · "${applied.keyword}"` : ""}`
+    : "";
+
   return (
     <div className="space-y-5">
-      <FilterBar
-        actions={
-          <Button variant="primary" icon={Search} onClick={() => setKeyword(keywordInput.trim())}>
-            검색
-          </Button>
-        }
-      >
-        <FilterItem label="카테고리">
-          <Select className="w-40" value={category} options={CATEGORY_OPTIONS} placeholder="전체 카테고리" onChange={(e) => setCategory(e.target.value)} />
-        </FilterItem>
-        <FilterItem label="검색 키워드">
-          <SearchInput
-            className="w-56"
-            value={keywordInput}
-            placeholder="예: 에어프라이어"
-            onValueChange={(v) => {
-              setKeywordInput(v);
-              if (!v) setKeyword("");
-            }}
-            onSubmit={() => setKeyword(keywordInput.trim())}
-          />
-        </FilterItem>
-        <FilterItem label="기간">
-          <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} />
-        </FilterItem>
-        <FilterItem label="영상 유형">
-          <SegmentedControl options={FORMATS} value={format} onChange={(v) => setFormat(v as typeof format)} />
-        </FilterItem>
-        <FilterItem label="정렬">
-          <Select className="w-48" value={sort} options={SORTS} onChange={(e) => setSort(e.target.value as typeof sort)} />
-        </FilterItem>
-      </FilterBar>
+      <TrendFilterPanel
+        draft={draft}
+        onChange={setDraft}
+        onSearch={() => {
+          setActiveFilterId("");
+          void runSearch(draft);
+        }}
+        filters={filters}
+        activeFilterId={activeFilterId}
+        onPickFilter={pickFilter}
+        onSaveFilter={saveFilter}
+        onMakeDefault={(id) => void makeDefault(id)}
+        onDeleteFilter={(id) => void deleteFilter(id)}
+        searching={loading}
+      />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="검색 결과" value={loading ? "-" : items.length} unit="개" hint={`최근 ${period}일 게시 영상`} />
-        <StatTile label="평균 Trend Score" value={stats ? Math.round(stats.avg) : "-"} hint="0~100, 높을수록 급상승" />
-        <StatTile
-          label="최고 일평균 조회수"
-          value={stats ? formatCompact(stats.fastest.viewsPerDay) : "-"}
-          hint={stats?.fastest.title}
-        />
-        <StatTile label="자주 등장한 키워드" value={stats?.topKeywords[0] ?? "-"} hint={stats?.topKeywords.slice(1).join(", ")} />
-      </div>
+      {notice && (
+        <Notice tone="neutral" icon={Info} className="items-center">
+          <span className="flex items-center justify-between gap-3">
+            {notice}
+            <button type="button" className="text-xs text-fg-subtle hover:text-fg" onClick={() => setNotice(null)}>
+              닫기
+            </button>
+          </span>
+        </Notice>
+      )}
+      {isMock && (
+        <Notice tone="info" icon={Info}>
+          지금은 데모(Mock) 데이터입니다. 설정 → API 연결 센터에서 YouTube Data API 키를 연결하면 실제 영상으로 조회합니다.
+        </Notice>
+      )}
+
+      <TrendInsights items={items} activeKeyword={applied?.keyword} onKeywordClick={searchKeyword} />
 
       <SectionCard
-        title="트렌드 영상"
+        title={
+          <span className="flex items-center gap-2">
+            트렌드 영상
+            {!loading && <Badge tone="brand">{items.length}개</Badge>}
+            {saved.length > 0 && (
+              <Badge tone="warning">
+                <Star className="size-3 fill-current" />찜 {saved.length}
+              </Badge>
+            )}
+          </span>
+        }
         icon={TrendingUp}
-        description="Trend Score = 조회 속도 50% + 구독자 대비 조회 비율 30% + 최근성 20%"
+        description={`${summary}${summary ? " — " : ""}Trend Score = 조회 속도 50% + 구독자 대비 조회 비율 30% + 최근성 20%. 열 제목을 누르면 정렬합니다.`}
         flush
+        footer={
+          !loading && !error && items.length + fetched > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-fg-subtle">
+                조회한 영상 {formatNumber(fetched)}개 중 조건에 맞는 영상 {formatNumber(items.length)}개
+                {!isMock && " · 50개를 더 불러올 때마다 YouTube API 할당량 약 102 units (하루 기본 10,000)"}
+              </p>
+              <div className="flex items-center gap-2">
+                {moreError && <span className="text-xs text-danger">{moreError}</span>}
+                {nextPageToken ? (
+                  <Button size="sm" icon={ChevronDown} loading={loadingMore} onClick={() => void loadMore()}>
+                    50개 더 불러오기
+                  </Button>
+                ) : (
+                  <span className="text-xs text-fg-subtle">더 불러올 영상이 없습니다.</span>
+                )}
+              </div>
+            </div>
+          ) : undefined
+        }
       >
         {loading ? (
           <LoadingState variant="skeleton" rows={6} className="p-5" />
         ) : error ? (
-          <ErrorState message={error} onRetry={reload} />
+          <ErrorState message={error} onRetry={() => applied && void runSearch(applied)} />
         ) : (
           <DataTable
             columns={columns}
             rows={items}
             rowKey={(r) => r.id}
-            empty={<EmptyState title="조건에 맞는 영상이 없습니다" description="기간을 늘리거나 카테고리·키워드 조건을 바꿔 보세요." />}
+            onRowClick={setDetail}
+            defaultSort={{ key: "trendScore", dir: "desc" }}
+            empty={
+              <EmptyState
+                title="조건에 맞는 영상이 없습니다"
+                description={
+                  fetched > 0
+                    ? `조회한 ${fetched}개가 구독자·조회수·댓글 조건에 맞지 않았습니다. [50개 더 불러오기] 를 누르거나 조건을 넓혀 보세요.`
+                    : "게시일 범위를 늘리거나 카테고리·키워드 조건을 바꿔 보세요."
+                }
+              />
+            }
           />
         )}
       </SectionCard>
+
+      <VideoDetailDrawer
+        item={detail}
+        saved={detail ? savedByVideo.has(detail.videoId) : false}
+        savedAnalysis={detail ? savedByVideo.get(detail.videoId)?.analysis : null}
+        onClose={() => setDetail(null)}
+        onToggleSave={(item) => void toggleSave(item)}
+        onKeywordClick={searchKeyword}
+      />
+    </div>
+  );
+}
+
+/** 저장한 조건 → 검색 조건. "최근 N일" 로 저장한 조건은 오늘 기준으로 다시 계산한다 */
+function fromSaved(f: SavedFilter): TrendDraft {
+  return refreshRecentRange({ ...defaultYouTubeQuery(), recentDays: undefined, ...f.params });
+}
+
+function KeywordTags({ item }: { item: YouTubeTrendItem }) {
+  // 주요 키워드 → 나머지 태그 순서로 한 줄에 보여주고, 전체는 마우스를 올리거나 상세 패널에서 본다
+  const extra = item.tags.filter((t) => !item.keywords.includes(t));
+  const all = [...item.keywords, ...extra];
+  const shown = [...item.keywords.slice(0, 2).map((text) => ({ text, tag: false })), ...extra.slice(0, 1).map((text) => ({ text, tag: true }))];
+  return (
+    <div className="flex w-[230px] items-center gap-1 overflow-hidden" title={all.join(", ")}>
+      {shown.map((k) =>
+        k.tag ? (
+          <span key={k.text} className="inline-block h-6 max-w-[80px] truncate rounded-md px-1.5 text-xs leading-6 text-fg-subtle ring-1 ring-line ring-inset">
+            #{k.text}
+          </span>
+        ) : (
+          <Tag key={k.text} className="max-w-[80px] shrink-0">
+            <span className="truncate">{k.text}</span>
+          </Tag>
+        ),
+      )}
+      {all.length > shown.length && <span className="shrink-0 text-xs text-fg-subtle">+{all.length - shown.length}</span>}
     </div>
   );
 }

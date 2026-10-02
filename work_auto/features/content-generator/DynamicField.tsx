@@ -74,7 +74,12 @@ function RemoteSelectField({
   className?: string;
 }) {
   const { data, loading, error } = useRemoteOptions(field.source!);
-  const options = data ?? [];
+  const loaded = data ?? [];
+  // 다른 화면에서 넘어온 값(예: 트렌드 화면의 영상)이 목록에 없어도 선택된 상태로 보여준다
+  const options =
+    value && !loading && !loaded.some((o) => o.value === value)
+      ? [{ value, label: field.source === "youtube-trends" ? "트렌드 화면에서 고른 영상" : "이전 화면에서 고른 항목", description: "생성할 때 이 항목 정보를 함께 사용합니다." }, ...loaded]
+      : loaded;
   const selected = options.find((o) => o.value === value);
   const isProduct = field.source === "products";
 

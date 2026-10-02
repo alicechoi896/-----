@@ -85,4 +85,6 @@ export const supabaseRepositories: Repositories = {
   feedback: createTable("user_feedback"),
   performance: createTable("performance_metrics"),
   videos: createTable("reference_videos"),
+  savedFilters: createTable("saved_filters"),
+  savedTrends: createTable("saved_trends"),
 };

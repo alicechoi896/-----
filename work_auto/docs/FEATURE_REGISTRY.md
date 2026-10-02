@@ -21,7 +21,7 @@
 
 | 채널 | ID | 기능 | Route | 종류 | 상태 | 필요 API | 입력 데이터 | 출력 데이터 | 구현 |
 |------|----|------|-------|------|------|----------|-------------|-------------|------|
-| YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | ✅ | YouTube Data API | 카테고리, 검색 키워드, 기간(7/14/21일), Shorts/일반, 정렬 | 썸네일, 제목, 채널, 게시일, 조회수, 일평균 조회수, 주요 키워드, Trend Score | `features/youtube-trends` |
+| YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | ✅ | YouTube Data API | 국가, 카테고리, 키워드, 게시일 범위(최근 N일), 구독자·조회수·댓글 범위, Shorts/롱폼, 저장한 조건 | Shorts/롱폼, 키워드·태그, 정렬(Trend Score·조회수·게시일·일평균·댓글), 추천 키워드, AI 추천 주제, 잘된 이유·추천 제목, 찜, 50개씩 더 불러오기 | `features/youtube-trends` |
 | YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | 🧪 | OpenAI | 제품*, 참고 트렌드, 참고 영상, 주요 키워드, 영상 길이, 콘텐츠 스타일 | 추천 제목 5개, Hook, 대본, 설명글, 주요 키워드, 해시태그 | ContentGenerator |
 | YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | 🧪 | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
 | NAVER 클립 | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | 🧪 | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
@@ -76,7 +76,9 @@
 |------|------|----|
 | 제품 상세페이지 학습 | [제품 라이브러리에 저장] | 제품 라이브러리 / 제품 상세 |
 | 제품 라이브러리 | [콘텐츠 만들기] | 제품 홍보 영상 · 클립 · 블로그 (`?productId=`) |
-| YouTube 트렌드 | [↗] | 정보성 영상 (`?trendId=`) |
+| YouTube 트렌드 | [↗] · 상세 패널 [이 트렌드로 정보성 영상 만들기] · 추천 주제 [만들기] | 정보성 영상 (`?trendId=&topic=&keywords=`) |
+| YouTube 트렌드 상세 | [제품 홍보 영상 만들기] | 제품 홍보 영상 (`?trendId=&keywords=`) |
+| YouTube 트렌드 | ☆ 찜 · 기본 조건 | 생성 화면 "참고 트렌드" 목록 (★ 찜 → 기본 조건 상위 20개) |
 | 네이버 트렌드 (Clip) | [클립 만들기] | 정보성 클립 (`?trendId=`) |
 | 네이버 트렌드 (Blog) | [글쓰기] | 정보·트렌드 글 (`?topic=`) |
 | 영상 URL 가져오기 | 저장 | 제품 홍보 영상의 "참고 영상" 선택지 |
