@@ -1,4 +1,5 @@
 import type { ID, ISODate } from "./common";
+import type { TrendScope } from "./profile";
 
 export type TrendSource = "youtube" | "naver";
 export type TrendPeriod = 7 | 14 | 21 | 30;
@@ -73,6 +74,10 @@ export interface YouTubeTrendQuery {
   minComments?: number;
   /** 다음 50개를 불러올 때 쓰는 페이지 토큰 */
   pageToken?: string;
+  /** 콘텐츠 프로필 ID. 비우면 기본 프로필 자동 적용, "none" 이면 프로필 없이 */
+  profileId?: string;
+  /** 서버가 프로필에서 풀어 넣는 조사 범위 (클라이언트가 보내지 않는다) */
+  scope?: TrendScope | null;
 }
 
 export interface YouTubeTrendPage {
@@ -89,7 +94,7 @@ export interface SavedFilter {
   userId: ID;
   kind: "youtube-trend";
   name: string;
-  params: Omit<YouTubeTrendQuery, "pageToken">;
+  params: Omit<YouTubeTrendQuery, "pageToken" | "profileId" | "scope">;
   /** 화면을 열 때 자동으로 적용, 생성 화면 "참고 트렌드" 기준 */
   isDefault: boolean;
   createdAt: ISODate;
@@ -133,12 +138,32 @@ export interface YouTubeTopicSuggestion {
   format: "shorts" | "long";
 }
 
+/** NAVER 트렌드 기간(일): 7일 ~ 3년 */
+export const NAVER_PERIODS = [7, 14, 30, 90, 180, 365, 730, 1095] as const;
+export type NaverPeriod = (typeof NAVER_PERIODS)[number];
+
 export interface NaverTrendQuery {
+  /** 콘텐츠 프로필이 없을 때 쓰는 기본 카테고리 (데모 데이터) */
   category?: string;
   keyword?: string;
-  periodDays: TrendPeriod;
+  periodDays: NaverPeriod;
   /** 사용하는 화면 (clip | blog). 결과 구성이 조금 다르다 */
   scope: "clip" | "blog";
+  /** 콘텐츠 프로필 ID. 비우면 기본 프로필 자동 적용, "none" 이면 프로필 없이 */
+  profileId?: string;
+  /** 서버가 프로필에서 풀어 넣는 조사 범위 ("무엇을 조사할지"). NAVER 분석 방식은 Provider 가 따로 정한다 */
+  profileScope?: TrendScope | null;
+}
+
+/** 검색어 하나의 검색 지표 (검색광고 API · 블로그 검색 API) */
+export interface NaverKeywordStats {
+  keyword: string;
+  /** 월간 검색량 (PC + 모바일). 검색광고 키가 없으면 null */
+  monthlyPc: number | null;
+  monthlyMobile: number | null;
+  competition: "low" | "mid" | "high" | null;
+  /** 블로그 누적 문서 수 (발행량 지표). 검색 API 권한이 없으면 null */
+  blogDocCount: number | null;
 }
 
 export interface NaverRisingTopic extends TrendItemBase {
@@ -156,6 +181,12 @@ export interface NaverTrendInsight {
   /** 최근 검색 추이 (상대값 0~100) */
   searchTrend: { date: string; value: number }[];
   contentIdeas: string[];
+  /** 검색어의 검색량·문서 수 (검색어가 있을 때) */
+  keywordStats?: NaverKeywordStats | null;
+  /** 데이터 출처: 실제 NAVER API / 데모 */
+  dataSource?: "live" | "mock";
+  /** 일부 데이터를 못 가져온 이유 등 안내 */
+  notes?: string[];
   collectedAt: ISODate;
 }
 

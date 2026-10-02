@@ -96,7 +96,7 @@
 | PATCH/DELETE | `/api/trends/youtube/filters/:id` | 이름·기본 지정 / 삭제 | savedTrendService |
 | GET/POST | `/api/trends/youtube/saved` | 찜 목록 / 찜하기 | savedTrendService |
 | DELETE | `/api/trends/youtube/saved/:id` | 찜 해제 | savedTrendService |
-| GET | `/api/trends/naver?scope&category&keyword&period` | NAVER 인사이트 | trendService.getNaverInsight |
+| GET | `/api/trends/naver?scope&keyword&period&profileId&category` | NAVER 인사이트 (기간 7일~3년, 프로필 범위, 검색량·문서 수) | trendService.getNaverInsight |
 | GET | `/api/trends/options?source=youtube\|naver` | 생성 폼의 트렌드 선택지 | trendService.listOptions |
 | GET | `/api/products` | 제품 목록 | productService.list |
 | POST | `/api/products` | 분석 결과(Draft) 저장 | productService.save |
@@ -110,6 +110,8 @@
 | GET/POST | `/api/feedback` | 피드백 조회 / 등록 | memoryService |
 | GET/POST | `/api/styles` | 스타일 조회 / 생성 | memoryService |
 | PUT/PATCH/DELETE | `/api/styles/:id` | 수정 / 기본 지정 / 삭제 | memoryService |
+| GET/POST | `/api/profiles` | 콘텐츠 프로필 목록 / 만들기 (`{ example: true }` = 가전 콘텐츠 예시) | contentProfileService |
+| PUT/PATCH/DELETE | `/api/profiles/:id` | 수정 / 기본 프로필로 설정 / 삭제 | contentProfileService |
 | POST | `/api/styles/extract` { text, channelIds } | 참고 자료 → 스타일 초안 (AI, 원문 저장 안 함) | styleExtractor |
 | GET | `/api/performance` | 성과 데이터 | memoryService.listPerformance |
 | GET | `/api/memory` | Memory 항목별 개수 | memoryService.overview |

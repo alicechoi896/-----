@@ -1,13 +1,13 @@
 import "server-only";
 import { YOUTUBE_CATEGORIES, YOUTUBE_COUNTRIES, dateRange, defaultYouTubeQuery } from "@/lib/domain/youtube";
 import { NAVER_TREND_CATEGORIES } from "@/lib/mock/naver-trends";
-import type { NaverTrendQuery, TrendOption, TrendPeriod, YouTubeTrendQuery } from "@/lib/types";
+import { NAVER_PERIODS, type NaverPeriod, type NaverTrendQuery, type TrendOption, type YouTubeTrendQuery } from "@/lib/types";
 import { AppError } from "../http";
 import { getNaverTrendProvider, getYouTubeTrendProvider } from "../providers/registry";
+import { contentProfileService } from "./content-profiles";
 import { savedTrendService } from "./saved-trends";
 
-const PERIODS: TrendPeriod[] = [7, 14, 21, 30];
-const toPeriod = (v: unknown): TrendPeriod => (PERIODS.includes(Number(v) as TrendPeriod) ? (Number(v) as TrendPeriod) : 7);
+const toNaverPeriod = (v: unknown): NaverPeriod => (NAVER_PERIODS.includes(Number(v) as NaverPeriod) ? (Number(v) as NaverPeriod) : 14);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,8 +45,8 @@ export function normalizeYouTubeQuery(raw: Record<string, unknown>): YouTubeTren
     maxSubscribers: toCount(raw.maxSubscribers),
     minViews: toCount(raw.minViews),
     maxViews: toCount(raw.maxViews),
-    minComments: toCount(raw.minComments),
     pageToken: str("pageToken").slice(0, 200) || undefined,
+    profileId: str("profileId").slice(0, 60) || undefined,
   };
 }
 
@@ -54,6 +54,8 @@ export const trendService = {
   /** YouTube 트렌드 한 페이지. 다음 페이지는 nextPageToken 으로 이어서 부른다 */
   async searchYouTube(params: URLSearchParams) {
     const query = normalizeYouTubeQuery(Object.fromEntries(params.entries()));
+    // 콘텐츠 프로필은 "무엇을 조사할지"만 정한다. 어떻게 찾을지는 YouTube Provider 가 따로 처리한다
+    query.scope = await contentProfileService.resolveScope(query.profileId);
     const provider = await getYouTubeTrendProvider();
     const page = await provider.searchTrends(query);
     return { ...page, query, provider: provider.id };
@@ -62,10 +64,13 @@ export const trendService = {
   async getNaverInsight(params: URLSearchParams) {
     const query: NaverTrendQuery = {
       category: params.get("category") || undefined,
-      keyword: params.get("keyword") || undefined,
-      periodDays: toPeriod(params.get("period")),
+      keyword: params.get("keyword")?.trim().slice(0, 50) || undefined,
+      periodDays: toNaverPeriod(params.get("period")),
       scope: params.get("scope") === "blog" ? "blog" : "clip",
+      profileId: params.get("profileId") || undefined,
     };
+    // 콘텐츠 프로필은 "무엇을 조사할지"만 정한다. NAVER 분석 방식은 NAVER Provider 가 따로 처리한다
+    query.profileScope = await contentProfileService.resolveScope(query.profileId);
     const provider = await getNaverTrendProvider();
     return { insight: await provider.getInsight(query), provider: provider.id };
   },
@@ -85,6 +90,7 @@ export const trendService = {
         group: "찜한 영상",
       }));
       const query = defaultFilter ? normalizeYouTubeQuery(defaultFilter.params as Record<string, unknown>) : defaultYouTubeQuery();
+      query.scope = await contentProfileService.resolveScope();
       const groupName = defaultFilter ? `기본 조건: ${defaultFilter.name}` : "최근 7일 인기 (한국)";
       const page = await (await getYouTubeTrendProvider()).searchTrends(query).catch(() => ({ items: [] }));
       const seen = new Set(bookmarked.map((o) => o.id));
@@ -96,9 +102,11 @@ export const trendService = {
       return [...bookmarked, ...fromSearch];
     }
     const provider = await getNaverTrendProvider();
-    const insights = await Promise.all(
-      NAVER_TREND_CATEGORIES.map((category) => provider.getInsight({ category, periodDays: 7, scope: "clip" })),
-    );
+    // 콘텐츠 프로필이 있으면 그 범위 1번만, 없으면 데모 카테고리별로
+    const profileScope = await contentProfileService.resolveScope();
+    const insights = profileScope
+      ? [await provider.getInsight({ periodDays: 7, scope: "clip", profileScope })]
+      : await Promise.all(NAVER_TREND_CATEGORIES.map((category) => provider.getInsight({ category, periodDays: 7, scope: "clip" })));
     return insights.flatMap((ins) =>
       ins.risingTopics.map((t) => ({ id: t.id, source: "naver" as const, title: `${t.title} (${t.category})`, keywords: t.keywords })),
     );

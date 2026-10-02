@@ -63,7 +63,7 @@ interface ProductDataCollector {          // 수집만 한다. 분석하지 않�
 | YouTube | MockYouTubeTrendProvider | `trends/mock-youtube-provider.ts` | ✅ 동작 |
 | YouTube | YouTubeDataApiProvider | `trends/youtube-data-api-provider.ts` | ✅ 구현 (트렌드, 영상 메타데이터, 연결 테스트). 서버 메모리 6시간 캐시 |
 | NAVER | MockNaverTrendProvider | `trends/mock-naver-provider.ts` | ✅ 동작 |
-| NAVER | NaverApiProvider | `trends/naver-api-provider.ts` | ⚠️ testConnection만 실제 동작, 조회는 501 |
+| NAVER | NaverApiProvider | `trends/naver-api-provider.ts` + `naver-searchad.ts` | ✅ 데이터랩·블로그 검색·검색광고 API 실제 조회 (live + 키 연결 시) |
 | 상품 | MockUrlCollector | `product/collectors.ts` | ✅ Mock (URL → 카탈로그) |
 | 상품 | MockImageCollector | 〃 | ✅ Mock (OCR 대체) |
 | 상품 | TextCollector | 〃 | ✅ **실제 동작** ("키: 값" 줄은 스펙으로 파싱) |
@@ -113,12 +113,13 @@ const collector = getProductCollector(source);  // supports()가 true인 첫 번
 ### 5.3 NAVER Open API
 | 항목 | 내용 |
 |------|------|
-| 용도 | 검색어 트렌드, 쇼핑 인사이트, 검색 결과 |
-| 인증 | 헤더 `X-Naver-Client-Id`, `X-Naver-Client-Secret` |
-| 자격증명 | `{ clientId, clientSecret }` |
-| 테스트 | `GET /v1/search/blog.json?query=test&display=1` |
-| 구현 순서 | ① DataLab 검색어 트렌드 `POST /v1/datalab/search` → `searchTrend` ② 쇼핑인사이트 `POST /v1/datalab/shopping/categories` → 카테고리 급상승 ③ 연관 키워드·검색량은 **검색광고 API**(별도 키: API Key, Secret, Customer ID)가 필요하다 ④ `contentIdeas`는 Service에서 AIProvider로 해석한다 (Provider끼리 직접 호출하지 않는다) |
-| 발급 | https://developers.naver.com/apps → 애플리케이션 등록 → 데이터랩(검색어트렌드), 검색 API 선택 |
+| 용도 | 검색 추이·급상승·시즌(데이터랩), 블로그 누적 문서 수(검색), 월간 검색량·연관 키워드·경쟁(검색광고) |
+| 인증 | Open API: 헤더 `X-Naver-Client-Id`, `X-Naver-Client-Secret` / 검색광고: `X-API-KEY`(엑세스라이선스), `X-Customer`, `X-Timestamp`, `X-Signature` = base64(HMAC-SHA256(비밀키, "{ts}.GET./keywordstool")) |
+| 자격증명 | `{ clientId, clientSecret, adApiKey?, adSecretKey?, adCustomerId? }` (검색광고 3개는 모두 있거나 모두 없음. 수정할 때 비운 칸은 기존 값 유지) |
+| 테스트 | 데이터랩 1회 + 블로그 검색 1회 + (키가 있으면) 키워드도구 1회. 결과를 항목별로 안내 |
+| 조사 방법 | ① 출발점 = 검색어 → 프로필 관심 키워드·세부 관심분야 → 카테고리 기본 키워드 ② 키워드도구로 연관 키워드·검색량 ③ 후보 20개를 데이터랩으로: 급상승 = 기간 끝 1/4 평균 ÷ 앞부분 평균, 시즌 = 작년 다음 달 지수 ÷ 연평균 ④ 검색 추이: 90일까지 일, 1년까지 주, 그 이상 월 단위 ⑤ 글감 아이디어는 규칙 기반 (AI 호출 없음) ⑥ 제외 키워드 제거 ⑦ 6시간 캐시 |
+| 호출량 | 조회 1회 ≈ 데이터랩 최대 9회(하루 1,000회 한도) + 검색광고 1회 + 블로그 검색 1회 |
+| 발급 | Open API: https://developers.naver.com/apps → 애플리케이션 등록 → 사용 API 에 '데이터랩(검색어트렌드)', '검색' 추가 / 검색광고: https://searchad.naver.com → 도구 → API 사용 관리 (엑세스라이선스·비밀키·CUSTOMER_ID) |
 
 ## 6. API 연결 방법 (사용자 관점)
 

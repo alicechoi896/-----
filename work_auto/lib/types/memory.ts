@@ -8,6 +8,8 @@ export interface UserStyle {
   name: string;
   /** 적용 채널 (여러 개). 비어 있으면 모든 채널 */
   channelIds: ChannelId[];
+  /** 적용 콘텐츠 프로필 (선택). 이 스타일로 생성하면 이 프로필을 Context 로 쓴다. 비우면 기본 프로필 */
+  profileId?: ID | null;
   tone: string;
   description: string;
   rules: string[];

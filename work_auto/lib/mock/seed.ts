@@ -9,12 +9,14 @@ import type {
   ProductSource,
   ReferenceVideo,
   RolePermission,
+  ContentProfile,
   SavedFilter,
   SavedTrend,
   UserProfile,
   UserFeedback,
   UserStyle,
 } from "@/lib/types";
+import { EXAMPLE_PROFILE } from "@/lib/types/profile";
 import { PRODUCT_CATALOG } from "./product-catalog";
 
 export const DEMO_USER_ID = "demo-user";
@@ -36,6 +38,7 @@ export interface StoreState {
   videos: ReferenceVideo[];
   savedFilters: SavedFilter[];
   savedTrends: SavedTrend[];
+  contentProfiles: ContentProfile[];
 }
 
 const DAY = 86_400_000;
@@ -93,6 +96,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
       userId,
       name: "친근한 리뷰어",
       channelIds: ["youtube"],
+      profileId: "prf_seed1",
       tone: "친근하고 빠른 말투, 반말 없이 존댓말",
       description: "첫 문장에서 시청자의 불편을 짚고, 30초 안에 핵심 장점을 보여준다.",
       rules: ["첫 문장은 질문형 Hook", "장점은 3개까지만", "가격은 '20만 원 이하'처럼 구간으로 표현"],
@@ -310,5 +314,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
     videos,
     savedFilters: [],
     savedTrends: [],
+    // 데모 기본 콘텐츠 프로필
+    contentProfiles: [{ ...EXAMPLE_PROFILE, id: "prf_seed1", userId, createdAt: iso(30), updatedAt: iso(30) }],
   };
 }

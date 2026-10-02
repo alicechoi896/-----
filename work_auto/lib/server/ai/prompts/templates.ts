@@ -30,6 +30,7 @@ function contentTemplate(
     { version: "1.0.0", date: today, note: "최초 작성" },
     ...history,
     { version: "1.1.0", date: "2026-10-02", note: "스타일 블록에 Hook·CTA 목록 추가, 생성 폼에서 고른 스타일 적용" },
+    { version: "1.2.0", date: "2026-10-02", note: "[콘텐츠 프로필] 블록 추가 (관심분야·관심 키워드·제외 키워드)" },
   ];
   return {
     id,

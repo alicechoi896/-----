@@ -1,6 +1,6 @@
 import "server-only";
 import { calcTrendScore } from "@/lib/domain/trend-score";
-import { SHORTS_MAX_SEC, YOUTUBE_COUNTRIES, categoryLabel, matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
+import { SHORTS_MAX_SEC, YOUTUBE_COUNTRIES, buildYouTubeSearchQ, categoryLabel, matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
 import type { YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { AppError } from "../../http";
 import type { VideoMeta, YouTubeTrendProvider } from "../types";
@@ -220,7 +220,7 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     const cacheKey = JSON.stringify([
       query.country,
       query.categoryId ?? "",
-      query.keyword?.trim() ?? "",
+      buildYouTubeSearchQ(query) ?? "",
       query.publishedFrom,
       query.publishedTo ?? "",
       query.format === "shorts" ? "short" : "",
@@ -253,7 +253,7 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
       publishedBefore: query.publishedTo ? new Date(new Date(query.publishedTo).getTime() + 86_400_000).toISOString() : undefined,
       videoCategoryId: query.categoryId,
       videoDuration: query.format === "shorts" ? "short" : undefined,
-      q: query.keyword?.trim() || undefined,
+      q: buildYouTubeSearchQ(query),
       pageToken: query.pageToken,
     });
     const nextPageToken = search.nextPageToken ?? null;

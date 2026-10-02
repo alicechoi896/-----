@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  ContentProfile,
   ContextSummary,
   GeneratedContent,
   GeneratedValue,
@@ -15,6 +16,8 @@ import type {
  * 프롬프트 템플릿은 이 객체만 보고 Context 블록을 만든다.
  */
 export interface GenerationContext {
+  /** 콘텐츠 프로필: 무엇을 다루는가 (관심분야·키워드·제외 키워드). 스타일에 연결된 프로필 → 기본 프로필 */
+  contentProfile: ContentProfile | null;
   /** Product Memory: 저장된 분석 결과 (재분석하지 않는다) */
   product: { product: Product; analysis: ProductAnalysis } | null;
   /** Style Memory: 채널 기본 스타일 */

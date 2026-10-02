@@ -14,7 +14,8 @@ UserProfile 1─┬─N ApiConnection          (profiles: 역할 admin/silver/go
        ├─N ContentProject 1─N GeneratedContent   (V2부터 UI에서 사용)
        ├─N GeneratedContent 1─┬─N UserFeedback
        │                      └─N PerformanceMetric
-       ├─N UserStyle                         (채널별 기본 1개)
+       ├─N ContentProfile                    (무엇을 다루나. 기본 1개, docs/CONTENT_PROFILE.md)
+       ├─N UserStyle ─0..1→ ContentProfile    (채널별 기본 1개, 적용 콘텐츠 프로필 선택)
        └─N ReferenceVideo                    (영상 URL 가져오기)
 
 TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V2에서 캐시 테이블로 저장)
@@ -176,7 +177,9 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 
 `YouTubeTrendQuery` = { country, categoryId, keyword, publishedFrom/To, recentDays, format, min/maxSubscribers, min/maxViews(미만), minComments, pageToken } → `YouTubeTrendPage` = { items, nextPageToken, fetched }
 
-`NaverTrendInsight` = { risingTopics, risingKeywords, seasonalKeywords, relatedKeywords, searchTrend[{date,value}], contentIdeas }
+`NaverTrendInsight` = { risingTopics, risingKeywords, seasonalKeywords, relatedKeywords, searchTrend[{date,value}], contentIdeas, keywordStats{ monthlyPc, monthlyMobile, competition, blogDocCount }, dataSource(`live`/`mock`), notes[] }
+
+`NaverTrendQuery` = { keyword, periodDays(7·14·30·90·180·365·730·1095), scope(`clip`/`blog`), profileId, profileScope(서버가 채움), category(프로필이 없을 때) }
 
 ### Keyword
 **왜 필요한가**: 트렌드, 제품 분석, 생성 결과에서 키워드를 같은 형태로 다룬다.
@@ -205,6 +208,27 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | ctas[] | 자주 쓰는 CTA (마지막 행동 유도), 최대 20개 |
 | isDefault | 채널마다 기본 1개. 적용 채널이 겹치는 다른 기본 스타일은 해제 (서비스에서 보장) |
 | createdAt / updatedAt | |
+
+### ContentProfile (content_profiles)
+**왜 필요한가**: "무엇을 다룰 것인가"를 저장해 두고 트렌드 조사 범위와 생성 Context에 자동으로 쓴다. 나의 스타일(어떻게 표현할 것인가)과는 별개의 데이터다. 자세한 내용은 [CONTENT_PROFILE.md](./CONTENT_PROFILE.md)를 본다.
+
+| 필드 | 설명 |
+|------|------|
+| id, userId | |
+| name, description | 예: 가전 콘텐츠 |
+| mainCategory | 대표 카테고리 (필수) |
+| subCategories[] | 세부 관심분야 |
+| seedKeywords[] | 기본 관심 키워드 (조사 출발점) |
+| excludeKeywords[] | 제외 키워드 (트렌드 결과·생성에서 뺀다) |
+| defaultTrendPeriod | 기본 분석기간(일) 7/14/21/30/90 |
+| country | 기본 국가 (예: KR) |
+| isDefault | 사용자당 1개 (서비스에서 보장, 첫 프로필은 자동 기본) |
+| isActive | 사용 중 여부 |
+| createdAt / updatedAt | |
+
+UserStyle 에 `profileId` (선택, `on delete set null`) 를 추가했다. 이 스타일로 생성하면 이 프로필을 Context 로 쓴다.
+
+`TrendScope` (저장하지 않음) = 프로필에서 조사 범위만 뽑은 값 { profileId, profileName, mainCategory, subCategories, seedKeywords, excludeKeywords }. 트렌드 Provider 에 넘긴다.
 
 ### UserFeedback
 **왜 필요한가**: 사용자가 결과를 어떻게 평가했는지 남긴다. "별로예요" 사유와 **사용자 수정본**이 가장 강한 학습 신호다.

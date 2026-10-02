@@ -1,12 +1,25 @@
 import "server-only";
 import { buildYouTubeTrendItems } from "@/lib/mock/youtube-trends";
 import { matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
-import type { YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
+import type { TrendScope, YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { seededNumber } from "@/lib/utils";
 import { serverConfig } from "../../config";
 import type { VideoMeta, YouTubeTrendProvider } from "../types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 데모 데이터용 프로필 범위 판단: 관심 키워드·세부 관심분야를 "가전" 같은 공통 꼬리말을 떼고 비교한다.
+ * (실제 YouTube 는 검색어 q 로 찾으므로 이 함수를 쓰지 않는다)
+ */
+function mockScopeMatch(haystack: string, scope: TrendScope): boolean {
+  const generic = new Set(["추천", "가성비", "신혼", "꿀팁"]);
+  const terms = [scope.mainCategory, ...scope.subCategories, ...scope.seedKeywords]
+    .flatMap((t) => [t, t.replace(new RegExp(`${scope.mainCategory}$`), "")])
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length >= 2 && !generic.has(t));
+  return terms.some((t) => haystack.includes(t));
+}
 
 /** YouTube 트렌드 Mock — 필터·정렬 로직은 실제 Provider 에서도 같은 결과를 내야 한다 */
 export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
@@ -30,10 +43,9 @@ export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
       const t = new Date(item.publishedAt).getTime();
       if (t < from || t > to) return false;
       if (query.categoryId && item.categoryId !== query.categoryId) return false;
-      if (keyword) {
-        const haystack = `${item.title} ${item.tags.join(" ")} ${item.channelName}`.toLowerCase();
-        if (!haystack.includes(keyword)) return false;
-      }
+      const haystack = `${item.title} ${item.tags.join(" ")} ${item.channelName} ${item.category}`.toLowerCase();
+      if (keyword) return haystack.includes(keyword);
+      if (query.scope) return mockScopeMatch(haystack, query.scope);
       return true;
     });
     // 데모 데이터는 한 페이지뿐이다

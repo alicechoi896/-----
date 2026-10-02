@@ -48,6 +48,18 @@ function contextBlocks(ctx: GenerationContext): string[] {
       block("사용 금지 표현", a.contentData.forbiddenExpressions),
     );
   }
+  if (ctx.contentProfile) {
+    const p = ctx.contentProfile;
+    blocks.push(
+      block("콘텐츠 프로필 (이 사용자가 다루는 분야)", [
+        `프로필: ${p.name}${p.description ? ` — ${p.description}` : ""}`,
+        `대표 카테고리: ${p.mainCategory}`,
+        p.subCategories.length ? `세부 관심분야: ${p.subCategories.join(", ")}` : "",
+        p.seedKeywords.length ? `관심 키워드 (자연스럽게 맞으면 활용): ${p.seedKeywords.join(", ")}` : "",
+        p.excludeKeywords.length ? `제외 키워드 (다루지 않는다): ${p.excludeKeywords.join(", ")}` : "",
+      ]),
+    );
+  }
   if (ctx.style) {
     const s = ctx.style;
     blocks.push(

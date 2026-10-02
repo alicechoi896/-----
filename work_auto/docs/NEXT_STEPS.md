@@ -16,7 +16,7 @@
 | API 연결 센터 / 암호화 | ✅ 완료 | 서버 AES-256-GCM, 마스킹 |
 | OpenAI 실제 호출 | 🟡 코드 완료, 미검증 | `PROVIDER_MODE=live` + 키 연결 후 검증 필요 |
 | YouTube 실제 조회 | ✅ 구현 (실키 검증 대기) | 트렌드 + 영상 메타데이터. `PROVIDER_MODE=live` + 키 연결 시 동작 |
-| NAVER 실제 조회 | 🔴 미구현 | testConnection만 실제 동작 |
+| NAVER 실제 조회 | ✅ v0.7.0 | 데이터랩·블로그 검색·검색광고 API (live + 키 연결 시) |
 | 영구 저장소 (Supabase) | ✅ 구현 (연결 대기) | `docs/SUPABASE_SETUP.md` 대로 연결하면 동작. 미연결 시 데모 모드 |
 | 로그인 / 역할 / 권한 | ✅ 구현 | 관리자·실버·골드·VIP, 사이트 관리(가입 승인·사용자·권한·활동 기록) |
 | 계정 기능 | ✅ 구현 | 내 정보(이름·비밀번호), 비밀번호 찾기, 회원 탈퇴 |
@@ -64,9 +64,9 @@
 - API 키 정책 결정: 사용자별 키(현재) vs 관리자 공용 키 + 등급별 사용량 한도
 
 ### Step 5. NAVER API 연동
-- DataLab 검색어 트렌드, 쇼핑인사이트 → `NaverApiProvider.getInsight`
-- 연관 키워드·검색량용 검색광고 API Provider 추가 (자격증명 3개)
-- `contentIdeas`는 Service에서 AI로 생성한다
+- ✅ 데이터랩(검색 추이·급상승·시즌), 블로그 검색(문서 수), 검색광고 API(검색량·연관 키워드) — v0.7.0
+- ✅ 콘텐츠 프로필로 조사 범위 자동 적용 (docs/CONTENT_PROFILE.md)
+- 남은 것: 쇼핑인사이트(카테고리별 클릭 추이), 글감 아이디어를 AI 로 고도화(선택, 버튼형), 캐시를 DB 로 옮기기
 
 ### Step 6. AI Memory 고도화
 - 결과 섹션별 편집기 + 수정본 저장 (`content_revisions`)

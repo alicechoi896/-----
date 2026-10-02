@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { Bookmark, RotateCcw, Save, Search, Star, Trash2 } from "lucide-react";
-import { YOUTUBE_CATEGORIES, YOUTUBE_COUNTRIES, dateRange, defaultYouTubeQuery } from "@/lib/domain/youtube";
+import { YOUTUBE_CATEGORIES, YOUTUBE_COUNTRIES, dateRange } from "@/lib/domain/youtube";
 import type { SavedFilter, YouTubeTrendQuery } from "@/lib/types";
 import { Badge, Button, Checkbox, Input, SegmentedControl, Select, cardClass } from "@/components/ui";
 import { cn, formatCompact } from "@/lib/utils";
 
-export type TrendDraft = Omit<YouTubeTrendQuery, "pageToken">;
+export type TrendDraft = Omit<YouTubeTrendQuery, "pageToken" | "scope">;
 
 const FORMATS = [
   { value: "all", label: "전체" },
@@ -30,6 +30,7 @@ const QUICK_RANGES = [
  */
 export function TrendFilterPanel({
   draft,
+  resetQuery,
   onChange,
   onSearch,
   filters,
@@ -41,6 +42,8 @@ export function TrendFilterPanel({
   searching,
 }: {
   draft: TrendDraft;
+  /** [초기화] 를 누르면 돌아갈 조건 (콘텐츠 프로필 기본값 포함) */
+  resetQuery: () => TrendDraft;
   onChange: (next: TrendDraft) => void;
   onSearch: () => void;
   filters: SavedFilter[];
@@ -99,7 +102,7 @@ export function TrendFilterPanel({
           <Field label="검색 키워드">
             <Input
               value={draft.keyword ?? ""}
-              placeholder="비우면 카테고리 인기 영상 (예: 에어프라이어)"
+              placeholder="이번에 좁혀 볼 키워드 (비우면 프로필·카테고리 전체)"
               onChange={(e) => set({ keyword: e.target.value || undefined })}
             />
           </Field>
@@ -137,7 +140,7 @@ export function TrendFilterPanel({
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_200px]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <RangeField
             label="구독자 수"
             min={draft.minSubscribers}
@@ -146,9 +149,6 @@ export function TrendFilterPanel({
             onChange={(min, max) => set({ minSubscribers: min, maxSubscribers: max })}
           />
           <RangeField label="조회수" min={draft.minViews} max={draft.maxViews} onChange={(min, max) => set({ minViews: min, maxViews: max })} />
-          <Field label="댓글 수">
-            <NumberInput value={draft.minComments} placeholder="0" suffix="개 이상" onChange={(v) => set({ minComments: v })} />
-          </Field>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
@@ -180,7 +180,7 @@ export function TrendFilterPanel({
               variant="ghost"
               icon={RotateCcw}
               onClick={() => {
-                onChange(defaultYouTubeQuery());
+                onChange(resetQuery());
                 onPickFilter("");
               }}
             >

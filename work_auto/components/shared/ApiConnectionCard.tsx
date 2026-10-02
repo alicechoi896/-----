@@ -18,7 +18,9 @@ export interface ProviderMeta {
   description: string;
   usages: string[];
   icon: LucideIcon;
-  fields: { name: string; label: string; placeholder: string }[];
+  fields: { name: string; label: string; placeholder: string; optional?: boolean; section?: string; hint?: string }[];
+  /** 수정할 때 비운 칸은 기존 값 유지 (NAVER 처럼 키가 여러 개인 경우) */
+  keepBlank?: boolean;
   docsUrl: string;
 }
 
@@ -104,8 +106,15 @@ export function ApiConnectionCard({
               run("connect", () => api.connections.connect(meta.id, values));
             }}
           >
+            {connected && meta.keepBlank && <p className="text-xs text-fg-subtle">비워 둔 칸은 지금 저장된 값을 그대로 씁니다.</p>}
             {meta.fields.map((f) => (
-              <FormField key={f.name} label={f.label} htmlFor={`${meta.id}-${f.name}`}>
+              <FormField
+                key={f.name}
+                label={f.section ? `${f.section} · ${f.label}` : f.label}
+                htmlFor={`${meta.id}-${f.name}`}
+                optional={f.optional}
+                hint={f.hint}
+              >
                 <Input
                   id={`${meta.id}-${f.name}`}
                   type="password"

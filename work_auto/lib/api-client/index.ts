@@ -2,6 +2,8 @@ import type { PermissionRow } from "@/lib/permissions";
 import type {
   ApiConnectionPublic,
   ChannelId,
+  ContentProfile,
+  ContentProfileInput,
   AuditLog,
   MemberRole,
   MemberTier,
@@ -106,8 +108,10 @@ function qs(params: Record<string, string | number | undefined>) {
 export const api = {
   trends: {
     /** 한 페이지(최대 50개 조회). 이어서 부를 때는 q.pageToken 에 nextPageToken 을 넣는다 */
-    youtube: (q: YouTubeTrendQuery) =>
-      request<YouTubeTrendPage & { query: YouTubeTrendQuery; provider: string }>(`/api/trends/youtube${qs({ ...q })}`),
+    youtube: ({ scope: _scope, ...q }: YouTubeTrendQuery) => {
+      void _scope; // 조사 범위는 서버가 profileId 로 풀어 넣는다
+      return request<YouTubeTrendPage & { query: YouTubeTrendQuery; provider: string }>(`/api/trends/youtube${qs({ ...q })}`);
+    },
     analyzeVideo: (video: YouTubeTrendItem) =>
       request<YouTubeVideoAnalysis & { provider: string }>("/api/trends/youtube/analyze", { method: "POST", body: json({ video }) }),
     suggestTopics: (videos: YouTubeTrendItem[], keywords: string[]) =>
@@ -128,9 +132,9 @@ export const api = {
       add: (item: YouTubeTrendItem) => request<SavedTrend>("/api/trends/youtube/saved", { method: "POST", body: json({ item }) }),
       remove: (id: string) => request<{ id: string }>(`/api/trends/youtube/saved/${id}`, { method: "DELETE" }),
     },
-    naver: (q: { scope: "clip" | "blog"; category?: string; keyword?: string; periodDays: number }) =>
+    naver: (q: { scope: "clip" | "blog"; category?: string; keyword?: string; periodDays: number; profileId?: string }) =>
       request<{ insight: NaverTrendInsight; provider: string }>(
-        `/api/trends/naver${qs({ scope: q.scope, category: q.category, keyword: q.keyword, period: q.periodDays })}`,
+        `/api/trends/naver${qs({ scope: q.scope, category: q.category, keyword: q.keyword, period: q.periodDays, profileId: q.profileId })}`,
       ),
     options: (source: "youtube" | "naver") => request<TrendOption[]>(`/api/trends/options${qs({ source })}`),
   },
@@ -174,9 +178,19 @@ export const api = {
     remove: (id: string) => request<{ id: string }>(`/api/styles/${id}`, { method: "DELETE" }),
   },
 
+  /** 콘텐츠 프로필 ("무엇을 다룰 것인가") */
+  profiles: {
+    list: () => request<ContentProfile[]>("/api/profiles"),
+    create: (input: ContentProfileInput) => request<ContentProfile>("/api/profiles", { method: "POST", body: json(input) }),
+    createExample: () => request<ContentProfile>("/api/profiles", { method: "POST", body: json({ example: true }) }),
+    update: (id: string, input: ContentProfileInput) => request<ContentProfile>(`/api/profiles/${id}`, { method: "PUT", body: json(input) }),
+    setDefault: (id: string) => request<ContentProfile>(`/api/profiles/${id}`, { method: "PATCH" }),
+    remove: (id: string) => request<{ id: string }>(`/api/profiles/${id}`, { method: "DELETE" }),
+  },
+
   memory: {
     overview: () =>
-      request<{ counts: Record<"products" | "styles" | "contents" | "exemplars" | "feedback" | "performance", number> }>(
+      request<{ counts: Record<"profiles" | "products" | "styles" | "contents" | "exemplars" | "feedback" | "performance", number> }>(
         "/api/memory",
       ),
     performance: () => request<(PerformanceMetric & { headline: string })[]>("/api/performance"),

@@ -8,6 +8,8 @@ export type GeneratedValue = string | string[];
  * "왜 이런 결과가 나왔는가"를 재현하고 설명하기 위해 결과와 함께 저장한다.
  */
 export interface ContextSummary {
+  /** 콘텐츠 프로필 (예전 결과에는 없을 수 있다) */
+  profile?: { id: ID; name: string } | null;
   product: { id: ID; name: string; analysisVersion: number } | null;
   style: { id: ID; name: string } | null;
   exemplars: { id: ID; label: string }[];

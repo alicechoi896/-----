@@ -6,3 +6,4 @@ export * from "./content";
 export * from "./memory";
 export * from "./auth";
 export * from "./settings";
+export * from "./profile";

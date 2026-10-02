@@ -11,6 +11,7 @@ import type {
 import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
+import { contentProfileService } from "./content-profiles";
 
 /**
  * AI Memory 관리 유스케이스 (AI 학습 관리 화면).
@@ -32,6 +33,7 @@ export function normalizeStyle(row: UserStyle): UserStyle {
     bannedPhrases: rest.bannedPhrases ?? [],
     hooks: rest.hooks ?? [],
     ctas: rest.ctas ?? [],
+    profileId: rest.profileId ?? null,
   };
 }
 
@@ -48,8 +50,15 @@ function cleanStyleInput(input: UserStyleInput): UserStyleInput {
     bannedPhrases: strList(input.bannedPhrases, 30, 60),
     hooks: strList(input.hooks, 20),
     ctas: strList(input.ctas, 20),
+    profileId: typeof input.profileId === "string" && input.profileId ? input.profileId : null,
     isDefault: Boolean(input.isDefault),
   };
+}
+
+/** 연결할 콘텐츠 프로필이 내 것인지 확인 */
+async function assertOwnProfile(profileId: string | null | undefined) {
+  if (!profileId) return;
+  if (!(await contentProfileService.get(profileId))) throw new AppError("VALIDATION", "연결할 콘텐츠 프로필을 찾을 수 없습니다.");
 }
 
 export const memoryService = {
@@ -113,6 +122,7 @@ export const memoryService = {
 
   async createStyle(input: UserStyleInput): Promise<UserStyle> {
     const clean = cleanStyleInput(input);
+    await assertOwnProfile(clean.profileId);
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const now = nowIso();
@@ -128,6 +138,7 @@ export const memoryService = {
     const existing = await repo.styles.get(id);
     if (!existing || existing.userId !== userId) notFound("스타일");
     const clean = cleanStyleInput(input);
+    await assertOwnProfile(clean.profileId);
     if (clean.isDefault) await this.clearDefault(clean.channelIds, id);
     return normalizeStyle((await repo.styles.update(id, { ...clean, updatedAt: nowIso() }))!);
   },
@@ -174,7 +185,8 @@ export const memoryService = {
   async overview() {
     const userId = await getCurrentUserId();
     const repo = getRepositories();
-    const [products, styles, contents, feedback, performance] = await Promise.all([
+    const [profiles, products, styles, contents, feedback, performance] = await Promise.all([
+      repo.contentProfiles.list((p) => p.userId === userId),
       repo.products.list((p) => p.userId === userId),
       repo.styles.list((s) => s.userId === userId),
       repo.contents.list((c) => c.userId === userId),
@@ -183,6 +195,7 @@ export const memoryService = {
     ]);
     return {
       counts: {
+        profiles: profiles.length,
         products: products.length,
         styles: styles.length,
         contents: contents.length,

@@ -18,6 +18,7 @@ import {
   LoadingState,
   Notice,
   SectionCard,
+  Select,
   Tag,
   Textarea,
   cardClass,
@@ -55,6 +56,8 @@ type Editing = { mode: "create"; draft?: UserStyleInput; reference?: string } | 
  */
 export function StyleTab({ initialReference, initialChannel }: { initialReference?: string; initialChannel?: string }) {
   const { data, loading, error, reload, setData } = useAsync(() => api.styles.list(), []);
+  const profiles = useAsync(() => api.profiles.list(), []);
+  const profileName = (id?: string | null) => (id ? (profiles.data?.find((p) => p.id === id)?.name ?? null) : null);
   const [editing, setEditing] = useState<Editing | null>(() =>
     initialReference
       ? {
@@ -122,6 +125,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
+                    {profileName(s.profileId) && <Badge tone="info">프로필 · {profileName(s.profileId)}</Badge>}
                     {s.channelIds.length === 0 ? (
                       <Badge tone="neutral">모든 채널</Badge>
                     ) : (
@@ -196,6 +200,7 @@ function toForm(s: UserStyleInput) {
     banned: s.bannedPhrases.join(", "),
     hooks: s.hooks,
     ctas: s.ctas,
+    profileId: s.profileId ?? "",
     isDefault: s.isDefault,
   };
 }
@@ -206,6 +211,7 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(editing.mode === "create" && Boolean(editing.reference));
+  const profiles = useAsync(() => api.profiles.list(), []);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   function toggleChannel(id: ChannelId) {
@@ -226,6 +232,7 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
         bannedPhrases: form.banned.split(",").map((s) => s.trim()).filter(Boolean),
         hooks: form.hooks.map((h) => h.trim()).filter(Boolean),
         ctas: form.ctas.map((c) => c.trim()).filter(Boolean),
+        profileId: form.profileId || null,
         isDefault: form.isDefault,
       };
       if (editing.mode === "edit") await api.styles.update(editing.style.id, input);
@@ -271,7 +278,7 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
           channelIds={form.channelIds}
           onDraft={(d) =>
             setForm((f) => ({
-              ...toForm({ ...d, channelIds: f.channelIds.length ? f.channelIds : d.channelIds, isDefault: f.isDefault }),
+              ...toForm({ ...d, channelIds: f.channelIds.length ? f.channelIds : d.channelIds, isDefault: f.isDefault, profileId: f.profileId || null }),
             }))
           }
         />
@@ -301,6 +308,21 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
               );
             })}
           </div>
+        </FormField>
+        <FormField
+          label="적용 콘텐츠 프로필"
+          htmlFor="style-profile"
+          optional
+          hint="이 스타일로 생성하면 이 프로필의 관심분야를 함께 씁니다. 비우면 기본 프로필"
+          className="md:col-span-2"
+        >
+          <Select
+            id="style-profile"
+            value={form.profileId}
+            options={(profiles.data ?? []).map((p) => ({ value: p.id, label: `${p.name}${p.isDefault ? " (기본)" : ""}` }))}
+            placeholder="기본 프로필 따라가기"
+            onChange={(e) => set("profileId", e.target.value)}
+          />
         </FormField>
         <FormField label="톤" htmlFor="style-tone">
           <Input id="style-tone" placeholder="예: 친근하고 빠른 말투, 존댓말" value={form.tone} onChange={(e) => set("tone", e.target.value)} />

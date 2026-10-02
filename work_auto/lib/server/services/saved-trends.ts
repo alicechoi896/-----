@@ -28,6 +28,7 @@ export const savedTrendService = {
     if (!name) throw new AppError("VALIDATION", "조건 이름을 입력해 주세요.");
     const params = normalizeYouTubeQuery(input.params ?? {});
     delete params.pageToken;
+    delete params.profileId;
     const userId = await getCurrentUserId();
     const repo = getRepositories();
     const existing = await this.listFilters();

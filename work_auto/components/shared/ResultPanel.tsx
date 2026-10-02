@@ -123,6 +123,7 @@ function OutputBlock({ section, value }: { section: OutputSection; value: Genera
 function ContextSummaryBox({ content }: { content: GeneratedContent }) {
   const c = content.context;
   const items: { label: string; value: string | null }[] = [
+    { label: "콘텐츠 프로필", value: c.profile?.name ?? null },
     { label: "제품", value: c.product ? `${c.product.name} (분석 v${c.product.analysisVersion})` : null },
     { label: "스타일", value: c.style?.name ?? null },
     { label: "좋은 예시", value: c.exemplars.length ? `${c.exemplars.length}건` : null },

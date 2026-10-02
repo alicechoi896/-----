@@ -36,5 +36,6 @@ export interface ProviderCredentialMap {
   openai: { apiKey: string };
   claude: { apiKey: string };
   youtube: { apiKey: string };
-  naver: { clientId: string; clientSecret: string };
+  /** Open API(데이터랩·검색) + 선택: 검색광고 API(검색량·연관 키워드) */
+  naver: { clientId: string; clientSecret: string; adApiKey?: string; adSecretKey?: string; adCustomerId?: string };
 }

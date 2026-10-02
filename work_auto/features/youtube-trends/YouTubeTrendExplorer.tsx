@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, ChevronDown, Flame, Info, PanelRightOpen, Star, TrendingUp } from "lucide-react";
 import { trendScoreLevel } from "@/lib/domain/trend-score";
-import { countryLabel, defaultYouTubeQuery, refreshRecentRange } from "@/lib/domain/youtube";
-import type { SavedFilter, SavedTrend, YouTubeTrendItem } from "@/lib/types";
+import { countryLabel, dateRange, defaultYouTubeQuery, refreshRecentRange } from "@/lib/domain/youtube";
+import type { ContentProfile, SavedFilter, SavedTrend, YouTubeTrendItem } from "@/lib/types";
+import { ProfileBar } from "@/features/content-profile/ProfileBar";
+import { pickProfile, useContentProfile } from "@/features/content-profile/useContentProfile";
 import { api } from "@/lib/api-client";
-import { Badge, Button, DataTable, EmptyState, ErrorState, LoadingState, Notice, SectionCard, Tag, type Column } from "@/components/ui";
+import { Badge, Button, CopyButton, DataTable, EmptyState, ErrorState, LoadingState, Notice, SectionCard, Tag, type Column } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils";
 import { TrendFilterPanel, type TrendDraft } from "./TrendFilterPanel";
@@ -43,9 +45,17 @@ export function YouTubeTrendExplorer() {
   const [detail, setDetail] = useState<YouTubeTrendItem | null>(null);
 
   const requestId = useRef(0);
+  /** 이번 검색에 적용할 콘텐츠 프로필 ("none" = 적용 안 함) */
+  const profileIdRef = useRef("");
+  // 프로필 전환 콜백에서 최신 검색 조건을 읽기 위한 참조
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  });
 
-  const runSearch = useCallback(async (query: TrendDraft) => {
+  const runSearch = useCallback(async (draftQuery: TrendDraft) => {
     const id = ++requestId.current;
+    const query = { ...draftQuery, profileId: profileIdRef.current || undefined };
     setApplied(query);
     setLoading(true);
     setError(null);
@@ -68,16 +78,36 @@ export function YouTubeTrendExplorer() {
     }
   }, []);
 
-  // 처음 열 때: 저장한 조건·찜을 읽고, 기본 조건이 있으면 그 조건으로 검색한다
+  // 콘텐츠 프로필: 바꾸면 그 프로필의 국가·분석기간으로 다시 검색, 적용을 끄고 켜면 같은 조건으로 다시 검색
+  const onProfileChange = useCallback(
+    (p: ContentProfile | null, scopeParam: string) => {
+      profileIdRef.current = scopeParam;
+      setActiveFilterId("");
+      const next = p && scopeParam !== "none" ? withProfileDefaults(draftRef.current, p) : draftRef.current;
+      setDraft(next);
+      void runSearch(next);
+    },
+    [runSearch],
+  );
+  const profile = useContentProfile(onProfileChange);
+
+  // 처음 열 때: 저장한 조건·찜·콘텐츠 프로필을 읽는다.
+  // 검색 조건 = 기본 저장 조건 → 없으면 콘텐츠 프로필의 국가·분석기간 → 없으면 기본값 (한국, 최근 7일)
   useEffect(() => {
     let active = true;
-    Promise.all([api.trends.filters.list().catch(() => [] as SavedFilter[]), api.trends.saved.list().catch(() => [] as SavedTrend[])]).then(
-      ([filterList, savedList]) => {
+    Promise.all([
+      api.trends.filters.list().catch(() => [] as SavedFilter[]),
+      api.trends.saved.list().catch(() => [] as SavedTrend[]),
+      api.profiles.list().catch(() => [] as ContentProfile[]),
+    ]).then(
+      ([filterList, savedList, profileList]) => {
         if (!active) return;
         setFilters(filterList);
         setSaved(savedList);
+        const startProfile = pickProfile(profileList);
+        profileIdRef.current = startProfile?.id ?? "none";
         const def = filterList.find((f) => f.isDefault);
-        const query = def ? fromSaved(def) : defaultYouTubeQuery();
+        const query = def ? fromSaved(def) : startProfile ? withProfileDefaults(defaultYouTubeQuery(), startProfile) : defaultYouTubeQuery();
         setDraft(query);
         setActiveFilterId(def?.id ?? "");
         void runSearch(query);
@@ -300,8 +330,11 @@ export function YouTubeTrendExplorer() {
 
   return (
     <div className="space-y-5">
+      <ProfileBar state={profile} note="검색어를 넣으면 이 범위 안에서 좁혀 찾습니다" />
+
       <TrendFilterPanel
         draft={draft}
+        resetQuery={() => (profile.selected && profile.applied ? withProfileDefaults(defaultYouTubeQuery(), profile.selected) : defaultYouTubeQuery())}
         onChange={setDraft}
         onSearch={() => {
           setActiveFilterId("");
@@ -407,9 +440,19 @@ export function YouTubeTrendExplorer() {
   );
 }
 
-/** 저장한 조건 → 검색 조건. "최근 N일" 로 저장한 조건은 오늘 기준으로 다시 계산한다 */
+/**
+ * 저장한 조건 → 검색 조건. "최근 N일" 로 저장한 조건은 오늘 기준으로 다시 계산한다.
+ * 저장할 때 비워 둔 범위(구독자·조회수)는 기본값으로 채우지 않는다 (저장한 그대로).
+ */
 function fromSaved(f: SavedFilter): TrendDraft {
-  return refreshRecentRange({ ...defaultYouTubeQuery(), recentDays: undefined, ...f.params });
+  const { country, format, publishedFrom, publishedTo } = defaultYouTubeQuery();
+  const base: TrendDraft = { country, format, publishedFrom, publishedTo };
+  return refreshRecentRange({ ...base, ...f.params });
+}
+
+/** 콘텐츠 프로필의 국가·기본 분석기간을 검색 조건에 넣는다 (나머지 조건은 유지) */
+function withProfileDefaults(q: TrendDraft, p: ContentProfile): TrendDraft {
+  return { ...q, country: p.country, recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
 }
 
 function KeywordTags({ item }: { item: YouTubeTrendItem }) {
@@ -418,7 +461,8 @@ function KeywordTags({ item }: { item: YouTubeTrendItem }) {
   const all = [...item.keywords, ...extra];
   const shown = [...item.keywords.slice(0, 2).map((text) => ({ text, tag: false })), ...extra.slice(0, 1).map((text) => ({ text, tag: true }))];
   return (
-    <div className="flex w-[230px] items-center gap-1 overflow-hidden" title={all.join(", ")}>
+    <div className="flex w-[250px] items-center gap-1" title={all.join(", ")}>
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
       {shown.map((k) =>
         k.tag ? (
           <span key={k.text} className="inline-block h-6 max-w-[80px] truncate rounded-md px-1.5 text-xs leading-6 text-fg-subtle ring-1 ring-line ring-inset">
@@ -431,6 +475,13 @@ function KeywordTags({ item }: { item: YouTubeTrendItem }) {
         ),
       )}
       {all.length > shown.length && <span className="shrink-0 text-xs text-fg-subtle">+{all.length - shown.length}</span>}
+      </div>
+      {all.length > 0 && (
+        // 행 클릭(상세 열기)과 겹치지 않게 막는다
+        <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <CopyButton value={all.join(", ")} label="키워드·태그 복사" iconOnly className="px-1.5" />
+        </span>
+      )}
     </div>
   );
 }

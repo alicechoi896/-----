@@ -15,6 +15,7 @@ import type { GenerationContext } from "./context-types";
  *   모든 생성은 이 함수를 거치고, 무엇이 들어갔는지(summary)를 결과와 함께 저장한다.
  *
  * 조립 순서와 개수 제한 (토큰 예산 관리)
+ *   0. Content Profile     — 무엇을 다루는가. 고른 스타일에 연결된 프로필 → 없으면 기본 프로필 (docs/CONTENT_PROFILE.md)
  *   1. Product Memory      — 선택한 제품의 현재 분석 1건
  *   2. Style Memory        — 생성 폼에서 고른 스타일 1건. 고르지 않으면 이 채널의 기본 스타일 (없으면 "모든 채널" 기본 스타일)
  *   3. Content History     — 같은 기능의 "좋은 결과" 최근 2건 (few-shot)
@@ -44,7 +45,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const videoId = String(input.referenceVideoId ?? "");
   const styleId = String(input.styleId ?? "");
 
-  const [productRow, styles, featureContents, downFeedback, channelContents, performance, trend, referenceVideo] = await Promise.all([
+  const [productRow, styles, featureContents, downFeedback, channelContents, performance, trend, referenceVideo, profiles] = await Promise.all([
     productId ? repo.products.get(productId) : Promise.resolve(null),
     repo.styles.list((s) => s.userId === userId && (s.isDefault || s.id === styleId)),
     repo.contents.list((c) => c.userId === userId && c.featureId === featureId && c.isExemplar),
@@ -53,6 +54,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     repo.performance.list((m) => m.views != null),
     trendId ? trendService.findOption(trendId) : Promise.resolve(null),
     videoId ? repo.videos.get(videoId) : Promise.resolve(null),
+    repo.contentProfiles.list((p) => p.userId === userId && p.isActive),
   ]);
 
   // 1) Product Memory — 저장된 분석을 그대로 쓴다 (상세페이지 재분석 없음)
@@ -74,6 +76,14 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     userStyles.find((s) => s.isDefault && s.channelIds.length === 0) ??
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
+
+  // 0) Content Profile — 스타일에 연결된 프로필이 우선, 없으면 기본 프로필
+  const contentProfile =
+    (style?.profileId ? profiles.find((p) => p.id === style.profileId) : undefined) ??
+    profiles.find((p) => p.isDefault) ??
+    profiles[0] ??
+    null;
+  if (!contentProfile) notes.push("콘텐츠 프로필 없음 → AI 학습 관리 > 콘텐츠 프로필에서 만들면 관심분야에 맞게 생성됩니다.");
 
   // 3) Content History — 좋은 결과 (few-shot 예시)
   const exemplars = featureContents
@@ -105,6 +115,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   if (honestyGuard) notes.push("실제 경험 미입력 → 사용 후기 표현 금지");
 
   const summary: ContextSummary = {
+    profile: contentProfile ? { id: contentProfile.id, name: contentProfile.name } : null,
     product: product ? { id: product.product.id, name: product.product.name, analysisVersion: product.analysis.version } : null,
     style: style ? { id: style.id, name: style.name } : null,
     exemplars: exemplars.map((e) => ({ id: e.id, label: e.headline })),
@@ -114,5 +125,5 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     notes,
   };
 
-  return { product, style, exemplars, avoid, performanceHints, trend, referenceVideo, honestyGuard, summary };
+  return { contentProfile, product, style, exemplars, avoid, performanceHints, trend, referenceVideo, honestyGuard, summary };
 }

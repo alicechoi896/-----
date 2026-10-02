@@ -51,7 +51,7 @@ export function ContentHistoryTab() {
       header: "사용된 Context",
       render: (c) => (
         <span className="text-xs text-fg-subtle">
-          {[c.context.style && `스타일:${c.context.style.name}`, c.context.exemplars.length && `예시 ${c.context.exemplars.length}`, c.context.trend && "트렌드"]
+          {[c.context.profile && `프로필:${c.context.profile.name}`, c.context.style && `스타일:${c.context.style.name}`, c.context.exemplars.length && `예시 ${c.context.exemplars.length}`, c.context.trend && "트렌드"]
             .filter(Boolean)
             .join(" · ") || "-"}
         </span>

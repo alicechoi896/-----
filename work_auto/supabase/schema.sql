@@ -314,6 +314,28 @@ create table if not exists public.user_settings (
   updated_at    timestamptz not null default now()
 );
 
+-- 콘텐츠 프로필: "무엇을 다룰 것인가" (관심분야). 트렌드 조사 범위와 생성 Context 에 쓴다 (docs/CONTENT_PROFILE.md)
+create table if not exists public.content_profiles (
+  id                    text primary key,
+  user_id               uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name                  text not null,
+  description           text not null default '',
+  main_category         text not null,
+  sub_categories        text[] not null default '{}',
+  seed_keywords         text[] not null default '{}',
+  exclude_keywords      text[] not null default '{}',
+  default_trend_period  integer not null default 21 check (default_trend_period between 1 and 3650),
+  country               text not null default 'KR',
+  is_default            boolean not null default false,
+  is_active             boolean not null default true,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+create index if not exists idx_content_profiles_user on public.content_profiles (user_id, created_at desc);
+
+-- v0.7.0: 스타일 → 적용 콘텐츠 프로필 (선택). 프로필을 지우면 연결만 풀린다
+alter table public.user_styles add column if not exists profile_id text references public.content_profiles (id) on delete set null;
+
 -- 저장한 검색 조건 (YouTube 트렌드 필터 등). params 는 조건 JSON
 create table if not exists public.saved_filters (
   id          text primary key,
@@ -388,6 +410,7 @@ alter table public.reference_videos    enable row level security;
 alter table public.user_settings       enable row level security;
 alter table public.saved_filters       enable row level security;
 alter table public.saved_trends        enable row level security;
+alter table public.content_profiles    enable row level security;
 
 -- profiles: 본인 또는 관리자만 조회. 역할·승인 변경은 관리자만
 drop policy if exists "profiles_select" on public.profiles;
@@ -423,7 +446,7 @@ begin
   foreach t in array array[
     'api_connections', 'products', 'product_sources', 'product_analyses', 'generated_contents',
     'user_styles', 'user_feedback', 'performance_metrics', 'reference_videos', 'user_settings',
-    'saved_filters', 'saved_trends'
+    'saved_filters', 'saved_trends', 'content_profiles'
   ] loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(

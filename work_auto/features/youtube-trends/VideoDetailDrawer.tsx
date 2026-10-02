@@ -177,7 +177,10 @@ function DetailBody({
               </ol>
             </div>
             <div>
-              <p className="mb-1.5 text-xs font-medium text-fg-subtle">추천 키워드</p>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-xs font-medium text-fg-subtle">추천 키워드</p>
+                <CopyButton value={analysis.keywords.join(", ")} label="키워드 복사" />
+              </div>
               <div className="flex flex-wrap gap-1">
                 {analysis.keywords.map((k) => (
                   <Tag key={k}>{k}</Tag>
@@ -189,7 +192,10 @@ function DetailBody({
       </section>
 
       <section>
-        <h3 className="mb-2 text-[13px] font-semibold text-fg">태그 {item.tags.length ? `(${item.tags.length})` : ""}</h3>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-fg">태그 {item.tags.length ? `(${item.tags.length})` : ""}</h3>
+          {item.tags.length > 0 && <CopyButton value={item.tags.join(", ")} label="태그 복사" />}
+        </div>
         {item.tags.length ? (
           <div className="flex flex-wrap gap-1">
             {item.tags.map((t) => (

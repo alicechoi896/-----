@@ -225,8 +225,9 @@ Service는 `getRepositories()`만 호출하므로 어느 쪽이든 코드가 같
 [Service] contentGenerationService.generate()
    ├─ 1) config = getGeneratorConfig(featureId)             입력 검증 (required 필드)
    ├─ 2) context = await contextBuilder.build({...})        ★ AI Memory 조립
+   │        ├─ Content Profile   (스타일에 연결된 프로필 → 기본 프로필. "무엇을 다루는가")
    │        ├─ Product Memory    (productId → 저장된 분석. 재분석하지 않는다)
-   │        ├─ Style Memory      (채널 기본 스타일 / 선택 스타일)
+   │        ├─ Style Memory      (생성 폼에서 고른 스타일 → 채널 기본 스타일)
    │        ├─ Content History   (같은 기능의 "좋은 결과" 상위 N개 = few-shot 예시)
    │        ├─ Feedback          (최근 "별로예요" 사유 = 피해야 할 패턴)
    │        ├─ Performance       (성과 상위 콘텐츠의 특징)
@@ -241,6 +242,21 @@ Service는 `getRepositories()`만 호출하므로 어느 쪽이든 코드가 같
 
 **규칙: AI는 절대 "빈 Context"로 호출하지 않는다.** 모든 생성은 `contextBuilder.build()`를 거친다.
 Context가 실제로 비어 있으면(제품 없음, 스타일 없음 등) `contextSummary`에 그 사실을 기록하고, UI에도 "사용된 학습 데이터"로 표시한다.
+
+### 5.2.1 트렌드 조회와 콘텐츠 프로필
+
+```
+[Client] 트렌드 화면 → ProfileBar(현재 분석 기준) → GET /api/trends/{youtube|naver}?…&profileId=
+[Service] trendService → contentProfileService.resolveScope(profileId) → query.scope / query.profileScope (TrendScope)
+[Provider] YouTubeTrendProvider / NaverTrendProvider 가 TrendScope 를 각자 방식으로 해석 (분석 로직은 공유하지 않는다)
+```
+
+- 프로필은 "무엇을 조사할지"만 정하고, "어떻게 찾을지"는 채널별 Provider가 정한다. 자세한 내용은 [CONTENT_PROFILE.md](./CONTENT_PROFILE.md)를 본다.
+- NAVER 실제 데이터 (`NaverApiProvider`):
+  - 데이터랩(검색 추이·급상승·시즌)
+  - 블로그 검색(누적 문서 수)
+  - 검색광고 API(월간 검색량·연관 키워드·경쟁, 선택)
+  - 같은 조건은 6시간 동안 서버 메모리에 캐시한다.
 
 ### 5.3 API 연결 (BYOK)
 

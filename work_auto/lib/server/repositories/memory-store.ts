@@ -68,4 +68,5 @@ export const memoryRepositories: Repositories = {
   videos: createCollection("videos"),
   savedFilters: createCollection("savedFilters"),
   savedTrends: createCollection("savedTrends"),
+  contentProfiles: createCollection("contentProfiles"),
 };

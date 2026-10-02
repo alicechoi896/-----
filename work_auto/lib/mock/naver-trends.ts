@@ -1,4 +1,5 @@
-import type { Keyword, NaverRisingTopic, NaverTrendInsight, NaverTrendQuery } from "@/lib/types";
+import type { Keyword, NaverRisingTopic, NaverTrendInsight, NaverTrendQuery, TrendScope } from "@/lib/types";
+import { hasExcluded } from "@/lib/types/profile";
 import { seededNumber } from "@/lib/utils";
 
 /**
@@ -62,33 +63,67 @@ function toKeywords(words: string[], seed: string, withGrowth: boolean): Keyword
   }));
 }
 
+/** 카테고리의 대표 키워드 (프로필이 없을 때 실제 Provider 가 조사 출발점으로 쓴다) */
+export function categorySeedKeywords(category: string): string[] {
+  return (DATA[category] ?? FALLBACK).rising.slice(0, 6);
+}
+
+/** 콘텐츠 프로필 → 데모용 카테고리 데이터 (프로필 키워드로 그럴듯하게 만든다) */
+function seedFromProfile(scope: TrendScope): CategorySeed {
+  const subs = scope.subCategories.length ? scope.subCategories : [scope.mainCategory];
+  const seeds = scope.seedKeywords.length ? scope.seedKeywords : [scope.mainCategory];
+  return {
+    topics: subs.slice(0, 4).map((sub, i) => ({
+      title: `${sub} 관심 증가`,
+      description: `'${sub}' 관련 검색이 최근 늘고 있습니다. (데모 데이터)`,
+      keywords: [sub, `${sub} 추천`, seeds[i % seeds.length]],
+    })),
+    rising: [...seeds, ...subs.map((s) => `${s} 추천`)].slice(0, 8),
+    seasonal: subs.map((s) => `${s} 시즌 준비`).slice(0, 5),
+    related: [...subs, ...seeds.map((k) => `${k} 순위`)].slice(0, 8),
+    ideas: [
+      `${scope.mainCategory} 입문자가 많이 묻는 질문 정리`,
+      `${subs[0]} 가격대별 추천`,
+      `${seeds[0]} 고르는 기준 5가지`,
+      `${subs[1] ?? subs[0]} 사기 전에 확인할 것`,
+    ],
+  };
+}
+
 export function buildNaverInsight(query: NaverTrendQuery, now: number): NaverTrendInsight {
-  const seed = DATA[query.category ?? ""] ?? FALLBACK;
+  const profile = query.profileScope ?? null;
+  const seed = profile ? seedFromProfile(profile) : (DATA[query.category ?? ""] ?? FALLBACK);
   const kw = query.keyword?.trim();
-  const base = `${query.category}-${kw}-${query.periodDays}`;
+  const base = `${profile?.profileId ?? query.category}-${kw}-${query.periodDays}`;
+  const exclude = profile?.excludeKeywords ?? [];
+  const keep = (w: string) => !hasExcluded(w, exclude);
+  const category = profile?.mainCategory ?? query.category ?? "생활/주방";
 
   const risingTopics: NaverRisingTopic[] = seed.topics.map((t, i) => ({
     id: `nv_${seededNumber(t.title, 1000, 9999)}`,
     source: "naver",
     title: t.title,
     description: t.description,
-    category: query.category ?? "생활/주방",
-    keywords: t.keywords,
+    category,
+    keywords: t.keywords.filter(keep),
     growthRate: seededNumber(base + t.title, 40, 260),
     trendScore: Math.max(40, 92 - i * 9 + seededNumber(base + i, -4, 4)),
     collectedAt: new Date(now).toISOString(),
   }));
 
   // 검색어가 있으면 관련 키워드를 검색어 중심으로 확장
-  const related = kw ? [`${kw} 추천`, `${kw} 가격`, `${kw} 비교`, `${kw} 후기`, `${kw} 단점`, ...seed.related.slice(0, 3)] : seed.related;
+  const related = kw ? [`${kw} 가격`, `${kw} 비교`, `${kw} 후기`, `${kw} 단점`, `${kw} 순위`, ...seed.related.slice(0, 3)] : seed.related;
 
-  const points = query.periodDays;
+  // 기간이 길면 주·월 단위로 묶는다 (실제 데이터랩과 같은 단위)
+  const days = query.periodDays;
+  const step = days <= 90 ? 1 : days <= 365 ? 7 : 30;
+  const points = Math.round(days / step);
   const searchTrend = Array.from({ length: points }, (_, i) => {
-    const d = new Date(now - (points - 1 - i) * 86_400_000);
+    const d = new Date(now - (points - 1 - i) * step * 86_400_000);
     const wave = Math.sin(i / 2.2) * 8;
     const growth = (i / points) * 35;
     return {
-      date: `${d.getMonth() + 1}/${d.getDate()}`,
+      date: step === 30 ? `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}` : `${d.getMonth() + 1}/${d.getDate()}`,
       value: Math.round(Math.min(100, 45 + growth + wave + seededNumber(base + i, -5, 5))),
     };
   });
@@ -96,11 +131,22 @@ export function buildNaverInsight(query: NaverTrendQuery, now: number): NaverTre
   return {
     query,
     risingTopics,
-    risingKeywords: toKeywords(seed.rising, base, true),
-    seasonalKeywords: toKeywords(seed.seasonal, base + "s", true),
-    relatedKeywords: toKeywords(related, base + "r", false),
+    risingKeywords: toKeywords(seed.rising.filter(keep), base, true),
+    seasonalKeywords: toKeywords(seed.seasonal.filter(keep), base + "s", true),
+    relatedKeywords: toKeywords(related.filter(keep), base + "r", false),
     searchTrend,
     contentIdeas: kw ? [`${kw} 고르는 기준 5가지`, `${kw} 가격대별 비교`, ...seed.ideas.slice(0, 2)] : seed.ideas,
+    keywordStats: kw
+      ? {
+          keyword: kw,
+          monthlyPc: seededNumber(kw + "pc", 1_000, 40_000),
+          monthlyMobile: seededNumber(kw + "mo", 5_000, 160_000),
+          competition: (["low", "mid", "high"] as const)[seededNumber(kw, 0, 2)],
+          blogDocCount: seededNumber(kw + "blog", 2_000, 900_000),
+        }
+      : null,
+    dataSource: "mock",
+    notes: [],
     collectedAt: new Date(now).toISOString(),
   };
 }

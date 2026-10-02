@@ -10,6 +10,7 @@ import type {
   ProductSource,
   ReferenceVideo,
   RolePermission,
+  ContentProfile,
   SavedFilter,
   SavedTrend,
   UserProfile,
@@ -49,4 +50,5 @@ export interface Repositories {
   videos: Repository<ReferenceVideo>;
   savedFilters: Repository<SavedFilter>;
   savedTrends: Repository<SavedTrend>;
+  contentProfiles: Repository<ContentProfile>;
 }

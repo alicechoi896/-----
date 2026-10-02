@@ -39,8 +39,14 @@ function validate<P extends ProviderId>(provider: P, raw: unknown): ProviderCred
   const c = (raw ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof c[k] === "string" ? (c[k] as string).trim() : "");
   if (provider === "naver") {
-    if (!str("clientId") || !str("clientSecret")) throw new AppError("VALIDATION", "Client ID 와 Client Secret 을 모두 입력해 주세요.");
-    return { clientId: str("clientId"), clientSecret: str("clientSecret") } as ProviderCredentialMap[P];
+    // 비운 칸은 기존 값을 유지한다 (검색광고 키만 추가할 때 Client ID 를 다시 넣지 않아도 되도록) → connect() 에서 합친다
+    return {
+      clientId: str("clientId"),
+      clientSecret: str("clientSecret"),
+      adApiKey: str("adApiKey"),
+      adSecretKey: str("adSecretKey"),
+      adCustomerId: str("adCustomerId").replace(/[^\d]/g, ""),
+    } as ProviderCredentialMap[P];
   }
   if (!str("apiKey")) throw new AppError("VALIDATION", "API Key 를 입력해 주세요.");
   if (provider === "openai" && !str("apiKey").startsWith("sk-")) {
@@ -68,6 +74,29 @@ function assertProvider(provider: string): asserts provider is ProviderId {
   if (!PROVIDER_IDS.includes(provider as ProviderId)) throw new AppError("UNKNOWN_PROVIDER", "지원하지 않는 Provider 입니다.", 404);
 }
 
+/**
+ * NAVER: 비운 칸은 저장된 값으로 채운다. 검색광고 키 3개는 모두 있거나 모두 없어야 한다.
+ * (검색광고 3칸을 모두 지우려면 연결 해제 후 다시 연결한다)
+ */
+async function mergeNaver(input: ProviderCredentialMap["naver"]): Promise<ProviderCredentialMap["naver"]> {
+  const prev = (await loadCredentials("naver").catch(() => null)) ?? null;
+  const pick = (k: keyof ProviderCredentialMap["naver"]) => input[k] || prev?.[k] || "";
+  const merged = {
+    clientId: pick("clientId"),
+    clientSecret: pick("clientSecret"),
+    adApiKey: pick("adApiKey"),
+    adSecretKey: pick("adSecretKey"),
+    adCustomerId: pick("adCustomerId"),
+  };
+  if (!merged.clientId || !merged.clientSecret) throw new AppError("VALIDATION", "Client ID 와 Client Secret 을 모두 입력해 주세요.");
+  const ad = [merged.adApiKey, merged.adSecretKey, merged.adCustomerId].filter(Boolean).length;
+  if (ad > 0 && ad < 3) {
+    throw new AppError("VALIDATION", "검색광고 API 는 엑세스라이선스, 비밀키, CUSTOMER_ID 세 가지를 모두 입력해야 합니다.");
+  }
+  if (ad === 0) return { clientId: merged.clientId, clientSecret: merged.clientSecret };
+  return merged;
+}
+
 async function findConnection(provider: ProviderId) {
   const userId = await getCurrentUserId();
   const [conn] = await getRepositories().connections.list((c) => c.userId === userId && c.provider === provider);
@@ -86,11 +115,15 @@ export const connectionService = {
 
   async connect(provider: string, credentials: unknown): Promise<ApiConnectionPublic> {
     assertProvider(provider);
-    const cred = validate(provider, credentials);
+    let cred = validate(provider, credentials);
+    if (provider === "naver") cred = (await mergeNaver(cred as ProviderCredentialMap["naver"])) as typeof cred;
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const now = nowIso();
-    const hint = provider === "naver" ? `ID ${maskSecret((cred as ProviderCredentialMap["naver"]).clientId)}` : maskSecret((cred as { apiKey: string }).apiKey);
+    const hint =
+      provider === "naver"
+        ? `ID ${maskSecret((cred as ProviderCredentialMap["naver"]).clientId)}${(cred as ProviderCredentialMap["naver"]).adApiKey ? " · 검색광고 연결" : ""}`
+        : maskSecret((cred as { apiKey: string }).apiKey);
     const encrypted = encryptSecret(JSON.stringify(cred));
 
     const existing = await findConnection(provider);

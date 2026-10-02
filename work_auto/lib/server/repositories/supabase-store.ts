@@ -87,4 +87,5 @@ export const supabaseRepositories: Repositories = {
   videos: createTable("reference_videos"),
   savedFilters: createTable("saved_filters"),
   savedTrends: createTable("saved_trends"),
+  contentProfiles: createTable("content_profiles"),
 };

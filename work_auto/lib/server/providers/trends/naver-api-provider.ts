@@ -1,35 +1,73 @@
 import "server-only";
-import type { NaverTrendInsight, NaverTrendQuery } from "@/lib/types";
-import { AppError } from "../../http";
+import { categorySeedKeywords } from "@/lib/mock/naver-trends";
+import { hasExcluded } from "@/lib/types/profile";
+import type { Keyword, NaverKeywordStats, NaverRisingTopic, NaverTrendInsight, NaverTrendQuery } from "@/lib/types";
+import { seededNumber } from "@/lib/utils";
 import type { NaverTrendProvider } from "../types";
+import { SearchAdError, fetchKeywordTool, type SearchAdCredentials, type SearchAdKeyword } from "./naver-searchad";
 
 /**
- * NAVER Open API Provider.
- * - testConnection: 실제로 호출한다. 이 서비스가 쓸 **데이터랩(검색어트렌드)** API 로 확인하고,
- *   실패하면 NAVER 가 돌려준 오류 코드로 원인(키 오류 / 앱에 API 미등록 등)을 안내한다.
- * - getInsight: 아직 구현하지 않았다. (registry 에서 트렌드 조회는 계속 Mock 을 쓴다)
+ * NAVER 실제 데이터 Provider. (YouTube 분석과 로직을 공유하지 않는다)
  *
- * 구현 메모 (docs/API_PROVIDER_SPEC.md "NAVER")
- *  1) DataLab 검색어 트렌드  POST https://openapi.naver.com/v1/datalab/search      → searchTrend
- *  2) DataLab 쇼핑인사이트   POST https://openapi.naver.com/v1/datalab/shopping/… → 카테고리 급상승
- *  3) 연관 키워드·검색량: 검색광고 API(키워드도구)는 별도 인증(API Key, Secret, Customer ID)이 필요하다
- *  4) contentIdeas 는 위 결과를 AIProvider 로 해석해 만든다 (Provider 끼리 직접 호출하지 말고 Service 에서 조합)
+ * 콘텐츠 프로필은 "무엇을 조사할지"(후보 키워드)만 준다. 조사 방법은 아래와 같다.
+ *  1) 후보 키워드: 검색어 → 없으면 프로필의 관심 키워드·세부 관심분야 → 없으면 카테고리 기본 키워드
+ *  2) 검색광고 API 키워드도구: 후보의 연관 키워드 + 월간 검색량 + 경쟁도 (키가 있을 때만)
+ *  3) 데이터랩 검색어트렌드:
+ *     - 검색 추이: 검색어의 기간 내 상대 지수 (7일 ~ 3년)
+ *     - 급상승: 후보 키워드 각각의 "기간 끝 1/4 평균 ÷ 앞부분 평균"
+ *     - 시즌: 작년 다음 달 지수 ÷ 연평균 (다음 달에 오를 키워드)
+ *  4) 블로그 검색 API: 검색어의 블로그 누적 문서 수 (발행량 지표)
+ *  5) 글감 아이디어: 위 키워드로 규칙 기반 생성 (AI 호출 없음, 비용 0)
+ *  제외 키워드가 들어간 키워드는 모든 목록에서 뺀다.
+ *
+ * 호출량: 조회 1회 ≈ 데이터랩 최대 9회 + 검색광고 1~2회 + 블로그 검색 1회. 같은 조건은 6시간 캐시.
+ * (데이터랩 하루 1,000회, 검색 API 하루 25,000회)
  */
 
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
+const BLOG_URL = "https://openapi.naver.com/v1/search/blog.json";
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_CANDIDATES = 20;
+
+const cache = new Map<string, { at: number; value: NaverTrendInsight }>();
+
+type Series = { period: string; ratio: number }[];
 
 /** NAVER 오류 응답 → 사용자 안내 (키 값은 절대 넣지 않는다) */
-function describeNaverError(status: number, body: { errorCode?: string; errorMessage?: string } | null): string {
+function describeNaverError(status: number, body: { errorCode?: string; errorMessage?: string } | null, api = "데이터랩(검색어트렌드)"): string {
   const code = body?.errorCode ? ` [${body.errorCode}]` : "";
   const raw = body?.errorMessage ? ` · NAVER 메시지: ${body.errorMessage}` : "";
   if (status === 401) {
     return `Client ID 또는 Client Secret 이 올바르지 않습니다. NAVER 개발자센터 → 내 애플리케이션에서 값을 다시 복사해 주세요.${code}${raw}`;
   }
   if (status === 403) {
-    return `이 애플리케이션에 '데이터랩(검색어트렌드)' API 가 등록되어 있지 않습니다. NAVER 개발자센터 → 내 애플리케이션 → API 설정 → 사용 API 에 '데이터랩 (검색어트렌드)' 를 추가해 주세요.${code}${raw}`;
+    return `이 애플리케이션에 '${api}' API 가 등록되어 있지 않습니다. NAVER 개발자센터 → 내 애플리케이션 → API 설정 → 사용 API 에 '${api}' 를 추가해 주세요.${code}${raw}`;
   }
   if (status === 429) return `NAVER API 하루 호출 한도를 넘었습니다. 내일 다시 시도해 주세요.${code}${raw}`;
   return `NAVER 응답 오류 (HTTP ${status})${code}${raw}`;
+}
+
+class NaverHttpError extends Error {}
+
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+const uniq = (xs: string[]) => [...new Map(xs.map((x) => [x.replace(/\s+/g, "").toLowerCase(), x.trim()])).values()].filter(Boolean);
+
+/** 기간 끝 1/4 의 평균이 앞부분 평균보다 몇 % 높은가 */
+function growthOf(series: Series): number {
+  const values = series.map((s) => s.ratio);
+  if (values.length < 4) return 0;
+  const cut = Math.max(1, Math.round(values.length / 4));
+  const recent = avg(values.slice(-cut));
+  const before = avg(values.slice(0, -cut));
+  if (before <= 0) return recent > 0 ? 300 : 0;
+  return Math.round((recent / before - 1) * 100);
+}
+
+function chartLabel(period: string, timeUnit: string): string {
+  const [y, m, d] = period.split("-");
+  if (timeUnit === "month") return `${y.slice(2)}.${m}`;
+  return `${Number(m)}/${Number(d)}`;
 }
 
 export class NaverApiProvider implements NaverTrendProvider {
@@ -40,6 +78,7 @@ export class NaverApiProvider implements NaverTrendProvider {
   constructor(
     private readonly clientId: string,
     private readonly clientSecret: string,
+    private readonly searchAd: SearchAdCredentials | null = null,
   ) {}
 
   private headers() {
@@ -52,31 +91,221 @@ export class NaverApiProvider implements NaverTrendProvider {
 
   async testConnection() {
     const testedAt = new Date().toISOString();
-    const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
     try {
-      const res = await fetch(DATALAB_URL, {
-        method: "POST",
-        headers: this.headers(),
-        cache: "no-store",
-        body: JSON.stringify({
-          startDate: day(8),
-          endDate: day(1),
-          timeUnit: "date",
-          keywordGroups: [{ groupName: "연결테스트", keywords: ["날씨"] }],
-        }),
-      });
-      if (res.ok) {
-        return { ok: true, message: "NAVER 데이터랩(검색어트렌드) API 에 정상적으로 연결되었습니다.", testedAt, mock: false };
-      }
-      const body = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
-      return { ok: false, message: describeNaverError(res.status, body), testedAt, mock: false };
-    } catch {
-      return { ok: false, message: "NAVER 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", testedAt, mock: false };
+      await this.datalab([{ groupName: "연결테스트", keywords: ["날씨"] }], 8, "date");
+    } catch (e) {
+      const message = e instanceof NaverHttpError ? e.message : "NAVER 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.";
+      return { ok: false, message, testedAt, mock: false };
     }
+    const parts = ["데이터랩(검색어트렌드) 연결 성공"];
+    const blog = await this.blogDocCount("가전").then(
+      () => "블로그 검색 연결 성공",
+      (e: unknown) => (e instanceof NaverHttpError ? `블로그 검색 실패: ${e.message}` : "블로그 검색 실패"),
+    );
+    parts.push(blog);
+    if (this.searchAd) {
+      parts.push(
+        await fetchKeywordTool(this.searchAd, ["가전"]).then(
+          () => "검색광고 API(검색량) 연결 성공",
+          (e: unknown) => `검색광고 API 실패: ${e instanceof Error ? e.message : "알 수 없는 오류"}`,
+        ),
+      );
+    } else {
+      parts.push("검색광고 API 키 미입력 (검색량·연관 키워드 없이 동작)");
+    }
+    return { ok: true, message: parts.join(" · "), testedAt, mock: false };
   }
 
-  async getInsight(_query: NaverTrendQuery): Promise<NaverTrendInsight> {
-    void _query;
-    throw new AppError("NOT_IMPLEMENTED", "NAVER 트렌드 실제 수집은 아직 구현되지 않았습니다. (docs/NEXT_STEPS.md)", 501);
+  /* ───────── 외부 호출 ───────── */
+
+  /** 데이터랩: 그룹 5개까지 한 번에. 끝 날짜는 어제 (오늘 데이터는 아직 없다) */
+  private async datalab(
+    groups: { groupName: string; keywords: string[] }[],
+    days: number,
+    timeUnit: "date" | "week" | "month",
+    endOffsetDays = 1,
+  ): Promise<Map<string, Series>> {
+    const end = new Date(Date.now() - endOffsetDays * 86_400_000);
+    const start = new Date(end.getTime() - (days - 1) * 86_400_000);
+    const res = await fetch(DATALAB_URL, {
+      method: "POST",
+      headers: this.headers(),
+      cache: "no-store",
+      body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), timeUnit, keywordGroups: groups.slice(0, 5) }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
+      throw new NaverHttpError(describeNaverError(res.status, body));
+    }
+    const data = (await res.json()) as { results: { title: string; data: Series }[] };
+    return new Map(data.results.map((r) => [r.title, r.data]));
   }
+
+  /** 키워드 여러 개를 각각 한 그룹으로 (5개씩 나눠 호출) */
+  private async seriesFor(keywords: string[], days: number, timeUnit: "date" | "week" | "month"): Promise<Map<string, Series>> {
+    const chunks: string[][] = [];
+    for (let i = 0; i < keywords.length; i += 5) chunks.push(keywords.slice(i, i + 5));
+    const maps = await Promise.all(chunks.map((c) => this.datalab(c.map((k) => ({ groupName: k, keywords: [k] })), days, timeUnit)));
+    return new Map(maps.flatMap((m) => [...m.entries()]));
+  }
+
+  private async blogDocCount(keyword: string): Promise<number> {
+    const res = await fetch(`${BLOG_URL}?${new URLSearchParams({ query: keyword, display: "1" }).toString()}`, {
+      headers: this.headers(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
+      throw new NaverHttpError(describeNaverError(res.status, body, "검색"));
+    }
+    return ((await res.json()) as { total?: number }).total ?? 0;
+  }
+
+  /* ───────── 인사이트 ───────── */
+
+  async getInsight(query: NaverTrendQuery): Promise<NaverTrendInsight> {
+    const kw = query.keyword?.trim() ?? "";
+    const scope = query.profileScope ?? null;
+    const exclude = scope?.excludeKeywords ?? [];
+    const cacheKey = JSON.stringify([kw, query.periodDays, query.category ?? "", scope, Boolean(this.searchAd)]);
+    const hit = cache.get(cacheKey);
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ...hit.value, query };
+
+    const notes: string[] = [];
+    const ok = (k: string) => !hasExcluded(k, exclude);
+
+    // 1) 조사 출발점
+    const seeds = uniq(
+      kw ? [kw] : scope ? [...scope.seedKeywords, ...scope.subCategories] : categorySeedKeywords(query.category ?? ""),
+    ).filter(ok);
+    if (!seeds.length) seeds.push(scope?.mainCategory ?? "가전");
+
+    // 2) 연관 키워드 + 검색량 (검색광고 API)
+    let related: SearchAdKeyword[] = [];
+    let seedStats: SearchAdKeyword | undefined;
+    if (this.searchAd) {
+      try {
+        const rows = await fetchKeywordTool(this.searchAd, seeds.slice(0, 5));
+        const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+        seedStats = kw ? rows.find((r) => norm(r.text) === norm(kw)) : undefined;
+        const seedSet = new Set(seeds.map(norm));
+        related = rows.filter((r) => !seedSet.has(norm(r.text)) && ok(r.text)).sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+      } catch (e) {
+        notes.push(e instanceof SearchAdError ? e.message : "검색광고 API 를 호출하지 못해 검색량·연관 키워드를 표시하지 않습니다.");
+      }
+    } else {
+      notes.push("검색광고 API 키가 없어 월간 검색량·연관 키워드는 표시하지 않습니다. (설정 → API 연결 센터 → NAVER)");
+    }
+    const volumeOf = new Map(related.map((r) => [r.text, r]));
+
+    // 3) 급상승 후보 = 출발점 + 검색량 많은 연관 키워드
+    const candidates = uniq([...seeds, ...related.slice(0, 30).map((r) => r.text)]).slice(0, MAX_CANDIDATES);
+    const periodDays = query.periodDays;
+    const timeUnit = periodDays <= 90 ? "date" : periodDays <= 365 ? "week" : "month";
+
+    const [candidateSeries, monthly, keywordSeries, blogCount] = await Promise.all([
+      this.seriesFor(candidates, Math.min(periodDays, 90), "date"),
+      this.seriesFor(candidates, 365, "month").catch(() => new Map<string, Series>()),
+      kw ? this.datalab([{ groupName: kw, keywords: [kw] }], periodDays, timeUnit) : Promise.resolve(new Map<string, Series>()),
+      kw
+        ? this.blogDocCount(kw).catch((e: unknown) => {
+            notes.push(e instanceof NaverHttpError ? `블로그 문서 수: ${e.message}` : "블로그 문서 수를 가져오지 못했습니다.");
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const toKeyword = (text: string, growthRate?: number): Keyword => {
+      const v = volumeOf.get(text) ?? (seedStats && text === kw ? seedStats : undefined);
+      return { text, source: "naver", volume: v?.volume, growthRate, competition: v?.competition };
+    };
+
+    const risingKeywords = candidates
+      .map((k) => ({ k, g: growthOf(candidateSeries.get(k) ?? []) }))
+      .filter((x) => (candidateSeries.get(x.k) ?? []).some((p) => p.ratio > 0))
+      .sort((a, b) => b.g - a.g)
+      .slice(0, 8)
+      .map((x) => toKeyword(x.k, x.g));
+
+    // 시즌: 작년 "다음 달" 지수가 연평균보다 높은 키워드
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const lastYearNext = `${nextMonth.getFullYear() - 1}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}`;
+    const seasonalKeywords = candidates
+      .map((k) => {
+        const s = monthly.get(k) ?? [];
+        const base = avg(s.map((p) => p.ratio));
+        const target = s.find((p) => p.period.startsWith(lastYearNext))?.ratio ?? 0;
+        return { k, idx: base > 0 ? target / base : 0 };
+      })
+      .filter((x) => x.idx >= 1.15)
+      .sort((a, b) => b.idx - a.idx)
+      .slice(0, 6)
+      .map((x) => toKeyword(x.k, Math.round((x.idx - 1) * 100)));
+
+    const relatedKeywords = (kw ? related : related.slice(0, 40)).slice(0, 15).map((r) => toKeyword(r.text));
+
+    const searchTrend = (keywordSeries.get(kw) ?? []).map((p) => ({ date: chartLabel(p.period, timeUnit), value: Math.round(p.ratio) }));
+
+    const keywordStats: NaverKeywordStats | null = kw
+      ? {
+          keyword: kw,
+          monthlyPc: seedStats?.monthlyPc ?? null,
+          monthlyMobile: seedStats?.monthlyMobile ?? null,
+          competition: seedStats?.competition ?? null,
+          blogDocCount: blogCount,
+        }
+      : null;
+
+    const now = new Date().toISOString();
+    const risingTopics: NaverRisingTopic[] = risingKeywords.slice(0, 5).map((k, i) => ({
+      id: `nv_${seededNumber(k.text, 100000, 999999)}`,
+      source: "naver",
+      title: k.text,
+      description: `최근 검색 지수가 앞선 기간보다 ${k.growthRate ?? 0}% ${(k.growthRate ?? 0) >= 0 ? "높습니다" : "낮습니다"}.${k.volume ? ` 월간 검색량 약 ${k.volume.toLocaleString("ko-KR")}회.` : ""}`,
+      category: scope?.mainCategory ?? query.category ?? "",
+      keywords: [k.text, ...related.filter((r) => r.text.includes(k.text) && r.text !== k.text).slice(0, 3).map((r) => r.text)],
+      growthRate: k.growthRate ?? 0,
+      trendScore: Math.max(30, 95 - i * 8),
+      collectedAt: now,
+    }));
+
+    const insight: NaverTrendInsight = {
+      query,
+      risingTopics,
+      risingKeywords,
+      seasonalKeywords,
+      relatedKeywords,
+      searchTrend,
+      contentIdeas: buildIdeas(kw, relatedKeywords, risingKeywords, seasonalKeywords, scope?.mainCategory),
+      keywordStats,
+      dataSource: "live",
+      notes,
+      collectedAt: now,
+    };
+    cache.set(cacheKey, { at: Date.now(), value: insight });
+    if (cache.size > 200) cache.delete(cache.keys().next().value!);
+    return insight;
+  }
+}
+
+/** 글감 아이디어 (규칙 기반, AI 호출 없음) */
+function buildIdeas(kw: string, related: Keyword[], rising: Keyword[], seasonal: Keyword[], category?: string): string[] {
+  const r = related.map((k) => k.text);
+  const ideas = kw
+    ? [
+        `${kw} 고르는 기준 5가지`,
+        `${kw} 가격대별 비교 정리`,
+        r[0] && r[1] ? `${r[0]} vs ${r[1]} 차이 한눈에 보기` : "",
+        `${kw} 장단점 솔직 정리`,
+        r[2] ? `${r[2]}, 사기 전에 확인할 것` : "",
+      ]
+    : [
+        rising[0] ? `요즘 '${rising[0].text}' 검색이 늘어난 이유` : "",
+        rising[1] ? `${rising[1].text} 처음 사는 사람을 위한 가이드` : "",
+        seasonal[0] ? `다음 달 대비: ${seasonal[0].text} 미리 준비하기` : "",
+        category ? `${category} 입문자가 많이 묻는 질문 정리` : "",
+        rising[2] ? `${rising[2].text} 가격대별 추천` : "",
+      ];
+  return ideas.filter(Boolean).slice(0, 5);
 }

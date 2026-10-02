@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowUpRight, CalendarRange, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
+import { ArrowUpRight, CalendarRange, Info, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
+import { ProfileBar } from "@/features/content-profile/ProfileBar";
+import { useContentProfile } from "@/features/content-profile/useContentProfile";
 import { CATEGORY_OPTIONS } from "@/lib/generators/configs";
 import type { Keyword, NaverTrendInsight } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -15,10 +17,12 @@ import {
   FilterBar,
   FilterItem,
   LoadingState,
+  Notice,
   SearchInput,
   SectionCard,
   SegmentedControl,
   Select,
+  StatTile,
   Tag,
   TrendLineChart,
   type Column,
@@ -29,6 +33,11 @@ const PERIODS = [
   { value: "7", label: "7일" },
   { value: "14", label: "14일" },
   { value: "30", label: "30일" },
+  { value: "90", label: "3개월" },
+  { value: "180", label: "6개월" },
+  { value: "365", label: "1년" },
+  { value: "730", label: "2년" },
+  { value: "1095", label: "3년" },
 ];
 
 const COMPETITION = {
@@ -48,16 +57,22 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
   const [keywordInput, setKeywordInput] = useState("");
   const [keyword, setKeyword] = useState("");
   const [period, setPeriod] = useState("14");
+  // 콘텐츠 프로필: "무엇을 조사할지" (카테고리·관심 키워드·제외 키워드). 분석은 NAVER 방식으로 따로 한다
+  const profile = useContentProfile();
+  const useProfile = Boolean(profile.selected && profile.applied);
 
   const { data, loading, error, reload } = useAsync(
     () =>
-      api.trends.naver({
-        scope,
-        category,
-        keyword,
-        periodDays: Number(period),
-      }),
-    [scope, category, keyword, period],
+      profile.ready
+        ? api.trends.naver({
+            scope,
+            category: useProfile ? undefined : category,
+            keyword,
+            periodDays: Number(period),
+            profileId: profile.scopeParam,
+          })
+        : new Promise<never>(() => {}), // 프로필을 읽은 뒤 한 번만 조회한다
+    [scope, category, keyword, period, profile.ready, profile.scopeParam],
   );
   const insight = data?.insight;
 
@@ -74,6 +89,7 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
 
   return (
     <div className="space-y-5">
+      <ProfileBar state={profile} note="검색어를 넣으면 이 범위 안에서 좁혀 조사합니다" />
       <FilterBar
         actions={
           <Button variant="primary" icon={Search} onClick={() => setKeyword(keywordInput.trim())}>
@@ -81,9 +97,11 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
           </Button>
         }
       >
-        <FilterItem label="카테고리">
-          <Select className="w-40" value={category} options={CATEGORY_OPTIONS} onChange={(e) => setCategory(e.target.value)} />
-        </FilterItem>
+        {!useProfile && (
+          <FilterItem label="카테고리">
+            <Select className="w-40" value={category} options={CATEGORY_OPTIONS} onChange={(e) => setCategory(e.target.value)} />
+          </FilterItem>
+        )}
         <FilterItem label="검색어">
           <SearchInput
             className="w-60"
@@ -97,9 +115,17 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
           />
         </FilterItem>
         <FilterItem label="최근 기간">
-          <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} />
+          <SegmentedControl className="flex-wrap" options={PERIODS} value={period} onChange={setPeriod} />
         </FilterItem>
       </FilterBar>
+
+      {insight?.notes && insight.notes.length > 0 && !loading && (
+        <Notice tone="neutral" icon={Info}>
+          {insight.notes.map((n) => (
+            <p key={n}>{n}</p>
+          ))}
+        </Notice>
+      )}
 
       {loading ? (
         <SectionCard>
@@ -223,6 +249,7 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
   return (
     <div className="space-y-4">
       <ActiveKeyword keyword={keyword} onClear={onClear} />
+      {insight.keywordStats && <KeywordStatsRow stats={insight.keywordStats} />}
       <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
         <SectionCard title={`최근 검색 추이 · ${keyword}`} icon={TrendingUp} description="기간 내 최대값을 100으로 둔 상대 지수입니다.">
           <TrendLineChart data={insight.searchTrend} />
@@ -233,7 +260,7 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
         {ideas}
-        <SectionCard title="다른 키워드 둘러보기" icon={Zap} description="검색어와 별개로, 선택한 카테고리에서 요즘 뜨는 키워드입니다.">
+        <SectionCard title="다른 키워드 둘러보기" icon={Zap} description="검색어와 별개로, 현재 분석 기준(프로필·카테고리)에서 요즘 뜨는 키워드입니다.">
           <p className="mb-1.5 text-[11.5px] font-medium text-fg-subtle">급상승</p>
           <div className="flex flex-wrap gap-1.5">
             {insight.risingKeywords.slice(0, 8).map((k) => (
@@ -265,6 +292,35 @@ function ActiveKeyword({ keyword, onClear }: { keyword: string; onClear: () => v
         </button>
       </span>
       <span className="text-xs text-fg-subtle">로 조회한 결과입니다.</span>
+    </div>
+  );
+}
+
+/** 검색어 지표: 월간 검색량(검색광고 API), 경쟁, 블로그 누적 문서 수(검색 API) */
+function KeywordStatsRow({ stats }: { stats: NonNullable<NaverTrendInsight["keywordStats"]> }) {
+  const total = stats.monthlyPc != null && stats.monthlyMobile != null ? stats.monthlyPc + stats.monthlyMobile : null;
+  const ratio = total && stats.blogDocCount != null ? stats.blogDocCount / Math.max(total, 1) : null;
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatTile
+        label="월간 검색량"
+        value={total != null ? formatNumber(total) : "-"}
+        unit={total != null ? "회" : undefined}
+        hint={total != null ? `PC ${formatNumber(stats.monthlyPc ?? 0)} · 모바일 ${formatNumber(stats.monthlyMobile ?? 0)}` : "검색광고 API 연결 필요"}
+      />
+      <StatTile label="광고 경쟁" value={stats.competition ? COMPETITION[stats.competition].label : "-"} hint="검색광고 기준" />
+      <StatTile
+        label="블로그 문서 수 (누적)"
+        value={stats.blogDocCount != null ? formatNumber(stats.blogDocCount) : "-"}
+        unit={stats.blogDocCount != null ? "건" : undefined}
+        hint="발행량 지표 · 많을수록 경쟁이 셉니다"
+      />
+      <StatTile
+        label="검색량 대비 문서 수"
+        value={ratio != null ? ratio.toFixed(1) : "-"}
+        unit={ratio != null ? "배" : undefined}
+        hint={ratio != null ? (ratio < 1 ? "문서가 적은 편 → 노출 기회" : ratio < 5 ? "보통" : "포화 → 세부 키워드 추천") : "검색량·문서 수가 모두 있을 때 계산"}
+      />
     </div>
   );
 }

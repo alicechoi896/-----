@@ -5,7 +5,7 @@ import { ArrowUpRight, Hash, Sparkles } from "lucide-react";
 import { recommendKeywords } from "@/lib/domain/youtube";
 import type { YouTubeTopicSuggestion, YouTubeTrendItem } from "@/lib/types";
 import { api } from "@/lib/api-client";
-import { Button, LinkButton, Notice, SectionCard } from "@/components/ui";
+import { Button, CopyButton, LinkButton, Notice, SectionCard } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { FormatBadge } from "./VideoDetailDrawer";
 import { infoVideoHref } from "./trend-links";
@@ -48,6 +48,7 @@ export function TrendInsights({
       <SectionCard
         title="추천 키워드"
         icon={Hash}
+        actions={keywords.length > 0 && <CopyButton value={keywords.map((k) => k.text).join(", ")} label="전체 복사" />}
         description="불러온 영상의 태그·제목에 자주 나오고, 성과(Trend Score)가 좋은 영상에 붙은 단어 순서입니다. 누르면 그 키워드로 검색합니다."
       >
         {keywords.length === 0 ? (

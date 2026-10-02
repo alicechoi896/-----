@@ -1,4 +1,5 @@
 import type { YouTubeTrendItem, YouTubeTrendQuery } from "@/lib/types";
+import { hasExcluded } from "@/lib/types/profile";
 
 /**
  * YouTube 트렌드 조회 공용 규칙 (클라이언트·서버 공용, 순수 함수)
@@ -60,9 +61,11 @@ export function dateRange(days: number, now = Date.now()): { publishedFrom: stri
   return { publishedFrom: ymd(new Date(now - days * 86_400_000)), publishedTo: ymd(new Date(now)) };
 }
 
-/** 기본 조회 조건: 한국, 최근 7일, 전체 */
+/** 기본 조회 조건: 한국, 최근 7일, 전체, 구독자 0~5만, 조회수 1만 이상 (작은 채널의 잘된 영상 찾기) */
+export const DEFAULT_RANGES = { minSubscribers: 0, maxSubscribers: 50_000, minViews: 10_000 } as const;
+
 export function defaultYouTubeQuery(now = Date.now()): YouTubeTrendQuery {
-  return { country: "KR", format: "all", recentDays: 7, ...dateRange(7, now) };
+  return { country: "KR", format: "all", recentDays: 7, ...dateRange(7, now), ...DEFAULT_RANGES };
 }
 
 /** "최근 N일" 조건이면 오늘 기준으로 날짜를 다시 계산한다 */
@@ -77,6 +80,25 @@ export function periodDaysOf(query: Pick<YouTubeTrendQuery, "publishedFrom" | "p
   return Math.max(1, Math.round((to - from) / 86_400_000));
 }
 
+/**
+ * YouTube 검색어(q) 만들기: 콘텐츠 프로필 범위 + 이번 검색어.
+ * - 검색어가 있으면 그 검색어로 좁힌다 (프로필 범위 안의 세부 주제)
+ * - 없으면 프로필의 관심 키워드·세부 관심분야를 OR(|) 로 묶어 넓게 찾는다
+ * - 제외 키워드는 YouTube 의 -검색어 로 뺀다 (결과에서도 한 번 더 거른다)
+ */
+export function buildYouTubeSearchQ(q: Pick<YouTubeTrendQuery, "keyword" | "scope">): string | undefined {
+  const quote = (t: string) => (/\s/.test(t) ? `"${t}"` : t);
+  const parts: string[] = [];
+  const kw = q.keyword?.trim();
+  if (kw) parts.push(kw);
+  else if (q.scope) {
+    const terms = [...q.scope.seedKeywords, ...q.scope.subCategories].slice(0, 12);
+    parts.push(terms.length ? terms.map(quote).join("|") : q.scope.mainCategory);
+  }
+  if (q.scope && parts.length) parts.push(...q.scope.excludeKeywords.slice(0, 8).map((e) => `-${e.replace(/\s+/g, "")}`));
+  return parts.join(" ") || undefined;
+}
+
 /** 구독자·조회수·댓글·유형 조건 (YouTube 검색 API 가 지원하지 않아 받아온 뒤 거른다) */
 export function matchesRanges(item: YouTubeTrendItem, q: YouTubeTrendQuery): boolean {
   if (q.format === "shorts" && item.format !== "shorts") return false;
@@ -85,7 +107,7 @@ export function matchesRanges(item: YouTubeTrendItem, q: YouTubeTrendQuery): boo
   if (q.maxSubscribers != null && item.channelSubscribers > q.maxSubscribers) return false;
   if (q.minViews != null && item.views < q.minViews) return false;
   if (q.maxViews != null && item.views >= q.maxViews) return false;
-  if (q.minComments != null && (item.commentCount ?? 0) < q.minComments) return false;
+  if (q.scope && hasExcluded(`${item.title} ${item.tags.join(" ")}`, q.scope.excludeKeywords)) return false;
   return true;
 }
 
