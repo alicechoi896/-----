@@ -214,6 +214,15 @@ export const api = {
   videos: {
     list: () => request<ReferenceVideo[]>("/api/videos"),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),
+    /** 샤오홍슈 노트의 영상 주소 (서버는 주소만, 파일은 브라우저가 직접 받는다) */
+    resolve: (url: string) =>
+      request<{
+        noteId: string;
+        title: string;
+        author: string;
+        durationSec: number;
+        streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
+      }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
     importMany: (items: { url: string; titleHint?: string }[], note?: string) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {

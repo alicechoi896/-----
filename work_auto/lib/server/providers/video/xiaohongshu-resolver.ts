@@ -1,0 +1,126 @@
+import "server-only";
+import { AppError } from "../../http";
+
+/**
+ * 샤오홍슈(小红书) 노트 → 영상 주소 찾기.
+ *
+ * - 모바일 웹 페이지(iPhone 브라우저로 요청)에는 로그인 없이 영상 정보(__INITIAL_STATE__)가 들어 있다.
+ *   (PC 브라우저로 요청하면 로그인 페이지로 보낸다 — 2026-10 확인)
+ * - 영상 파일 서버(xhscdn)는 CORS 를 허용(Access-Control-Allow-Origin: *)해서, 파일은 사용자 브라우저가 직접 받는다.
+ *   → 우리 서버는 "주소만" 찾고 영상 파일을 다루지 않는다 (저장·트래픽 비용 0)
+ * - 링크의 xsec_token 이 있어야 열린다. 앱 "공유 → 링크 복사" 링크 또는 xhslink.com 단축 링크를 쓴다.
+ * - 샤오홍슈가 페이지 구조를 바꾸면 이 파일만 고친다.
+ */
+
+const MOBILE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+const TIMEOUT_MS = 8000;
+
+export interface XhsStream {
+  codec: string;
+  width: number;
+  height: number;
+  size: number | null;
+  url: string;
+  backupUrls: string[];
+}
+
+export interface XhsVideo {
+  noteId: string;
+  title: string;
+  author: string;
+  durationSec: number;
+  /** 재생 호환성이 좋은 순서 (h264 먼저) */
+  streams: XhsStream[];
+}
+
+const https = (u: string) => u.replace(/^http:\/\//, "https://");
+
+async function fetchText(url: string): Promise<{ text: string; finalUrl: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": MOBILE_UA, "Accept-Language": "zh-CN,zh;q=0.9,ko;q=0.8" },
+      redirect: "follow",
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
+    return { text: await res.text(), finalUrl: res.url };
+  } catch {
+    throw new AppError("XHS_FETCH", "샤오홍슈에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", 502);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 공유 링크·단축 링크 → 노트 ID 와 xsec_token */
+async function normalize(input: string): Promise<{ noteId: string; token: string | null; source: string }> {
+  let url = input.trim();
+  if (/xhslink\.com/i.test(url)) url = (await fetchText(url)).finalUrl; // 단축 링크는 실제 노트 주소로 이동한다
+  const noteId = url.match(/xiaohongshu\.com\/(?:explore|discovery\/item)\/([0-9a-f]{24})/i)?.[1];
+  if (!noteId) throw new AppError("XHS_URL", "샤오홍슈 노트 링크가 아닙니다. 앱에서 공유 → 링크 복사한 주소를 넣어 주세요.", 400);
+  const q = new URL(url).searchParams;
+  return { noteId, token: q.get("xsec_token"), source: q.get("xsec_source") ?? "app_share" };
+}
+
+function parseState(html: string): Record<string, unknown> | null {
+  const marker = "window.__INITIAL_STATE__=";
+  const start = html.indexOf(marker);
+  if (start < 0) return null;
+  const end = html.indexOf("</script>", start);
+  try {
+    return JSON.parse(html.slice(start + marker.length, end).replace(/\bundefined\b/g, "null")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+type Json = Record<string, unknown>;
+const obj = (v: unknown): Json => (v && typeof v === "object" ? (v as Json) : {});
+
+export async function resolveXiaohongshu(input: string): Promise<XhsVideo> {
+  const { noteId, token, source } = await normalize(input);
+  const qs = new URLSearchParams({ ...(token ? { xsec_token: token } : {}), xsec_source: source });
+  const { text, finalUrl } = await fetchText(`https://www.xiaohongshu.com/explore/${noteId}?${qs.toString()}`);
+  if (/\/login|\/404/.test(finalUrl)) {
+    throw new AppError(
+      "XHS_BLOCKED",
+      token
+        ? "샤오홍슈가 이 링크를 열어 주지 않습니다. 링크가 만료되었을 수 있으니 앱에서 공유 링크를 새로 복사해 주세요."
+        : "링크에 xsec_token 이 없습니다. 앱에서 공유 → 링크 복사한 주소를 그대로 넣어 주세요.",
+      400,
+    );
+  }
+  const state = parseState(text);
+  const note = obj(obj(obj(obj(state).noteData).data).noteData);
+  if (!note.noteId && !note.title) throw new AppError("XHS_PARSE", "샤오홍슈 페이지에서 노트 정보를 찾지 못했습니다. (페이지 구조가 바뀌었을 수 있습니다)", 502);
+  if (note.type !== "video") throw new AppError("XHS_NOT_VIDEO", "영상이 아닌 노트입니다. (사진 노트는 받을 수 없습니다)", 400);
+
+  const media = obj(obj(note.video).media);
+  const streamMap = obj(media.stream);
+  const streams: XhsStream[] = [];
+  for (const key of ["h264", "h265", "h266", "av1"]) {
+    const list = Array.isArray(streamMap[key]) ? (streamMap[key] as Json[]) : [];
+    for (const s of list) {
+      if (typeof s.masterUrl !== "string") continue;
+      streams.push({
+        codec: String(s.videoCodec ?? key),
+        width: Number(s.width) || 0,
+        height: Number(s.height) || 0,
+        size: typeof s.size === "number" ? s.size : null,
+        url: https(s.masterUrl),
+        backupUrls: Array.isArray(s.backupUrls) ? (s.backupUrls as string[]).map(https) : [],
+      });
+    }
+  }
+  if (!streams.length) throw new AppError("XHS_NO_STREAM", "영상 주소를 찾지 못했습니다. 잠시 후 다시 시도해 주세요.", 502);
+
+  return {
+    noteId,
+    title: String(note.title || note.desc || "샤오홍슈 영상").trim().slice(0, 100),
+    author: String(obj(note.user).nickName ?? obj(note.user).nickname ?? ""),
+    durationSec: Number(obj(media.video).duration) || 0,
+    streams,
+  };
+}

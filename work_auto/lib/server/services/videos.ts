@@ -4,6 +4,7 @@ import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { detectPlatform, xiaohongshuId } from "@/lib/video-links";
 import { getYouTubeTrendProvider } from "../providers/registry";
+import { resolveXiaohongshu } from "../providers/video/xiaohongshu-resolver";
 import type { VideoMeta } from "../providers/types";
 import { getCurrentUserId, getRepositories } from "../repositories";
 
@@ -38,10 +39,20 @@ export const videoService = {
     const dup = await repo.videos.list((v) => v.userId === userId && v.url === trimmed);
     if (dup.length) throw new AppError("DUPLICATE", "이미 가져온 영상입니다.", 409);
 
-    // 샤오홍슈는 로그인 없이 영상 정보를 주지 않아 서버에서 조회하지 않는다 (공유 문구의 제목을 쓴다)
+    // 샤오홍슈: 모바일 웹 페이지에서 제목·작성자·길이를 읽는다
     const meta =
       detectPlatform(trimmed) === "xiaohongshu"
-        ? xiaohongshuMeta(trimmed, titleHint)
+        ? await resolveXiaohongshu(trimmed).then(
+            (v): VideoMeta => ({
+              url: trimmed,
+              platform: "xiaohongshu",
+              title: v.title,
+              channelName: v.author || "샤오홍슈",
+              durationSec: v.durationSec,
+              thumbnailColor: "#ffe3e3",
+            }),
+            () => xiaohongshuMeta(trimmed, titleHint), // 조회가 안 되면 공유 문구 제목으로 저장 (다운로드할 때 다시 시도)
+          )
         : await (await getYouTubeTrendProvider()).getVideoMeta(trimmed);
     const video: ReferenceVideo = { id: createId("vid"), userId, ...meta, note: note?.trim() || null, createdAt: nowIso() };
     await repo.videos.insert(video);

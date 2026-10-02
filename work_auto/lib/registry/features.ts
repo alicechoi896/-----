@@ -237,7 +237,7 @@ export const FEATURES: FeatureDef[] = [
     channelId: "tools",
     order: 3,
     title: "영상 URL 가져오기",
-    description: "샤오홍슈·YouTube 영상 링크를 여러 개 한 번에 등록하고, 소리 없는 영상으로 내려받는 명령을 복사합니다.",
+    description: "샤오홍슈·YouTube 영상 링크를 여러 개 한 번에 등록합니다. 샤오홍슈 영상은 버튼 하나로 소리 없는 mp4 로 바로 저장합니다.",
     href: "/tools/video-import",
     icon: Link2,
     kind: "tool",
@@ -245,7 +245,7 @@ export const FEATURES: FeatureDef[] = [
     defaultTiers: ALL,
     requiredProviders: ["youtube"],
     inputs: ["영상 URL 여러 개(줄바꿈)", "메모"],
-    outputs: ["영상 메타데이터", "참고 영상 목록", "소리 없는 영상 다운로드 명령(yt-dlp)"],
+    outputs: ["영상 메타데이터", "참고 영상 목록", "샤오홍슈: 소리 없는 mp4 바로 저장·ZIP", "YouTube: 다운로드 명령(yt-dlp)"],
   },
   {
     id: "video-mute",
