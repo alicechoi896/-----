@@ -52,11 +52,16 @@ export async function getYouTubeTrendProvider(): Promise<YouTubeTrendProvider> {
   return mockYouTube;
 }
 
+/**
+ * NAVER 트렌드 조회는 실제 수집(getInsight)을 아직 구현하지 않아, 키를 연결해도 Mock 데이터를 보여준다.
+ * (연결 테스트는 createProviderForTest 에서 실제로 호출한다)
+ * 실제 수집을 구현하면 아래 주석을 풀어 연결된 경우 NaverApiProvider 를 쓰게 한다.
+ */
 export async function getNaverTrendProvider(): Promise<NaverTrendProvider> {
-  if (serverConfig.providerMode === "live") {
-    const cred = await loadCredentials("naver");
-    if (cred) return new NaverApiProvider(cred.clientId, cred.clientSecret);
-  }
+  // if (serverConfig.providerMode === "live") {
+  //   const cred = await loadCredentials("naver");
+  //   if (cred) return new NaverApiProvider(cred.clientId, cred.clientSecret);
+  // }
   return mockNaver;
 }
 

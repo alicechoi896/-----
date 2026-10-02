@@ -46,6 +46,18 @@ function validate<P extends ProviderId>(provider: P, raw: unknown): ProviderCred
   if (provider === "openai" && !str("apiKey").startsWith("sk-")) {
     throw new AppError("VALIDATION", "OpenAI API Key 는 'sk-' 로 시작해야 합니다.");
   }
+  if (provider === "youtube") {
+    const key = str("apiKey");
+    if (key.endsWith(".apps.googleusercontent.com") || key.startsWith("GOCSPX-")) {
+      throw new AppError(
+        "VALIDATION",
+        "OAuth 클라이언트 ID 또는 보안 비밀번호를 입력하셨습니다. Google Cloud → 사용자 인증 정보 → '+ 사용자 인증 정보 만들기' → 'API 키'로 만든 키(AIza…)를 넣어 주세요.",
+      );
+    }
+    if (!key.startsWith("AIza")) {
+      throw new AppError("VALIDATION", "YouTube Data API 키는 보통 'AIza' 로 시작합니다. 키를 다시 확인해 주세요.");
+    }
+  }
   return { apiKey: str("apiKey") } as ProviderCredentialMap[P];
 }
 

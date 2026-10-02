@@ -18,6 +18,11 @@ import type { VideoMeta, YouTubeTrendProvider } from "../types";
  */
 
 const BASE = "https://www.googleapis.com/youtube/v3";
+
+/** 우리 사이트 주소 (Vercel 이 운영 도메인을 자동으로 넣어 준다. 다른 도메인을 쓰면 APP_ORIGIN 으로 지정) */
+const SITE_ORIGIN =
+  process.env.APP_ORIGIN ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const SHORTS_MAX_SEC = 180;
 
@@ -90,22 +95,58 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     const search = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") search.set(k, String(v));
     search.set("key", this.apiKey);
-    const res = await fetch(`${BASE}/${path}?${search.toString()}`, { cache: "no-store" });
+    // API 키에 '웹사이트(HTTP 리퍼러)' 제한을 건 경우에도 동작하도록 우리 사이트 주소를 Referer 로 보낸다.
+    // (서버 요청에는 원래 Referer 가 없어 API_KEY_HTTP_REFERRER_BLOCKED 로 거절된다)
+    const res = await fetch(`${BASE}/${path}?${search.toString()}`, {
+      cache: "no-store",
+      headers: SITE_ORIGIN ? { Referer: `${SITE_ORIGIN}/` } : undefined,
+    });
     if (res.ok) return (await res.json()) as T;
 
-    // 오류 메시지에 API 키가 들어가지 않도록 reason 만 사용한다
-    const body = (await res.json().catch(() => null)) as { error?: { errors?: { reason?: string }[] } } | null;
+    // Google 오류 응답에서 원인 코드만 읽는다 (오류 메시지에 API 키를 넣지 않는다)
+    const body = (await res.json().catch(() => null)) as {
+      error?: { errors?: { reason?: string }[]; details?: { reason?: string }[] };
+    } | null;
     const reason = body?.error?.errors?.[0]?.reason ?? "";
+    const detail = body?.error?.details?.find((d) => d.reason)?.reason ?? "";
+    const code = [reason, detail].filter(Boolean).join(" / ");
+    const suffix = code ? ` [${code}]` : ` [HTTP ${res.status}]`;
+
     if (reason === "quotaExceeded" || reason === "dailyLimitExceeded") {
-      throw new AppError("YOUTUBE_QUOTA", "YouTube API 일일 할당량을 모두 사용했습니다. 내일 다시 시도하거나 Google Cloud 에서 할당량을 늘려 주세요.", 429);
+      throw new AppError("YOUTUBE_QUOTA", `YouTube API 일일 할당량을 모두 사용했습니다. 내일 다시 시도하거나 Google Cloud 에서 할당량을 늘려 주세요.${suffix}`, 429);
     }
-    if (reason === "keyInvalid" || res.status === 400) {
-      throw new AppError("YOUTUBE_KEY", "YouTube API 키가 올바르지 않습니다. API 연결 센터에서 키를 확인해 주세요.", 400);
+    if (detail === "API_KEY_HTTP_REFERRER_BLOCKED" || detail === "API_KEY_IP_ADDRESS_BLOCKED" || detail === "API_KEY_ANDROID_APP_BLOCKED" || detail === "API_KEY_IOS_APP_BLOCKED") {
+      throw new AppError(
+        "YOUTUBE_KEY_RESTRICTED",
+        `API 키에 '애플리케이션 제한사항'(웹사이트·IP 등)이 걸려 있어 서버에서 호출할 수 없습니다. Google Cloud → 사용자 인증 정보 → 해당 API 키 → 애플리케이션 제한사항을 '없음'으로 바꿔 주세요. (API 제한사항은 YouTube Data API v3 로 그대로 두면 됩니다)${suffix}`,
+        403,
+      );
+    }
+    if (detail === "API_KEY_SERVICE_BLOCKED") {
+      throw new AppError(
+        "YOUTUBE_KEY_API_RESTRICTED",
+        `API 키의 'API 제한사항'에 YouTube Data API v3 가 포함되어 있지 않습니다. Google Cloud → 사용자 인증 정보 → 해당 키 → API 제한사항에서 YouTube Data API v3 를 체크해 주세요.${suffix}`,
+        403,
+      );
+    }
+    if (reason === "accessNotConfigured" || detail === "SERVICE_DISABLED") {
+      throw new AppError(
+        "YOUTUBE_API_DISABLED",
+        `이 Google Cloud 프로젝트에서 YouTube Data API v3 가 사용 설정되어 있지 않습니다. API 및 서비스 → 라이브러리 → YouTube Data API v3 → [사용] 을 눌러 주세요. 켠 직후에는 몇 분 걸릴 수 있습니다.${suffix}`,
+        403,
+      );
+    }
+    if (reason === "keyInvalid" || detail === "API_KEY_INVALID" || res.status === 400) {
+      throw new AppError(
+        "YOUTUBE_KEY",
+        `YouTube API 키가 올바르지 않습니다. 'AIza' 로 시작하는 API 키인지 확인해 주세요. (OAuth 클라이언트 ID·보안 비밀번호는 여기에 넣지 않습니다)${suffix}`,
+        400,
+      );
     }
     if (res.status === 403) {
-      throw new AppError("YOUTUBE_FORBIDDEN", "YouTube Data API 사용 권한이 없습니다. Google Cloud 에서 YouTube Data API v3 가 사용 설정되어 있는지, 키 제한에 포함되어 있는지 확인해 주세요.", 403);
+      throw new AppError("YOUTUBE_FORBIDDEN", `YouTube Data API 사용이 거절되었습니다. 키 제한과 API 사용 설정을 확인해 주세요.${suffix}`, 403);
     }
-    throw new AppError("YOUTUBE_ERROR", `YouTube API 호출에 실패했습니다 (HTTP ${res.status}${reason ? `, ${reason}` : ""}).`, 502);
+    throw new AppError("YOUTUBE_ERROR", `YouTube API 호출에 실패했습니다.${suffix}`, 502);
   }
 
   async testConnection() {
