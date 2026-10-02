@@ -2,7 +2,7 @@ import type { ProductAnalysisContent, RawProductData } from "@/lib/types";
 
 /**
  * Mock 제품 카탈로그.
- * - MockProductCollector: URL 을 받으면 이 중 하나를 "수집 결과"로 돌려준다.
+ * - 데모 모드의 이미지 수집(MockImageCollector)이 이 중 하나를 "수집 결과"로 돌려준다.
  * - MockAIProvider(product-analysis): raw.title 이 일치하면 아래 analysis 를 돌려준다.
  * - Seed: 앞의 3개는 처음부터 제품 라이브러리에 저장된 상태로 시작한다.
  * 브랜드와 제품은 모두 가상이다.

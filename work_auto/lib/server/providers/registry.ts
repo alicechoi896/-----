@@ -8,7 +8,7 @@ import { decryptSecret } from "../security/crypto";
 import { ClaudeProvider } from "./ai/claude-provider";
 import { MockAIProvider } from "./ai/mock-ai-provider";
 import { OpenAIProvider } from "./ai/openai-provider";
-import { ImageTextCollector, MockImageCollector, MockUrlCollector, TextCollector, WebPageCollector } from "./product/collectors";
+import { ImageTextCollector, MockImageCollector, TextCollector } from "./product/collectors";
 import { MockNaverTrendProvider } from "./trends/mock-naver-provider";
 import { MockYouTubeTrendProvider } from "./trends/mock-youtube-provider";
 import { NaverApiProvider } from "./trends/naver-api-provider";
@@ -91,10 +91,14 @@ function createNaverProvider(c: ProviderCredentialMap["naver"], ad: ProviderCred
  * - live: URL 은 실제 웹페이지 수집, 이미지는 AI 가 읽은 텍스트로 수집 (예시 제품으로 바꿔치기하지 않음)
  * - mock(데모): 예시 카탈로그 사용
  */
-const LIVE_COLLECTORS: ProductDataCollector[] = [new WebPageCollector(), new ImageTextCollector(), new TextCollector()];
-const MOCK_COLLECTORS: ProductDataCollector[] = [new MockUrlCollector(), new ImageTextCollector(), new MockImageCollector(), new TextCollector()];
+const LIVE_COLLECTORS: ProductDataCollector[] = [new ImageTextCollector(), new TextCollector()];
+const MOCK_COLLECTORS: ProductDataCollector[] = [new ImageTextCollector(), new MockImageCollector(), new TextCollector()];
 
 export function getProductCollector(source: ProductSourceInput): ProductDataCollector {
+  // 상품 URL 수집은 v0.9.11 에서 뺐다 (쇼핑몰 대부분이 서버 접속을 막아 쓸 수 없었다). 예전 화면·API 호출에도 이유를 안내한다
+  if (source.type === "url") {
+    throw new AppError("URL_NOT_SUPPORTED", "상품 URL 로 읽기는 지원하지 않습니다. 상세페이지를 캡처해 '이미지 업로드'로 올리거나 '텍스트 직접 입력'을 이용해 주세요.");
+  }
   const collectors = serverConfig.providerMode === "live" ? LIVE_COLLECTORS : MOCK_COLLECTORS;
   const collector = collectors.find((c) => c.supports(source));
   if (!collector) throw new AppError("NO_COLLECTOR", "이 입력을 처리할 수집기가 없습니다.");

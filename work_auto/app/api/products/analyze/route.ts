@@ -1,5 +1,5 @@
 import { requireAccess } from "@/lib/server/auth";
-import { handle, readJson } from "@/lib/server/http";
+import { AppError, handle, readJson } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/rate-limit";
 import { productService } from "@/lib/server/services/products";
 import type { ProductSourceInput } from "@/lib/types";
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     await requireAccess("product-learning");
     await rateLimit("product-analyze");
     const { source } = await readJson<{ source: ProductSourceInput }>(request);
+    if (!source || typeof source !== "object" || !("type" in source)) throw new AppError("VALIDATION", "분석할 상세페이지 이미지나 텍스트를 넣어 주세요.");
     return productService.analyze(source);
   });
 }

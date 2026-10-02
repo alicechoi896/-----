@@ -61,7 +61,7 @@
 
 | 위험 | 대응 | 위치 |
 |------|------|------|
-| 사용자가 넣은 주소로 서버가 내부망에 접속 (SSRF) | 공개 인터넷 주소만 허용, 리다이렉트마다 재검사 | `lib/server/security/safe-url.ts` (`safeFetch`) |
+| 사용자가 넣은 주소로 서버가 내부망에 접속 (SSRF) | 공개 인터넷 주소만 허용, 리다이렉트마다 재검사. 상품 URL 수집은 v0.9.11 에서 기능째 삭제 (사용자 주소로 접속하는 곳은 샤오홍슈 도메인 고정뿐) | `lib/server/security/safe-url.ts` (`safeFetch`, 새 기능용) |
 | 샤오홍슈 주소 위장 (`evil.com/?xhslink.com`) | 도메인 정확히 비교 | `xiaohongshu-resolver.ts` `xhsHost()` |
 | 클릭재킹·형식 추측 | 보안 헤더 | `next.config.ts` |
 | 환경변수 실수로 데모(관리자) 모드가 운영에 열림 | production + Supabase 없음 → 503. 일부러 열려면 `ALLOW_DEMO=1` | `lib/supabase/config.ts` `isDemoBlocked()` |

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, Check, FileText, ImageUp, Library, Link2, ScanSearch, Upload, X } from "lucide-react";
+import { ArrowRight, Check, FileText, ImageUp, Library, ScanSearch, Upload, X } from "lucide-react";
 import type { Product, ProductAnalysisDraft, ProductSourceInput } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Button, LinkButton } from "@/components/ui/Button";
@@ -16,10 +16,10 @@ import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
 import { MAX_SLICES, batchSlices, sliceImageFile, type ImageSlice } from "@/lib/image-slicer";
 import { cn } from "@/lib/utils";
 
-type SourceTab = "url" | "image" | "text";
+type SourceTab = "image" | "text";
 
+/** 상품 URL 입력은 v0.9.11 에서 뺐다 (쇼핑몰 대부분이 서버 접속을 막는다) */
 const TABS = [
-  { value: "url" as const, label: "URL 입력", icon: Link2 },
   { value: "image" as const, label: "이미지 업로드", icon: ImageUp },
   { value: "text" as const, label: "텍스트 직접 입력", icon: FileText },
 ];
@@ -28,8 +28,7 @@ const TABS = [
 const PIPELINE = ["상품 입력", "Product Data Collector", "Raw Product Data", "AI Analyzer", "Structured Product Data", "Product Library"];
 
 export function ProductLearningWorkspace() {
-  const [tab, setTab] = useState<SourceTab>("url");
-  const [url, setUrl] = useState("");
+  const [tab, setTab] = useState<SourceTab>("image");
   const [files, setFiles] = useState<File[]>([]);
   const [text, setText] = useState("");
   const [productName, setProductName] = useState("");
@@ -47,7 +46,6 @@ export function ProductLearningWorkspace() {
   const stage = saved ? 6 : draft ? 5 : analyzing ? 3 : 0;
 
   function buildSource(): ProductSourceInput | null {
-    if (tab === "url") return url.trim() ? { type: "url", url: url.trim() } : null;
     if (tab === "image") return files.length ? { type: "image", fileNames: files.map((f) => f.name), productName } : null;
     return text.trim() ? { type: "text", text, productName } : null;
   }
@@ -85,7 +83,7 @@ export function ProductLearningWorkspace() {
         setProgress("읽은 내용으로 제품을 분석하는 중…");
         setDraft(await api.products.analyze({ ...source, extractedText }));
       } else {
-        setProgress(source.type === "url" ? "상품 페이지를 읽고 AI 가 분석하는 중…" : "AI 가 분석하는 중…");
+        setProgress("AI 가 분석하는 중…");
         setDraft(await api.products.analyze(source));
       }
     } catch (e) {
@@ -104,30 +102,6 @@ export function ProductLearningWorkspace() {
 
       <SectionCard title="상세페이지 입력" description="쿠팡, 스마트스토어 등의 상품 정보를 분석해 제품 라이브러리에 저장합니다.">
         <Tabs items={TABS} value={tab} onChange={setTab} className="-mt-1 mb-5" />
-
-        {tab === "url" && (
-          <form
-            className="flex flex-col gap-3 sm:flex-row sm:items-end"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (canAnalyze) analyze();
-            }}
-          >
-            <FormField label="상품 URL" htmlFor="product-url" className="flex-1">
-              <Input
-                id="product-url"
-                type="url"
-                inputMode="url"
-                placeholder="https://www.coupang.com/vp/products/…"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
-            </FormField>
-            <Button type="submit" variant="primary" icon={ScanSearch} loading={analyzing} disabled={!canAnalyze}>
-              상세페이지 분석하기
-            </Button>
-          </form>
-        )}
 
         {tab === "image" && (
           <div className="space-y-3">
@@ -191,8 +165,8 @@ export function ProductLearningWorkspace() {
         )}
 
         <Notice tone="neutral" className="mt-5">
-          URL 접근이 불가능한 경우 상세페이지 이미지 또는 텍스트를 직접 입력할 수 있습니다. 쿠팡처럼 자동 수집을 막는 쇼핑몰은
-          상세페이지를 캡처해 이미지로 올리면 가장 정확합니다. (상세 설명이 이미지로 되어 있는 스마트스토어도 이미지 업로드를 권장합니다)
+          쿠팡·스마트스토어 등 쇼핑몰 상세페이지를 캡처해 이미지로 올리면 가장 정확합니다. 세로로 긴 캡처도 그대로 올리면 자동으로 나눠 읽습니다.
+          텍스트로 복사할 수 있는 상세페이지는 &lsquo;텍스트 직접 입력&rsquo;에 붙여 넣어도 됩니다.
         </Notice>
       </SectionCard>
 
