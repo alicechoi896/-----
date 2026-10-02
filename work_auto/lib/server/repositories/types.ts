@@ -2,6 +2,7 @@ import "server-only";
 import type {
   ApiConnection,
   AuditLog,
+  UserSettings,
   GeneratedContent,
   PerformanceMetric,
   Product,
@@ -34,6 +35,7 @@ export interface Repositories {
   profiles: Repository<UserProfile>;
   rolePermissions: Repository<RolePermission>;
   auditLogs: Repository<AuditLog>;
+  settings: Repository<UserSettings>;
   connections: Repository<ApiConnection>;
   products: Repository<Product>;
   productSources: Repository<ProductSource>;

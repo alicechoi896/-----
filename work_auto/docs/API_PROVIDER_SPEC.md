@@ -58,7 +58,8 @@ interface ProductDataCollector {          // 수집만 한다. 분석하지 않�
 | 영역 | 구현체 | 파일 | 상태 |
 |------|--------|------|------|
 | AI | MockAIProvider | `ai/mock-ai-provider.ts`, `ai/mock-writer.ts` | ✅ 동작 (결정적 출력, Context 반영) |
-| AI | OpenAIProvider | `ai/openai-provider.ts` | ✅ 코드 완료 (fetch, Chat Completions JSON mode). `PROVIDER_MODE=live` + 연결 시 사용 |
+| AI | ClaudeProvider | `ai/claude-provider.ts` | ✅ 동작 (기본 `claude-sonnet-5-5`, 구조화 출력, 이미지 입력, 거절 시 fallback) |
+| AI | OpenAIProvider | `ai/openai-provider.ts` | ✅ 동작 (fetch, Chat Completions JSON mode, 이미지 입력) |
 | YouTube | MockYouTubeTrendProvider | `trends/mock-youtube-provider.ts` | ✅ 동작 |
 | YouTube | YouTubeDataApiProvider | `trends/youtube-data-api-provider.ts` | ✅ 구현 (트렌드, 영상 메타데이터, 연결 테스트). 서버 메모리 6시간 캐시 |
 | NAVER | MockNaverTrendProvider | `trends/mock-naver-provider.ts` | ✅ 동작 |

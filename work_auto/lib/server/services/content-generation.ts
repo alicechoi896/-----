@@ -52,6 +52,20 @@ export const contentGenerationService = {
       task: `content:${featureId}`,
       messages,
       outputKeys: config.outputs.map((o) => o.key),
+      // 출력 형식 강제: 목록·태그는 문자열 배열, 텍스트는 문자열 (Claude structured outputs)
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: config.outputs.map((o) => o.key),
+        properties: Object.fromEntries(
+          config.outputs.map((o) => [
+            o.key,
+            o.format === "list" || o.format === "tags"
+              ? { type: "array", items: { type: "string" }, description: `${o.label}${o.count ? ` (${o.count}개)` : ""}` }
+              : { type: "string", description: o.label },
+          ]),
+        ),
+      },
       variables: { featureId, outputs: config.outputs, input, context },
     });
 

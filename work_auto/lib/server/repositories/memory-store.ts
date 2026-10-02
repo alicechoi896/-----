@@ -56,6 +56,7 @@ export const memoryRepositories: Repositories = {
   profiles: createCollection("profiles"),
   rolePermissions: createCollection("rolePermissions"),
   auditLogs: createCollection("auditLogs"),
+  settings: createCollection("settings"),
   connections: createCollection("connections"),
   products: createCollection("products"),
   productSources: createCollection("productSources"),

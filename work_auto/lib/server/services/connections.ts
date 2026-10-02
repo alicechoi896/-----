@@ -20,7 +20,7 @@ import { encryptSecret, maskSecret } from "../security/crypto";
  *  - 평문 Key 를 로그로 남기지 않는다.
  */
 
-export const PROVIDER_IDS: ProviderId[] = ["openai", "youtube", "naver"];
+export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver"];
 
 function toPublic(c: ApiConnection): ApiConnectionPublic {
   // encryptedCredentials, userId 를 명시적으로 제거한다
@@ -45,6 +45,9 @@ function validate<P extends ProviderId>(provider: P, raw: unknown): ProviderCred
   if (!str("apiKey")) throw new AppError("VALIDATION", "API Key 를 입력해 주세요.");
   if (provider === "openai" && !str("apiKey").startsWith("sk-")) {
     throw new AppError("VALIDATION", "OpenAI API Key 는 'sk-' 로 시작해야 합니다.");
+  }
+  if (provider === "claude" && !str("apiKey").startsWith("sk-ant-")) {
+    throw new AppError("VALIDATION", "Claude API Key 는 'sk-ant-' 로 시작합니다. console.anthropic.com → API Keys 에서 확인해 주세요.");
   }
   if (provider === "youtube") {
     const key = str("apiKey");

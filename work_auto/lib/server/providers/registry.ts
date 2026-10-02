@@ -3,10 +3,12 @@ import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/li
 import { serverConfig } from "../config";
 import { AppError } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
+import { settingsService } from "../services/settings";
 import { decryptSecret } from "../security/crypto";
+import { ClaudeProvider } from "./ai/claude-provider";
 import { MockAIProvider } from "./ai/mock-ai-provider";
 import { OpenAIProvider } from "./ai/openai-provider";
-import { MockImageCollector, MockUrlCollector, TextCollector } from "./product/collectors";
+import { ImageTextCollector, MockImageCollector, MockUrlCollector, TextCollector, WebPageCollector } from "./product/collectors";
 import { MockNaverTrendProvider } from "./trends/mock-naver-provider";
 import { MockYouTubeTrendProvider } from "./trends/mock-youtube-provider";
 import { NaverApiProvider } from "./trends/naver-api-provider";
@@ -31,17 +33,31 @@ const mockNaver = new MockNaverTrendProvider();
 async function loadCredentials<P extends ProviderId>(provider: P): Promise<ProviderCredentialMap[P] | null> {
   const userId = await getCurrentUserId();
   const [conn] = await getRepositories().connections.list((c) => c.userId === userId && c.provider === provider);
-  if (!conn || conn.status !== "connected" || !conn.encryptedCredentials) return null;
+  // 마지막 테스트가 실패(error)한 키도 사용한다: 실제 호출에서 원인이 담긴 오류를 보여주기 위해 (Mock 으로 몰래 바꾸지 않음)
+  if (!conn || conn.status === "disconnected" || !conn.encryptedCredentials) return null;
   return JSON.parse(decryptSecret(conn.encryptedCredentials)) as ProviderCredentialMap[P];
 }
 
+/**
+ * 글쓰기·분석 AI 선택:
+ *  1) 사용자가 고른 기본 AI(설정)가 연결되어 있으면 그것
+ *  2) 아니면 연결된 것 중 Claude → OpenAI 순
+ *  3) 아무것도 없으면 Mock
+ */
 export async function getAIProvider(): Promise<AIProvider> {
-  if (serverConfig.providerMode === "live") {
-    const cred = await loadCredentials("openai");
-    if (cred) return new OpenAIProvider(cred.apiKey, serverConfig.openaiModel);
-    // 향후: Claude/Gemini 연결 여부와 사용자가 고른 기본 AI 에 따라 분기
-  }
-  return mockAI;
+  if (serverConfig.providerMode !== "live") return mockAI;
+  const [settings, claude, openai] = await Promise.all([
+    // 설정 테이블이 아직 없는 등 실패해도 AI 선택은 계속되도록 기본값으로 대신한다
+    settingsService.get().catch(() => ({ preferredAi: null })),
+    loadCredentials("claude"),
+    loadCredentials("openai"),
+  ]);
+  const make = {
+    claude: () => (claude ? new ClaudeProvider(claude.apiKey, serverConfig.claudeModel) : null),
+    openai: () => (openai ? new OpenAIProvider(openai.apiKey, serverConfig.openaiModel) : null),
+  };
+  const preferred = settings.preferredAi ? make[settings.preferredAi]() : null;
+  return preferred ?? make.claude() ?? make.openai() ?? mockAI;
 }
 
 export async function getYouTubeTrendProvider(): Promise<YouTubeTrendProvider> {
@@ -65,11 +81,17 @@ export async function getNaverTrendProvider(): Promise<NaverTrendProvider> {
   return mockNaver;
 }
 
-/** 입력 유형에 맞는 Collector. 앞에 있을수록 우선한다 (전용 수집기를 앞에 추가) */
-const COLLECTORS: ProductDataCollector[] = [new MockUrlCollector(), new MockImageCollector(), new TextCollector()];
+/**
+ * 입력 유형에 맞는 Collector. 앞에 있을수록 우선한다 (전용 수집기를 앞에 추가).
+ * - live: URL 은 실제 웹페이지 수집, 이미지는 AI 가 읽은 텍스트로 수집 (예시 제품으로 바꿔치기하지 않음)
+ * - mock(데모): 예시 카탈로그 사용
+ */
+const LIVE_COLLECTORS: ProductDataCollector[] = [new WebPageCollector(), new ImageTextCollector(), new TextCollector()];
+const MOCK_COLLECTORS: ProductDataCollector[] = [new MockUrlCollector(), new ImageTextCollector(), new MockImageCollector(), new TextCollector()];
 
 export function getProductCollector(source: ProductSourceInput): ProductDataCollector {
-  const collector = COLLECTORS.find((c) => c.supports(source));
+  const collectors = serverConfig.providerMode === "live" ? LIVE_COLLECTORS : MOCK_COLLECTORS;
+  const collector = collectors.find((c) => c.supports(source));
   if (!collector) throw new AppError("NO_COLLECTOR", "이 입력을 처리할 수집기가 없습니다.");
   return collector;
 }
@@ -83,6 +105,8 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
   switch (provider) {
     case "openai":
       return new OpenAIProvider((cred as ProviderCredentialMap["openai"]).apiKey, serverConfig.openaiModel);
+    case "claude":
+      return new ClaudeProvider((cred as ProviderCredentialMap["claude"]).apiKey, serverConfig.claudeModel);
     case "youtube":
       return new YouTubeDataApiProvider((cred as ProviderCredentialMap["youtube"]).apiKey);
     case "naver": {

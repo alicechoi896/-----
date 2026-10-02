@@ -7,7 +7,7 @@ import { cardClass } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/utils";
 
-const PROVIDER_LABEL = { openai: "OpenAI", youtube: "YouTube Data API", naver: "NAVER API" } as const;
+const PROVIDER_LABEL = { openai: "AI (Claude·OpenAI)", claude: "AI (Claude·OpenAI)", youtube: "YouTube Data API", naver: "NAVER API" } as const;
 
 /**
  * 2차(채널 허브) 화면의 기능 카드. Registry 의 FeatureDef 하나를 그대로 받는다.

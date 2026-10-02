@@ -10,6 +10,8 @@ export const serverConfig = {
   /** API Key 암호화용 32바이트 키 (base64). 없으면 개발용 키를 파생해서 쓴다 */
   encryptionKey: process.env.ENCRYPTION_KEY ?? "",
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  /** Claude 모델 (기본 claude-sonnet-5-5) */
+  claudeModel: process.env.CLAUDE_MODEL ?? "claude-sonnet-5-5",
   /** Mock 응답 지연(ms). 기본 0. 로딩 화면을 확인할 때만 MOCK_LATENCY_MS 로 지정한다 */
   mockLatencyMs: Number(process.env.MOCK_LATENCY_MS ?? 0),
 };

@@ -13,6 +13,7 @@ import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState, ErrorState, LoadingState, Notice } from "@/components/ui/States";
 import { Tabs } from "@/components/ui/Tabs";
 import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
+import { MAX_SLICES, batchSlices, sliceImageFile, type ImageSlice } from "@/lib/image-slicer";
 import { cn } from "@/lib/utils";
 
 type SourceTab = "url" | "image" | "text";
@@ -37,12 +38,17 @@ export function ProductLearningWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProductAnalysisDraft | null>(null);
   const [saved, setSaved] = useState<Product | null>(null);
+  /** 진행 안내 (이미지 조각 읽기 단계별) */
+  const [progress, setProgress] = useState<string | null>(null);
+  /** 이미지에서 AI 가 읽은 원문 (확인용, 저장 시 원본 수집 데이터로 남는다) */
+  const [extracted, setExtracted] = useState<string | null>(null);
+  const [showExtracted, setShowExtracted] = useState(false);
 
   const stage = saved ? 6 : draft ? 5 : analyzing ? 3 : 0;
 
   function buildSource(): ProductSourceInput | null {
     if (tab === "url") return url.trim() ? { type: "url", url: url.trim() } : null;
-    if (tab === "image") return files.length ? { type: "image", fileNames: files.map((f) => f.name) } : null;
+    if (tab === "image") return files.length ? { type: "image", fileNames: files.map((f) => f.name), productName } : null;
     return text.trim() ? { type: "text", text, productName } : null;
   }
 
@@ -53,12 +59,40 @@ export function ProductLearningWorkspace() {
     setError(null);
     setDraft(null);
     setSaved(null);
+    setExtracted(null);
+    setShowExtracted(false);
     try {
-      setDraft(await api.products.analyze(source));
+      if (source.type === "image") {
+        // 1) 브라우저에서 이미지를 조각내고  2) 몇 번에 나눠 AI 가 읽게 한 뒤  3) 읽은 텍스트로 분석한다
+        setProgress("이미지를 읽기 좋은 크기로 자르는 중…");
+        const slices: ImageSlice[] = [];
+        for (const file of files) slices.push(...(await sliceImageFile(file)));
+        if (slices.length > MAX_SLICES) {
+          throw new Error(`이미지가 너무 깁니다 (${slices.length}조각). 핵심 부분 위주로 ${MAX_SLICES}조각 이하가 되게 나눠 올려 주세요.`);
+        }
+        const batches = batchSlices(slices);
+        const texts: string[] = [];
+        for (let i = 0; i < batches.length; i++) {
+          setProgress(`AI 가 상세페이지를 읽는 중… (${i + 1}/${batches.length}, 이미지 조각 ${slices.length}개)`);
+          const { text } = await api.products.extractImages(
+            batches[i].map(({ mediaType, data }) => ({ mediaType, data })),
+            `${i + 1}/${batches.length} 묶음`,
+          );
+          texts.push(text);
+        }
+        const extractedText = texts.join("\n\n");
+        setExtracted(extractedText);
+        setProgress("읽은 내용으로 제품을 분석하는 중…");
+        setDraft(await api.products.analyze({ ...source, extractedText }));
+      } else {
+        setProgress(source.type === "url" ? "상품 페이지를 읽고 AI 가 분석하는 중…" : "AI 가 분석하는 중…");
+        setDraft(await api.products.analyze(source));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "분석에 실패했습니다.");
     } finally {
       setAnalyzing(false);
+      setProgress(null);
     }
   }
 
@@ -100,7 +134,8 @@ export function ProductLearningWorkspace() {
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-card border border-dashed border-line-strong bg-subtle/60 px-6 py-10 text-center transition-colors hover:bg-subtle">
               <Upload className="size-5 text-fg-subtle" />
               <span className="mt-2 text-sm font-medium text-fg">상세페이지 이미지를 선택하세요</span>
-              <span className="mt-1 text-xs text-fg-subtle">JPG, PNG · 여러 장 선택 가능 · 긴 상세 이미지는 잘라서 올려도 됩니다</span>
+              <span className="mt-1 text-xs text-fg-subtle">JPG, PNG, WEBP · 여러 장 선택 가능 · 세로로 긴 상세 이미지도 그대로 올리면 자동으로 잘라 읽습니다</span>
+              <span className="mt-1 text-xs text-fg-subtle">이미지는 AI 가 읽는 데만 쓰고 서버에 저장하지 않습니다</span>
               <input
                 type="file"
                 accept="image/*"
@@ -122,7 +157,10 @@ export function ProductLearningWorkspace() {
                 ))}
               </ul>
             )}
-            <div className="flex justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <FormField label="제품명" htmlFor="image-product-name" optional hint="비워두면 이미지에서 찾습니다" className="sm:w-80">
+                <Input id="image-product-name" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="예: 클린웨이브 무선청소기 S9" />
+              </FormField>
               <Button variant="primary" icon={ScanSearch} loading={analyzing} disabled={!canAnalyze} onClick={analyze}>
                 이미지 분석하기
               </Button>
@@ -153,13 +191,14 @@ export function ProductLearningWorkspace() {
         )}
 
         <Notice tone="neutral" className="mt-5">
-          URL 접근이 불가능한 경우 상세페이지 이미지 또는 텍스트를 직접 입력할 수 있습니다.
+          URL 접근이 불가능한 경우 상세페이지 이미지 또는 텍스트를 직접 입력할 수 있습니다. 쿠팡처럼 자동 수집을 막는 쇼핑몰은
+          상세페이지를 캡처해 이미지로 올리면 가장 정확합니다. (상세 설명이 이미지로 되어 있는 스마트스토어도 이미지 업로드를 권장합니다)
         </Notice>
       </SectionCard>
 
       {analyzing ? (
         <SectionCard>
-          <LoadingState label="상세페이지를 수집하고 AI가 분석하는 중입니다…" className="py-20" />
+          <LoadingState label={progress ?? "상세페이지를 수집하고 AI가 분석하는 중입니다…"} className="py-20" />
         </SectionCard>
       ) : error ? (
         <SectionCard>
@@ -189,6 +228,18 @@ export function ProductLearningWorkspace() {
               />
             </div>
           </div>
+          {extracted && (
+            <div className="rounded-card border border-line bg-canvas px-5 py-3 shadow-card">
+              <button type="button" className="text-[13px] font-medium text-fg-muted hover:text-fg" onClick={() => setShowExtracted((v) => !v)}>
+                {showExtracted ? "▾" : "▸"} AI 가 이미지에서 읽은 내용 보기 ({extracted.length.toLocaleString("ko-KR")}자)
+              </button>
+              {showExtracted && (
+                <pre className="mt-3 max-h-96 overflow-y-auto rounded-control bg-subtle p-3 text-xs leading-relaxed whitespace-pre-wrap text-fg-muted">
+                  {extracted}
+                </pre>
+              )}
+            </div>
+          )}
           <ProductAnalysisView analysis={draft.analysis} />
         </div>
       ) : (
@@ -198,11 +249,7 @@ export function ProductLearningWorkspace() {
             title="분석 결과가 여기에 표시됩니다"
             description={
               <>
-                예시 URL로 바로 시험해 볼 수 있습니다:{" "}
-                <button type="button" className="font-medium text-brand hover:underline" onClick={() => { setTab("url"); setUrl("https://smartstore.naver.com/dailywear/products/4410087"); }}>
-                  스마트스토어 예시 입력
-                </button>
-                {" · "}
+                URL, 이미지, 텍스트 중 하나로 상세페이지를 넣고 분석하세요.{" "}
                 <Link href="/tools/product-library" className="font-medium text-brand hover:underline">
                   저장된 제품 보기
                 </Link>

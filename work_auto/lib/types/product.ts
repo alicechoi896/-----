@@ -5,7 +5,8 @@ export type ProductSourceType = "url" | "image" | "text";
 /** 제품 상세페이지 학습 화면의 입력 */
 export type ProductSourceInput =
   | { type: "url"; url: string }
-  | { type: "image"; fileNames: string[] }
+  /** 이미지는 브라우저에서 잘라 AI 가 읽은 텍스트(extractedText)만 서버에 보낸다. 이미지 파일은 저장하지 않는다 */
+  | { type: "image"; fileNames: string[]; extractedText?: string; productName?: string }
   | { type: "text"; text: string; productName?: string };
 
 /**

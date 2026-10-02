@@ -4,6 +4,7 @@ import type { OutputSection } from "@/lib/generators/types";
 import type { ProductAnalysisContent, RawProductData } from "@/lib/types";
 import type { GenerationContext } from "../../ai/context-types";
 import { serverConfig } from "../../config";
+import { contentText } from "../types";
 import type {
   AIProvider,
   StructuredGenerationRequest,
@@ -24,6 +25,8 @@ export class MockAIProvider implements AIProvider {
   readonly id = "mock";
   readonly kind = "ai" as const;
   readonly label = "Mock AI";
+  /** Mock 은 이미지를 읽을 수 없다 (상세페이지 이미지 읽기는 OpenAI 또는 Claude 연결 필요) */
+  readonly supportsVision = false;
   readonly model = "mock-writer-v1";
 
   async testConnection() {
@@ -32,7 +35,7 @@ export class MockAIProvider implements AIProvider {
 
   async generateText(request: TextGenerationRequest): Promise<TextGenerationResult> {
     await sleep(serverConfig.mockLatencyMs);
-    const last = request.messages.at(-1)?.content ?? "";
+    const last = contentText(request.messages.at(-1)?.content ?? "");
     return { text: `(Mock 응답) ${last.slice(0, 80)}`, provider: this.id, model: this.model };
   }
 

@@ -2,6 +2,26 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.4.0] - 2026-10-02: Claude 연결 · 상세페이지 학습 실제화 (개선 1단계)
+
+### 추가
+- **Claude (Anthropic) Provider** (`claude-provider.ts`, 기본 모델 `claude-sonnet-5-5`, `CLAUDE_MODEL` 로 변경 가능)
+  - 구조화 출력(JSON Schema) 강제, 이미지 입력, 거절 시 서버 측 fallback(`fallbacks: "default"`)
+- **기본 AI 선택**: API 연결 센터 → 기본 AI (Claude / OpenAI). `user_settings` 테이블
+- **상세페이지 이미지 실제 읽기**: 브라우저에서 긴 이미지를 1000×1400px 조각(80px 겹침)으로 자르고 JPEG 압축 → 최대 8조각씩 `/api/products/extract-images` → AI 가 텍스트·표·수치를 그대로 옮김 → 분석. **이미지는 저장하지 않음**
+- **URL 실제 수집** (`WebPageCollector`): og 태그, JSON-LD Product, 본문 텍스트. 수집을 막는 쇼핑몰은 원인과 대안(이미지 업로드) 안내
+- 생성 결과에도 JSON Schema 적용 (출력 형식 고정)
+- "AI 가 이미지에서 읽은 내용 보기" (분석 근거 확인)
+
+### 변경
+- **Mock 바꿔치기 제거**: 실제 모드(live)에서는 URL·이미지를 예시 제품으로 바꾸지 않는다 (데모 모드에서만 예시 사용)
+- 제품 분석 프롬프트 v1.1.0: 사실 항목(원문 근거)과 제작 아이디어 항목(적극 제안)을 구분, 항목별 최소 개수 → "원문에서 찾지 못함" 도배 해소
+- 마지막 테스트가 실패한 키도 실제 호출에 사용 (Mock 으로 몰래 바꾸지 않고 원인 오류를 보여줌)
+- API 오류 안내 강화 (키 오류·한도·크레딧), AI 호출 라우트 실행 시간 120초
+
+### 필요한 작업
+- Supabase 에서 `schema.sql` 다시 실행 (`user_settings` 테이블 추가)
+
 ## [0.3.1] - 2026-10-02: 속도 개선
 
 ### 원인

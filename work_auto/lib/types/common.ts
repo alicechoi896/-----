@@ -8,7 +8,10 @@ export type ISODate = string;
 export type ChannelId = "youtube" | "naver-clip" | "naver-blog" | "tools";
 
 /** 외부 API Provider 식별자 (API 연결 센터 단위) */
-export type ProviderId = "openai" | "youtube" | "naver";
+export type ProviderId = "openai" | "claude" | "youtube" | "naver";
+
+/** 글쓰기·분석에 쓸 수 있는 AI Provider */
+export type AiProviderId = "openai" | "claude";
 
 /** 기능 구현 상태: live=실제 API 연동, mock=Mock 데이터로 동작, planned=준비 중 */
 export type FeatureStatus = "live" | "mock" | "planned";

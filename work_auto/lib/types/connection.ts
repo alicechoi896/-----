@@ -34,6 +34,7 @@ export type ApiConnectionPublic = Omit<ApiConnection, "encryptedCredentials" | "
 /** Provider별 입력 자격증명 형태 */
 export interface ProviderCredentialMap {
   openai: { apiKey: string };
+  claude: { apiKey: string };
   youtube: { apiKey: string };
   naver: { clientId: string; clientSecret: string };
 }

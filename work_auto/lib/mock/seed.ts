@@ -1,6 +1,7 @@
 import type {
   ApiConnection,
   AuditLog,
+  UserSettings,
   GeneratedContent,
   PerformanceMetric,
   Product,
@@ -21,6 +22,7 @@ export interface StoreState {
   profiles: UserProfile[];
   rolePermissions: RolePermission[];
   auditLogs: AuditLog[];
+  settings: UserSettings[];
   connections: ApiConnection[];
   products: Product[];
   productSources: ProductSource[];
@@ -283,6 +285,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
       { id: "demo-member-3", email: "park.clip@example.com", name: "박클립", role: "silver", status: "pending", approvedAt: null, approvedBy: null, termsAgreedAt: iso(0.2), createdAt: iso(0.2), updatedAt: iso(0.2) },
     ],
     rolePermissions: [],
+    settings: [],
     auditLogs: [
       { id: "log_seed1", actorId: userId, actorEmail: "demo@example.com", actorName: "데모 관리자", action: "user.approve", targetType: "user", targetId: "demo-member-1", targetLabel: "김크리", detail: { role: "gold", roleLabel: "골드" }, createdAt: iso(10) },
     ],

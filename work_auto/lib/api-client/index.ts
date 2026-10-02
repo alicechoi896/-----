@@ -5,6 +5,8 @@ import type {
   MemberRole,
   MemberTier,
   UserProfile,
+  UserSettings,
+  UserSettingsInput,
   ApiResult,
   GeneratedContent,
   GenerateContentRequest,
@@ -111,6 +113,9 @@ export const api = {
   products: {
     list: () => request<Product[]>("/api/products"),
     get: (id: string) => request<ProductDetail>(`/api/products/${id}`),
+    /** 상세 이미지 조각 → 텍스트 (AI Vision). 이미지는 서버에 저장되지 않는다 */
+    extractImages: (images: { mediaType: string; data: string }[], partLabel?: string) =>
+      request<{ text: string; provider: string }>("/api/products/extract-images", { method: "POST", body: json({ images, partLabel }) }),
     analyze: (source: ProductSourceInput) =>
       request<ProductAnalysisDraft>("/api/products/analyze", { method: "POST", body: json({ source }) }),
     save: (draft: ProductAnalysisDraft) => request<Product>("/api/products", { method: "POST", body: json(draft) }),
@@ -176,6 +181,11 @@ export const api = {
     reject: (userId: string, reason?: string) =>
       request<UserProfile>(`/api/admin/users/${userId}/reject`, { method: "POST", body: json({ reason }) }),
     auditLogs: () => request<AuditLog[]>("/api/admin/audit-logs"),
+  },
+
+  settings: {
+    get: () => request<UserSettings>("/api/settings"),
+    update: (input: UserSettingsInput) => request<UserSettings>("/api/settings", { method: "PATCH", body: json(input) }),
   },
 
   account: {

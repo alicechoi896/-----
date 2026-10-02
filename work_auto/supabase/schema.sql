@@ -293,6 +293,15 @@ create table if not exists public.reference_videos (
   unique (user_id, url)
 );
 
+-- 사용자별 설정 (한 사람당 1행, id = 사용자 ID). 기본 AI 등 작은 값만 담는다
+create table if not exists public.user_settings (
+  id            uuid primary key references auth.users (id) on delete cascade,
+  user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  preferred_ai  text check (preferred_ai in ('openai', 'claude')),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
 -- 자주 쓰는 조회용 인덱스
 create index if not exists idx_contents_user_feature on public.generated_contents (user_id, feature_id, created_at desc);
 create index if not exists idx_feedback_user_feature on public.user_feedback (user_id, feature_id, created_at desc);
@@ -330,6 +339,7 @@ alter table public.user_styles         enable row level security;
 alter table public.user_feedback       enable row level security;
 alter table public.performance_metrics enable row level security;
 alter table public.reference_videos    enable row level security;
+alter table public.user_settings       enable row level security;
 
 -- profiles: 본인 또는 관리자만 조회. 역할·승인 변경은 관리자만
 drop policy if exists "profiles_select" on public.profiles;
@@ -364,7 +374,7 @@ declare t text;
 begin
   foreach t in array array[
     'api_connections', 'products', 'product_sources', 'product_analyses', 'generated_contents',
-    'user_styles', 'user_feedback', 'performance_metrics', 'reference_videos'
+    'user_styles', 'user_feedback', 'performance_metrics', 'reference_videos', 'user_settings'
   ] loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(

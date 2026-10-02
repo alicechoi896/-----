@@ -31,7 +31,18 @@ export interface BaseProvider {
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  /** 텍스트만 보내면 문자열, 이미지를 함께 보내면 조각 배열 */
+  content: string | ChatContentPart[];
+}
+
+/** 메시지 조각: 텍스트 또는 이미지(base64). 이미지는 AI 에 보낸 뒤 저장하지 않는다 */
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string };
+
+/** 메시지 내용에서 텍스트만 꺼낸다 (로그, Mock 용) */
+export function contentText(content: ChatMessage["content"]): string {
+  return typeof content === "string" ? content : content.map((p) => (p.type === "text" ? p.text : "[이미지]")).join("\n");
 }
 
 export interface TextGenerationRequest {
@@ -45,6 +56,11 @@ export interface TextGenerationRequest {
 export interface StructuredGenerationRequest extends TextGenerationRequest {
   /** 응답 JSON 의 최상위 key 목록 (응답 검증에 사용) */
   outputKeys: string[];
+  /**
+   * 응답 JSON 스키마 (선택). 주면 지원하는 AI 는 이 형식을 강제한다 (Claude structured outputs).
+   * 객체는 additionalProperties: false + required 를 갖춰야 한다.
+   */
+  jsonSchema?: Record<string, unknown>;
   /**
    * 프롬프트를 만들 때 쓴 구조화 데이터.
    * 실제 AI 는 messages 만 보지만, Mock 은 이 값으로 결정적인 출력을 만든다.
@@ -74,6 +90,8 @@ export interface StructuredGenerationResult<T> {
 export interface AIProvider extends BaseProvider {
   readonly kind: "ai";
   readonly model: string;
+  /** 이미지 입력(상세페이지 이미지 읽기)을 지원하는가 */
+  readonly supportsVision: boolean;
   generateText(request: TextGenerationRequest): Promise<TextGenerationResult>;
   /** JSON 객체로 응답을 받는다. 결과 key 검증은 호출하는 Service 가 한다 */
   generateStructured<T extends Record<string, unknown>>(

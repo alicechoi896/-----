@@ -18,6 +18,7 @@ export class OpenAIProvider implements AIProvider {
   readonly id = "openai";
   readonly kind = "ai" as const;
   readonly label = "OpenAI";
+  readonly supportsVision = true;
   private readonly baseUrl = "https://api.openai.com/v1";
 
   constructor(
@@ -47,13 +48,26 @@ export class OpenAIProvider implements AIProvider {
       cache: "no-store",
       body: JSON.stringify({
         model: this.model,
-        messages: request.messages,
+        // 이미지 조각은 OpenAI 형식(image_url + data URL)으로 바꾼다
+        messages: request.messages.map((m) => ({
+          role: m.role,
+          content:
+            typeof m.content === "string"
+              ? m.content
+              : m.content.map((p) =>
+                  p.type === "text"
+                    ? { type: "text", text: p.text }
+                    : { type: "image_url", image_url: { url: `data:${p.mediaType};base64,${p.data}`, detail: "high" } },
+                ),
+        })),
         temperature: request.temperature ?? 0.7,
         max_tokens: request.maxTokens,
         ...(json ? { response_format: { type: "json_object" } } : {}),
       }),
     });
     if (!res.ok) {
+      if (res.status === 401) throw new AppError("AI_KEY", "OpenAI API 키가 올바르지 않습니다. API 연결 센터에서 확인해 주세요.", 400);
+      if (res.status === 429) throw new AppError("AI_RATE_LIMIT", "OpenAI 호출 한도 또는 크레딧이 부족합니다. 잠시 후 다시 시도하거나 결제 설정을 확인해 주세요.", 429);
       throw new AppError("AI_PROVIDER_ERROR", `OpenAI 호출 실패 (HTTP ${res.status})`, 502);
     }
     const body = (await res.json()) as {
