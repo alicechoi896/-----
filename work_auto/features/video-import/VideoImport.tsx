@@ -6,7 +6,8 @@ import { Check, Copy, Download, Film, ListPlus, ShieldCheck, Terminal, Trash2 } 
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { DOWNLOAD_DIR, INSTALL_COMMAND, downloadCommand } from "@/lib/video-download";
+import { COOKIE_OPTIONS, DOWNLOAD_DIR, INSTALL_COMMANDS, downloadCommand, type CookieSource } from "@/lib/video-download";
+import { PLATFORM_LABEL, parseVideoLinks } from "@/lib/video-links";
 import {
   Button,
   CopyButton,
@@ -19,26 +20,33 @@ import {
   LoadingState,
   Notice,
   SectionCard,
+  Select,
   Textarea,
   type Column,
 } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatRelative } from "@/lib/utils";
 
-const PLATFORM = { youtube: "YouTube", naver: "NAVER", other: "기타" } as const;
 const MAX_BATCH = 20;
+/** 로그인 정보 선택은 이 브라우저에만 기억한다 (화면 편의) */
+const COOKIE_KEY = "work_auto.download-cookies";
+
+function readCookieChoice(): CookieSource {
+  try {
+    const v = window.localStorage.getItem(COOKIE_KEY) as CookieSource | null;
+    return v && COOKIE_OPTIONS.some((o) => o.value === v) ? v : "none";
+  } catch {
+    return "none";
+  }
+}
 
 type ImportResult = { url: string; ok: boolean; error?: string };
 
-/** 줄바꿈·공백·쉼표로 나눈 URL 목록 */
-function parseUrls(text: string): string[] {
-  return [...new Set(text.split(/[\s,]+/).map((s) => s.trim()).filter((s) => /^https?:\/\//.test(s)))];
-}
 
 /**
  * 영상 URL 가져오기.
- * - URL 여러 개를 줄바꿈으로 넣으면 한 번에 목록이 생긴다 (영상 정보만 저장, '제품 홍보 영상 만들기'의 참고 영상)
- * - 다운로드: 내 PC 에서 실행할 yt-dlp 명령을 복사한다 (영상 트랙만 받아 소리 없는 파일). 사이트 서버는 영상 파일을 다루지 않는다.
+ * - URL 여러 개를 줄바꿈으로 넣으면 한 번에 목록이 생긴다. 샤오홍슈 앱의 공유 문구를 그대로 붙여넣어도 링크·제목을 뽑는다
+ * - 다운로드: 내 PC 에서 실행할 yt-dlp 명령을 복사한다 (받은 뒤 소리 트랙 제거 → 소리 없는 파일). 사이트 서버는 영상 파일을 다루지 않는다.
  */
 export function VideoImport() {
   const list = useAsync(() => api.videos.list(), []);
@@ -49,8 +57,19 @@ export function VideoImport() {
   const [results, setResults] = useState<ImportResult[] | null>(null);
   const [guideOpen, setGuideOpen] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [cookies, setCookies] = useState<CookieSource>(() => (typeof window === "undefined" ? "none" : readCookieChoice()));
 
-  const urls = parseUrls(text);
+  const links = parseVideoLinks(text);
+  const urls = links.map((l) => l.url);
+
+  function chooseCookies(v: CookieSource) {
+    setCookies(v);
+    try {
+      window.localStorage.setItem(COOKIE_KEY, v);
+    } catch {
+      // 기억하지 못해도 이번 화면에서는 쓴다
+    }
+  }
 
   async function handleImport() {
     if (!urls.length) return;
@@ -58,7 +77,7 @@ export function VideoImport() {
     setError(null);
     setResults(null);
     try {
-      const res = await api.videos.importMany(urls.slice(0, MAX_BATCH), note);
+      const res = await api.videos.importMany(links.slice(0, MAX_BATCH), note);
       const added = res.filter((r) => r.ok && r.video).map((r) => r.video!);
       list.setData((prev) => [...added, ...(prev ?? [])]);
       setResults(res.map(({ url, ok, error: e }) => ({ url, ok, error: e })));
@@ -79,7 +98,7 @@ export function VideoImport() {
 
   async function copyDownload(v: ReferenceVideo) {
     try {
-      await navigator.clipboard.writeText(downloadCommand([v.url]));
+      await navigator.clipboard.writeText(downloadCommand([v.url], cookies));
       setCopiedId(v.id);
       setGuideOpen(true);
       setTimeout(() => setCopiedId((id) => (id === v.id ? null : id)), 1800);
@@ -102,7 +121,7 @@ export function VideoImport() {
               {v.title}
             </a>
             <p className="text-xs text-fg-subtle">
-              {PLATFORM[v.platform]} · {v.channelName}
+              {PLATFORM_LABEL[v.platform] ?? "기타"} · {v.channelName}
             </p>
           </div>
         </div>
@@ -133,7 +152,7 @@ export function VideoImport() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="영상 가져오기" icon={ListPlus} description="YouTube, NAVER 등 영상 URL 을 한 줄에 하나씩 넣으세요. 한 번에 20개까지 목록에 추가됩니다.">
+      <SectionCard title="영상 가져오기" icon={ListPlus} description="샤오홍슈·YouTube 등 영상 링크를 한 줄에 하나씩 넣으세요. 샤오홍슈 앱의 공유 문구를 그대로 붙여넣어도 됩니다. 한 번에 20개까지.">
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -150,7 +169,7 @@ export function VideoImport() {
             <Textarea
               id="video-urls"
               rows={4}
-              placeholder={"https://www.youtube.com/watch?v=…\nhttps://youtu.be/…\nhttps://www.youtube.com/shorts/…"}
+              placeholder={"http://xhslink.com/a/… (샤오홍슈 공유 문구 그대로 OK)\nhttps://www.xiaohongshu.com/explore/…\nhttps://www.youtube.com/shorts/…"}
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
@@ -189,7 +208,7 @@ export function VideoImport() {
             // 복사하면 아래 다운로드 방법도 펼친다
             <span onClick={() => setGuideOpen(true)}>
               <CopyButton
-                value={downloadCommand(videos.map((v) => v.url))}
+                value={downloadCommand(videos.map((v) => v.url), cookies)}
                 label={`전체 ${videos.length}개 다운로드 명령 복사`}
                 className="border border-line"
               />
@@ -206,33 +225,59 @@ export function VideoImport() {
         )}
       </SectionCard>
 
-      <DownloadGuide open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} />
+      <DownloadGuide open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} cookies={cookies} onCookies={chooseCookies} />
     </div>
   );
 }
 
 /** 다운로드 방법 (처음 한 번 설치 → 명령 붙여넣기) */
-function DownloadGuide({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function DownloadGuide({
+  open,
+  onToggle,
+  cookies,
+  onCookies,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  cookies: CookieSource;
+  onCookies: (v: CookieSource) => void;
+}) {
+  const cookieHint = COOKIE_OPTIONS.find((o) => o.value === cookies)?.hint;
   return (
     <section className="rounded-card border border-line bg-subtle/60">
       <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left">
         <span className="flex items-center gap-2 text-[14px] font-semibold text-fg">
           <Terminal className="size-4 text-fg-subtle" />
-          다운로드 방법 (소리 없는 영상으로 저장)
+          다운로드 방법 (샤오홍슈·YouTube → 소리 없는 영상으로 저장)
         </span>
         <span className="text-xs text-fg-subtle">{open ? "접기" : "펼치기"}</span>
       </button>
       {open && (
         <div className="space-y-4 border-t border-line px-5 py-4 text-[13px] leading-relaxed text-fg-muted">
           <ol className="space-y-3">
-            <Step n={1} title="처음 한 번만: 다운로드 도구(yt-dlp) 설치">
-              시작 메뉴에서 <b>PowerShell</b> 을 열고 아래 명령을 붙여넣은 뒤 Enter. 설치가 끝나면 PowerShell 을 닫았다가 다시 엽니다.
-              <Code text={INSTALL_COMMAND} />
+            <Step n={1} title="처음 한 번만: 다운로드 도구(yt-dlp)와 ffmpeg 설치">
+              시작 메뉴에서 <b>PowerShell</b> 을 열고 아래 두 줄을 하나씩 붙여넣고 Enter. 설치가 끝나면 PowerShell 을 닫았다가 다시 엽니다.
+              {INSTALL_COMMANDS.map((c) => (
+                <Code key={c} text={c} />
+              ))}
             </Step>
-            <Step n={2} title="영상 옆 [다운로드] 또는 [전체 다운로드 명령 복사]">
-              소리 없는 영상(영상 트랙만)으로 받는 명령이 복사됩니다.
+            <Step n={2} title="샤오홍슈 로그인 정보 (샤오홍슈는 보통 필요)">
+              <span>샤오홍슈는 로그인하지 않으면 영상을 보여주지 않는 경우가 많습니다. 브라우저에 로그인해 둔 정보를 다운로드 도구가 읽게 합니다.</span>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <Select
+                  className="w-48"
+                  value={cookies}
+                  options={COOKIE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  onChange={(e) => onCookies(e.target.value as CookieSource)}
+                />
+                <span className="text-xs text-fg-subtle">{cookieHint}</span>
+              </div>
+              <p className="mt-1 text-xs text-fg-subtle">로그인 정보는 내 PC 안에서만 쓰이고 이 사이트로 전송되지 않습니다.</p>
             </Step>
-            <Step n={3} title="PowerShell 에 붙여넣고 Enter">
+            <Step n={3} title="영상 옆 [다운로드] 또는 [전체 다운로드 명령 복사]">
+              받은 뒤 소리 트랙을 빼는 명령이 복사됩니다 (다시 인코딩하지 않아 화질 그대로).
+            </Step>
+            <Step n={4} title="PowerShell 에 붙여넣고 Enter">
               <span>
                 <code className="rounded bg-canvas px-1 ring-1 ring-line">{DOWNLOAD_DIR.replace("~", "내 폴더")}</code> 에 <b>소리 없는 영상</b>이 저장됩니다.
                 파일 이름 끝에 <code className="rounded bg-canvas px-1 ring-1 ring-line">_음성없음</code> 이 붙습니다.
@@ -240,15 +285,16 @@ function DownloadGuide({ open, onToggle }: { open: boolean; onToggle: () => void
             </Step>
           </ol>
           <p className="text-xs text-fg-subtle">
-            영상만 따로 제공하지 않는 일부 사이트는 받기가 실패할 수 있습니다. 그럴 때는 일반 파일로 받은 뒤{" "}
+            &ldquo;No video formats found&rdquo; 또는 &ldquo;笔记暂时无法浏览&rdquo; 가 나오면 2번의 로그인 정보를 선택하고 다시 복사하세요. 링크가 오래되면(xsec_token 만료) 앱에서 공유 링크를 새로 복사하세요.
+            이미 소리 있는 파일을 갖고 있다면{" "}
             <Link href="/tools/video-mute" className="font-medium text-brand hover:underline">
               영상 음성 제거
             </Link>
-            로 소리를 빼세요. 사이트 서버는 영상 파일을 다루지 않습니다 (서버 비용 0, YouTube 의 서버 차단 회피).
+            에 넣어도 됩니다. 사이트 서버는 영상 파일을 다루지 않습니다 (서버 비용 0, 서버 차단 회피).
           </p>
           <Notice tone="warning" icon={ShieldCheck} title="저작권 주의">
-            내 영상, 사용 허락을 받은 영상, 또는 참고(분석)용으로만 쓰세요. 다른 사람 영상은 소리를 빼고 다시 올려도 YouTube Content ID 가 화면으로
-            찾아내 수익 정지·저작권 경고를 받을 수 있습니다.
+            내 영상, 사용 허락을 받은 영상(제조사·판매자 제공 소스 등), 또는 참고(분석)용으로만 쓰세요. 다른 사람 영상은 소리를 빼고 다시 올려도
+            플랫폼이 화면으로 찾아내 수익 정지·저작권 경고를 받을 수 있습니다.
           </Notice>
         </div>
       )}

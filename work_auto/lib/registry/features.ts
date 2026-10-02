@@ -237,7 +237,7 @@ export const FEATURES: FeatureDef[] = [
     channelId: "tools",
     order: 3,
     title: "영상 URL 가져오기",
-    description: "참고 영상 URL을 여러 개 한 번에 등록하고, 소리 없는 영상으로 내려받는 명령을 복사합니다.",
+    description: "샤오홍슈·YouTube 영상 링크를 여러 개 한 번에 등록하고, 소리 없는 영상으로 내려받는 명령을 복사합니다.",
     href: "/tools/video-import",
     icon: Link2,
     kind: "tool",

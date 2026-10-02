@@ -2,6 +2,18 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.8.2] - 2026-10-02: 샤오홍슈(小红书) 영상 지원
+
+### 추가
+- 샤오홍슈 링크 인식 (`xiaohongshu.com/explore·discovery/item`, `xhslink.com` 단축 링크). 앱의 **공유 문구를 그대로 붙여넣어도** 링크와 제목을 뽑는다 (`lib/video-links.ts`)
+- 목록에 "샤오홍슈" 표시. 샤오홍슈는 로그인 없이 정보를 주지 않아 서버에서 조회하지 않고 공유 문구의 제목을 쓴다
+- 다운로드 명령에 **로그인 정보 옵션**: Firefox / Chrome / Edge 로그인 또는 cookies.txt (`--cookies-from-browser`, `--cookies`). 선택은 이 브라우저에만 기억
+
+### 변경
+- 다운로드 명령: 영상 트랙만 받는 방식(샤오홍슈에서 실패) → **받은 뒤 ffmpeg 로 소리 트랙만 제거**(`--use-postprocessor FFmpegCopyStream --ppa "CopyStream:-an"`, 재인코딩 없음, mp4 유지). YouTube·샤오홍슈 공통
+- 설치 안내에 ffmpeg 추가 (`winget install Gyan.FFmpeg`)
+- 검증: yt-dlp 2026.08.19 + ffmpeg, PowerShell 5.1 에서 생성된 명령 그대로 실행 → 결과 파일에 영상 트랙만 남음, `~/Downloads` 경로 정상
+
 ## [0.8.1] - 2026-10-02: 영상 URL 여러 개 가져오기 · 소리 없는 영상 다운로드
 
 ### 추가

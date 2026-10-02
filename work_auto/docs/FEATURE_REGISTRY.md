@@ -33,7 +33,7 @@
 | NAVER 블로그 | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | 🧪 | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
 | 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | 🧪 | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
 | 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | 🧪 | - | 검색어, 카테고리 | 제품 카드/목록, 상세, 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
-| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL 여러 개(줄바꿈, 최대 20), 메모 | 영상 메타데이터, 참고 영상 목록, 소리 없는 영상 다운로드 명령(yt-dlp, 내 PC) | `features/video-import`, `lib/video-download.ts` |
+| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL 여러 개(줄바꿈, 최대 20), 메모 | 영상 메타데이터, 참고 영상 목록, 소리 없는 영상 다운로드 명령(yt-dlp + ffmpeg, 내 PC, 샤오홍슈 로그인 옵션) | `features/video-import`, `lib/video-download.ts`, `lib/video-links.ts` |
 | 공통 도구 | `video-mute` | 영상 음성 제거 | `/tools/video-mute` | tool | ✅ | - (브라우저 ffmpeg.wasm) | 내 영상 파일 (MP4·MOV·WEBM·MKV, 1GB 이하) | 음성 없는 영상(원본 화질), 여러 개 ZIP | `features/video-mute`, `lib/video-mute.ts` |
 | 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | ✅ | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
 | 사이트 관리 | `admin-approvals` | 가입 승인 | `/admin/approvals` | admin | ✅ | - | 승인 등급, 거절 사유 | 승인 대기 목록 | `features/admin` (관리자 전용) |
