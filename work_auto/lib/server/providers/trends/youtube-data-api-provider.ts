@@ -38,7 +38,7 @@ const THUMB_FALLBACK = ["#dbe4ff", "#ffe3e3", "#d3f9d8", "#fff3bf", "#e5dbff", "
 const STOPWORDS = new Set(["the", "and", "with", "shorts", "short", "영상", "이것", "정말", "진짜", "그리고", "하는", "있는", "없는"]);
 
 interface SearchResponse {
-  items: { id: { videoId?: string } }[];
+  items: { id: { videoId?: string }; snippet?: { channelId?: string } }[];
   nextPageToken?: string;
 }
 interface VideosResponse {
@@ -260,13 +260,20 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     const ids = search.items.map((i) => i.id.videoId).filter((id): id is string => Boolean(id));
     if (ids.length === 0) return { items: [], nextPageToken };
 
-    const videos = await this.get<VideosResponse>("videos", {
-      part: "snippet,statistics,contentDetails",
-      id: ids.join(","),
-      maxResults: 50,
-    });
-    const channelIds = Array.from(new Set(videos.items.map((v) => v.snippet.channelId)));
-    const channels = await this.get<ChannelsResponse>("channels", { part: "statistics", id: channelIds.join(","), maxResults: 50 });
+    // 채널 ID 는 검색 결과에 이미 있으므로 영상 정보·채널 정보를 동시에 받는다 (예전: 차례로 → 왕복 1번 절약)
+    const searchChannelIds = Array.from(new Set(search.items.map((i) => i.snippet?.channelId).filter((c): c is string => Boolean(c))));
+    const [videos, channelsFirst] = await Promise.all([
+      this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: ids.join(","), maxResults: 50 }),
+      searchChannelIds.length
+        ? this.get<ChannelsResponse>("channels", { part: "statistics", id: searchChannelIds.slice(0, 50).join(","), maxResults: 50 })
+        : Promise.resolve({ items: [] } as ChannelsResponse),
+    ]);
+    // 검색 결과에 채널 ID 가 빠진 영상이 있으면 그것만 한 번 더
+    const known = new Set(channelsFirst.items.map((c) => c.id));
+    const missing = Array.from(new Set(videos.items.map((v) => v.snippet.channelId).filter((c) => !known.has(c))));
+    const channels = missing.length
+      ? { items: [...channelsFirst.items, ...(await this.get<ChannelsResponse>("channels", { part: "statistics", id: missing.slice(0, 50).join(","), maxResults: 50 })).items] }
+      : channelsFirst;
     const subsByChannel = new Map(
       channels.items.map((c) => [c.id, c.statistics.hiddenSubscriberCount ? null : Number(c.statistics.subscriberCount ?? 0)]),
     );

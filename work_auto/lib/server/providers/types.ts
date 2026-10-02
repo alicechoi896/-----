@@ -2,6 +2,8 @@ import "server-only";
 import type {
   ConnectionTestResult,
   NaverTrendInsight,
+  NaverTrendMore,
+  NaverTrendSection,
   NaverTrendQuery,
   ProductSourceInput,
   RawProductData,
@@ -124,6 +126,8 @@ export interface YouTubeTrendProvider extends BaseProvider {
 export interface NaverTrendProvider extends BaseProvider {
   readonly kind: "naver-trend";
   getInsight(query: NaverTrendQuery): Promise<NaverTrendInsight>;
+  /** [더보기]: offset 부터 10개 더 (급상승은 그때 다음 후보를 더 계산한다) */
+  getMore(query: NaverTrendQuery, section: NaverTrendSection, offset: number): Promise<NaverTrendMore>;
 }
 
 /** 트렌드 Provider 통칭 */

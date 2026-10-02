@@ -190,6 +190,8 @@ export interface NaverTrendInsight {
   dataSource?: "live" | "mock";
   /** 일부 데이터를 못 가져온 이유 등 안내 */
   notes?: string[];
+  /** 더 불러올 수 있는 목록 (10개씩, [더보기]를 누를 때 서버가 그때 더 계산한다) */
+  more?: { rising: boolean; related: boolean; ideas: boolean };
   collectedAt: ISODate;
 }
 
@@ -201,4 +203,16 @@ export interface TrendOption {
   keywords: string[];
   /** 선택 목록의 묶음 이름 (예: "찜한 영상", "기본 조건 결과") */
   group?: string;
+}
+
+/** NAVER 트렌드 [더보기] (10개씩) */
+export type NaverTrendSection = "rising" | "related" | "ideas";
+export interface NaverTrendMore {
+  section: NaverTrendSection;
+  /** rising: 급상승 키워드와 급상승 주제를 함께 늘린다 */
+  risingKeywords?: Keyword[];
+  risingTopics?: NaverRisingTopic[];
+  relatedKeywords?: Keyword[];
+  contentIdeas?: string[];
+  hasMore: boolean;
 }

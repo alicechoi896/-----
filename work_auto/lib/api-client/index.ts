@@ -3,6 +3,8 @@ import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
   ApiConnectionPublic,
+  NaverTrendMore,
+  NaverTrendSection,
   LearningProfile,
   LearningProfileView,
   ContentPublicationInput,
@@ -116,9 +118,10 @@ function qs(params: Record<string, string | number | undefined>) {
 export const api = {
   trends: {
     /** 한 페이지(최대 50개 조회). 이어서 부를 때는 q.pageToken 에 nextPageToken 을 넣는다 */
-    youtube: ({ scope: _scope, ...q }: YouTubeTrendQuery) => {
+    /** fill: 걸러져 남는 영상이 적으면 서버가 다음 페이지를 이어서 받는다 (첫 검색용) */
+    youtube: ({ scope: _scope, ...q }: YouTubeTrendQuery, opts: { fill?: boolean } = {}) => {
       void _scope; // 조사 범위는 서버가 profileId 로 풀어 넣는다
-      return request<YouTubeTrendPage & { query: YouTubeTrendQuery; provider: string }>(`/api/trends/youtube${qs({ ...q })}`);
+      return request<YouTubeTrendPage & { query: YouTubeTrendQuery; provider: string }>(`/api/trends/youtube${qs({ ...q, fill: opts.fill ? "1" : undefined })}`);
     },
     analyzeVideo: (video: YouTubeTrendItem) =>
       request<YouTubeVideoAnalysis & { provider: string }>("/api/trends/youtube/analyze", { method: "POST", body: json({ video }) }),
@@ -143,6 +146,15 @@ export const api = {
     naver: (q: { scope: "clip" | "blog"; category?: string; keyword?: string; periodDays: number; profileId?: string }) =>
       request<{ insight: NaverTrendInsight; provider: string }>(
         `/api/trends/naver${qs({ scope: q.scope, category: q.category, keyword: q.keyword, period: q.periodDays, profileId: q.profileId })}`,
+      ),
+    /** NAVER 트렌드 [더보기] 10개 더 */
+    naverMore: (
+      q: { scope: "clip" | "blog"; category?: string; keyword?: string; periodDays: number; profileId?: string },
+      section: NaverTrendSection,
+      offset: number,
+    ) =>
+      request<NaverTrendMore>(
+        `/api/trends/naver/more${qs({ scope: q.scope, category: q.category, keyword: q.keyword, period: q.periodDays, profileId: q.profileId, section, offset })}`,
       ),
     options: (source: "youtube" | "naver") => request<TrendOption[]>(`/api/trends/options${qs({ source })}`),
   },

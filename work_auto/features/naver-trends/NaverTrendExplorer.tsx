@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ArrowUpRight, CalendarRange, Info, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
 import { ProfileBar } from "@/features/content-profile/ProfileBar";
 import { useContentProfile } from "@/features/content-profile/useContentProfile";
 import { CATEGORY_OPTIONS } from "@/lib/generators/configs";
-import type { Keyword, NaverRisingTopic, NaverTrendInsight } from "@/lib/types";
+import type { Keyword, NaverRisingTopic, NaverTrendInsight, NaverTrendSection } from "@/lib/types";
 import { SEASON_LABEL, seasonOf } from "@/lib/domain/naver-trend-lists";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -71,17 +71,15 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
   const period = periodOverride ?? (PERIODS.some((p) => p.value === profilePeriod) ? profilePeriod : DEFAULT_PERIOD);
   const setPeriod = (v: string) => setPeriodOverride(v);
 
+  const trendQuery: TrendQuery = {
+    scope,
+    category: useProfile ? undefined : category,
+    keyword,
+    periodDays: Number(period),
+    profileId: profile.scopeParam,
+  };
   const { data, loading, error, reload } = useAsync(
-    () =>
-      profile.ready
-        ? api.trends.naver({
-            scope,
-            category: useProfile ? undefined : category,
-            keyword,
-            periodDays: Number(period),
-            profileId: profile.scopeParam,
-          })
-        : new Promise<never>(() => {}), // 프로필을 읽은 뒤 한 번만 조회한다
+    () => (profile.ready ? api.trends.naver(trendQuery) : new Promise<never>(() => {})), // 프로필을 읽은 뒤 한 번만 조회한다
     [scope, category, keyword, period, profile.ready, profile.scopeParam],
   );
   const insight = data?.insight;
@@ -146,9 +144,75 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
           <ErrorState message={error ?? "데이터가 없습니다."} onRetry={reload} />
         </SectionCard>
       ) : scope === "clip" ? (
-        <ClipView insight={insight} keyword={keyword} onKeyword={searchKeyword} onClear={clearKeyword} />
+        <ClipView key={insight.collectedAt + keyword} insight={insight} q={trendQuery} keyword={keyword} onKeyword={searchKeyword} onClear={clearKeyword} />
       ) : (
-        <BlogView insight={insight} keyword={keyword} onKeyword={searchKeyword} onClear={clearKeyword} />
+        <BlogView key={insight.collectedAt + keyword} insight={insight} q={trendQuery} keyword={keyword} onKeyword={searchKeyword} onClear={clearKeyword} />
+      )}
+    </div>
+  );
+}
+
+/* ───────── [더보기]: 처음 10개, 누를 때마다 서버가 10개 더 계산 ───────── */
+
+type TrendQuery = { scope: "clip" | "blog"; category?: string; keyword?: string; periodDays: number; profileId?: string };
+
+type KeywordHandlers = {
+  q: TrendQuery;
+  keyword: string;
+  onKeyword: (k: string) => void;
+  onClear: () => void;
+};
+
+/** 처음 받은 10개에 [더보기]로 받은 것을 이어 붙인다. 조회 조건이 바뀌면(key) 처음부터 */
+function usePagedInsight(insight: NaverTrendInsight, q: TrendQuery) {
+  const [risingKeywords, setRisingKeywords] = useState(insight.risingKeywords);
+  const [risingTopics, setRisingTopics] = useState(insight.risingTopics);
+  const [related, setRelated] = useState(insight.relatedKeywords);
+  const [ideas, setIdeas] = useState(insight.contentIdeas);
+  const [more, setMore] = useState(insight.more ?? { rising: false, related: false, ideas: false });
+  const [loading, setLoading] = useState<NaverTrendSection | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadMore(section: NaverTrendSection) {
+    setLoading(section);
+    setError(null);
+    try {
+      const offset = section === "rising" ? risingKeywords.length : section === "related" ? related.length : ideas.length;
+      const r = await api.trends.naverMore(q, section, offset);
+      const add = <T,>(prev: T[], next: T[] | undefined, key: (x: T) => string) => {
+        const seen = new Set(prev.map(key));
+        return [...prev, ...(next ?? []).filter((x) => !seen.has(key(x)))];
+      };
+      if (section === "rising") {
+        setRisingKeywords((prev) => add(prev, r.risingKeywords, (k) => k.text));
+        setRisingTopics((prev) => add(prev, r.risingTopics, (t) => t.id));
+      } else if (section === "related") setRelated((prev) => add(prev, r.relatedKeywords, (k) => k.text));
+      else setIdeas((prev) => add(prev, r.contentIdeas, (x) => x));
+      setMore((m) => ({ ...m, [section]: r.hasMore }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "더 불러오지 못했습니다.");
+    } finally {
+      setLoading(null);
+    }
+  }
+  return { risingKeywords, risingTopics, related, ideas, more, loading, error, loadMore };
+}
+
+/** 목록 아래 [10개 더 보기] */
+function MoreButton({ show, loading, onClick, error }: { show: boolean; loading: boolean; onClick: () => void; error?: string | null }) {
+  if (!show && !error) return null;
+  return (
+    <div className="border-t border-line">
+      {error && <p className="px-5 pt-2 text-center text-xs text-danger">{error}</p>}
+      {show && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onClick}
+          className="w-full px-5 py-2.5 text-center text-xs font-medium text-fg-subtle hover:bg-subtle hover:text-brand disabled:opacity-60"
+        >
+          {loading ? "불러오는 중…" : "10개 더 보기"}
+        </button>
       )}
     </div>
   );
@@ -156,26 +220,36 @@ export function NaverTrendExplorer({ scope }: { scope: "clip" | "blog" }) {
 
 /* ───────── NAVER 클립 ───────── */
 
-type KeywordHandlers = {
-  keyword: string;
-  onKeyword: (k: string) => void;
-  onClear: () => void;
-};
-
-function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTrendInsight } & KeywordHandlers) {
+function ClipView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverTrendInsight } & KeywordHandlers) {
+  const pg = usePagedInsight(insight, q);
   return (
     <div className="space-y-4">
       {keyword && <ActiveKeyword keyword={keyword} onClear={onClear} />}
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <RisingTopicsCard topics={insight.risingTopics} onKeyword={onKeyword} description="클립 소재로 쓰기 좋은 주제입니다." makeHref={(t) => `/naver-clip/info-content?trendId=${t.id}`} makeLabel="클립 만들기" />
+        <RisingTopicsCard
+          topics={pg.risingTopics}
+          onKeyword={onKeyword}
+          description="클립 소재로 쓰기 좋은 주제입니다."
+          makeHref={(t) => `/naver-clip/info-content?trendId=${t.id}`}
+          makeLabel="클립 만들기"
+          more={<MoreButton show={pg.more.rising} loading={pg.loading === "rising"} onClick={() => void pg.loadMore("rising")} error={pg.error} />}
+        />
 
         <div className="space-y-4">
-          <SectionCard title={`급상승 키워드 · ${insight.risingKeywords.length}개`} icon={TrendingUp} description="키워드를 누르면 그 키워드로 조회합니다." flush>
-            <Expandable items={insight.risingKeywords} limit={10} render={(rows) => <KeywordTable keywords={rows} onKeyword={onKeyword} />} />
+          <SectionCard title={`급상승 키워드 · ${pg.risingKeywords.length}개`} icon={TrendingUp} description="키워드를 누르면 그 키워드로 조회합니다." flush>
+            <KeywordTable keywords={pg.risingKeywords} onKeyword={onKeyword} />
+            <MoreButton show={pg.more.rising} loading={pg.loading === "rising"} onClick={() => void pg.loadMore("rising")} />
           </SectionCard>
           {/* 시즌 키워드는 검색어와 무관한 지표라 검색어가 없을 때만 보여준다 */}
           {!keyword && <KeywordChips title={`시즌 키워드 · 지금(${SEASON_LABEL[seasonOf()]})`} icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} copyAll />}
-          <KeywordChips title={`관련 키워드 · ${insight.relatedKeywords.length}개`} icon={Link2} keywords={insight.relatedKeywords} onKeyword={onKeyword} copyAll />
+          <KeywordChips
+            title={`관련 키워드 · ${pg.related.length}개`}
+            icon={Link2}
+            keywords={pg.related}
+            onKeyword={onKeyword}
+            copyAll
+            more={pg.more.related ? <MoreButton show loading={pg.loading === "related"} onClick={() => void pg.loadMore("related")} /> : undefined}
+          />
         </div>
       </div>
     </div>
@@ -189,20 +263,17 @@ function ClipView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
  * 검색어가 있을 때: 그 검색어의 검색 추이·관련 검색어·글 아이디어가 중심.
  *   급상승·시즌 키워드는 검색어와 무관한 카테고리 지표라서 아래 "다른 키워드 둘러보기" 로 작게 내린다.
  */
-function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTrendInsight } & KeywordHandlers) {
+function BlogView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverTrendInsight } & KeywordHandlers) {
+  const pg = usePagedInsight(insight, q);
   const ideas = (
     <SectionCard
-      title={`${keyword ? `'${keyword}' 글 아이디어` : "콘텐츠 아이디어"} · ${insight.contentIdeas.length}개`}
+      title={`${keyword ? `'${keyword}' 글 아이디어` : "콘텐츠 아이디어"} · ${pg.ideas.length}개`}
       icon={Lightbulb}
-      actions={insight.contentIdeas.length > 0 && <CopyButton value={insight.contentIdeas} label="전체 복사" />}
+      actions={pg.ideas.length > 0 && <CopyButton value={pg.ideas} label="전체 복사" />}
       flush
     >
-      <Expandable
-        items={insight.contentIdeas}
-        limit={10}
-        render={(rows) => (
       <ul className="divide-y divide-line">
-        {rows.map((idea) => (
+        {pg.ideas.map((idea) => (
           <li key={idea} className="flex items-center justify-between gap-3 px-5 py-3">
             <span className="text-sm text-fg">{idea}</span>
             <Link
@@ -215,20 +286,20 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
           </li>
         ))}
       </ul>
-        )}
-      />
+      <MoreButton show={pg.more.ideas} loading={pg.loading === "ideas"} onClick={() => void pg.loadMore("ideas")} error={pg.loading === null ? pg.error : null} />
     </SectionCard>
   );
 
   const relatedCard = (
     <SectionCard
-      title={`관련 검색어 · ${insight.relatedKeywords.length}개`}
+      title={`관련 검색어 · ${pg.related.length}개`}
       icon={Link2}
       description={keyword ? "누르면 그 검색어로 다시 조회합니다." : "누르면 그 검색어로 조회합니다."}
-      actions={insight.relatedKeywords.length > 0 && <CopyButton value={insight.relatedKeywords.map((k) => k.text)} label="전체 복사" />}
+      actions={pg.related.length > 0 && <CopyButton value={pg.related.map((k) => k.text)} label="전체 복사" />}
       flush
     >
-      <Expandable items={insight.relatedKeywords} limit={10} render={(rows) => <KeywordTable keywords={rows} showGrowth={false} onKeyword={onKeyword} />} />
+      <KeywordTable keywords={pg.related} showGrowth={false} onKeyword={onKeyword} />
+      <MoreButton show={pg.more.related} loading={pg.loading === "related"} onClick={() => void pg.loadMore("related")} />
     </SectionCard>
   );
 
@@ -251,12 +322,13 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
         </div>
         <div className="grid items-start gap-4 lg:grid-cols-3">
           <RisingTopicsCard
-            topics={insight.risingTopics}
+            topics={pg.risingTopics}
             onKeyword={onKeyword}
             description="현재 분석 기준에서 검색이 늘고 있는 주제입니다."
             makeHref={(t) => `/naver-blog/info-writing?${new URLSearchParams({ topic: t.title }).toString()}`}
             makeLabel="글쓰기"
             compact
+            more={<MoreButton show={pg.more.rising} loading={pg.loading === "rising"} onClick={() => void pg.loadMore("rising")} />}
           />
           <KeywordChips title={`시즌 키워드 · 지금(${SEASON_LABEL[seasonOf()]})`} icon={CalendarRange} keywords={insight.seasonalKeywords} showGrowth onKeyword={onKeyword} copyAll />
           {ideas}
@@ -298,26 +370,6 @@ function BlogView({ insight, keyword, onKeyword, onClear }: { insight: NaverTren
 
 /* ───────── 공용 조각 ───────── */
 
-/** 처음에는 limit 개만, [나머지 N개 더 보기] 로 전체 */
-function Expandable<T>({ items, limit, render }: { items: T[]; limit: number; render: (rows: T[]) => ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const rows = open ? items : items.slice(0, limit);
-  return (
-    <>
-      {render(rows)}
-      {items.length > limit && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="w-full border-t border-line px-5 py-2.5 text-center text-xs font-medium text-fg-subtle hover:bg-subtle hover:text-brand"
-        >
-          {open ? "접기" : `나머지 ${items.length - limit}개 더 보기`}
-        </button>
-      )}
-    </>
-  );
-}
-
 function RisingTopicsCard({
   topics,
   onKeyword,
@@ -325,6 +377,7 @@ function RisingTopicsCard({
   makeHref,
   makeLabel,
   compact,
+  more,
 }: {
   topics: NaverRisingTopic[];
   onKeyword: (k: string) => void;
@@ -332,6 +385,8 @@ function RisingTopicsCard({
   makeHref: (t: NaverRisingTopic) => string;
   makeLabel: string;
   compact?: boolean;
+  /** 목록 아래 [10개 더 보기] */
+  more?: React.ReactNode;
 }) {
   return (
     <SectionCard
@@ -342,12 +397,8 @@ function RisingTopicsCard({
       flush
     >
       {topics.length === 0 && <EmptyNote text="급상승 주제를 찾지 못했습니다. 위쪽 안내 문구를 확인하거나 다른 검색어로 조회해 보세요." />}
-      <Expandable
-        items={topics}
-        limit={compact ? 8 : 10}
-        render={(rows) => (
           <ul className="divide-y divide-line">
-            {rows.map((t) => (
+            {topics.map((t) => (
               <li key={t.id} className={compact ? "flex items-center justify-between gap-3 px-5 py-2.5" : "flex items-start justify-between gap-4 px-5 py-4"}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -372,8 +423,7 @@ function RisingTopicsCard({
               </li>
             ))}
           </ul>
-        )}
-      />
+      {more}
     </SectionCard>
   );
 }
@@ -498,6 +548,7 @@ function KeywordChips({
   showGrowth,
   onKeyword,
   copyAll,
+  more,
 }: {
   title: string;
   icon: typeof Zap;
@@ -506,6 +557,8 @@ function KeywordChips({
   onKeyword?: (k: string) => void;
   /** 오른쪽 위에 [전체 복사] (키워드를 줄마다 하나씩) */
   copyAll?: boolean;
+  /** 아래 [10개 더 보기] */
+  more?: React.ReactNode;
 }) {
   return (
     <SectionCard title={title} icon={icon} actions={copyAll && keywords.length > 0 && <CopyButton value={keywords.map((k) => k.text)} label="전체 복사" />}>
@@ -527,6 +580,7 @@ function KeywordChips({
           );
         })}
       </div>
+      {more && <div className="-mx-5 -mb-5 mt-4">{more}</div>}
     </SectionCard>
   );
 }

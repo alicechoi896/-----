@@ -19,8 +19,6 @@ import { infoVideoHref, trendPrefill } from "./trend-links";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 /** 처음 검색할 때 조건에 맞는 영상이 이보다 적으면 다음 페이지를 자동으로 더 불러온다 */
-const AUTO_FILL_TARGET = 20;
-const AUTO_EXTRA_PAGES = 2;
 
 /**
  * YouTube 트렌드 찾기.
@@ -64,17 +62,10 @@ export function YouTubeTrendExplorer() {
     setError(null);
     setMoreError(null);
     try {
-      // 제목 언어·구독자·조회수 조건으로 걸러져 남는 영상이 적으면 다음 페이지를 자동으로 더 불러온다 (최대 3페이지 = 약 306 units)
-      let page = await api.trends.youtube(query);
-      let items = page.items;
-      let fetchedCount = page.fetched;
-      for (let extra = 0; extra < AUTO_EXTRA_PAGES && items.length < AUTO_FILL_TARGET && page.nextPageToken; extra++) {
-        if (id !== requestId.current) return;
-        page = await api.trends.youtube({ ...query, pageToken: page.nextPageToken });
-        const seen = new Set(items.map((i) => i.id));
-        items = [...items, ...page.items.filter((i) => !seen.has(i.id))];
-        fetchedCount += page.fetched;
-      }
+      // 제목 언어·구독자·조회수 조건으로 걸러져 남는 영상이 적으면 서버가 다음 페이지를 이어서 받는다 (요청 1번, 최대 3페이지)
+      const page = await api.trends.youtube(query, { fill: true });
+      const items = page.items;
+      const fetchedCount = page.fetched;
       if (id !== requestId.current) return;
       setItems(items);
       setNextPageToken(page.nextPageToken);

@@ -50,29 +50,57 @@ export function normalizeYouTubeQuery(raw: Record<string, unknown>): YouTubeTren
   };
 }
 
+/** 첫 화면 자동 채우기: 남는 영상이 이만큼 안 되면 최대 2페이지 더 (약 306 units) */
+const YT_FILL = { target: 20, extraPages: 2 };
+
+/** NAVER 트렌드 조회 조건 (콘텐츠 프로필은 "무엇을 조사할지"만 정한다. 분석 방식은 NAVER Provider 가 따로) */
+async function naverQuery(params: URLSearchParams): Promise<NaverTrendQuery> {
+  const query: NaverTrendQuery = {
+    category: params.get("category") || undefined,
+    keyword: params.get("keyword")?.trim().slice(0, 50) || undefined,
+    periodDays: toNaverPeriod(params.get("period")),
+    scope: params.get("scope") === "blog" ? "blog" : "clip",
+    profileId: params.get("profileId") || undefined,
+  };
+  query.profileScope = await contentProfileService.resolveScope(query.profileId);
+  return query;
+}
+
 export const trendService = {
   /** YouTube 트렌드 한 페이지. 다음 페이지는 nextPageToken 으로 이어서 부른다 */
   async searchYouTube(params: URLSearchParams) {
     const query = normalizeYouTubeQuery(Object.fromEntries(params.entries()));
     // 콘텐츠 프로필은 "무엇을 조사할지"만 정한다. 어떻게 찾을지는 YouTube Provider 가 따로 처리한다
-    query.scope = await contentProfileService.resolveScope(query.profileId);
-    const provider = await getYouTubeTrendProvider();
-    const page = await provider.searchTrends(query);
+    const [scope, provider] = await Promise.all([contentProfileService.resolveScope(query.profileId), getYouTubeTrendProvider()]);
+    query.scope = scope;
+    let page = await provider.searchTrends(query);
+    // fill=1: 조건(구독자·조회수·제목 언어)으로 걸러져 남는 영상이 적으면 다음 페이지를 서버에서 이어서 받는다 (최대 2페이지 더)
+    if (params.get("fill") === "1") {
+      let items = page.items;
+      let fetched = page.fetched;
+      for (let extra = 0; extra < YT_FILL.extraPages && items.length < YT_FILL.target && page.nextPageToken; extra++) {
+        page = await provider.searchTrends({ ...query, pageToken: page.nextPageToken });
+        const seen = new Set(items.map((i) => i.id));
+        items = [...items, ...page.items.filter((i) => !seen.has(i.id))];
+        fetched += page.fetched;
+      }
+      page = { ...page, items, fetched };
+    }
     return { ...page, query, provider: provider.id };
   },
 
   async getNaverInsight(params: URLSearchParams) {
-    const query: NaverTrendQuery = {
-      category: params.get("category") || undefined,
-      keyword: params.get("keyword")?.trim().slice(0, 50) || undefined,
-      periodDays: toNaverPeriod(params.get("period")),
-      scope: params.get("scope") === "blog" ? "blog" : "clip",
-      profileId: params.get("profileId") || undefined,
-    };
-    // 콘텐츠 프로필은 "무엇을 조사할지"만 정한다. NAVER 분석 방식은 NAVER Provider 가 따로 처리한다
-    query.profileScope = await contentProfileService.resolveScope(query.profileId);
-    const provider = await getNaverTrendProvider();
+    const [query, provider] = await Promise.all([naverQuery(params), getNaverTrendProvider()]);
     return { insight: await provider.getInsight(query), provider: provider.id };
+  },
+
+  /** [더보기] 10개 더 (rising: 급상승 키워드·주제 / related: 관련 키워드 / ideas: 콘텐츠·글 아이디어) */
+  async getNaverMore(params: URLSearchParams) {
+    const section = params.get("section");
+    if (section !== "rising" && section !== "related" && section !== "ideas") throw new AppError("VALIDATION", "더 불러올 목록이 올바르지 않습니다.");
+    const offset = Math.max(0, Math.min(200, Math.floor(Number(params.get("offset")) || 0)));
+    const [query, provider] = await Promise.all([naverQuery(params), getNaverTrendProvider()]);
+    return provider.getMore(query, section, offset);
   },
 
   /**

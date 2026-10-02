@@ -61,7 +61,8 @@ function initialState(editing: ContentPublicationView | null, presetContent: Gen
     title: "",
     contentType: "",
     status: "published",
-    scheduledAt: "",
+    // 예약일·실제 업로드일 모두 지금(또는 캘린더에서 고른 날)으로 미리 채운다
+    scheduledAt: toLocalInput(defaultDate ?? new Date().toISOString()),
     publishedAt: toLocalInput(defaultDate ?? new Date().toISOString()),
     platformUrl: "",
     assigneeId: "",
