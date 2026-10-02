@@ -22,7 +22,6 @@ import {
   type Column,
 } from "@/components/ui";
 import { CreateContentMenu, ProductCard } from "@/components/shared/ProductCard";
-import { ProductThumb } from "@/components/shared/ProductThumb";
 import { formatDate, formatRelative } from "@/lib/utils";
 
 /**
@@ -58,7 +57,6 @@ export function ProductLibrary() {
       header: "제품",
       render: (p) => (
         <div className="flex items-center gap-3">
-          <ProductThumb name={p.name} imageUrl={p.imageUrl} className="size-10 shrink-0 rounded-md ring-1 ring-line" />
           <div className="min-w-0">
             <Link href={`/tools/product-library/${p.id}`} className="font-medium text-fg hover:text-brand">
               {p.name}

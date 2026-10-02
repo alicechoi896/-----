@@ -74,23 +74,27 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
   titleCandidates.splice(0, titleCandidates.length, ...uniq(titleCandidates));
 
   // 대본: 말할 문장만 (장면·컷·시간 표시 없음)
-  const scriptLines = isClip
-    ? [
-        hook,
-        p ? `${shortName}, ${features[0] ?? "핵심 기능"}부터 볼게요.` : `${topic}, 핵심 하나만 짚을게요.`,
-        benefits[0],
-        benefits[1] ?? "두 번째 포인트도 있어요.",
-        p?.summary.cautions[0] ? `다만 ${p.summary.cautions[0]}` : "주의할 점도 꼭 확인하세요.",
-        phrase ?? "저장해 두고 필요할 때 보세요.",
-      ]
-    : [
-        hook,
-        p ? p.summary.oneLiner : `오늘은 ${topic}에 대해 핵심만 정리해 보겠습니다.`,
-        ...(p?.contentData.videoPoints ?? ["먼저 기본 개념부터 볼게요.", "실제 예시로 확인해 보면 이렇습니다.", "따라 하는 방법은 어렵지 않습니다."]),
-        `정리하면 ${benefits.slice(0, 3).join(", ")}입니다.`,
-        p?.summary.cautions.length ? `다만 ${p.summary.cautions[0]}` : "상황에 따라 결과는 다를 수 있습니다.",
-        phrase ?? "도움이 되셨다면 구독과 좋아요 부탁드립니다.",
-      ];
+  // 제품 홍보: 초반 Hook → 제품 핵심 정보 2~3개 → CTA
+  const productCta = context.styleContext?.ctas[0] ?? `${shortName} 자세한 정보는 설명란 링크에서 확인해 보세요.`;
+  const productPoints = p
+    ? (p.summary.keyBenefits.length ? p.summary.keyBenefits : p.summary.keyFeatures)
+        .slice(0, 3)
+        .map((b, i) => `${["첫째", "둘째", "셋째"][i]}, ${b}.`)
+    : [];
+  const scriptLines = p
+    ? [hook, ...productPoints, productCta]
+    : isClip
+      ? [hook, `${topic}, 핵심 하나만 짚을게요.`, benefits[0], benefits[1] ?? "두 번째 포인트도 있어요.", "주의할 점도 꼭 확인하세요.", phrase ?? "저장해 두고 필요할 때 보세요."]
+      : [
+          hook,
+          `오늘은 ${topic}에 대해 핵심만 정리해 보겠습니다.`,
+          "먼저 기본 개념부터 볼게요.",
+          "실제 예시로 확인해 보면 이렇습니다.",
+          "따라 하는 방법은 어렵지 않습니다.",
+          `정리하면 ${benefits.slice(0, 3).join(", ")}입니다.`,
+          "상황에 따라 결과는 다를 수 있습니다.",
+          phrase ?? "도움이 되셨다면 구독과 좋아요 부탁드립니다.",
+        ];
 
   // 30개까지 채우는 키워드 (데모)
   const keywordPool = uniq([

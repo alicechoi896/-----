@@ -20,7 +20,6 @@ import {
 } from "@/components/ui";
 import { CreateContentMenu } from "@/components/shared/ProductCard";
 import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
-import { ProductThumb } from "@/components/shared/ProductThumb";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { ProductVideos } from "./ProductVideos";
 
@@ -51,7 +50,6 @@ export function ProductDetailView({ productId, initialMode }: { productId: strin
     <div className="space-y-6">
       {/* 요약 헤더 */}
       <div className="flex flex-wrap items-center gap-5 rounded-card border border-line bg-canvas p-5 shadow-card">
-        <ProductThumb name={product.name} imageUrl={product.imageUrl} className="size-20 shrink-0 rounded-lg ring-1 ring-line" />
         <div className="min-w-0 flex-1">
           <p className="text-xs text-fg-subtle">
             {product.brand} · {product.category} · {product.seller}

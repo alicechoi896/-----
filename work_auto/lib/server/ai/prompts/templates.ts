@@ -31,6 +31,15 @@ const VIDEO_OUTPUT_RULES = [
   "keywords 는 검색 키워드 30개 (짧고 겹치지 않게).",
 ].join(" ");
 
+/** 제품 홍보 영상·클립 대본 패턴 (v0.9.14) */
+const PRODUCT_SCRIPT_PATTERN = [
+  "제품 홍보 대본(script)은 반드시 이 순서로 쓴다:",
+  "1) 초반 Hook — 첫 문장에서 시청자의 문제·궁금증·상황을 짚어 계속 보게 만든다.",
+  "2) 제품 핵심 정보 2~3개 — [제품 정보]의 특징·장점 중 시청자에게 가장 중요한 2~3개만 골라 하나씩 쉽게 설명한다. 스펙을 나열하지 않고, 제품 정보에 없는 내용은 쓰지 않는다.",
+  "3) CTA — 마지막에 행동 유도 한 문장 (저장·댓글·링크 확인 등).",
+  "Hook·핵심 정보·CTA 같은 구조 이름이나 번호는 대본에 쓰지 않는다.",
+].join(" ");
+
 /** 블로그 공통 출력 규칙 (v0.9.13) */
 const BLOG_OUTPUT_RULES = [
   "본문(body)에 마크다운 기호(##, ###, **, >)를 쓰지 않는다. 소제목은 기호 없이 한 줄로 쓰고, 소제목과 문단 앞뒤는 빈 줄로 나눈다.",
@@ -207,8 +216,11 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     "youtube.product-video",
     "YouTube 제품 홍보 영상 원고",
     "YouTube 제품 홍보 영상 원고를 만든다. 제목은 클릭을 부르되 과장하지 않는다. 대본 분량은 영상 길이에 맞춘다. " +
+      PRODUCT_SCRIPT_PATTERN +
+      " " +
       VIDEO_OUTPUT_RULES +
       " tags 는 YouTube 태그 입력칸에 넣을 짧은 검색어 30개 (# 없이).",
+    [{ version: "1.6.0", date: "2026-10-03", note: "제품 홍보 대본 패턴: 초반 Hook → 제품 핵심 정보 2~3개 → CTA" }],
   ),
   contentTemplate(
     "youtube.info-video",
@@ -220,8 +232,11 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   contentTemplate(
     "naver-clip.product-content",
     "NAVER 클립 제품 홍보 클립 원고",
-    "NAVER 클립용 세로 숏폼(60초 이내) 제품 홍보 원고를 만든다. 대본은 짧은 문장을 한 줄씩 쓴다. " + VIDEO_OUTPUT_RULES,
-    [{ version: "1.0.1", date: "2026-10-02", note: "채널 표기 변경: NAVER Clip → NAVER 클립" }],
+    "NAVER 클립용 세로 숏폼(60초 이내) 제품 홍보 원고를 만든다. 대본은 짧은 문장을 한 줄씩 쓴다. " + PRODUCT_SCRIPT_PATTERN + " " + VIDEO_OUTPUT_RULES,
+    [
+      { version: "1.0.1", date: "2026-10-02", note: "채널 표기 변경: NAVER Clip → NAVER 클립" },
+      { version: "1.6.0", date: "2026-10-03", note: "제품 홍보 대본 패턴: 초반 Hook → 제품 핵심 정보 2~3개 → CTA" },
+    ],
   ),
   contentTemplate(
     "naver-clip.info-content",

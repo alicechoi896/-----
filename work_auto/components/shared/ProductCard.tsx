@@ -8,7 +8,6 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Badge";
 import { cardClass } from "@/components/ui/SectionCard";
 import { formatDate, formatRelative } from "@/lib/utils";
-import { ProductThumb } from "./ProductThumb";
 
 /** "콘텐츠 만들기" 메뉴: 제품이 미리 선택된 생성 화면으로 이동 */
 export const PRODUCT_CONTENT_TARGETS = [
@@ -54,16 +53,13 @@ export function CreateContentMenu({ productId, size = "sm" }: { productId: strin
 
 /**
  * 제품 라이브러리 카드.
- * 표시: 대표 이미지, 제품명, 브랜드, 카테고리, 주요 장점, 저장일, 최근 사용일
+ * 표시: 제품명, 브랜드, 카테고리, 주요 장점, 저장일, 최근 사용일
  * 버튼: 상세보기, 수정, 콘텐츠 만들기, 삭제
  */
 export function ProductCard({ product, onDelete }: { product: Product; onDelete: (product: Product) => void }) {
   const detailHref = `/tools/product-library/${product.id}`;
   return (
     <article className={`${cardClass} flex flex-col overflow-hidden`}>
-      <Link href={detailHref} className="block">
-        <ProductThumb name={product.name} imageUrl={product.imageUrl} className="h-32 w-full border-b border-line" />
-      </Link>
       <div className="flex flex-1 flex-col p-4">
         <p className="text-xs text-fg-subtle">
           {product.brand} · {product.category}
