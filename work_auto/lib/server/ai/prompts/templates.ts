@@ -26,7 +26,11 @@ function contentTemplate(
   task: string,
   history: PromptTemplate["changelog"] = [],
 ): PromptTemplate {
-  const changelog = [{ version: "1.0.0", date: today, note: "최초 작성" }, ...history];
+  const changelog = [
+    { version: "1.0.0", date: today, note: "최초 작성" },
+    ...history,
+    { version: "1.1.0", date: "2026-10-02", note: "스타일 블록에 Hook·CTA 목록 추가, 생성 폼에서 고른 스타일 적용" },
+  ];
   return {
     id,
     version: changelog[changelog.length - 1].version,
@@ -101,6 +105,25 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
       "응답은 지정된 JSON 형식으로만 한다.",
     ].join("\n"),
     task: "아래 영상이 잘된 이유를 분석하고, 비슷한 영상을 만들 제목과 키워드를 추천한다.",
+  },
+  {
+    id: "style.extract",
+    version: "1.0.0",
+    description: "참고 글·대본·영상 정보에서 말투와 구조를 뽑아 '나의 스타일' 초안을 만든다",
+    changelog: [{ version: "1.0.0", date: "2026-10-02", note: "최초 작성" }],
+    system: [
+      "당신은 콘텐츠 문체 분석가다. 사용자가 준 참고 자료(블로그 글, 영상 대본, 영상 제목·설명·태그)를 읽고, 같은 느낌으로 새 콘텐츠를 쓸 수 있도록 스타일 규칙을 만든다.",
+      "규칙:",
+      "1. 내용(주제·제품)이 아니라 '쓰는 방식'을 뽑는다: 말투, 문장 길이, 구조, 시작·마무리 방식, 자주 쓰는 표현.",
+      "2. name: 스타일을 한눈에 알 수 있는 짧은 이름 (15자 이내). tone: 말투 한 줄. description: 구조·전개 특징 1~2문장.",
+      "3. rules 4~7개: 따라 쓰면 같은 느낌이 나는 구체적 규칙 (예: '문장은 20자 이내', '소제목마다 체크리스트').",
+      "4. examplePhrases 3~6개: 자료에 실제로 나온, 또는 그 말투를 그대로 살린 짧은 표현.",
+      "5. hooks 3~5개: 초반 3초(첫 문장)에 쓰는 패턴. 자료의 시작 방식을 응용한다. 주제가 바뀌어도 쓸 수 있게 일반화한다.",
+      "6. ctas 2~4개: 마지막 행동 유도 문장 (구독, 댓글, 저장, 링크 확인 등). 자료에 있으면 그 방식을 따른다.",
+      "7. bannedPhrases 0~5개: 이 스타일과 맞지 않거나 과장된 표현.",
+      "자료를 그대로 길게 복사하지 않는다. 응답은 지정된 JSON 형식으로만 한다.",
+    ].join("\n"),
+    task: "아래 참고 자료의 스타일을 분석해 스타일 초안을 만든다.",
   },
   {
     id: "youtube.trend-topics",

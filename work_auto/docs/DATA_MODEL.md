@@ -190,18 +190,20 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | competition? | `low` \| `mid` \| `high` |
 
 ### UserStyle
-**왜 필요한가**: Style Memory다. 매번 "친근하게, 존댓말로…"를 입력하지 않아도 채널 기본 스타일이 자동으로 적용된다.
+**왜 필요한가**: Style Memory다. 스타일을 여러 개 만들어 생성 화면의 "스타일"에서 고른다. 고르지 않으면 채널 기본 스타일이 자동으로 적용된다.
 
 | 필드 | 설명 |
 |------|------|
 | id, userId | |
 | name | 예: 친근한 리뷰어 |
-| channelId | ChannelId \| `all` |
+| channelIds[] | 적용 채널 (여러 개). 빈 배열 = 모든 채널. DB 의 예전 `channel_id` 는 schema.sql 재실행 시 옮겨지고 비워진다 |
 | tone, description | 톤과 설명 |
 | rules[] | 지켜야 할 규칙 |
 | examplePhrases[] | 자주 쓰는 표현 |
 | bannedPhrases[] | 금지 표현 |
-| isDefault | 채널당 1개만 true (서비스에서 보장) |
+| hooks[] | 자주 쓰는 Hook (초반 3초 문장), 최대 20개 |
+| ctas[] | 자주 쓰는 CTA (마지막 행동 유도), 최대 20개 |
+| isDefault | 채널마다 기본 1개. 적용 채널이 겹치는 다른 기본 스타일은 해제 (서비스에서 보장) |
 | createdAt / updatedAt | |
 
 ### UserFeedback

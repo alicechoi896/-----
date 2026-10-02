@@ -21,8 +21,10 @@ const FLOW = ["고정 프롬프트", "제품 데이터", "스타일 데이터", 
  * AI 학습 관리 — "학습" = Fine-tuning 이 아니라, 저장 데이터를 생성 시 Context 로 주입하는 것.
  * 이 화면에서 각 Memory 를 확인하고 관리한다.
  */
-export function AiLearningCenter() {
-  const [tab, setTab] = useState<TabKey>("products");
+const TAB_KEYS: TabKey[] = ["products", "styles", "contents", "feedback", "performance"];
+
+export function AiLearningCenter({ initialTab, styleRef, styleChannel }: { initialTab?: string; styleRef?: string; styleChannel?: string }) {
+  const [tab, setTab] = useState<TabKey>(TAB_KEYS.includes(initialTab as TabKey) ? (initialTab as TabKey) : "products");
   const overview = useAsync(() => api.memory.overview(), [tab]);
   const c = overview.data?.counts;
 
@@ -63,7 +65,7 @@ export function AiLearningCenter() {
         <Tabs items={items} value={tab} onChange={setTab} />
         <div className="pt-5">
           {tab === "products" && <ProductMemoryTab />}
-          {tab === "styles" && <StyleTab />}
+          {tab === "styles" && <StyleTab initialReference={styleRef} initialChannel={styleChannel} />}
           {tab === "contents" && <ContentHistoryTab />}
           {tab === "feedback" && <FeedbackTab />}
           {tab === "performance" && <PerformanceTab />}

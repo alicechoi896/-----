@@ -6,14 +6,18 @@ export interface UserStyle {
   id: ID;
   userId: ID;
   name: string;
-  /** "all" 이면 모든 채널에 적용 */
-  channelId: ChannelId | "all";
+  /** 적용 채널 (여러 개). 비어 있으면 모든 채널 */
+  channelIds: ChannelId[];
   tone: string;
   description: string;
   rules: string[];
   examplePhrases: string[];
   bannedPhrases: string[];
-  /** 채널별 기본 스타일 (채널당 1개) */
+  /** 자주 쓰는 Hook (초반 3초 문장) */
+  hooks: string[];
+  /** 자주 쓰는 CTA (마지막 행동 유도 문장) */
+  ctas: string[];
+  /** 기본 스타일: 적용 채널에서 스타일을 고르지 않고 생성하면 자동 적용 (채널마다 1개) */
   isDefault: boolean;
   createdAt: ISODate;
   updatedAt: ISODate;

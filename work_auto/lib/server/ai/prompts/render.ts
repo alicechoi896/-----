@@ -58,6 +58,8 @@ function contextBlocks(ctx: GenerationContext): string[] {
         ...s.rules.map((r) => `규칙: ${r}`),
         s.examplePhrases.length ? `자주 쓰는 표현: ${s.examplePhrases.join(" / ")}` : "",
         s.bannedPhrases.length ? `금지 표현: ${s.bannedPhrases.join(" / ")}` : "",
+        s.hooks.length ? `자주 쓰는 Hook(초반 3초) — 이 패턴을 응용해 Hook 을 만든다: ${s.hooks.join(" / ")}` : "",
+        s.ctas.length ? `자주 쓰는 CTA(마지막 행동 유도) — 마무리는 이 중 하나를 상황에 맞게 응용한다: ${s.ctas.join(" / ")}` : "",
       ]),
     );
   }
@@ -94,7 +96,7 @@ export function renderContentPrompt(
 ): ChatMessage[] {
   const labels = Object.fromEntries(config.fields.map((f) => [f.name, f.label]));
   const userInput = Object.entries(input)
-    .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId")
+    .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId" && key !== "styleId")
     .map(([key, v]) => `${labels[key] ?? key}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
 
   const user = [

@@ -238,16 +238,28 @@ create table if not exists public.user_styles (
   id               text primary key,
   user_id          uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name             text not null,
-  channel_id       text not null,
+  channel_id       text,
+  channel_ids      text[] not null default '{}',
   tone             text not null default '',
   description      text not null default '',
   rules            text[] not null default '{}',
   example_phrases  text[] not null default '{}',
   banned_phrases   text[] not null default '{}',
+  hooks            text[] not null default '{}',
+  ctas             text[] not null default '{}',
   is_default       boolean not null default false,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+-- v0.6.0: 스타일 적용 채널 여러 개(channel_ids), Hook·CTA 목록. 예전 channel_id 값을 옮긴다
+alter table public.user_styles add column if not exists channel_ids text[] not null default '{}';
+alter table public.user_styles add column if not exists hooks text[] not null default '{}';
+alter table public.user_styles add column if not exists ctas text[] not null default '{}';
+alter table public.user_styles alter column channel_id drop not null;
+update public.user_styles set channel_ids = array[channel_id], channel_id = null
+  where channel_id is not null and channel_id <> 'all' and channel_ids = '{}';
+update public.user_styles set channel_id = null where channel_id = 'all';
 
 create table if not exists public.user_feedback (
   id             text primary key,

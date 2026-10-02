@@ -253,6 +253,25 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
   },
 };
 
+/** 기능 ID → 스타일을 고를 채널 */
+function styleChannelOf(featureId: string): string {
+  return featureId.startsWith("yt-") ? "youtube" : featureId.startsWith("clip-") ? "naver-clip" : "naver-blog";
+}
+
+// 모든 생성 기능 폼 마지막에 "스타일" 선택을 붙인다 (비우면 채널 기본 스타일 자동 적용)
+for (const config of Object.values(GENERATOR_CONFIGS)) {
+  if (!config.fields.some((f) => f.name === "styleId")) {
+    config.fields.push({
+      name: "styleId",
+      label: "스타일",
+      type: "remote-select",
+      source: "styles",
+      sourceParam: styleChannelOf(config.featureId),
+      placeholder: "기본 스타일 자동 적용",
+    });
+  }
+}
+
 export function getGeneratorConfig(featureId: string): GeneratorConfig {
   const config = GENERATOR_CONFIGS[featureId];
   if (!config) throw new Error(`Generator config not found: ${featureId}`);

@@ -109,7 +109,8 @@
 | PATCH | `/api/contents/:id` | 좋은 결과로 저장 `{isExemplar}` | memoryService.setExemplar |
 | GET/POST | `/api/feedback` | 피드백 조회 / 등록 | memoryService |
 | GET/POST | `/api/styles` | 스타일 조회 / 생성 | memoryService |
-| PATCH/DELETE | `/api/styles/:id` | 기본 지정 / 삭제 | memoryService |
+| PUT/PATCH/DELETE | `/api/styles/:id` | 수정 / 기본 지정 / 삭제 | memoryService |
+| POST | `/api/styles/extract` { text, channelIds } | 참고 자료 → 스타일 초안 (AI, 원문 저장 안 함) | styleExtractor |
 | GET | `/api/performance` | 성과 데이터 | memoryService.listPerformance |
 | GET | `/api/memory` | Memory 항목별 개수 | memoryService.overview |
 | GET | `/api/connections` | 연결 상태 (공개 DTO) | connectionService.list |

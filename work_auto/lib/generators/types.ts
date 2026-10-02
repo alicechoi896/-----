@@ -32,6 +32,8 @@ export interface FieldDef {
   hint?: string;
   options?: FieldOption[];
   source?: RemoteSource;
+  /** 원격 목록을 거르는 값 (예: styles 는 채널 ID 로 그 채널에 쓸 수 있는 스타일만 보여준다) */
+  sourceParam?: string;
   defaultValue?: string;
   /** 2열 그리드에서 차지할 칸 수 (기본 2 = 한 줄 전체) */
   span?: 1 | 2;

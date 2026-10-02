@@ -37,12 +37,13 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
   ]);
   const benefits = p?.summary.keyBenefits ?? [`${topic}의 핵심을 빠르게 이해할 수 있다`, "바로 따라 할 수 있는 방법을 정리했다", "자주 하는 실수를 피할 수 있다"];
   const features = p?.summary.keyFeatures ?? [];
-  const phrase = context.style?.examplePhrases[0];
+  const phrase = context.style?.ctas[0] ?? context.style?.examplePhrases[0];
   const isClip = featureId.startsWith("clip");
   const isBlog = featureId.startsWith("blog");
   const experience = asString(input.experience);
 
   const hook =
+    context.style?.hooks[0] ??
     p?.contentData.hooks[0] ??
     (context.trend ? `요즘 '${context.trend.title}' 검색이 급증한 이유, 30초로 정리합니다.` : `${topic}, 이것만 알면 됩니다.`);
 

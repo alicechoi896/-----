@@ -73,7 +73,7 @@ function RemoteSelectField({
   onChange: (value: string) => void;
   className?: string;
 }) {
-  const { data, loading, error } = useRemoteOptions(field.source!);
+  const { data, loading, error } = useRemoteOptions(field.source!, field.sourceParam);
   const loaded = data ?? [];
   // 다른 화면에서 넘어온 값(예: 트렌드 화면의 영상)이 목록에 없어도 선택된 상태로 보여준다
   const options =
@@ -93,6 +93,16 @@ function RemoteSelectField({
           제품 상세페이지 학습
         </Link>
         에서 먼저 제품을 등록하세요.
+      </>
+    );
+  else if (!loading && loaded.length === 0 && field.source === "styles")
+    hint = (
+      <>
+        이 채널에 쓸 스타일이 없습니다.{" "}
+        <Link href="/ai-learning?tab=styles" className="font-medium text-brand hover:underline">
+          나의 스타일
+        </Link>
+        에서 만들 수 있습니다.
       </>
     );
   else if (selected?.description) hint = <span className="line-clamp-2">{selected.description}</span>;

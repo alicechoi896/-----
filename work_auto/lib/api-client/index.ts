@@ -1,6 +1,7 @@
 import type { PermissionRow } from "@/lib/permissions";
 import type {
   ApiConnectionPublic,
+  ChannelId,
   AuditLog,
   MemberRole,
   MemberTier,
@@ -165,6 +166,10 @@ export const api = {
   styles: {
     list: () => request<UserStyle[]>("/api/styles"),
     create: (input: UserStyleInput) => request<UserStyle>("/api/styles", { method: "POST", body: json(input) }),
+    update: (id: string, input: UserStyleInput) => request<UserStyle>(`/api/styles/${id}`, { method: "PUT", body: json(input) }),
+    /** 참고 자료(텍스트) → 스타일 초안 (AI). 원문은 저장되지 않는다 */
+    extract: (text: string, channelIds: ChannelId[]) =>
+      request<UserStyleInput & { provider: string }>("/api/styles/extract", { method: "POST", body: json({ text, channelIds }) }),
     setDefault: (id: string) => request<UserStyle>(`/api/styles/${id}`, { method: "PATCH" }),
     remove: (id: string) => request<{ id: string }>(`/api/styles/${id}`, { method: "DELETE" }),
   },

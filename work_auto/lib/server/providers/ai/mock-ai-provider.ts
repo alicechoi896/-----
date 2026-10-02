@@ -64,6 +64,10 @@ export class MockAIProvider implements AIProvider {
       return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
     }
 
+    if (request.task === "style-extract") {
+      return { data: mockStyleExtract(String(v.text ?? "")) as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task === "youtube-trend-topics") {
       return { data: mockTrendTopics(v.videos as MockVideo[], v.keywords as string[]) as unknown as T, provider: this.id, model: this.model };
     }
@@ -99,6 +103,33 @@ function mockVideoAnalysis(video: MockVideo) {
       `${main}, 이렇게 하면 실패하지 않습니다`,
     ],
     keywords: [...new Set([...video.tags.slice(0, 6), `${main} 추천`, `${main} 방법`])].slice(0, 8),
+  };
+}
+
+/** 참고 자료의 문장 길이·어미·첫/마지막 문장으로 규칙 기반 스타일 초안을 만든다 */
+function mockStyleExtract(text: string) {
+  const sentences = text
+    .split(/(?<=[.!?。]|요\s|다\s)\s*|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 4);
+  const avg = sentences.length ? Math.round(sentences.reduce((n, s) => n + s.length, 0) / sentences.length) : 20;
+  const polite = /요[.!?\s]|니다/.test(text);
+  const first = sentences[0] ?? "";
+  const last = sentences.at(-1) ?? "";
+  return {
+    name: avg <= 20 ? "짧고 빠른 말투" : "차분한 설명형",
+    tone: `${polite ? "존댓말" : "반말·구어체"}, 문장 평균 ${avg}자 내외`,
+    description: avg <= 20 ? "짧은 문장을 빠르게 이어 리듬감을 만든다." : "배경 → 핵심 → 정리 순서로 차근차근 설명한다.",
+    rules: [
+      `한 문장은 ${Math.max(10, avg)}자 내외로 쓴다`,
+      polite ? "존댓말(~요, ~니다)로 쓴다" : "친구에게 말하듯 편하게 쓴다",
+      "첫 문장에서 독자의 상황이나 고민을 짚는다",
+      "핵심은 3가지 이내로 정리한다",
+    ],
+    examplePhrases: sentences.slice(1, 4).map((s) => s.slice(0, 30)),
+    hooks: [first.slice(0, 40) || "이거 모르면 손해예요", "딱 30초만 보시면 됩니다"],
+    ctas: [last.slice(0, 40) || "도움이 됐다면 저장해 두세요", "궁금한 점은 댓글로 남겨 주세요"],
+    bannedPhrases: ["무조건", "역대급"],
   };
 }
 

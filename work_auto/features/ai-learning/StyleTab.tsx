@@ -1,38 +1,69 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Star, Trash2 } from "lucide-react";
-import type { UserStyle, UserStyleInput } from "@/lib/types";
+import { useRef, useState } from "react";
+import { FileText, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import type { ChannelId, UserStyle, UserStyleInput } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { CHANNELS } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
 import {
   Badge,
   Button,
+  Checkbox,
   EmptyState,
   ErrorState,
   FormField,
   IconButton,
   Input,
   LoadingState,
+  Notice,
   SectionCard,
-  Select,
   Tag,
   Textarea,
   cardClass,
 } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
-const CHANNEL_OPTIONS = [
-  { value: "all", label: "모든 채널" },
-  ...CHANNELS.filter((c) => c.showOnHome && c.id !== "tools").map((c) => ({ value: c.id, label: c.name })),
-];
-const channelLabel = (id: string) => CHANNEL_OPTIONS.find((o) => o.value === id)?.label ?? id;
+const STYLE_CHANNELS = CHANNELS.filter((c) => c.showOnHome && c.id !== "tools").map((c) => ({ id: c.id as ChannelId, name: c.name }));
+const channelName = (id: string) => STYLE_CHANNELS.find((c) => c.id === id)?.name ?? id;
 const lines = (s: string) => s.split("\n").map((l) => l.trim()).filter(Boolean);
 
-/** Style Memory: 채널별 기본 스타일 1개가 생성 시 자동 적용된다 */
-export function StyleTab() {
+/** 참고 자료로 읽을 수 있는 파일 (브라우저에서 텍스트만 읽고 서버에 파일을 올리지 않는다) */
+const TEXT_FILE_ACCEPT = ".txt,.md,.srt,.vtt,.csv,text/plain";
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+const EMPTY: UserStyleInput = {
+  name: "",
+  channelIds: [],
+  tone: "",
+  description: "",
+  rules: [],
+  examplePhrases: [],
+  bannedPhrases: [],
+  hooks: [],
+  ctas: [],
+  isDefault: false,
+};
+
+type Editing = { mode: "create"; draft?: UserStyleInput; reference?: string } | { mode: "edit"; style: UserStyle };
+
+/**
+ * Style Memory.
+ * - 스타일은 여러 개 만들고, 적용 채널을 여러 개 고를 수 있다 (안 고르면 모든 채널).
+ * - 생성 화면의 "스타일" 에서 골라 쓰고, 비워 두면 그 채널의 기본 스타일(★)이 자동 적용된다.
+ * - Hook(초반 3초)·CTA(마지막 행동 유도) 문장을 모아 두면 생성할 때 응용한다.
+ */
+export function StyleTab({ initialReference, initialChannel }: { initialReference?: string; initialChannel?: string }) {
   const { data, loading, error, reload, setData } = useAsync(() => api.styles.list(), []);
-  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Editing | null>(() =>
+    initialReference
+      ? {
+          mode: "create",
+          reference: initialReference,
+          draft: { ...EMPTY, channelIds: STYLE_CHANNELS.some((c) => c.id === initialChannel) ? [initialChannel as ChannelId] : [] },
+        }
+      : null,
+  );
 
   async function setDefault(style: UserStyle) {
     await api.styles.setDefault(style.id);
@@ -50,18 +81,22 @@ export function StyleTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-[13px] text-fg-subtle">채널마다 기본 스타일(★) 1개가 해당 채널의 모든 생성에 자동으로 적용됩니다.</p>
-        <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating((v) => !v)}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] text-fg-subtle">
+          생성 화면의 <b className="font-medium text-fg-muted">스타일</b> 에서 골라 씁니다. 고르지 않으면 채널마다 기본 스타일(★) 1개가 자동 적용됩니다.
+        </p>
+        <Button variant="primary" size="sm" icon={Plus} onClick={() => setEditing(editing ? null : { mode: "create" })}>
           스타일 추가
         </Button>
       </div>
 
-      {creating && (
+      {editing && (
         <StyleForm
-          onCancel={() => setCreating(false)}
-          onCreated={() => {
-            setCreating(false);
+          key={editing.mode === "edit" ? editing.style.id : "new"}
+          editing={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
             reload();
           }}
         />
@@ -69,16 +104,16 @@ export function StyleTab() {
 
       {!data?.length ? (
         <SectionCard>
-          <EmptyState title="등록된 스타일이 없습니다" description="자주 쓰는 말투와 규칙을 등록하면 결과가 일정해집니다." />
+          <EmptyState title="등록된 스타일이 없습니다" description="자주 쓰는 말투·규칙·Hook·CTA 를 등록하면 결과가 일정해집니다. 참고 글을 넣으면 AI 가 초안을 만들어 줍니다." />
         </SectionCard>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.map((s) => (
-            <article key={s.id} className={`${cardClass} flex flex-col p-5`}>
+            <article key={s.id} className={cn(cardClass, "flex flex-col p-5", s.isDefault && "ring-1 ring-brand-line")}>
               <div className="flex items-start justify-between gap-2">
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-fg">{s.name}</h3>
+                    <h3 className="truncate font-semibold text-fg">{s.name}</h3>
                     {s.isDefault && (
                       <Badge tone="brand">
                         <Star className="size-3" />
@@ -86,17 +121,33 @@ export function StyleTab() {
                       </Badge>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-fg-subtle">{channelLabel(s.channelId)}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {s.channelIds.length === 0 ? (
+                      <Badge tone="neutral">모든 채널</Badge>
+                    ) : (
+                      s.channelIds.map((c) => (
+                        <Badge key={c} tone="neutral">
+                          {channelName(c)}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
                 </div>
-                <IconButton icon={Trash2} label="삭제" size="sm" onClick={() => remove(s)} className="hover:text-danger" />
+                <div className="flex shrink-0">
+                  <IconButton icon={Pencil} label="수정" size="sm" onClick={() => setEditing({ mode: "edit", style: s })} />
+                  <IconButton icon={Trash2} label="삭제" size="sm" onClick={() => remove(s)} className="hover:text-danger" />
+                </div>
               </div>
-              <p className="mt-3 text-[13px] font-medium text-fg-muted">{s.tone}</p>
-              <p className="mt-1 text-[13px] text-fg-subtle">{s.description}</p>
-              <ul className="mt-3 flex-1 space-y-1 text-[13px] text-fg-muted">
-                {s.rules.map((r) => (
+              {s.tone && <p className="mt-3 text-[13px] font-medium text-fg-muted">{s.tone}</p>}
+              {s.description && <p className="mt-1 text-[13px] text-fg-subtle">{s.description}</p>}
+              <ul className="mt-3 space-y-1 text-[13px] text-fg-muted">
+                {s.rules.slice(0, 4).map((r) => (
                   <li key={r}>· {r}</li>
                 ))}
+                {s.rules.length > 4 && <li className="text-fg-subtle">외 {s.rules.length - 4}개 규칙</li>}
               </ul>
+              <PhraseSummary label="Hook (초반 3초)" items={s.hooks} />
+              <PhraseSummary label="CTA (마지막 행동)" items={s.ctas} />
               {s.bannedPhrases.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {s.bannedPhrases.map((b) => (
@@ -106,6 +157,7 @@ export function StyleTab() {
                   ))}
                 </div>
               )}
+              <div className="flex-1" />
               {!s.isDefault && (
                 <Button size="sm" className="mt-4 self-start" icon={Star} onClick={() => setDefault(s)}>
                   기본 스타일로 지정
@@ -119,11 +171,46 @@ export function StyleTab() {
   );
 }
 
-function StyleForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: () => void }) {
-  const [form, setForm] = useState({ name: "", channelId: "all", tone: "", description: "", rules: "", examples: "", banned: "" });
+function PhraseSummary({ label, items }: { label: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-3">
+      <p className="text-[11.5px] font-medium text-fg-subtle">
+        {label} · {items.length}개
+      </p>
+      <p className="mt-0.5 line-clamp-2 text-[13px] text-fg-muted">&ldquo;{items[0]}&rdquo;{items.length > 1 ? ` 외 ${items.length - 1}개` : ""}</p>
+    </div>
+  );
+}
+
+/* ───────── 추가 · 수정 폼 ───────── */
+
+function toForm(s: UserStyleInput) {
+  return {
+    name: s.name,
+    channelIds: s.channelIds,
+    tone: s.tone,
+    description: s.description,
+    rules: s.rules.join("\n"),
+    examples: s.examplePhrases.join("\n"),
+    banned: s.bannedPhrases.join(", "),
+    hooks: s.hooks,
+    ctas: s.ctas,
+    isDefault: s.isDefault,
+  };
+}
+
+function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel: () => void; onSaved: () => void }) {
+  const initial = editing.mode === "edit" ? editing.style : (editing.draft ?? EMPTY);
+  const [form, setForm] = useState(() => toForm(initial));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [aiOpen, setAiOpen] = useState(editing.mode === "create" && Boolean(editing.reference));
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  function toggleChannel(id: ChannelId) {
+    set("channelIds", form.channelIds.includes(id) ? form.channelIds.filter((c) => c !== id) : [...form.channelIds, id]);
+  }
 
   async function save() {
     setSaving(true);
@@ -131,16 +218,19 @@ function StyleForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
     try {
       const input: UserStyleInput = {
         name: form.name,
-        channelId: form.channelId as UserStyleInput["channelId"],
+        channelIds: form.channelIds,
         tone: form.tone,
         description: form.description,
         rules: lines(form.rules),
         examplePhrases: lines(form.examples),
         bannedPhrases: form.banned.split(",").map((s) => s.trim()).filter(Boolean),
-        isDefault: true,
+        hooks: form.hooks.map((h) => h.trim()).filter(Boolean),
+        ctas: form.ctas.map((c) => c.trim()).filter(Boolean),
+        isDefault: form.isDefault,
       };
-      await api.styles.create(input);
-      onCreated();
+      if (editing.mode === "edit") await api.styles.update(editing.style.id, input);
+      else await api.styles.create(input);
+      onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장에 실패했습니다.");
     } finally {
@@ -150,11 +240,22 @@ function StyleForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
 
   return (
     <SectionCard
-      title="새 스타일"
-      description="저장하면 선택한 채널의 기본 스타일로 지정됩니다."
+      title={editing.mode === "edit" ? `스타일 수정: ${editing.style.name}` : "새 스타일"}
+      description="적용 채널을 고르지 않으면 모든 채널에서 쓸 수 있습니다."
+      actions={
+        editing.mode === "create" && (
+          <Button size="sm" variant={aiOpen ? "subtle" : "secondary"} icon={Sparkles} onClick={() => setAiOpen((v) => !v)}>
+            참고 자료로 AI 초안 만들기
+          </Button>
+        )
+      }
       footer={
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {error && <span className="mr-auto text-xs text-danger">{error}</span>}
+          <label className="mr-auto flex items-center gap-2 text-[13px] text-fg-muted">
+            <Checkbox checked={form.isDefault} onChange={(v) => set("isDefault", v)} label="기본 스타일로 지정" />
+            기본 스타일로 지정 <span className="text-xs text-fg-subtle">(적용 채널이 겹치는 다른 기본 스타일은 해제됩니다)</span>
+          </label>
           <Button size="sm" variant="ghost" onClick={onCancel}>
             취소
           </Button>
@@ -164,29 +265,199 @@ function StyleForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
         </div>
       }
     >
+      {aiOpen && editing.mode === "create" && (
+        <ReferenceExtractor
+          initialText={editing.reference}
+          channelIds={form.channelIds}
+          onDraft={(d) =>
+            setForm((f) => ({
+              ...toForm({ ...d, channelIds: f.channelIds.length ? f.channelIds : d.channelIds, isDefault: f.isDefault }),
+            }))
+          }
+        />
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <FormField label="스타일 이름" htmlFor="style-name" required>
-          <Input id="style-name" placeholder="예: 친근한 리뷰어" value={form.name} onChange={set("name")} />
+          <Input id="style-name" placeholder="예: 친근한 리뷰어" value={form.name} onChange={(e) => set("name", e.target.value)} />
         </FormField>
-        <FormField label="적용 채널" htmlFor="style-channel">
-          <Select id="style-channel" options={CHANNEL_OPTIONS} value={form.channelId} onChange={set("channelId")} />
+        <FormField label="적용 채널 (여러 개 선택)" hint={form.channelIds.length === 0 ? "선택하지 않으면 모든 채널" : undefined}>
+          <div className="flex flex-wrap gap-1.5">
+            {STYLE_CHANNELS.map((c) => {
+              const on = form.channelIds.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => toggleChannel(c.id)}
+                  className={cn(
+                    "h-9 rounded-control border px-3 text-[13px] transition-colors",
+                    on ? "border-brand bg-brand-soft font-medium text-brand" : "border-line-strong text-fg-muted hover:border-brand-line hover:text-brand",
+                  )}
+                >
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
         </FormField>
         <FormField label="톤" htmlFor="style-tone">
-          <Input id="style-tone" placeholder="예: 친근하고 빠른 말투, 존댓말" value={form.tone} onChange={set("tone")} />
+          <Input id="style-tone" placeholder="예: 친근하고 빠른 말투, 존댓말" value={form.tone} onChange={(e) => set("tone", e.target.value)} />
         </FormField>
         <FormField label="설명" htmlFor="style-desc">
-          <Input id="style-desc" placeholder="예: 첫 문장에서 불편을 짚는다" value={form.description} onChange={set("description")} />
+          <Input id="style-desc" placeholder="예: 첫 문장에서 불편을 짚는다" value={form.description} onChange={(e) => set("description", e.target.value)} />
         </FormField>
+        <PhraseListField
+          label="Hook (초반 3초)"
+          hint="영상·글의 첫 문장 패턴. 생성할 때 주제에 맞게 응용합니다."
+          placeholder="예: 아직도 이렇게 하세요?"
+          items={form.hooks}
+          onChange={(v) => set("hooks", v)}
+        />
+        <PhraseListField
+          label="CTA (마지막 행동 유도)"
+          hint="구독·댓글·저장·링크 확인 등 마무리 문장"
+          placeholder="예: 더 자세한 정보는 고정 댓글에 있어요"
+          items={form.ctas}
+          onChange={(v) => set("ctas", v)}
+        />
         <FormField label="규칙" htmlFor="style-rules" hint="한 줄에 하나씩">
-          <Textarea id="style-rules" rows={3} value={form.rules} onChange={set("rules")} />
+          <Textarea id="style-rules" rows={4} value={form.rules} onChange={(e) => set("rules", e.target.value)} />
         </FormField>
         <FormField label="자주 쓰는 표현" htmlFor="style-examples" hint="한 줄에 하나씩">
-          <Textarea id="style-examples" rows={3} value={form.examples} onChange={set("examples")} />
+          <Textarea id="style-examples" rows={4} value={form.examples} onChange={(e) => set("examples", e.target.value)} />
         </FormField>
         <FormField label="금지 표현" htmlFor="style-banned" hint="쉼표로 구분" className="md:col-span-2">
-          <Input id="style-banned" placeholder="예: 무조건 사세요, 역대급" value={form.banned} onChange={set("banned")} />
+          <Input id="style-banned" placeholder="예: 무조건 사세요, 역대급" value={form.banned} onChange={(e) => set("banned", e.target.value)} />
         </FormField>
       </div>
     </SectionCard>
+  );
+}
+
+/** 문장 목록 입력: [+ 추가] 로 한 줄씩 늘리고, 줄마다 삭제할 수 있다 */
+function PhraseListField({
+  label,
+  hint,
+  placeholder,
+  items,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  placeholder: string;
+  items: string[];
+  onChange: (items: string[]) => void;
+}) {
+  const rows = items.length ? items : [""];
+  return (
+    <FormField label={`${label} · ${items.filter((i) => i.trim()).length}개`} hint={hint}>
+      <div className="space-y-1.5">
+        {rows.map((value, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="tabular w-5 shrink-0 text-right text-xs text-fg-subtle">{i + 1}</span>
+            <Input
+              value={value}
+              maxLength={200}
+              placeholder={placeholder}
+              onChange={(e) => onChange(rows.map((r, j) => (j === i ? e.target.value : r)))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (value.trim()) onChange([...rows, ""]);
+                }
+              }}
+            />
+            <IconButton icon={X} label="이 줄 삭제" size="sm" onClick={() => onChange(rows.filter((_, j) => j !== i))} />
+          </div>
+        ))}
+        <Button size="sm" variant="ghost" icon={Plus} disabled={rows.length >= 20} onClick={() => onChange([...rows, ""])}>
+          추가
+        </Button>
+      </div>
+    </FormField>
+  );
+}
+
+/**
+ * 참고 자료 → AI 스타일 초안.
+ * 텍스트 붙여넣기 또는 텍스트 파일(.txt .md .srt .vtt)을 브라우저에서 읽는다. 파일과 원문은 서버에 저장하지 않는다.
+ */
+function ReferenceExtractor({
+  initialText,
+  channelIds,
+  onDraft,
+}: {
+  initialText?: string;
+  channelIds: ChannelId[];
+  onDraft: (draft: UserStyleInput) => void;
+}) {
+  const [text, setText] = useState(initialText ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function readFiles(files: FileList | null) {
+    if (!files?.length) return;
+    setError(null);
+    const parts: string[] = [];
+    for (const file of Array.from(files).slice(0, 5)) {
+      if (file.size > MAX_FILE_BYTES) {
+        setError(`${file.name}: 2MB 이하 텍스트 파일만 읽을 수 있습니다.`);
+        continue;
+      }
+      const raw = await file.text();
+      // 자막 파일은 번호·시간 줄을 빼고 대사만 남긴다
+      const cleaned = /\.(srt|vtt)$/i.test(file.name)
+        ? raw
+            .split("\n")
+            .filter((l) => l.trim() && !/^\d+$/.test(l.trim()) && !l.includes("-->") && !/^WEBVTT/.test(l))
+            .join("\n")
+        : raw;
+      parts.push(cleaned.trim());
+    }
+    setText((t) => [t.trim(), ...parts].filter(Boolean).join("\n\n---\n\n"));
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function extract() {
+    setLoading(true);
+    setError(null);
+    try {
+      const { provider, ...draft } = await api.styles.extract(text, channelIds);
+      void provider;
+      onDraft(draft);
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "초안을 만들지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mb-5 space-y-3 rounded-card border border-brand-line bg-brand-soft/30 p-4">
+      <div>
+        <p className="text-[13px] font-semibold text-fg">참고 자료로 AI 초안 만들기</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-fg-subtle">
+          닮고 싶은 블로그 글, 영상 대본·자막, 영상 제목·설명을 붙여 넣으세요. AI 가 말투·구조·Hook·CTA 를 뽑아 아래 칸을 채웁니다. 자료와 파일은 저장하지 않습니다 (최대 12,000자 사용).
+        </p>
+      </div>
+      <Textarea rows={6} value={text} placeholder="여기에 참고 글이나 대본을 붙여 넣으세요" onChange={(e) => setText(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <input ref={fileRef} type="file" accept={TEXT_FILE_ACCEPT} multiple hidden onChange={(e) => void readFiles(e.target.files)} />
+        <Button size="sm" icon={FileText} onClick={() => fileRef.current?.click()}>
+          텍스트·자막 파일 불러오기
+        </Button>
+        <span className="tabular text-xs text-fg-subtle">{text.length.toLocaleString("ko-KR")}자</span>
+        <Button size="sm" variant="primary" icon={Sparkles} className="ml-auto" loading={loading} disabled={text.trim().length < 50} onClick={() => void extract()}>
+          {done ? "다시 만들기" : "스타일 초안 만들기"}
+        </Button>
+      </div>
+      {error && <Notice tone="warning">{error}</Notice>}
+      {done && !error && <p className="text-xs text-success">아래 칸에 초안을 채웠습니다. 확인하고 고친 뒤 저장하세요.</p>}
+    </div>
   );
 }

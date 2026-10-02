@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  ChannelId,
   GeneratedContent,
   PerformanceMetric,
   UserFeedback,
@@ -15,6 +16,42 @@ import { getCurrentUserId, getRepositories } from "../repositories";
  * AI Memory 관리 유스케이스 (AI 학습 관리 화면).
  * Style / Content History / Feedback / Performance 의 조회와 변경.
  */
+const STYLE_CHANNELS: ChannelId[] = ["youtube", "naver-clip", "naver-blog"];
+const strList = (v: unknown, max: number, len = 200) =>
+  Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim().slice(0, len)).filter(Boolean))].slice(0, max) : [];
+
+/** 예전 형식(channelId 하나, Hook·CTA 없음)도 새 형식으로 맞춘다 */
+export function normalizeStyle(row: UserStyle): UserStyle {
+  const { channelId: legacy, ...rest } = row as UserStyle & { channelId?: string | null };
+  const channelIds = rest.channelIds?.length ? rest.channelIds : legacy && legacy !== "all" ? [legacy as ChannelId] : [];
+  return {
+    ...rest,
+    channelIds,
+    rules: rest.rules ?? [],
+    examplePhrases: rest.examplePhrases ?? [],
+    bannedPhrases: rest.bannedPhrases ?? [],
+    hooks: rest.hooks ?? [],
+    ctas: rest.ctas ?? [],
+  };
+}
+
+function cleanStyleInput(input: UserStyleInput): UserStyleInput {
+  const name = input?.name?.trim().slice(0, 40);
+  if (!name) throw new AppError("VALIDATION", "스타일 이름을 입력해 주세요.");
+  return {
+    name,
+    channelIds: (Array.isArray(input.channelIds) ? input.channelIds : []).filter((c): c is ChannelId => STYLE_CHANNELS.includes(c)),
+    tone: String(input.tone ?? "").trim().slice(0, 200),
+    description: String(input.description ?? "").trim().slice(0, 500),
+    rules: strList(input.rules, 20),
+    examplePhrases: strList(input.examplePhrases, 20),
+    bannedPhrases: strList(input.bannedPhrases, 30, 60),
+    hooks: strList(input.hooks, 20),
+    ctas: strList(input.ctas, 20),
+    isDefault: Boolean(input.isDefault),
+  };
+}
+
 export const memoryService = {
   /* ── Content History ── */
   async listContents(filter: { featureId?: string; productId?: string } = {}): Promise<GeneratedContent[]> {
@@ -70,38 +107,57 @@ export const memoryService = {
   /* ── Style ── */
   async listStyles(): Promise<UserStyle[]> {
     const userId = await getCurrentUserId();
-    return getRepositories().styles.list((s) => s.userId === userId);
+    const rows = await getRepositories().styles.list((s) => s.userId === userId);
+    return rows.map(normalizeStyle).sort((x, y) => Number(y.isDefault) - Number(x.isDefault) || y.updatedAt.localeCompare(x.updatedAt));
   },
 
   async createStyle(input: UserStyleInput): Promise<UserStyle> {
-    if (!input.name?.trim()) throw new AppError("VALIDATION", "스타일 이름을 입력해 주세요.");
+    const clean = cleanStyleInput(input);
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const now = nowIso();
-    const style: UserStyle = { ...input, id: createId("sty"), userId, createdAt: now, updatedAt: now };
-    if (style.isDefault) await this.clearDefault(style.channelId);
+    const style: UserStyle = { ...clean, id: createId("sty"), userId, createdAt: now, updatedAt: now };
+    if (style.isDefault) await this.clearDefault(style.channelIds, style.id);
     await repo.styles.insert(style);
     return style;
   },
 
+  async updateStyle(id: string, input: UserStyleInput): Promise<UserStyle> {
+    const repo = getRepositories();
+    const userId = await getCurrentUserId();
+    const existing = await repo.styles.get(id);
+    if (!existing || existing.userId !== userId) notFound("스타일");
+    const clean = cleanStyleInput(input);
+    if (clean.isDefault) await this.clearDefault(clean.channelIds, id);
+    return normalizeStyle((await repo.styles.update(id, { ...clean, updatedAt: nowIso() }))!);
+  },
+
   async setDefaultStyle(id: string): Promise<UserStyle> {
     const repo = getRepositories();
-    const style = await repo.styles.get(id);
-    if (!style) notFound("스타일");
-    await this.clearDefault(style.channelId);
-    return (await repo.styles.update(id, { isDefault: true, updatedAt: nowIso() }))!;
+    const userId = await getCurrentUserId();
+    const row = await repo.styles.get(id);
+    if (!row || row.userId !== userId) notFound("스타일");
+    const style = normalizeStyle(row);
+    await this.clearDefault(style.channelIds, id);
+    return normalizeStyle((await repo.styles.update(id, { isDefault: true, updatedAt: nowIso() }))!);
   },
 
   async removeStyle(id: string): Promise<void> {
     await getRepositories().styles.remove(id);
   },
 
-  /** 채널당 기본 스타일은 1개 */
-  async clearDefault(channelId: UserStyle["channelId"]) {
+  /**
+   * 기본 스타일은 채널마다 1개.
+   * 적용 채널이 겹치는 다른 기본 스타일을 해제한다 (모든 채널 스타일끼리도 겹침으로 본다).
+   */
+  async clearDefault(channelIds: UserStyle["channelIds"], exceptId?: string) {
     const repo = getRepositories();
     const userId = await getCurrentUserId();
-    for (const s of await repo.styles.list((x) => x.userId === userId && x.channelId === channelId && x.isDefault)) {
-      await repo.styles.update(s.id, { isDefault: false });
+    const others = (await repo.styles.list((x) => x.userId === userId && x.isDefault && x.id !== exceptId)).map(normalizeStyle);
+    for (const s of others) {
+      const overlap =
+        channelIds.length === 0 ? s.channelIds.length === 0 : s.channelIds.some((c) => channelIds.includes(c));
+      if (overlap) await repo.styles.update(s.id, { isDefault: false });
     }
   },
 

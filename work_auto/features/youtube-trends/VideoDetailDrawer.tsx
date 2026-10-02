@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Lightbulb, PackageOpen, Sparkles, Star, Video } from "lucide-react";
+import { ExternalLink, Lightbulb, PackageOpen, Palette, Sparkles, Star, Video } from "lucide-react";
 import type { YouTubeTrendItem, YouTubeVideoAnalysis } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Badge, Button, CopyButton, Drawer, LinkButton, Notice, Tag } from "@/components/ui";
@@ -125,6 +125,9 @@ function DetailBody({
         <LinkButton href={productVideoHref(prefill)} icon={PackageOpen}>
           제품 홍보 영상 만들기
         </LinkButton>
+        <LinkButton href={styleHref(item)} icon={Palette} variant="ghost" title="이 영상의 제목·설명·태그로 나의 스타일 초안을 만듭니다">
+          스타일로 저장
+        </LinkButton>
       </div>
       <p className="-mt-3 text-xs text-fg-subtle">
         생성 화면에 참고 트렌드·주제·키워드가 미리 채워집니다.{analysis ? " (AI 추천 제목·키워드 사용)" : ""}
@@ -208,6 +211,20 @@ function DetailBody({
       )}
     </div>
   );
+}
+
+/** 영상 정보 → AI 학습 관리 > 나의 스타일 (참고 자료로 미리 채움). 대본은 공식 API 로 가져올 수 없어 제목·설명·태그를 쓴다 */
+function styleHref(item: YouTubeTrendItem): string {
+  const reference = [
+    `[영상 제목] ${item.title}`,
+    `[형식] ${item.format === "shorts" ? "Shorts" : "롱폼"} · 채널 ${item.channelName}`,
+    item.description ? `[설명]\n${item.description}` : "",
+    item.tags.length ? `[태그] ${item.tags.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 3000);
+  return `/ai-learning?${new URLSearchParams({ tab: "styles", styleChannel: "youtube", styleRef: reference }).toString()}`;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
