@@ -13,5 +13,6 @@
 - 색, 간격, 반경은 `app/globals.css`의 토큰을 쓴다 (`docs/DESIGN_SYSTEM.md`). 흰색 기반 라이트 테마.
 - UI 문구는 한국어(합니다체).
 - 기능을 추가하거나 바꾸면 `docs/FEATURE_REGISTRY.md`, `docs/CHANGELOG.md`를 갱신한다.
+- 사용자가 넣은 주소로 서버가 접속할 때는 `safeFetch()` 를 쓴다 (`lib/server/security/safe-url.ts`, SSRF 방지).
 - 서버 IP 로 외부 서비스를 부르는 API 에는 `rateLimit()` 을 건다 (docs/OPERATIONS.md).
 - 완료 전: `npm run lint && npm run typecheck && npm run build`

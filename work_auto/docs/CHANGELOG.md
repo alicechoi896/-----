@@ -2,6 +2,18 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.7] - 2026-10-02: 보안 보강
+
+### 보안
+- **서버가 내부 주소로 접속하는 것 차단 (SSRF)**: `lib/server/security/safe-url.ts`
+  - 상품 URL 수집은 localhost·사설망·클라우드 내부 주소(169.254.169.254)를 막고, 리다이렉트도 매번 다시 검사한다
+  - 샤오홍슈는 도메인이 정확히 `xhslink.com` / `xiaohongshu.com` 일 때만 접속한다 (공유 문구 전체를 붙여 넣어도 첫 주소만 쓴다)
+- **보안 헤더**: 다른 사이트의 iframe 삽입 금지(클릭재킹), 파일 형식 추측 금지, Referrer·카메라/마이크 제한, X-Powered-By 제거 (`next.config.ts`)
+- **운영에서 데모 모드 차단**: Vercel production 에 Supabase 설정이 빠지면 로그인 없는 관리자 데모로 열리지 않고 "서비스 점검 중"(503)
+- **로그인·가입 반복 시도 캡차**: 15분 안에 같은 IP·이메일로 5번 넘게 시도하면 Cloudflare Turnstile (`lib/server/security/auth-guard.ts`)
+  - 로그인은 실패만, 가입은 모든 시도를 센다. 15분 30번을 넘으면 캡차를 풀어도 막는다
+  - 캡차 키가 없으면 5번 넘은 뒤 15분 동안 막는다
+
 ## [0.9.6] - 2026-10-02: 이름 "자동화 지니", 새 로고, 생성 이력 300건 정리
 
 ### 변경

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/server/auth";
+import { checkAuthAttempt } from "@/lib/server/security/auth-guard";
 import { auditService } from "@/lib/server/services/audit";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -14,6 +15,8 @@ import { createId } from "@/lib/utils";
 export interface AuthFormState {
   error: string | null;
   message: string | null;
+  /** 시도가 많아 다음 제출에 캡차(Turnstile)가 필요하다 */
+  captcha?: boolean;
 }
 
 const PASSWORD_MIN_LENGTH = 8;
@@ -79,9 +82,14 @@ export async function signIn(_prev: AuthFormState, formData: FormData): Promise<
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "이메일과 비밀번호를 입력해 주세요.", message: null };
 
+  // 15분 안에 5번 넘게 틀리면 캡차 (lib/server/security/auth-guard.ts)
+  const guard = await checkAuthAttempt("login", email, formData);
+  if (guard.blocked) return { ...guard.blocked, message: null };
+
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: toKorean(error.message), message: null };
+  if (error) return { error: toKorean(error.message), message: null, captcha: guard.record() };
+  guard.clear();
   if (data.user) await logWithClient(supabase, data.user, "auth.login");
   // 승인 전 사용자는 (app)/layout 이 승인 대기 화면으로 보낸다
   redirect(safeNext(formData.get("next")));
@@ -102,6 +110,11 @@ export async function signUp(_prev: AuthFormState, formData: FormData): Promise<
   if (password !== passwordConfirm) return { error: "비밀번호 확인이 일치하지 않습니다.", message: null };
   if (!agreeTerms || !agreePrivacy) return { error: "이용약관과 개인정보처리방침에 동의해 주세요.", message: null };
 
+  // 같은 IP·이메일로 15분 안에 5번 넘게 가입을 시도하면 캡차 (성공한 가입도 센다)
+  const guard = await checkAuthAttempt("signup", email, formData);
+  if (guard.blocked) return { ...guard.blocked, message: null };
+  const captcha = guard.record();
+
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -112,7 +125,7 @@ export async function signUp(_prev: AuthFormState, formData: FormData): Promise<
       emailRedirectTo: `${await getOrigin()}/auth/callback`,
     },
   });
-  if (error) return { error: toKorean(error.message), message: null };
+  if (error) return { error: toKorean(error.message), message: null, captcha };
 
   // 이메일 인증을 끈 프로젝트는 바로 세션이 생긴다 → 승인 대기 화면으로
   if (data.session && data.user) {
@@ -122,6 +135,7 @@ export async function signUp(_prev: AuthFormState, formData: FormData): Promise<
   return {
     error: null,
     message: `${email} 로 인증 메일을 보냈습니다. 메일의 링크를 누른 뒤, 관리자 승인이 끝나면 사용할 수 있습니다.`,
+    captcha,
   };
 }
 

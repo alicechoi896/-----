@@ -9,6 +9,7 @@ import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/States";
 import { SegmentedControl } from "@/components/ui/Tabs";
+import { Turnstile } from "@/components/ui/Turnstile";
 import { signIn, signUp, type AuthFormState } from "./actions";
 
 const initial: AuthFormState = { error: null, message: null };
@@ -60,6 +61,7 @@ export function LoginForm({ next, callbackError }: { next: string; callbackError
           <FormField label="비밀번호" htmlFor="password">
             <Input id="password" name="password" type="password" autoComplete="current-password" required />
           </FormField>
+          {signInState.captcha && <Turnstile resetKey={signInState} />}
           <Button type="submit" variant="primary" size="lg" icon={LogIn} loading={signingIn} className="mt-2 w-full">
             로그인
           </Button>
@@ -85,6 +87,7 @@ export function LoginForm({ next, callbackError }: { next: string; callbackError
             <AgreeCheck name="agreeTerms" href="/terms" label="이용약관" />
             <AgreeCheck name="agreePrivacy" href="/privacy" label="개인정보 수집·이용" />
           </div>
+          {signUpState.captcha && <Turnstile resetKey={signUpState} />}
           <Button type="submit" variant="primary" size="lg" icon={UserPlus} loading={signingUp} className="mt-2 w-full">
             가입 신청
           </Button>

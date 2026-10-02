@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isSupabaseConfigured, supabaseEnv } from "@/lib/supabase/config";
+import { isDemoBlocked, isSupabaseConfigured, supabaseEnv } from "@/lib/supabase/config";
 
 /**
  * Next.js 16 의 proxy (이전 middleware).
@@ -33,6 +33,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
+  if (isDemoBlocked()) {
+    // 운영에서 Supabase 설정이 빠졌다 → 로그인 없는 데모로 열지 않고 멈춘다
+    console.error("[proxy] Supabase 환경변수가 없어 사이트를 닫았습니다 (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY 확인)");
+    return new NextResponse("서비스 점검 중입니다. 잠시 후 다시 접속해 주세요.", {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
   if (!isSupabaseConfigured()) return response;
 
   const supabase = createServerClient(supabaseEnv.url, supabaseEnv.anonKey, {

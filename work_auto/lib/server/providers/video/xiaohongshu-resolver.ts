@@ -57,9 +57,30 @@ async function fetchText(url: string): Promise<{ text: string; finalUrl: string 
 /** 공유 링크·단축 링크 → 노트 ID 와 xsec_token */
 const shortLinks = new Map<string, string>();
 
+/** 샤오홍슈 도메인인지 (서버가 다른 주소로 접속하지 않게 주소의 도메인을 정확히 확인한다) */
+function xhsHost(raw: string): "short" | "note" | null {
+  let host: string;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    host = u.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const under = (d: string) => host === d || host.endsWith(`.${d}`);
+  if (under("xhslink.com")) return "short";
+  if (under("xiaohongshu.com")) return "note";
+  return null;
+}
+
+const NOT_XHS = "샤오홍슈 노트 링크가 아닙니다. 앱에서 공유 → 링크 복사한 주소를 넣어 주세요.";
+
 async function normalize(input: string): Promise<{ noteId: string; token: string | null; source: string }> {
-  let url = input.trim();
-  if (/xhslink\.com/i.test(url)) {
+  // 공유 문구 전체를 붙여 넣어도 첫 번째 주소만 쓴다
+  let url = input.trim().match(/https?:\/\/[^\s"'<>，。]+/i)?.[0] ?? input.trim();
+  const kind = xhsHost(url);
+  if (!kind) throw new AppError("XHS_URL", NOT_XHS, 400);
+  if (kind === "short") {
     // 단축 링크는 실제 노트 주소로 이동한다 (같은 단축 링크는 다시 묻지 않는다)
     const known = shortLinks.get(url);
     if (known) url = known;
@@ -70,8 +91,10 @@ async function normalize(input: string): Promise<{ noteId: string; token: string
       url = finalUrl;
     }
   }
-  const noteId = url.match(/xiaohongshu\.com\/(?:explore|discovery\/item)\/([0-9a-f]{24})/i)?.[1];
-  if (!noteId) throw new AppError("XHS_URL", "샤오홍슈 노트 링크가 아닙니다. 앱에서 공유 → 링크 복사한 주소를 넣어 주세요.", 400);
+  // 단축 링크가 다른 곳으로 이동했으면 쓰지 않는다
+  if (xhsHost(url) !== "note") throw new AppError("XHS_URL", NOT_XHS, 400);
+  const noteId = new URL(url).pathname.match(/\/(?:explore|discovery\/item)\/([0-9a-f]{24})/i)?.[1];
+  if (!noteId) throw new AppError("XHS_URL", NOT_XHS, 400);
   const q = new URL(url).searchParams;
   return { noteId, token: q.get("xsec_token"), source: q.get("xsec_source") ?? "app_share" };
 }

@@ -4,6 +4,7 @@ import type { ProductSourceInput, RawProductData } from "@/lib/types";
 import { seededNumber } from "@/lib/utils";
 import { AppError } from "../../http";
 import { serverConfig } from "../../config";
+import { assertPublicUrl, safeFetch } from "../../security/safe-url";
 import type { ProductDataCollector } from "../types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -253,6 +254,11 @@ export class WebPageCollector implements ProductDataCollector {
     } catch {
       throw new AppError("BAD_URL", "올바른 상품 URL 을 입력해 주세요. (https:// 로 시작)");
     }
+    try {
+      await assertPublicUrl(url); // 서버 내부·사설망 주소 차단 (SSRF)
+    } catch {
+      throw new AppError("BAD_URL", "접속할 수 없는 주소입니다. 공개된 상품 페이지 주소를 입력해 주세요.");
+    }
     const seller = SELLER_BY_HOST.find(([re]) => re.test(url.hostname))?.[1] ?? url.hostname;
     const blocked = new AppError(
       "SITE_BLOCKED",
@@ -262,14 +268,14 @@ export class WebPageCollector implements ProductDataCollector {
 
     let res: Response;
     try {
-      res = await fetch(url, {
+      // 리다이렉트되는 주소도 매번 다시 검사한다
+      res = await safeFetch(url, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
           "Accept-Language": "ko-KR,ko;q=0.9",
           Accept: "text/html,application/xhtml+xml",
         },
-        redirect: "follow",
         cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       });

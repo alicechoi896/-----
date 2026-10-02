@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { DEMO_USER_ID } from "@/lib/mock/seed";
 import { canAccess, resolveAllowedKeys } from "@/lib/permissions";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { isDemoBlocked, isSupabaseConfigured } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { MemberRole, MemberStatus, SessionInfo } from "@/lib/types";
 import { AppError } from "./http";
@@ -38,6 +38,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export const getSession = cache(async (): Promise<SessionInfo | null> => {
+  if (isDemoBlocked()) return null; // 운영에서 설정이 빠졌을 때 데모 관리자로 열지 않는다
   if (!isSupabaseConfigured()) {
     const repo = memoryRepositories;
     const profile = await repo.profiles.get(DEMO_USER_ID);

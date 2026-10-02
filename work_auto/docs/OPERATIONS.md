@@ -55,3 +55,16 @@
 2. 호출 한도를 Redis 로 (인스턴스 사이 공유)
 3. 트렌드·샤오홍슈 결과 캐시를 DB 로 (인스턴스 사이 공유, 할당량 절약)
 4. 글자 흐리게를 서버에서 처리하고 싶다면 별도 영상 처리 서버(GPU/CPU)가 필요하다 — 비용이 생기므로 사용량을 본 뒤 결정
+
+## 5. 보안 (v0.9.7)
+
+| 위험 | 대응 | 위치 |
+|------|------|------|
+| 사용자가 넣은 주소로 서버가 내부망에 접속 (SSRF) | 공개 인터넷 주소만 허용, 리다이렉트마다 재검사 | `lib/server/security/safe-url.ts` (`safeFetch`) |
+| 샤오홍슈 주소 위장 (`evil.com/?xhslink.com`) | 도메인 정확히 비교 | `xiaohongshu-resolver.ts` `xhsHost()` |
+| 클릭재킹·형식 추측 | 보안 헤더 | `next.config.ts` |
+| 환경변수 실수로 데모(관리자) 모드가 운영에 열림 | production + Supabase 없음 → 503. 일부러 열려면 `ALLOW_DEMO=1` | `lib/supabase/config.ts` `isDemoBlocked()` |
+| 비밀번호 대입·가입 폭주 | 15분 5회 초과 → Turnstile 캡차, 30회 초과 → 차단 | `lib/server/security/auth-guard.ts` |
+
+캡차 키 설정: Cloudflare 대시보드 → Turnstile → Add widget (도메인 `work-auto-blush.vercel.app`) →
+Vercel 환경변수 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` → 재배포. 키가 없으면 캡차 대신 15분 차단.
