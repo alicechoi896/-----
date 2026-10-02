@@ -152,12 +152,45 @@ function ContextSummaryBox({ content }: { content: GeneratedContent }) {
           </div>
         ))}
       </dl>
+      {c.styleSamples && <StyleSamples s={c.styleSamples} />}
       {c.notes.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-xs text-warning">
           {c.notes.map((n) => (
             <li key={n}>· {n}</li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** 스타일에서 이번에 참고한 표본 (Hook·CTA·제목 패턴·자주 쓰는 표현은 많으면 10개씩 무작위) */
+function StyleSamples({ s }: { s: NonNullable<GeneratedContent["context"]["styleSamples"]> }) {
+  const [open, setOpen] = useState(false);
+  const rows: [string, string[], number][] = [
+    ["제목 패턴", s.titlePatterns, s.totals.titlePatterns],
+    ["Hook", s.hooks, s.totals.hooks],
+    ["CTA", s.ctas, s.totals.ctas],
+    ["자주 쓰는 표현", s.examplePhrases, s.totals.examplePhrases],
+  ];
+  const summary = rows.filter(([, list]) => list.length).map(([label, list, total]) => `${label} ${list.length}${total > list.length ? `/${total}` : ""}`);
+  if (!summary.length && !s.rulesCount && !s.bannedCount) return null;
+  return (
+    <div className="mt-2 text-xs text-fg-subtle">
+      <button type="button" className="underline-offset-2 hover:text-fg hover:underline" onClick={() => setOpen((v) => !v)}>
+        스타일 참고 ({s.medium === "blog" ? "블로그용으로 재해석" : "영상용"}): {[...summary, s.rulesCount ? `규칙 ${s.rulesCount}` : "", s.bannedCount ? `금지 표현 ${s.bannedCount}` : ""].filter(Boolean).join(" · ")} {open ? "▲" : "▼"}
+      </button>
+      {open && (
+        <dl className="mt-1.5 space-y-1">
+          {rows
+            .filter(([, list]) => list.length)
+            .map(([label, list]) => (
+              <div key={label}>
+                <dt className="font-medium text-fg-muted">{label}</dt>
+                <dd>{list.join(" / ")}</dd>
+              </div>
+            ))}
+        </dl>
       )}
     </div>
   );

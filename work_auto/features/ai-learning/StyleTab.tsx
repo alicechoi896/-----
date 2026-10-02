@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import { FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
 import type { ChannelId, UserStyle, UserStyleInput } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { CHANNELS } from "@/lib/registry";
@@ -23,11 +23,15 @@ import {
   Textarea,
   cardClass,
 } from "@/components/ui";
+import { STYLE_LIMITS } from "@/lib/style-limits";
 import { cn } from "@/lib/utils";
+import { StyleImportDialog, type StyleImportResult, type StyleLists } from "./StyleImportDialog";
 
 const STYLE_CHANNELS = CHANNELS.filter((c) => c.showOnHome && c.id !== "tools").map((c) => ({ id: c.id as ChannelId, name: c.name }));
 const channelName = (id: string) => STYLE_CHANNELS.find((c) => c.id === id)?.name ?? id;
 const lines = (s: string) => s.split("\n").map((l) => l.trim()).filter(Boolean);
+/** 금지 표현: 한 줄에 하나 (예전처럼 쉼표로 구분해도 된다) */
+const bannedList = (s: string) => s.split(/[\n,]/).map((l) => l.trim()).filter(Boolean);
 
 /** 참고 자료로 읽을 수 있는 파일 (브라우저에서 텍스트만 읽고 서버에 파일을 올리지 않는다) */
 const TEXT_FILE_ACCEPT = ".txt,.md,.srt,.vtt,.csv,text/plain";
@@ -43,6 +47,7 @@ const EMPTY: UserStyleInput = {
   bannedPhrases: [],
   hooks: [],
   ctas: [],
+  titlePatterns: [],
   isDefault: false,
 };
 
@@ -87,6 +92,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-subtle">
           생성 화면의 <b className="font-medium text-fg-muted">스타일</b> 에서 골라 씁니다. 고르지 않으면 채널마다 기본 스타일(★) 1개가 자동 적용됩니다.
+          Hook·CTA·제목 패턴·자주 쓰는 표현은 많으면 생성할 때마다 10개씩 골라 참고합니다.
         </p>
         <Button variant="primary" size="sm" icon={Plus} onClick={() => setEditing(editing ? null : { mode: "create" })}>
           스타일 추가
@@ -98,6 +104,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
           key={editing.mode === "edit" ? editing.style.id : "new"}
           editing={editing}
           onCancel={() => setEditing(null)}
+          onUpdated={(updated) => setData((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
           onSaved={() => {
             setEditing(null);
             reload();
@@ -152,13 +159,15 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
               </ul>
               <PhraseSummary label="Hook (초반 3초)" items={s.hooks} />
               <PhraseSummary label="CTA (마지막 행동)" items={s.ctas} />
+              <PhraseSummary label="제목 패턴" items={s.titlePatterns ?? []} />
               {s.bannedPhrases.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1">
-                  {s.bannedPhrases.map((b) => (
+                  {s.bannedPhrases.slice(0, 12).map((b) => (
                     <Tag key={b} className="text-danger line-through">
                       {b}
                     </Tag>
                   ))}
+                  {s.bannedPhrases.length > 12 && <span className="self-center text-xs text-fg-subtle">외 {s.bannedPhrases.length - 12}개</span>}
                 </div>
               )}
               <div className="flex-1" />
@@ -197,19 +206,60 @@ function toForm(s: UserStyleInput) {
     description: s.description,
     rules: s.rules.join("\n"),
     examples: s.examplePhrases.join("\n"),
-    banned: s.bannedPhrases.join(", "),
+    banned: s.bannedPhrases.join("\n"),
     hooks: s.hooks,
     ctas: s.ctas,
+    titlePatterns: s.titlePatterns ?? [],
     profileId: s.profileId ?? "",
     isDefault: s.isDefault,
   };
 }
 
-function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel: () => void; onSaved: () => void }) {
+type StyleFormState = ReturnType<typeof toForm>;
+
+const items = (list: string[]) => list.map((x) => x.trim()).filter(Boolean);
+
+function toInput(form: StyleFormState): UserStyleInput {
+  return {
+    name: form.name,
+    channelIds: form.channelIds,
+    tone: form.tone,
+    description: form.description,
+    rules: lines(form.rules),
+    examplePhrases: lines(form.examples),
+    bannedPhrases: bannedList(form.banned),
+    hooks: items(form.hooks),
+    ctas: items(form.ctas),
+    titlePatterns: items(form.titlePatterns),
+    profileId: form.profileId || null,
+    isDefault: form.isDefault,
+  };
+}
+
+/** 폼 → 파일 일괄 추가에서 비교할 6개 목록 */
+function toLists(form: StyleFormState): StyleLists {
+  const i = toInput(form);
+  return { hooks: i.hooks, ctas: i.ctas, titlePatterns: i.titlePatterns, rules: i.rules, examplePhrases: i.examplePhrases, bannedPhrases: i.bannedPhrases };
+}
+
+function StyleForm({
+  editing,
+  onCancel,
+  onSaved,
+  onUpdated,
+}: {
+  editing: Editing;
+  onCancel: () => void;
+  onSaved: () => void;
+  /** 폼을 닫지 않고 목록의 카드만 바꾼다 (파일 일괄 추가 후. 목록을 다시 불러오면 폼이 처음 값으로 돌아간다) */
+  onUpdated: (style: UserStyle) => void;
+}) {
   const initial = editing.mode === "edit" ? editing.style : (editing.draft ?? EMPTY);
   const [form, setForm] = useState(() => toForm(initial));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importNote, setImportNote] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(editing.mode === "create" && Boolean(editing.reference));
   const profiles = useAsync(() => api.profiles.list(), []);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -218,23 +268,32 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
     set("channelIds", form.channelIds.includes(id) ? form.channelIds.filter((c) => c !== id) : [...form.channelIds, id]);
   }
 
+  /** 파일 일괄 추가 확인: 폼에 합치고, 수정 중인 스타일이면 바로 저장한다 (새 스타일은 이름을 정하고 [저장]) */
+  async function applyImport(result: StyleImportResult) {
+    const next: StyleFormState = {
+      ...form,
+      hooks: result.lists.hooks,
+      ctas: result.lists.ctas,
+      titlePatterns: result.lists.titlePatterns,
+      rules: result.lists.rules.join("\n"),
+      examples: result.lists.examplePhrases.join("\n"),
+      banned: result.lists.bannedPhrases.join("\n"),
+    };
+    if (editing.mode === "edit") {
+      onUpdated(await api.styles.update(editing.style.id, toInput(next))); // 실패하면 창에 오류를 보여 주고 폼은 그대로 둔다
+    }
+    setForm(next);
+    setImportNote(
+      `${result.input}개 입력 · ${result.added}개 추가 · ${result.duplicates}개 중복 제외${result.overLimit ? ` · ${result.overLimit}개 한도 초과 제외` : ""}` +
+        (editing.mode === "edit" ? " — 저장했습니다." : " — 아래 [저장]을 눌러야 반영됩니다."),
+    );
+  }
+
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      const input: UserStyleInput = {
-        name: form.name,
-        channelIds: form.channelIds,
-        tone: form.tone,
-        description: form.description,
-        rules: lines(form.rules),
-        examplePhrases: lines(form.examples),
-        bannedPhrases: form.banned.split(",").map((s) => s.trim()).filter(Boolean),
-        hooks: form.hooks.map((h) => h.trim()).filter(Boolean),
-        ctas: form.ctas.map((c) => c.trim()).filter(Boolean),
-        profileId: form.profileId || null,
-        isDefault: form.isDefault,
-      };
+      const input = toInput(form);
       if (editing.mode === "edit") await api.styles.update(editing.style.id, input);
       else await api.styles.create(input);
       onSaved();
@@ -250,11 +309,16 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
       title={editing.mode === "edit" ? `스타일 수정: ${editing.style.name}` : "새 스타일"}
       description="적용 채널을 고르지 않으면 모든 채널에서 쓸 수 있습니다."
       actions={
-        editing.mode === "create" && (
-          <Button size="sm" variant={aiOpen ? "subtle" : "secondary"} icon={Sparkles} onClick={() => setAiOpen((v) => !v)}>
-            참고 자료로 AI 초안 만들기
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" icon={FileUp} onClick={() => setImportOpen(true)}>
+            파일로 일괄 추가
           </Button>
-        )
+          {editing.mode === "create" && (
+            <Button size="sm" variant={aiOpen ? "subtle" : "secondary"} icon={Sparkles} onClick={() => setAiOpen((v) => !v)}>
+              참고 자료로 AI 초안 만들기
+            </Button>
+          )}
+        </div>
       }
       footer={
         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -272,6 +336,19 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
         </div>
       }
     >
+      <StyleImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        current={toLists(form)}
+        saveLabel={editing.mode === "edit" ? "저장" : "추가"}
+        onConfirm={applyImport}
+      />
+      {importNote && (
+        <Notice tone="info" className="mb-4">
+          파일 일괄 추가: {importNote}
+        </Notice>
+      )}
+
       {aiOpen && editing.mode === "create" && (
         <ReferenceExtractor
           initialText={editing.reference}
@@ -335,6 +412,7 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
           hint="영상·글의 첫 문장 패턴. 생성할 때 주제에 맞게 응용합니다."
           placeholder="예: 아직도 이렇게 하세요?"
           items={form.hooks}
+          max={STYLE_LIMITS.hooks.max}
           onChange={(v) => set("hooks", v)}
         />
         <PhraseListField
@@ -342,16 +420,26 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
           hint="구독·댓글·저장·링크 확인 등 마무리 문장"
           placeholder="예: 더 자세한 정보는 고정 댓글에 있어요"
           items={form.ctas}
+          max={STYLE_LIMITS.ctas.max}
           onChange={(v) => set("ctas", v)}
         />
-        <FormField label="규칙" htmlFor="style-rules" hint="한 줄에 하나씩">
+        <PhraseListField
+          label="제목 패턴"
+          hint="최종 제목이 아니라 설득 구조 참고용입니다. 생성할 때 AI 가 주제·제품에 맞는 새 제목 후보 약 10개로 바꿔 씁니다. 바뀌는 부분은 [제품] [숫자] [대상] 처럼 적으세요."
+          placeholder="예: [제품] 사기 전에 꼭 알아야 하는 [숫자]가지"
+          items={form.titlePatterns}
+          max={STYLE_LIMITS.titlePatterns.max}
+          onChange={(v) => set("titlePatterns", v)}
+          className="md:col-span-2"
+        />
+        <FormField label="규칙" htmlFor="style-rules" hint="한 줄에 하나씩 · 생성할 때 항상 전부 지킵니다">
           <Textarea id="style-rules" rows={4} value={form.rules} onChange={(e) => set("rules", e.target.value)} />
         </FormField>
-        <FormField label="자주 쓰는 표현" htmlFor="style-examples" hint="한 줄에 하나씩">
+        <FormField label="자주 쓰는 표현" htmlFor="style-examples" hint="한 줄에 하나씩 · 말투 참고용">
           <Textarea id="style-examples" rows={4} value={form.examples} onChange={(e) => set("examples", e.target.value)} />
         </FormField>
-        <FormField label="금지 표현" htmlFor="style-banned" hint="쉼표로 구분" className="md:col-span-2">
-          <Input id="style-banned" placeholder="예: 무조건 사세요, 역대급" value={form.banned} onChange={(e) => set("banned", e.target.value)} />
+        <FormField label="금지 표현" htmlFor="style-banned" hint="한 줄에 하나씩 (쉼표로 구분해도 됩니다) · 생성할 때 항상 전부 피합니다" className="md:col-span-2">
+          <Textarea id="style-banned" rows={2} placeholder={"예: 무조건 사세요\n역대급"} value={form.banned} onChange={(e) => set("banned", e.target.value)} />
         </FormField>
       </div>
     </SectionCard>
@@ -359,29 +447,38 @@ function StyleForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel:
 }
 
 /** 문장 목록 입력: [+ 추가] 로 한 줄씩 늘리고, 줄마다 삭제할 수 있다 */
+/** 처음에 보여 주는 줄 수. 파일로 많이 넣으면 접어 둔다 */
+const VISIBLE_ROWS = 8;
+
 function PhraseListField({
   label,
   hint,
   placeholder,
   items,
+  max,
   onChange,
+  className,
 }: {
   label: string;
   hint: string;
   placeholder: string;
   items: string[];
+  max: number;
   onChange: (items: string[]) => void;
+  className?: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const rows = items.length ? items : [""];
+  const visible = expanded ? rows : rows.slice(0, VISIBLE_ROWS);
   return (
-    <FormField label={`${label} · ${items.filter((i) => i.trim()).length}개`} hint={hint}>
+    <FormField label={`${label} · ${items.filter((i) => i.trim()).length}개`} hint={hint} className={className}>
       <div className="space-y-1.5">
-        {rows.map((value, i) => (
+        {visible.map((value, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <span className="tabular w-5 shrink-0 text-right text-xs text-fg-subtle">{i + 1}</span>
             <Input
               value={value}
-              maxLength={200}
+              maxLength={500}
               placeholder={placeholder}
               onChange={(e) => onChange(rows.map((r, j) => (j === i ? e.target.value : r)))}
               onKeyDown={(e) => {
@@ -394,9 +491,25 @@ function PhraseListField({
             <IconButton icon={X} label="이 줄 삭제" size="sm" onClick={() => onChange(rows.filter((_, j) => j !== i))} />
           </div>
         ))}
-        <Button size="sm" variant="ghost" icon={Plus} disabled={rows.length >= 20} onClick={() => onChange([...rows, ""])}>
-          추가
-        </Button>
+        <div className="flex flex-wrap items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Plus}
+            disabled={rows.length >= max}
+            onClick={() => {
+              setExpanded(true);
+              onChange([...rows, ""]);
+            }}
+          >
+            추가
+          </Button>
+          {rows.length > VISIBLE_ROWS && (
+            <Button size="sm" variant="ghost" onClick={() => setExpanded((v) => !v)}>
+              {expanded ? "접기" : `나머지 ${rows.length - VISIBLE_ROWS}개 보기`}
+            </Button>
+          )}
+        </div>
       </div>
     </FormField>
   );

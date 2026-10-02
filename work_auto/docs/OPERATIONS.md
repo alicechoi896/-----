@@ -37,6 +37,7 @@
 | product-analyze / product-images | 10 / 40 | 긴 상세페이지는 이미지 조각을 여러 번 읽는다 |
 | trends-youtube / trends-naver | 30 / 20 | 각자 키지만 반복 조회 방지, NAVER 는 자동완성 포함 |
 | describe-photos | 10 | |
+| style-import | 20 | 나의 스타일 파일 미리보기 (파일 파싱만) |
 
 한도는 서버 인스턴스마다 따로 센다 (엄격한 한도가 아니라 폭주 방지용). 사용자가 수백 명이 되면 Upstash Redis 등으로 바꾼다.
 

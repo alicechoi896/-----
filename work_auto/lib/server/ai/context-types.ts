@@ -1,4 +1,5 @@
 import "server-only";
+import type { StyleContext } from "./style-context";
 import type {
   ContentProfile,
   ContextSummary,
@@ -22,6 +23,8 @@ export interface GenerationContext {
   product: { product: Product; analysis: ProductAnalysis } | null;
   /** Style Memory: 채널 기본 스타일 */
   style: UserStyle | null;
+  /** 이번 생성용 스타일 지시 (표본 추출 + 영상/블로그 해석). buildStyleContext() 결과 */
+  styleContext: StyleContext | null;
   /** Content History: 같은 기능에서 "좋은 결과"로 저장된 예시 (few-shot) */
   exemplars: GeneratedContent[];
   /** Feedback Data: 최근 "별로예요" 사유와 사용자 수정본 → 피해야 할 패턴 */

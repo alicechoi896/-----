@@ -1,4 +1,6 @@
 import type { PermissionRow } from "@/lib/permissions";
+import type { StyleImportKind } from "@/lib/style-limits";
+import type { StyleImportPreview } from "@/lib/types";
 import type {
   ApiConnectionPublic,
   ChannelId,
@@ -84,7 +86,8 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(path, {
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      // 파일 업로드(FormData)는 브라우저가 multipart 경계를 직접 붙이도록 Content-Type 을 비워 둔다
+      headers: init?.body instanceof FormData ? init?.headers : { "Content-Type": "application/json", ...init?.headers },
       cache: "no-store",
     });
   } catch {
@@ -175,6 +178,13 @@ export const api = {
     extract: (text: string, channelIds: ChannelId[]) =>
       request<UserStyleInput & { provider: string }>("/api/styles/extract", { method: "POST", body: json({ text, channelIds }) }),
     setDefault: (id: string) => request<UserStyle>(`/api/styles/${id}`, { method: "PATCH" }),
+    /** .txt/.csv 파일 일괄 추가 미리보기 (저장하지 않는다). TXT 는 target 필요 */
+    importPreview: (file: File, target?: StyleImportKind) => {
+      const body = new FormData();
+      body.append("file", file);
+      if (target) body.append("target", target);
+      return request<StyleImportPreview>("/api/styles/import", { method: "POST", body });
+    },
     remove: (id: string) => request<{ id: string }>(`/api/styles/${id}`, { method: "DELETE" }),
   },
 

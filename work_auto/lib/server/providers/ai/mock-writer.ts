@@ -54,6 +54,24 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
     p ? `${shortName} 스펙 한눈에 정리 (${features[0] ?? "핵심 기능"})` : `${topic} 초보자를 위한 가이드`,
     p ? `${p.summary.differentiators[0] ?? "차별점"}, ${shortName}` : `${topic} 자주 묻는 질문 5가지`,
   ];
+  // 제목 패턴: 실제 AI 는 구조만 참고해 새로 쓰지만, 데모는 빈칸만 채워 "패턴이 반영되는 모습"을 보여 준다
+  const fill = (pattern: string) =>
+    pattern
+      .replace(/\[(제품|제품명)\]/g, shortName || topic)
+      .replace(/\[숫자\]/g, "3")
+      .replace(/\[키워드\]/g, keywords[0] ?? topic)
+      .replace(/\[대상\]/g, p?.summary.targetAudience[0] ?? "처음 알아보는 분")
+      .replace(/\[행동\]/g, "검색만")
+      .replace(/\[[^\]]{1,10}\]/g, topic);
+  titleCandidates.push(
+    ...(context.styleContext?.titlePatterns ?? []).map(fill),
+    `${topic}, 처음이라면 이것부터`,
+    `${shortName || topic} 실제로 따져 본 장단점`,
+    `왜 다들 ${shortName || topic} 이야기를 할까`,
+    `${keywords[1] ?? topic} 놓치기 쉬운 포인트`,
+    `${topic} 한 번에 정리 (체크리스트)`,
+  );
+  titleCandidates.splice(0, titleCandidates.length, ...uniq(titleCandidates));
 
   const scriptCuts = isClip
     ? [

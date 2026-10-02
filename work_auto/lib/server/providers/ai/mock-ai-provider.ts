@@ -129,6 +129,7 @@ function mockStyleExtract(text: string) {
     examplePhrases: sentences.slice(1, 4).map((s) => s.slice(0, 30)),
     hooks: [first.slice(0, 40) || "이거 모르면 손해예요", "딱 30초만 보시면 됩니다"],
     ctas: [last.slice(0, 40) || "도움이 됐다면 저장해 두세요", "궁금한 점은 댓글로 남겨 주세요"],
+    titlePatterns: ["[제품] 사기 전에 꼭 알아야 하는 [숫자]가지", "아직도 [행동]하고 있다면 이것부터 확인하세요"],
     bannedPhrases: ["무조건", "역대급"],
   };
 }

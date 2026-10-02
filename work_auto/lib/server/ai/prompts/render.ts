@@ -4,6 +4,7 @@ import type { GeneratorConfig, OutputSection } from "@/lib/generators/types";
 import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
+import { renderStyleBlocks } from "../style-context";
 import type { PromptTemplate } from "./types";
 
 /**
@@ -60,20 +61,9 @@ function contextBlocks(ctx: GenerationContext): string[] {
       ]),
     );
   }
-  if (ctx.style) {
-    const s = ctx.style;
-    blocks.push(
-      block("스타일", [
-        `이름: ${s.name}`,
-        `톤: ${s.tone}`,
-        `설명: ${s.description}`,
-        ...s.rules.map((r) => `규칙: ${r}`),
-        s.examplePhrases.length ? `자주 쓰는 표현: ${s.examplePhrases.join(" / ")}` : "",
-        s.bannedPhrases.length ? `금지 표현: ${s.bannedPhrases.join(" / ")}` : "",
-        s.hooks.length ? `자주 쓰는 Hook(초반 3초) — 이 패턴을 응용해 Hook 을 만든다: ${s.hooks.join(" / ")}` : "",
-        s.ctas.length ? `자주 쓰는 CTA(마지막 행동 유도) — 마무리는 이 중 하나를 상황에 맞게 응용한다: ${s.ctas.join(" / ")}` : "",
-      ]),
-    );
+  // 스타일: Style Context Builder 가 고른 표본과 영상/블로그별 해석 지시 (lib/server/ai/style-context.ts)
+  if (ctx.styleContext) {
+    for (const b of renderStyleBlocks(ctx.styleContext)) blocks.push(block(b.title, b.lines));
   }
   if (ctx.exemplars.length) {
     blocks.push(

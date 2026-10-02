@@ -201,11 +201,12 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | name | 예: 친근한 리뷰어 |
 | channelIds[] | 적용 채널 (여러 개). 빈 배열 = 모든 채널. DB 의 예전 `channel_id` 는 schema.sql 재실행 시 옮겨지고 비워진다 |
 | tone, description | 톤과 설명 |
-| rules[] | 지켜야 할 규칙 |
-| examplePhrases[] | 자주 쓰는 표현 |
-| bannedPhrases[] | 금지 표현 |
-| hooks[] | 자주 쓰는 Hook (초반 3초 문장), 최대 20개 |
-| ctas[] | 자주 쓰는 CTA (마지막 행동 유도), 최대 20개 |
+| rules[] | 지켜야 할 규칙. 생성 때 항상 전부 전달. 최대 50개 |
+| examplePhrases[] | 자주 쓰는 표현 (말투 참고). 최대 200개, 생성 때 무작위 10개 |
+| bannedPhrases[] | 금지 표현. 생성 때 항상 전부 전달. 최대 100개 |
+| hooks[] | 자주 쓰는 Hook (초반 3초 문장). 최대 200개, 생성 때 무작위 10개 |
+| ctas[] | 자주 쓰는 CTA (마지막 행동 유도). 최대 200개, 생성 때 무작위 10개 |
+| titlePatterns[] (`title_patterns`, v0.9.9) | 제목 패턴 (설득 구조 참고용, AI 가 새 제목 후보로 재해석). 최대 200개, 생성 때 무작위 10개. `text[] not null default '{}'` 추가 컬럼 ([STYLE_CONTEXT.md](./STYLE_CONTEXT.md)) |
 | isDefault | 채널마다 기본 1개. 적용 채널이 겹치는 다른 기본 스타일은 해제 (서비스에서 보장) |
 | createdAt / updatedAt | |
 

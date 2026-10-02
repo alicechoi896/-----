@@ -19,6 +19,8 @@ export interface UserStyle {
   hooks: string[];
   /** 자주 쓰는 CTA (마지막 행동 유도 문장) */
   ctas: string[];
+  /** 제목 패턴: 최종 제목이 아니라 설득 구조 참고용. AI 가 매번 새 제목으로 재해석한다 (docs/STYLE_CONTEXT.md) */
+  titlePatterns: string[];
   /** 기본 스타일: 적용 채널에서 스타일을 고르지 않고 생성하면 자동 적용 (채널마다 1개) */
   isDefault: boolean;
   createdAt: ISODate;
@@ -77,4 +79,22 @@ export interface ReferenceVideo {
   /** 연관 제품 (선택). '제품 홍보 영상 만들기'에서 참고 영상을 고를 때 함께 보인다 */
   productId?: ID | null;
   createdAt: ISODate;
+}
+
+/** 나의 스타일 파일 일괄 추가 미리보기 (POST /api/styles/import). 파일은 저장하지 않는다 */
+export interface StyleImportPreview {
+  fileType: "txt" | "csv";
+  /** 파일에서 찾은 유효 항목 수 (파일 안 중복 포함) */
+  found: number;
+  /** 종류별 항목 (파일 안 중복은 뺐다). 키: hook, cta, title_pattern, rule, example_phrase, banned_phrase */
+  items: Record<"hook" | "cta" | "title_pattern" | "rule" | "example_phrase" | "banned_phrase", string[]>;
+  /** 파일 안에서 겹쳐 뺀 수 */
+  duplicateInFile: number;
+  /** 저장하지 않는 행 (알 수 없는 type, 너무 긴 줄 등). 앞 50개만 */
+  errors: { line: number; reason: string }[];
+  errorCount: number;
+  /** 1,000개를 넘어 뒤를 읽지 않았는지 */
+  truncated: boolean;
+  /** UTF-8 이 아니어서 한국어 윈도우 인코딩(CP949)으로 읽었는지 */
+  decodedAsCp949: boolean;
 }

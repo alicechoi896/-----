@@ -35,6 +35,32 @@ function fail(table: string, action: string, error: { message: string; code?: st
   throw new AppError("DB_ERROR", "데이터베이스 처리 중 오류가 발생했습니다.", 500);
 }
 
+/**
+ * 새로 추가했지만 아직 Supabase 에 schema.sql 을 다시 실행하지 않았을 수 있는 컬럼.
+ * 컬럼이 없으면(PGRST204) 값이 비어 있을 때만 빼고 다시 저장한다. 값이 있으면 조용히 버리지 않고 안내한다.
+ */
+const PENDING_COLUMNS: Record<string, string[]> = {
+  user_styles: ["title_patterns"], // v0.9.9
+};
+
+async function writeWithPendingColumns<R>(
+  table: string,
+  row: Record<string, unknown>,
+  run: (row: Record<string, unknown>) => PromiseLike<{ data: R; error: { message: string; code?: string } | null }>,
+): Promise<{ data: R; error: { message: string; code?: string } | null }> {
+  const first = await run(row);
+  const missing = first.error?.code === "PGRST204" ? (PENDING_COLUMNS[table] ?? []).find((c) => first.error!.message.includes(`'${c}'`)) : undefined;
+  if (!missing) return first;
+  const value = row[missing];
+  if (Array.isArray(value) ? value.length > 0 : value != null) {
+    throw new AppError("SCHEMA_OUTDATED", "DB 업데이트가 필요합니다. Supabase SQL Editor 에서 supabase/schema.sql 을 다시 실행한 뒤 저장해 주세요.", 409);
+  }
+  console.warn(`[supabase] ${table}.${missing} 컬럼이 아직 없습니다 (schema.sql 재실행 필요). 빈 값이라 빼고 저장합니다.`);
+  const { [missing]: _drop, ...rest } = row;
+  void _drop;
+  return run(rest);
+}
+
 function createTable<T extends { id: string }>(table: string): Repository<T> {
   return {
     async list(filter) {
@@ -52,13 +78,17 @@ function createTable<T extends { id: string }>(table: string): Repository<T> {
     },
     async insert(item) {
       const db = await createSupabaseServerClient();
-      const { data, error } = await db.from(table).insert(toRow(item)).select("*").single();
+      const { data, error } = await writeWithPendingColumns(table, toRow(item) as Record<string, unknown>, (row) =>
+        db.from(table).insert(row).select("*").single(),
+      );
       if (error) fail(table, "insert", error);
       return fromRow<T>(data);
     },
     async update(id, patch) {
       const db = await createSupabaseServerClient();
-      const { data, error } = await db.from(table).update(toRow(patch)).eq("id", id).select("*").maybeSingle();
+      const { data, error } = await writeWithPendingColumns(table, toRow(patch) as Record<string, unknown>, (row) =>
+        db.from(table).update(row).eq("id", id).select("*").maybeSingle(),
+      );
       if (error) fail(table, "update", error);
       return data ? fromRow<T>(data) : null;
     },

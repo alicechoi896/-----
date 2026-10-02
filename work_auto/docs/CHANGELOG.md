@@ -2,6 +2,28 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.9] - 2026-10-03: 나의 스타일 강화 (제목 패턴 · 파일 일괄 추가 · Style Context Builder)
+
+자세한 내용은 docs/STYLE_CONTEXT.md
+
+### 추가
+- **제목 패턴** (`user_styles.title_patterns`): 설득 구조 참고용. 생성할 때 AI 가 새 제목 후보 약 10개로 재해석한다 (별도 AI 호출 없음)
+- **[파일로 일괄 추가]** (.txt 한 줄 = 1개 / .csv type,text): 미리보기 → 확인 후 저장. 중복·한도·오류 행 표시. 파일은 메모리에서만 읽고 저장하지 않는다 (`POST /api/styles/import`)
+- **추천 예시 300개 불러오기**: Hook 100 · CTA 100 · 제목 패턴 100 (`public/samples/style-starter.csv`)
+- 결과 화면 학습 데이터 상자에 이번에 참고한 스타일 표본 표시, `generated_contents.context.styleSamples` 에 기록
+
+### 변경
+- **Style Context Builder** (`lib/server/ai/style-context.ts`): 규칙·금지 표현은 항상 전부, Hook·CTA·제목 패턴·자주 쓰는 표현은 10개 넘으면 무작위 10개
+- 블로그는 영상용 Hook·CTA 를 자연스러운 도입·마무리 문장으로, 제목 패턴을 검색형 제목으로 재해석
+- 모든 생성 화면 제목 후보 10개 (YouTube 5·3개 → 10개, 블로그 5·3개 → 10개, NAVER 클립은 제목 + 제목 후보 10개 추가)
+- 콘텐츠 프롬프트 1.4.0, style.extract 1.1.0 (AI 스타일 초안에 제목 패턴 포함)
+- 저장 한도: Hook·CTA·표현·제목 패턴 200개(500자), 규칙 50개, 금지 표현 100개(100자). 금지 표현 입력칸은 한 줄에 하나(쉼표도 가능)
+- Hook·CTA·제목 패턴 목록은 8줄 넘으면 접어서 보여 준다
+
+### DB
+- `alter table public.user_styles add column if not exists title_patterns text[] not null default '{}';` (추가만, 기존 데이터·RLS 그대로)
+- Supabase 에 아직 실행하지 않아도 앱은 동작한다 (빈 값은 빼고 저장, 값이 있으면 재실행 안내)
+
 ## [0.9.8] - 2026-10-02: NAVER 검색광고 API 별도 카드
 
 ### 변경

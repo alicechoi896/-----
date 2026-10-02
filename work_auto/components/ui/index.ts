@@ -12,6 +12,7 @@ export { SectionCard, InfoRow, BulletList, cardClass } from "./SectionCard";
 export { DataTable } from "./DataTable";
 export type { Column, SortState } from "./DataTable";
 export { Drawer } from "./Drawer";
+export { Modal } from "./Modal";
 export { BulkDeleteButton } from "./BulkDeleteButton";
 export { Combobox } from "./Combobox";
 export type { ComboOption } from "./Combobox";

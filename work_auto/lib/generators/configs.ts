@@ -131,7 +131,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.videoLength(),
       { name: "style", label: "콘텐츠 스타일", type: "segmented", options: VIDEO_STYLE_OPTIONS, defaultValue: "리뷰형" },
     ],
-    outputs: [O.titles("추천 제목 5개"), O.hook(), O.script(), O.description(), O.keywords("주요 키워드"), O.hashtags()],
+    outputs: [O.titles("제목 후보", 10), O.hook(), O.script(), O.description(), O.keywords("주요 키워드"), O.hashtags()],
   },
 
   "yt-info-video": {
@@ -147,7 +147,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.keywords(),
       F.videoLength(),
     ],
-    outputs: [O.topics(), O.titles("제목", 3), O.hook(), O.script(), O.description(), O.keywords()],
+    outputs: [O.topics(), O.titles("제목 후보", 10), O.hook(), O.script(), O.description(), O.keywords()],
   },
 
   "clip-product-content": {
@@ -165,6 +165,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     ],
     outputs: [
       { key: "title", label: "제목", format: "text" },
+      O.titles("제목 후보", 10),
       O.hook(),
       O.script("클립 대본"),
       O.description(),
@@ -180,7 +181,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     trendField: "trendId",
     headlineKey: "title",
     fields: [F.category(), F.naverTrend("현재 트렌드"), F.keywords("키워드")],
-    outputs: [O.topics(), { key: "title", label: "제목", format: "text" }, O.script(), O.description(), O.keywords()],
+    outputs: [O.topics(), { key: "title", label: "제목", format: "text" }, O.titles("제목 후보", 10), O.script(), O.description(), O.keywords()],
   },
 
   "blog-product-writing": {
@@ -211,7 +212,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       },
     ],
     outputs: [
-      O.titles("제목 후보", 5),
+      O.titles("제목 후보", 10),
       { key: "body", label: "전체 본문", format: "longtext" },
       { key: "headings", label: "소제목", format: "list", count: 5 },
       { key: "benefits", label: "제품 장점", format: "list", count: 4 },
@@ -236,7 +237,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { name: "length", label: "글 길이", type: "select", options: BLOG_LENGTH_OPTIONS, defaultValue: "medium", span: 1 },
     ],
     outputs: [
-      O.titles("제목 후보", 5),
+      O.titles("제목 후보", 10),
       { key: "body", label: "전체 본문", format: "longtext" },
       { key: "headings", label: "소제목", format: "list", count: 5 },
       O.keywords(),
@@ -255,7 +256,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { name: "writingType", label: "글 유형", type: "segmented", options: [{ value: "정보", label: "정보" }, { value: "제품 소개", label: "제품 소개" }, { value: "트렌드", label: "트렌드" }], defaultValue: "정보" },
       { ...F.product(false), hint: "선택하면 제품 정보를 함께 활용합니다." },
     ],
-    outputs: [O.titles("제목 후보", 3), { key: "body", label: "전체 본문", format: "longtext" }, O.keywords(), O.hashtags()],
+    outputs: [O.titles("제목 후보", 10), { key: "body", label: "전체 본문", format: "longtext" }, O.keywords(), O.hashtags()],
   },
 };
 

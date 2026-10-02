@@ -9,7 +9,7 @@ const strArray = { type: "array", items: { type: "string" } } as const;
 const STYLE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["name", "tone", "description", "rules", "examplePhrases", "hooks", "ctas", "bannedPhrases"],
+  required: ["name", "tone", "description", "rules", "examplePhrases", "hooks", "ctas", "titlePatterns", "bannedPhrases"],
   properties: {
     name: { type: "string" },
     tone: { type: "string" },
@@ -18,6 +18,7 @@ const STYLE_SCHEMA = {
     examplePhrases: strArray,
     hooks: strArray,
     ctas: strArray,
+    titlePatterns: strArray,
     bannedPhrases: strArray,
   },
 } as const;
@@ -77,6 +78,7 @@ export const styleExtractor = {
       examplePhrases: list(d.examplePhrases, 8),
       hooks: list(d.hooks, 8),
       ctas: list(d.ctas, 6),
+      titlePatterns: list(d.titlePatterns, 6),
       bannedPhrases: list(d.bannedPhrases, 8),
       isDefault: false,
     };

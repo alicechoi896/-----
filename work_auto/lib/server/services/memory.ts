@@ -8,6 +8,7 @@ import type {
   UserStyle,
   UserStyleInput,
 } from "@/lib/types";
+import { STYLE_LIMITS, cleanStyleText, styleItemKey } from "@/lib/style-limits";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
@@ -19,8 +20,20 @@ import { productService } from "./products";
  * Style / Content History / Feedback / Performance 의 조회와 변경.
  */
 const STYLE_CHANNELS: ChannelId[] = ["youtube", "naver-clip", "naver-blog"];
-const strList = (v: unknown, max: number, len = 200) =>
-  Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim().slice(0, len)).filter(Boolean))].slice(0, max) : [];
+/** 제어 문자 제거 + 앞뒤 공백 정리. 같은 항목(대소문자·공백 무시)은 하나만 남긴다 */
+const strList = (v: unknown, max: number, len = 200) => {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of v) {
+    const s = cleanStyleText(String(x)).slice(0, len);
+    const key = styleItemKey(s);
+    if (!s || seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out.slice(0, max);
+};
 
 /** 예전 형식(channelId 하나, Hook·CTA 없음)도 새 형식으로 맞춘다 */
 export function normalizeStyle(row: UserStyle): UserStyle {
@@ -34,6 +47,7 @@ export function normalizeStyle(row: UserStyle): UserStyle {
     bannedPhrases: rest.bannedPhrases ?? [],
     hooks: rest.hooks ?? [],
     ctas: rest.ctas ?? [],
+    titlePatterns: rest.titlePatterns ?? [],
     profileId: rest.profileId ?? null,
   };
 }
@@ -46,11 +60,12 @@ function cleanStyleInput(input: UserStyleInput): UserStyleInput {
     channelIds: (Array.isArray(input.channelIds) ? input.channelIds : []).filter((c): c is ChannelId => STYLE_CHANNELS.includes(c)),
     tone: String(input.tone ?? "").trim().slice(0, 200),
     description: String(input.description ?? "").trim().slice(0, 500),
-    rules: strList(input.rules, 20),
-    examplePhrases: strList(input.examplePhrases, 20),
-    bannedPhrases: strList(input.bannedPhrases, 30, 60),
-    hooks: strList(input.hooks, 20),
-    ctas: strList(input.ctas, 20),
+    rules: strList(input.rules, STYLE_LIMITS.rules.max, STYLE_LIMITS.rules.len),
+    examplePhrases: strList(input.examplePhrases, STYLE_LIMITS.examplePhrases.max, STYLE_LIMITS.examplePhrases.len),
+    bannedPhrases: strList(input.bannedPhrases, STYLE_LIMITS.bannedPhrases.max, STYLE_LIMITS.bannedPhrases.len),
+    hooks: strList(input.hooks, STYLE_LIMITS.hooks.max, STYLE_LIMITS.hooks.len),
+    ctas: strList(input.ctas, STYLE_LIMITS.ctas.max, STYLE_LIMITS.ctas.len),
+    titlePatterns: strList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max, STYLE_LIMITS.titlePatterns.len),
     profileId: typeof input.profileId === "string" && input.profileId ? input.profileId : null,
     isDefault: Boolean(input.isDefault),
   };

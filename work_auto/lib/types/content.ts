@@ -18,6 +18,24 @@ export interface ContextSummary {
   trend: { id: ID; title: string } | null;
   /** 경고나 참고 (예: "실제 경험 미입력 → 사용 후기 표현 금지") */
   notes: string[];
+  /** 이번 생성에 실제로 보낸 스타일 표본 (v0.9.9~, 예전 결과에는 없다) */
+  styleSamples?: StyleSampleSnapshot | null;
+}
+
+/** 나의 스타일에서 이번 생성에 보낸 항목. Hook·CTA·제목 패턴·자주 쓰는 표현은 많으면 무작위 표본이다 */
+export interface StyleSampleSnapshot {
+  styleId: ID;
+  /** video: YouTube·NAVER 클립, blog: NAVER 블로그 (Hook·CTA·제목 패턴 해석이 다르다) */
+  medium: "video" | "blog";
+  hooks: string[];
+  ctas: string[];
+  titlePatterns: string[];
+  examplePhrases: string[];
+  /** 규칙·금지 표현은 항상 전부 보낸다 */
+  rulesCount: number;
+  bannedCount: number;
+  /** 저장된 전체 개수 */
+  totals: { examplePhrases: number; hooks: number; ctas: number; titlePatterns: number };
 }
 
 /** 같은 제품이나 주제로 만든 생성물을 묶는 단위 (V2부터 UI에서 사용) */

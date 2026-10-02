@@ -7,6 +7,7 @@ import { getRepositories } from "../repositories";
 import { normalizeStyle } from "../services/memory";
 import { trendService } from "../services/trends";
 import type { GenerationContext } from "./context-types";
+import { buildStyleContext, styleSnapshot } from "./style-context";
 
 /**
  * ★ ContextBuilder — AI Memory 를 "생성 1회분"의 Context 로 조립한다.
@@ -18,6 +19,7 @@ import type { GenerationContext } from "./context-types";
  *   0. Content Profile     — 무엇을 다루는가. 고른 스타일에 연결된 프로필 → 없으면 기본 프로필 (docs/CONTENT_PROFILE.md)
  *   1. Product Memory      — 선택한 제품의 현재 분석 1건
  *   2. Style Memory        — 생성 폼에서 고른 스타일 1건. 고르지 않으면 이 채널의 기본 스타일 (없으면 "모든 채널" 기본 스타일)
+ *                            → buildStyleContext(): Hook·CTA·제목 패턴·자주 쓰는 표현은 10개 초과면 무작위 10개, 규칙·금지 표현은 전부 (docs/STYLE_CONTEXT.md)
  *   3. Content History     — 같은 기능의 "좋은 결과" 최근 2건 (few-shot)
  *   4. Feedback            — 같은 기능의 "별로예요" 최근 3건 (피해야 할 패턴)
  *   5. Performance         — 같은 채널 성과 상위 2건
@@ -77,6 +79,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     userStyles.find((s) => s.isDefault && s.channelIds.length === 0) ??
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
+  const styleContext = style ? buildStyleContext({ style, channelId }) : null;
 
   // 0) Content Profile — 생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필
   if (pickedProfileId && !profiles.some((p) => p.id === pickedProfileId)) {
@@ -128,7 +131,8 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     performanceHints,
     trend: trend ? { id: trend.id, title: trend.title } : null,
     notes,
+    styleSamples: styleContext ? styleSnapshot(styleContext) : null,
   };
 
-  return { contentProfile, product, style, exemplars, avoid, performanceHints, trend, referenceVideo, honestyGuard, summary };
+  return { contentProfile, product, style, styleContext, exemplars, avoid, performanceHints, trend, referenceVideo, honestyGuard, summary };
 }
