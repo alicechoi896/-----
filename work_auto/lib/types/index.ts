@@ -7,3 +7,4 @@ export * from "./memory";
 export * from "./auth";
 export * from "./settings";
 export * from "./profile";
+export * from "./publication";

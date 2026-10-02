@@ -32,6 +32,10 @@ function fromRow<T>(row: Record<string, unknown>): T {
 function fail(table: string, action: string, error: { message: string; code?: string }): never {
   console.error(`[supabase] ${table}.${action}`, error.code, error.message);
   if (error.code === "42501") throw new AppError("FORBIDDEN", "이 작업을 할 권한이 없습니다.", 403);
+  // 새 테이블을 아직 만들지 않았을 때 (schema.sql 재실행 전)
+  if (error.code === "PGRST205" || error.code === "42P01") {
+    throw new AppError("SCHEMA_OUTDATED", "DB 업데이트가 필요합니다. Supabase SQL Editor 에서 supabase/schema.sql 을 다시 실행해 주세요.", 409);
+  }
   throw new AppError("DB_ERROR", "데이터베이스 처리 중 오류가 발생했습니다.", 500);
 }
 
@@ -118,4 +122,5 @@ export const supabaseRepositories: Repositories = {
   savedFilters: createTable("saved_filters"),
   savedTrends: createTable("saved_trends"),
   contentProfiles: createTable("content_profiles"),
+  publications: createTable("content_publications"),
 };

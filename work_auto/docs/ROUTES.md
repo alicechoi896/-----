@@ -64,6 +64,7 @@
 | POST | `/api/videos/resolve` { url } | 샤오홍슈 노트의 영상 주소 (주소만, 파일은 브라우저가 직접 받음) | resolveXiaohongshu |
 | POST | `/api/videos/batch` { urls[], note? } | 여러 영상 한 번에 가져오기 (최대 20개, URL 별 결과) | videoService.importMany |
 | `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |
+| `/uploads` | 업로드 관리 | 월간 캘린더·날짜 상세·업로드 등록 (`?contentId=` 로 등록 창 열기) | UploadCalendar | Dynamic |
 | `/settings` | 설정 | 설정 카드 (API 연결 센터, 일반 설정 준비 중) | ChannelHub | Dynamic |
 | `/settings/api` | API 연결 센터 | OpenAI / YouTube / NAVER 연결·테스트 | ApiCenter, ApiConnectionCard | Dynamic |
 | (그 외) | 404 | 홈으로 이동 | not-found.tsx | - |

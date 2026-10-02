@@ -7,11 +7,14 @@ import { api } from "@/lib/api-client";
 import { findFeature } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { Badge, BulkDeleteButton, DataTable, EmptyState, ErrorState, LoadingState, SectionCard, type Column } from "@/components/ui";
+import { UploadStatusBadge, useUploadStatus } from "@/components/shared/UploadStatusBadge";
 import { cn, formatRelative } from "@/lib/utils";
 
 /** Content History: 과거 생성물. ★(좋은 결과)는 같은 기능의 다음 생성에 few-shot 예시로 쓰인다 */
 export function ContentHistoryTab({ onChanged }: { onChanged?: () => void }) {
   const { data, loading, error, reload, setData } = useAsync(() => api.contents.list(), []);
+  // 업로드 상태: 업로드 관리 기록에서 계산 (미업로드 · 예약 · 업로드 완료)
+  const uploads = useUploadStatus((data ?? []).map((c) => c.id));
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   async function deleteSelected() {
@@ -69,6 +72,7 @@ export function ContentHistoryTab({ onChanged }: { onChanged?: () => void }) {
       ),
     },
     { key: "prompt", header: "프롬프트", render: (c) => <span className="tabular text-xs text-fg-muted">v{c.promptVersion}</span> },
+    { key: "upload", header: "업로드", render: (c) => (uploads ? <UploadStatusBadge state={uploads[c.id]} /> : <span className="text-fg-subtle">-</span>) },
     {
       key: "rating",
       header: "평가",

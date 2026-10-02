@@ -79,12 +79,12 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
   const productPoints = p
     ? (p.summary.keyBenefits.length ? p.summary.keyBenefits : p.summary.keyFeatures)
         .slice(0, 3)
-        .map((b, i) => `${["첫째", "둘째", "셋째"][i]}, ${b}.`)
+        .flatMap((b, i) => [`${["첫째", "둘째", "셋째"][i]}는요`, b.length > 20 ? b.slice(0, 20) : b])
     : [];
   const scriptLines = p
-    ? [hook, ...productPoints, productCta]
+    ? [hook, `이거 하나면 되는데`, ...productPoints, productCta]
     : isClip
-      ? [hook, `${topic}, 핵심 하나만 짚을게요.`, benefits[0], benefits[1] ?? "두 번째 포인트도 있어요.", "주의할 점도 꼭 확인하세요.", phrase ?? "저장해 두고 필요할 때 보세요."]
+      ? [hook, `${topic.slice(0, 14)}, 핵심만 갈게요`, "딱 두 가지인데", benefits[0].slice(0, 20), "그리고요", (benefits[1] ?? "두 번째도 있어요").slice(0, 20), "주의할 점도 있어요", phrase ?? "저장해 두고 보세요"]
       : [
           hook,
           `오늘은 ${topic}에 대해 핵심만 정리해 보겠습니다.`,
@@ -174,7 +174,8 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
     hook: () => hook,
     hooks: (n) => hookPool.slice(0, n),
     ctas: (n) => ctaPool.slice(0, n),
-    script: () => scriptLines.join("\n\n"),
+    // 짧은 리듬 대본(제품 영상·클립)은 한 줄씩, 정보성 영상은 문단 사이 줄바꿈
+    script: () => scriptLines.join(p || isClip ? "\n" : "\n\n"),
     description: () =>
       [
         p ? `${p.summary.oneLiner}.` : `${topic}에 대해 핵심만 정리했습니다.`,

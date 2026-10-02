@@ -1,4 +1,5 @@
 import type {
+  ContentPublication,
   ApiConnection,
   AuditLog,
   UserSettings,
@@ -39,6 +40,7 @@ export interface StoreState {
   savedFilters: SavedFilter[];
   savedTrends: SavedTrend[];
   contentProfiles: ContentProfile[];
+  publications: ContentPublication[];
 }
 
 const DAY = 86_400_000;
@@ -303,6 +305,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
     ],
     rolePermissions: [],
     settings: [],
+    publications: demoPublications(now, userId, contents, products),
     auditLogs: [
       { id: "log_seed1", actorId: userId, actorEmail: "demo@example.com", actorName: "데모 관리자", action: "user.approve", targetType: "user", targetId: "demo-member-1", targetLabel: "김크리", detail: { role: "gold", roleLabel: "골드" }, createdAt: iso(10) },
     ],
@@ -320,4 +323,42 @@ export function createSeedState(now: number = Date.now()): StoreState {
     // 데모 기본 콘텐츠 프로필
     contentProfiles: [{ ...EXAMPLE_PROFILE, id: "prf_seed1", userId, createdAt: iso(30), updatedAt: iso(30) }],
   };
+}
+
+/** 데모 업로드 기록: 최근 생성 콘텐츠 일부는 업로드 완료·예약, 하나는 직접 등록 */
+function demoPublications(now: number, userId: string, contents: GeneratedContent[], products: Product[]): ContentPublication[] {
+  const iso = (days: number) => new Date(now + days * DAY).toISOString();
+  const name = (pid: string | null) => products.find((p) => p.id === pid)?.name ?? "";
+  const base = { userId, accountName: "", note: null, assigneeId: userId, assigneeName: "데모 관리자", createdAt: iso(-3), updatedAt: iso(-3) };
+  const list: ContentPublication[] = contents.slice(0, 2).map((c, i) => ({
+    ...base,
+    id: `pub_seed${i + 1}`,
+    contentId: c.id,
+    productId: c.productId,
+    productName: name(c.productId),
+    platform: c.channelId,
+    title: c.headline,
+    contentType: "",
+    status: i === 0 ? "published" : "scheduled",
+    scheduledAt: i === 0 ? null : iso(2),
+    publishedAt: i === 0 ? iso(-1) : null,
+    platformUrl: i === 0 ? "https://www.youtube.com/" : null,
+  }));
+  list.push({
+    ...base,
+    id: "pub_seed3",
+    contentId: null,
+    productId: null,
+    productName: "",
+    platform: "naver-blog",
+    title: "직접 쓴 블로그 글 (생성 시스템 밖)",
+    contentType: "블로그 글",
+    status: "published",
+    scheduledAt: null,
+    publishedAt: iso(-2),
+    platformUrl: "https://blog.naver.com/",
+    assigneeId: "demo-member-1",
+    assigneeName: "김크리",
+  });
+  return list;
 }

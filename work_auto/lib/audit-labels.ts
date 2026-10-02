@@ -13,6 +13,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "account.update_name": "이름 변경",
   "account.change_password": "비밀번호 변경",
   "account.withdraw": "회원 탈퇴",
+  "publication.create": "업로드 등록",
+  "publication.update": "업로드 수정",
+  "publication.delete": "업로드 삭제",
 };
 
 /** 필터용 묶음 */
@@ -21,6 +24,7 @@ export const AUDIT_GROUPS: { value: string; label: string; actions: AuditAction[
   { value: "permission", label: "권한", actions: ["permission.change", "permission.reset"] },
   { value: "auth", label: "로그인·가입", actions: ["auth.login", "auth.logout", "auth.signup"] },
   { value: "account", label: "내 정보·탈퇴", actions: ["account.update_name", "account.change_password", "account.withdraw"] },
+  { value: "publication", label: "업로드 관리", actions: ["publication.create", "publication.update", "publication.delete"] },
 ];
 
 /** 상세 내용을 한 줄 문장으로 */

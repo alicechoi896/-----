@@ -23,12 +23,22 @@ const today = "2026-10-01";
 
 /** 영상·클립 공통 출력 규칙 (v0.9.13) */
 const VIDEO_OUTPUT_RULES = [
-  "script(대본)는 실제로 말할 문장만 쓴다. 장면·컷·자막 지시, 시간(예: 0~5초), [오프닝]·[컷1] 같은 표시, 머리표(-, •, 번호)를 쓰지 않는다. 문단 사이에만 줄바꿈한다.",
+  "script(대본)는 실제로 말할 문장만 쓴다. 장면·컷·자막 지시, 시간(예: 0~5초), [오프닝]·[컷1] 같은 표시, 머리표(-, •, 번호)를 쓰지 않는다.",
   "hooks 는 첫 3초 문장 10개. 질문형·문제 제기·반전·숫자·공감 등 방식을 서로 다르게 쓴다.",
   "ctas 는 마지막 행동 유도 문장 10개. 저장·댓글·구독·링크 확인 등 서로 다른 방식으로 쓴다.",
   "titles 는 서로 다른 제목 후보 10개.",
   "description(설명글)은 충분히 길게 쓴다: 5~8개 문단, 문단 사이는 빈 줄로 줄바꿈한다. 핵심 요약, 주요 내용, 추천 대상, 확인할 점, 마무리 안내를 담는다.",
   "keywords 는 검색 키워드 30개 (짧고 겹치지 않게).",
+].join(" ");
+
+/** 짧은 리듬 대본 말투 (v0.9.16: YouTube 제품 영상, NAVER 클립) */
+const SHORT_SCRIPT_STYLE = [
+  "대본 말투 (가장 중요):",
+  "'~니다.'로 끝나는 문장을 쓰지 않는다 (습니다·합니다·입니다 금지).",
+  "'~인데', '~이고', '~거든요', '~요'처럼 다음 말로 이어지는 구어체로 쓴다.",
+  "짧게 끊어 리듬감 있게 말하고, 설명을 길게 나열하지 않는다.",
+  "한 줄은 5~20자로 짧게, 줄마다 줄바꿈한다.",
+  "분량은 영상 길이에 맞춘다 (15초 약 6~8줄, 30초 약 10~14줄, 60초 약 18~25줄, 그보다 길면 길이에 비례).",
 ].join(" ");
 
 /** 제품 홍보 영상·클립 대본 패턴 (v0.9.14) */
@@ -219,29 +229,36 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
       PRODUCT_SCRIPT_PATTERN +
       " " +
       VIDEO_OUTPUT_RULES +
+      " " +
+      SHORT_SCRIPT_STYLE +
       " tags 는 YouTube 태그 입력칸에 넣을 짧은 검색어 30개 (# 없이).",
-    [{ version: "1.6.0", date: "2026-10-03", note: "제품 홍보 대본 패턴: 초반 Hook → 제품 핵심 정보 2~3개 → CTA" }],
+    [
+      { version: "1.6.0", date: "2026-10-03", note: "제품 홍보 대본 패턴: 초반 Hook → 제품 핵심 정보 2~3개 → CTA" },
+      { version: "1.7.0", date: "2026-10-03", note: "대본 말투: '~니다.' 금지, 이어지는 구어체, 한 줄 5~20자 리듬. Shorts 15·30초" },
+    ],
   ),
   contentTemplate(
     "youtube.info-video",
     "YouTube 정보성 영상 원고",
-    "제품과 관계없는 YouTube 정보성 영상을 기획한다. 주제가 비어 있으면 트렌드와 카테고리로 주제를 먼저 추천하고, 첫 번째 추천 주제로 원고를 쓴다. " +
+    "제품과 관계없는 YouTube 정보성 영상을 기획한다. 주제가 비어 있으면 트렌드와 카테고리로 주제를 먼저 추천하고, 첫 번째 추천 주제로 원고를 쓴다. 대본은 문단 사이에만 줄바꿈한다. " +
       VIDEO_OUTPUT_RULES +
       " tags 는 YouTube 태그 입력칸에 넣을 짧은 검색어 30개 (# 없이).",
   ),
   contentTemplate(
     "naver-clip.product-content",
     "NAVER 클립 제품 홍보 클립 원고",
-    "NAVER 클립용 세로 숏폼(60초 이내) 제품 홍보 원고를 만든다. 대본은 짧은 문장을 한 줄씩 쓴다. " + PRODUCT_SCRIPT_PATTERN + " " + VIDEO_OUTPUT_RULES,
+    "NAVER 클립용 세로 숏폼 제품 홍보 원고를 만든다. 분량은 사용자 입력의 영상 길이에 맞춘다. " + PRODUCT_SCRIPT_PATTERN + " " + VIDEO_OUTPUT_RULES + " " + SHORT_SCRIPT_STYLE,
     [
       { version: "1.0.1", date: "2026-10-02", note: "채널 표기 변경: NAVER Clip → NAVER 클립" },
       { version: "1.6.0", date: "2026-10-03", note: "제품 홍보 대본 패턴: 초반 Hook → 제품 핵심 정보 2~3개 → CTA" },
+      { version: "1.7.0", date: "2026-10-03", note: "영상 길이 선택(15초~10분 이상), 대본 말투: '~니다.' 금지, 한 줄 5~20자 리듬" },
     ],
   ),
   contentTemplate(
     "naver-clip.info-content",
     "NAVER 클립 정보성 클립 원고",
-    "현재 네이버 트렌드를 활용한 정보형 숏폼 클립 원고(60초 이내)를 만든다. 대본은 짧은 문장을 한 줄씩 쓴다. " + VIDEO_OUTPUT_RULES,
+    "현재 네이버 트렌드를 활용한 정보형 클립 원고를 만든다. 분량은 사용자 입력의 영상 길이에 맞춘다. " + VIDEO_OUTPUT_RULES + " " + SHORT_SCRIPT_STYLE,
+    [{ version: "1.7.0", date: "2026-10-03", note: "영상 길이 선택(15초~10분 이상), 대본 말투: '~니다.' 금지, 한 줄 5~20자 리듬" }],
   ),
   contentTemplate(
     "naver-blog.product-writing",

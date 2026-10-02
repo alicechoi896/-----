@@ -97,9 +97,12 @@ export function renderContentPrompt(
   ctx: GenerationContext,
 ): ChatMessage[] {
   const labels = Object.fromEntries(config.fields.map((f) => [f.name, f.label]));
+  // 선택형 항목은 값("15s") 대신 화면 이름("Shorts 15초")으로 보낸다
+  const optionLabel = (key: string, v: unknown) =>
+    config.fields.find((f) => f.name === key)?.options?.find((o) => o.value === v)?.label ?? String(v);
   const userInput = Object.entries(input)
     .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId" && key !== "styleId" && key !== "profileId")
-    .map(([key, v]) => `${labels[key] ?? key}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
+    .map(([key, v]) => `${labels[key] ?? key}: ${Array.isArray(v) ? v.join(", ") : optionLabel(key, v)}`);
 
   const user = [
     block("작업", template.task),

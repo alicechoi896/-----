@@ -59,7 +59,10 @@ export type AuditAction =
   | "permission.reset"
   | "account.update_name"
   | "account.change_password"
-  | "account.withdraw";
+  | "account.withdraw"
+  | "publication.create"
+  | "publication.update"
+  | "publication.delete";
 
 /** 활동 기록 (감사 로그). 사용자가 탈퇴해도 남도록 actor 정보를 복사해 둔다 */
 export interface AuditLog {
@@ -69,7 +72,7 @@ export interface AuditLog {
   actorName: string;
   action: AuditAction;
   /** 대상 종류와 표시 이름 (예: user / 홍길동) */
-  targetType: "user" | "permission" | "account" | "auth";
+  targetType: "user" | "permission" | "account" | "auth" | "publication";
   targetId: string | null;
   targetLabel: string | null;
   /** 변경 전후 값 등 */

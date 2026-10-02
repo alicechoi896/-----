@@ -18,7 +18,19 @@ export const CATEGORY_OPTIONS: FieldOption[] = [
 ].map((v) => ({ value: v, label: v }));
 
 const VIDEO_LENGTH_OPTIONS: FieldOption[] = [
-  { value: "shorts", label: "Shorts (60초 이내)" },
+  { value: "15s", label: "Shorts 15초" },
+  { value: "30s", label: "Shorts 30초" },
+  { value: "shorts", label: "Shorts 60초 이내" },
+  { value: "3m", label: "3분 내외" },
+  { value: "6m", label: "5~8분" },
+  { value: "10m", label: "10분 이상" },
+];
+
+/** NAVER 클립 영상 길이 (값은 YouTube 와 같다) */
+const CLIP_LENGTH_OPTIONS: FieldOption[] = [
+  { value: "15s", label: "15초" },
+  { value: "30s", label: "30초" },
+  { value: "shorts", label: "60초 이내" },
   { value: "3m", label: "3분 내외" },
   { value: "6m", label: "5~8분" },
   { value: "10m", label: "10분 이상" },
@@ -92,11 +104,11 @@ const F = {
     required: true,
     span,
   }),
-  videoLength: (): FieldDef => ({
+  videoLength: (options: FieldOption[] = VIDEO_LENGTH_OPTIONS): FieldDef => ({
     name: "length",
     label: "영상 길이",
     type: "segmented",
-    options: VIDEO_LENGTH_OPTIONS,
+    options,
     defaultValue: "shorts",
   }),
 };
@@ -165,6 +177,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.naverTrend(),
       { name: "style", label: "콘텐츠 스타일", type: "select", options: CLIP_STYLE_OPTIONS, defaultValue: "빠른 요약형", span: 1 },
       F.keywords(),
+      F.videoLength(CLIP_LENGTH_OPTIONS),
     ],
     outputs: [
       O.titles(),
@@ -183,7 +196,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     submitLabel: "클립 원고 생성하기",
     trendField: "trendId",
     headlineKey: "titles",
-    fields: [F.category(), F.naverTrend("현재 트렌드"), F.keywords("키워드")],
+    fields: [F.category(), F.naverTrend("현재 트렌드"), F.keywords("키워드"), F.videoLength(CLIP_LENGTH_OPTIONS)],
     outputs: [O.topics(), O.titles(), O.hooks(), O.script("클립 대본"), O.ctas(), O.description(), O.keywords()],
   },
 

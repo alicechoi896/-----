@@ -1,4 +1,4 @@
-import { Brain, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
+import { Brain, CalendarCheck, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -84,6 +84,14 @@ export const STANDALONE_PAGES: StandalonePageDef[] = [
     description: "제품, 스타일, 히스토리, 피드백, 성과 데이터를 관리합니다. 생성할 때마다 이 데이터가 Context로 쓰입니다.",
     href: "/ai-learning",
     icon: Brain,
+    defaultTiers: ["silver", "gold", "vip"],
+  },
+  {
+    id: "uploads",
+    title: "업로드 관리",
+    description: "언제, 어느 채널에, 어떤 제품의 콘텐츠를 올렸는지 기록하고 월별 캘린더로 팀 전체 업로드 현황을 봅니다.",
+    href: "/uploads",
+    icon: CalendarCheck,
     defaultTiers: ["silver", "gold", "vip"],
   },
 ];

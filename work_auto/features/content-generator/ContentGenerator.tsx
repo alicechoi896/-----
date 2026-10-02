@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState, ErrorState, LoadingState, Notice } from "@/components/ui/States";
 import { ResultPanel } from "@/components/shared/ResultPanel";
+import { UploadStatusBadge, useUploadStatus } from "@/components/shared/UploadStatusBadge";
 import { cn, formatRelative } from "@/lib/utils";
 import { DynamicField, type FormValues } from "./DynamicField";
 import { PhotoField, type PhotoItem } from "./PhotoField";
@@ -32,6 +33,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
   // 이 결과를 만들 때 쓴 사진 (생성 후 사진을 바꿔도 결과 미리보기는 그대로)
   const [resultPhotos, setResultPhotos] = useState<PhotoItem[]>([]);
   const history = useAsync(() => api.contents.list({ featureId }), [featureId]);
+  const uploads = useUploadStatus((history.data ?? []).slice(0, 6).map((c) => c.id));
 
   const missing = config.fields.filter((f) => f.required && !values[f.name]?.trim());
   const showHonesty = Boolean(config.experienceField);
@@ -167,7 +169,10 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
                       {c.isExemplar && " · ★ 좋은 결과"}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs text-fg-subtle">{formatRelative(c.createdAt)}</span>
+                  <span className="flex shrink-0 items-center gap-2 text-xs text-fg-subtle">
+                    {uploads && <UploadStatusBadge state={uploads[c.id]} />}
+                    {formatRelative(c.createdAt)}
+                  </span>
                 </button>
               </li>
             ))}

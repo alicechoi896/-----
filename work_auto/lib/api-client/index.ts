@@ -3,6 +3,9 @@ import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
   ApiConnectionPublic,
+  ContentPublicationInput,
+  ContentPublicationView,
+  ContentUploadState,
   ChannelId,
   ContentProfile,
   ContentProfileInput,
@@ -163,6 +166,18 @@ export const api = {
       request<GeneratedContent>("/api/contents/generate", { method: "POST", body: json(req) }),
     setExemplar: (id: string, isExemplar: boolean) =>
       request<GeneratedContent>(`/api/contents/${id}`, { method: "PATCH", body: json({ isExemplar }) }),
+  },
+
+  /** 업로드 관리 (팀 공용 캘린더) */
+  publications: {
+    list: (from: string, to: string) => request<ContentPublicationView[]>(`/api/publications${qs({ from, to })}`),
+    create: (input: Partial<ContentPublicationInput>) => request<ContentPublicationView>("/api/publications", { method: "POST", body: json(input) }),
+    update: (id: string, input: Partial<ContentPublicationInput>) =>
+      request<ContentPublicationView>(`/api/publications/${id}`, { method: "PUT", body: json(input) }),
+    remove: (id: string) => request<{ id: string }>(`/api/publications/${id}`, { method: "DELETE" }),
+    /** 생성 콘텐츠별 업로드 상태 (없으면 미업로드) */
+    status: (ids: string[]) => request<Record<string, ContentUploadState>>(`/api/publications/status${qs({ ids: ids.join(",") })}`),
+    assignees: () => request<{ id: string; name: string }[]>("/api/publications/assignees"),
   },
 
   feedback: {

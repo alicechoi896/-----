@@ -357,6 +357,32 @@ create table if not exists public.saved_filters (
   updated_at  timestamptz not null default now()
 );
 
+-- v0.9.16: 콘텐츠 업로드 기록 (생성과 업로드를 나눈다: 콘텐츠 1개 → 여러 플랫폼·여러 날짜 업로드). docs/UPLOADS.md
+-- 팀 공용: 승인된 직원은 모두 조회, 수정·삭제는 등록자·담당자·관리자. platform 은 앱의 목록으로 관리(제한 없음 → 새 플랫폼 추가 쉬움)
+create table if not exists public.content_publications (
+  id             text primary key,
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  content_id     text references public.generated_contents (id) on delete set null,
+  product_id     text references public.products (id) on delete set null,
+  platform       text not null,
+  account_name   text not null default '',
+  title          text not null,
+  content_type   text not null default '',
+  product_name   text not null default '',
+  status         text not null default 'draft' check (status in ('draft', 'scheduled', 'published', 'failed')),
+  scheduled_at   timestamptz,
+  published_at   timestamptz,
+  platform_url   text,
+  assignee_id    uuid references public.profiles (id) on delete set null,
+  assignee_name  text not null default '',
+  note           text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists idx_publications_published on public.content_publications (published_at desc);
+create index if not exists idx_publications_scheduled on public.content_publications (scheduled_at desc);
+create index if not exists idx_publications_content on public.content_publications (content_id);
+
 -- 찜한 트렌드 영상 (영상 정보 텍스트만 저장, 썸네일은 YouTube 주소만)
 create table if not exists public.saved_trends (
   id             text primary key,
@@ -464,6 +490,22 @@ begin
     );
   end loop;
 end $$;
+
+-- content_publications (v0.9.16): 팀 공용 업로드 캘린더
+alter table public.content_publications enable row level security;
+drop policy if exists "publications_select_team" on public.content_publications;
+create policy "publications_select_team" on public.content_publications for select to authenticated
+  using ((select public.is_active()));
+drop policy if exists "publications_insert_own" on public.content_publications;
+create policy "publications_insert_own" on public.content_publications for insert to authenticated
+  with check (user_id = (select auth.uid()) and (select public.is_active()));
+drop policy if exists "publications_update" on public.content_publications;
+create policy "publications_update" on public.content_publications for update to authenticated
+  using ((select public.is_active()) and (user_id = (select auth.uid()) or assignee_id = (select auth.uid()) or (select public.is_admin())))
+  with check ((select public.is_active()) and (user_id = (select auth.uid()) or assignee_id = (select auth.uid()) or (select public.is_admin())));
+drop policy if exists "publications_delete" on public.content_publications;
+create policy "publications_delete" on public.content_publications for delete to authenticated
+  using ((select public.is_active()) and (user_id = (select auth.uid()) or (select public.is_admin())));
 
 -- 통계 갱신: 쿼리 계획이 새 인덱스를 바로 활용하도록
 analyze public.profiles, public.role_permissions, public.audit_logs, public.products, public.generated_contents,

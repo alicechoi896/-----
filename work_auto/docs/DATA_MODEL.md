@@ -286,6 +286,23 @@ UserStyle 에 `profileId` (선택, `on delete set null`) 를 추가했다. 이 �
 | analysis (jsonb) | AI 분석 결과 { reasons, titleSuggestions, keywords } — 찜한 영상을 분석하면 함께 저장 |
 | createdAt | |
 
+### ContentPublication (content_publications, v0.9.16)
+
+**왜 필요한가**: 콘텐츠 생성과 실제 업로드를 나눈다. 콘텐츠 1개 → 여러 플랫폼·여러 날짜 업로드, 예약, URL, 담당자, 직접 등록. 팀 공용 (승인된 직원 모두 조회). 자세한 내용은 [UPLOADS.md](./UPLOADS.md).
+
+| 필드 | 설명 |
+|------|------|
+| id, userId | userId = 등록한 사람 |
+| contentId / productId | 생성 콘텐츠·제품 연결 (선택, 지우면 연결만 풀림) |
+| platform, accountName | 플랫폼(목록은 앱에서 관리, DB 제한 없음), 채널·계정 |
+| title, contentType, productName | 제목·원고 유형·제품명 (복사본: 남의 콘텐츠·제품은 RLS 로 못 읽어서) |
+| status | draft / scheduled / published / failed |
+| scheduledAt, publishedAt | 예약일, 실제 업로드일 |
+| platformUrl, assigneeId, assigneeName, note | URL, 담당자, 메모 |
+| createdAt / updatedAt | |
+
+생성 콘텐츠의 업로드 상태(미업로드·예약·업로드 완료)는 이 표에서 계산한다 (generated_contents 에 저장하지 않음).
+
 ## 4. V2 테이블 설계 (Postgres)
 
 ```sql

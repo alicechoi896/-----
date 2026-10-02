@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BookmarkPlus, Brain, ThumbsDown, ThumbsUp } from "lucide-react";
+import Link from "next/link";
+import { BookmarkPlus, Brain, CalendarPlus, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -14,6 +15,7 @@ import { cardClass } from "@/components/ui/SectionCard";
 import type { ProcessedPhoto } from "@/lib/photo-process";
 import { cn } from "@/lib/utils";
 import { BodyWithPhotos } from "./BodyWithPhotos";
+import { UploadStatusBadge, useUploadStatus } from "./UploadStatusBadge";
 
 /**
  * 생성 결과 패널 — 모든 생성형 기능이 같이 쓴다.
@@ -40,6 +42,9 @@ export function ResultPanel({
 }) {
   const allText = outputs.map((o) => `■ ${o.label}\n${toText(content.output[o.key])}`).join("\n\n");
 
+  // 업로드 상태 (업로드 관리 기록에서 계산)
+  const uploads = useUploadStatus([content.id]);
+
   return (
     <div className="space-y-4">
       <div className={cn(cardClass, "flex flex-wrap items-center justify-between gap-3 px-5 py-3.5")}>
@@ -52,8 +57,17 @@ export function ResultPanel({
           <span>
             {content.provider} / {content.model}
           </span>
+          {uploads && <UploadStatusBadge state={uploads[content.id]} />}
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/uploads?contentId=${content.id}`}
+            className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-3 text-[13px] text-fg-muted hover:border-brand-line hover:text-brand"
+            title="이 콘텐츠를 실제로 올렸다면 업로드 관리에 기록합니다"
+          >
+            <CalendarPlus className="size-3.5" />
+            업로드 등록
+          </Link>
           <CopyButton value={allText} label="전체 복사" />
           <SaveButton
             size="sm"
