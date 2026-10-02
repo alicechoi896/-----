@@ -18,8 +18,13 @@ export interface AuthFormState {
 
 const PASSWORD_MIN_LENGTH = 8;
 
-/** Supabase 오류 메시지 → 사용자 안내 문구 */
+/** Supabase 오류 메시지 → 사용자 안내 문구. 모르는 오류는 서버 로그에 원문을 남긴다 (비밀번호는 남기지 않음) */
 function toKorean(message: string): string {
+  if (/email logins are disabled|email_provider_disabled/i.test(message)) {
+    return "이메일 로그인이 꺼져 있습니다. Supabase → Authentication → Sign In / Providers → Email 에서 Enable Email provider 를 켜 주세요.";
+  }
+  if (/signups not allowed|signup.*disabled/i.test(message)) return "현재 회원가입이 막혀 있습니다. 관리자에게 문의해 주세요.";
+  if (/captcha/i.test(message)) return "보안 확인(캡차) 설정 때문에 처리할 수 없습니다. Supabase 의 Attack Protection 설정을 확인해 주세요.";
   if (/invalid login credentials/i.test(message)) return "이메일 또는 비밀번호가 올바르지 않습니다.";
   if (/email not confirmed/i.test(message)) return "이메일 인증이 완료되지 않았습니다. 받은 메일함의 인증 링크를 눌러 주세요.";
   if (/already registered|already exists/i.test(message)) return "이미 가입된 이메일입니다. 로그인해 주세요.";
@@ -27,7 +32,8 @@ function toKorean(message: string): string {
   if (/same.*password|different from the old/i.test(message)) return "이전과 다른 비밀번호를 입력해 주세요.";
   if (/rate limit|too many/i.test(message)) return "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.";
   if (/invalid email|unable to validate email/i.test(message)) return "올바른 이메일 주소를 입력해 주세요.";
-  return "처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+  console.error("[auth] unhandled supabase auth error:", message);
+  return `처리 중 문제가 발생했습니다. (${message})`;
 }
 
 /** 로그인 후 돌아갈 경로. 외부 주소로 보내는 것(오픈 리다이렉트)을 막는다 */
