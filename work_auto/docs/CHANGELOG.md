@@ -2,6 +2,13 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.10] - 2026-10-03: 나의 스타일 CSV 다운로드
+
+### 추가
+- 스타일 카드 ⬇ 버튼과 수정 화면 [CSV 다운로드]: Hook·CTA·제목 패턴·규칙·자주 쓰는 표현·금지 표현을 type,text CSV 로 내려받기 (다시 올리면 그대로 가져온다)
+- 미리보기 창 [추천 예시 CSV 받기] (300개)
+- CSV 수식 주입 방지: = + - @ 로 시작하는 값은 ' 를 붙여 내보내고, 올릴 때 뗀다
+
 ## [0.9.9] - 2026-10-03: 나의 스타일 강화 (제목 패턴 · 파일 일괄 추가 · Style Context Builder)
 
 자세한 내용은 docs/STYLE_CONTEXT.md

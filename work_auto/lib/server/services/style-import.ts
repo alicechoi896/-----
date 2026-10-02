@@ -143,7 +143,8 @@ export async function previewStyleImport(file: File, target: string | null): Pro
   };
 
   const add = (kind: StyleImportKind, raw: string, line: number) => {
-    const value = cleanStyleText(raw);
+    // CSV 다운로드가 수식 주입 방지로 붙인 ' 를 뗀다 ('=..., '+..., '-..., '@...)
+    const value = cleanStyleText(raw).replace(/^'(?=[=+\-@])/, "");
     if (!value) return;
     if (value.length > STYLE_IMPORT_MAX_LEN) return fail(line, `${STYLE_IMPORT_MAX_LEN}자를 넘는 항목 (${value.length}자)`);
     if (found >= STYLE_IMPORT_MAX_ITEMS) {

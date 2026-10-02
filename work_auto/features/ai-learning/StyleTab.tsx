@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Download, FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
 import type { ChannelId, UserStyle, UserStyleInput } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { CHANNELS } from "@/lib/registry";
@@ -24,6 +24,7 @@ import {
   cardClass,
 } from "@/components/ui";
 import { STYLE_LIMITS } from "@/lib/style-limits";
+import { countStyleItems, downloadCsv, styleCsvFileName, styleToCsv } from "@/lib/style-csv";
 import { cn } from "@/lib/utils";
 import { StyleImportDialog, type StyleImportResult, type StyleLists } from "./StyleImportDialog";
 
@@ -145,6 +146,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
                   </div>
                 </div>
                 <div className="flex shrink-0">
+                  <IconButton icon={Download} label="CSV 다운로드" size="sm" onClick={() => downloadCsv(styleToCsv(s), styleCsvFileName(s.name))} />
                   <IconButton icon={Pencil} label="수정" size="sm" onClick={() => setEditing({ mode: "edit", style: s })} />
                   <IconButton icon={Trash2} label="삭제" size="sm" onClick={() => remove(s)} className="hover:text-danger" />
                 </div>
@@ -312,6 +314,15 @@ function StyleForm({
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" icon={FileUp} onClick={() => setImportOpen(true)}>
             파일로 일괄 추가
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Download}
+            disabled={countStyleItems(toLists(form)) === 0}
+            onClick={() => downloadCsv(styleToCsv(toLists(form)), styleCsvFileName(form.name))}
+          >
+            CSV 다운로드
           </Button>
           {editing.mode === "create" && (
             <Button size="sm" variant={aiOpen ? "subtle" : "secondary"} icon={Sparkles} onClick={() => setAiOpen((v) => !v)}>
