@@ -57,7 +57,8 @@
 | `/tools/product-learning` | 제품 상세페이지 학습 | URL/이미지/텍스트 → 분석 → 저장 | ProductLearningWorkspace | Dynamic |
 | `/tools/product-library` | 제품 라이브러리 | 카드/목록, 검색, 삭제, 콘텐츠 만들기 | ProductLibrary | Dynamic |
 | `/tools/product-library/[productId]` | 제품 상세 | 전체 분석·원본·생성 이력, `?mode=edit` 수정 | ProductDetailView | Dynamic |
-| `/tools/video-import` | 영상 URL 가져오기 | 참고 영상 저장 | VideoImport | Dynamic |
+| `/tools/video-import` | 영상 URL 가져오기 | URL 여러 개 저장 + 소리 없는 영상 다운로드 명령 | VideoImport | Dynamic |
+| POST | `/api/videos/batch` { urls[], note? } | 여러 영상 한 번에 가져오기 (최대 20개, URL 별 결과) | videoService.importMany |
 | `/tools/video-mute` | 영상 음성 제거 | 내 영상에서 소리만 빼기 (브라우저 처리) | VideoMuteTool | Dynamic |
 | `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |
 | `/settings` | 설정 | 설정 카드 (API 연결 센터, 일반 설정 준비 중) | ChannelHub | Dynamic |

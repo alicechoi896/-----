@@ -214,6 +214,12 @@ export const api = {
   videos: {
     list: () => request<ReferenceVideo[]>("/api/videos"),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),
+    /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
+    importMany: (urls: string[], note?: string) =>
+      request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {
+        method: "POST",
+        body: json({ urls, note }),
+      }),
     remove: (id: string) => request<{ id: string }>(`/api/videos/${id}`, { method: "DELETE" }),
   },
 
