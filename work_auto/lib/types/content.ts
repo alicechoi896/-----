@@ -46,6 +46,8 @@ export interface StyleSampleSnapshot {
   bannedCount: number;
   /** 저장된 전체 개수 */
   totals: { examplePhrases: number; hooks: number; ctas: number; titlePatterns: number };
+  /** 원하는 유형 이름 (v0.9.23~) */
+  preferredTypes?: { hooks?: string[]; ctas?: string[]; titlePatterns?: string[] };
 }
 
 /** 같은 제품이나 주제로 만든 생성물을 묶는 단위 (V2부터 UI에서 사용) */

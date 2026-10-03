@@ -27,7 +27,7 @@ export function Tabs<V extends string>({
   className?: string;
 }) {
   return (
-    <div role="tablist" className={cn("flex gap-1 border-b border-line", className)}>
+    <div role="tablist" className={cn("flex gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-line)] [scrollbar-width:none]", className)}>
       {items.map((item) => {
         const active = item.value === value;
         const Icon = item.icon;
@@ -40,7 +40,7 @@ export function Tabs<V extends string>({
             disabled={item.disabled}
             onClick={() => onChange(item.value)}
             className={cn(
-              "relative -mb-px inline-flex h-10 items-center gap-1.5 border-b-2 px-3 text-sm font-medium transition-colors disabled:opacity-40",
+              "relative inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors disabled:opacity-40",
               active ? "border-brand text-fg" : "border-transparent text-fg-subtle hover:text-fg-muted",
             )}
           >

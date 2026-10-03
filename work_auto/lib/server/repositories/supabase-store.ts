@@ -44,7 +44,7 @@ function fail(table: string, action: string, error: { message: string; code?: st
  * 컬럼이 없으면(PGRST204) 값이 비어 있을 때만 빼고 다시 저장한다. 값이 있으면 조용히 버리지 않고 안내한다.
  */
 const PENDING_COLUMNS: Record<string, string[]> = {
-  user_styles: ["title_patterns"], // v0.9.9
+  user_styles: ["title_patterns", "preferred_types"], // v0.9.9, v0.9.23
 };
 
 async function writeWithPendingColumns<R>(
@@ -56,7 +56,8 @@ async function writeWithPendingColumns<R>(
   const missing = first.error?.code === "PGRST204" ? (PENDING_COLUMNS[table] ?? []).find((c) => first.error!.message.includes(`'${c}'`)) : undefined;
   if (!missing) return first;
   const value = row[missing];
-  if (Array.isArray(value) ? value.length > 0 : value != null) {
+  const empty = value == null || (Array.isArray(value) ? value.length === 0 : typeof value === "object" && Object.keys(value).length === 0);
+  if (!empty) {
     throw new AppError("SCHEMA_OUTDATED", "DB 업데이트가 필요합니다. Supabase SQL Editor 에서 supabase/schema.sql 을 다시 실행한 뒤 저장해 주세요.", 409);
   }
   console.warn(`[supabase] ${table}.${missing} 컬럼이 아직 없습니다 (schema.sql 재실행 필요). 빈 값이라 빼고 저장합니다.`);

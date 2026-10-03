@@ -66,6 +66,20 @@
 
 패턴 작성 팁: 바뀌는 자리는 `[제품]` `[숫자]` `[키워드]` `[대상]` `[행동]` 처럼 대괄호로 적는다.
 
+## 5-1. 원하는 유형 (v0.9.23)
+
+Hook·CTA·제목 패턴 칸마다 유형 10개 중 여러 개를 고른다 (`lib/style-types.ts`, 저장: `user_styles.preferred_types`). 직접 입력·[+ 추가]는 그대로.
+
+| 항목 | 유형 |
+|---|---|
+| Hook | 충격형 · 반전형 · 이득형 · 질문형 · 공감형 · 숫자형 · 경고형 · 비교형 · 궁금증형 · 후기형 |
+| CTA | 저장 유도 · 링크 확인 · 댓글 참여 · 구독·팔로우 · 한정·마감 · 부담 없는 제안 · 혜택 강조 · 다음 편 예고 · 공유 유도 · 질문형 |
+| 제목 | 숫자형 · 질문형 · 비교형 · 후기형 · 방법형 · 경고형 · 추천형 · 대상 지정형 · 결론형 · 반전형 |
+
+- **생성할 때**: `[스타일 > 원하는 유형]` 블록 — 그 항목 후보의 **약 70%**(`PREFERRED_TYPE_RATIO`)만 고른 유형으로, 고른 유형끼리 고루. **나머지 약 30%는 AI 가 다른 유형 중 주제에 맞는 것을 섞어 추천** (전부 같은 유형으로 만들지 않는다). 블로그는 Hook 후보가 없어 도입 문단을 고른 Hook 유형 중 하나로 시작
+- **[고른 유형으로 예시 10개 만들기]**: `POST /api/styles/type-examples` (AI 1회, 프롬프트 `style.type-examples`) → 고른 유형을 고루 나눈 일반화 예시 10개를 목록 위에 채운다 (지금 목록과 중복 제외, 저장은 [저장])
+- 유형 id 는 저장값이라 바꾸지 않는다. 모르는 id 는 저장·생성 때 버린다 (`cleanPreferredTypes`)
+
 ## 6. 생성 기록 (generated_contents.context)
 
 새 테이블 없이 기존 `context` JSON 에 `styleSamples` 를 추가해 **이번 생성에 실제로 보낸 표본**을 남긴다.
@@ -130,6 +144,8 @@ Claude 전용·OpenAI 전용 코드가 없다. API 연결 센터와 `preferred_a
 
 ```sql
 alter table public.user_styles add column if not exists title_patterns text[] not null default '{}';
+-- v0.9.23
+alter table public.user_styles add column if not exists preferred_types jsonb not null default '{}'::jsonb;
 ```
 
 - 추가만 한다. 기존 행은 `'{}'`, 기존 컬럼·데이터·RLS(`own_rows`) 그대로 (PGlite 로 기존 데이터 위 실행 검증).

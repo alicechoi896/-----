@@ -112,6 +112,16 @@ export class MockAIProvider implements AIProvider {
       return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
     }
 
+    if (request.task === "style-type-examples") {
+      // 데모: 고른 유형의 예시를 번갈아 (부족하면 번호를 붙여 다르게)
+      const types = (v.types as { label: string; examples: string[] }[]) ?? [];
+      const pool = types.flatMap((t) => t.examples.map((e, i) => ({ e, i })));
+      pool.sort((a, b) => a.i - b.i);
+      const stamp = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+      const items = Array.from({ length: 10 }, (_, n) => (pool.length ? `${pool[n % pool.length].e}${n >= pool.length ? ` (${Math.floor(n / pool.length) + 1})` : ""} · 데모 ${stamp}` : `예시 ${n + 1}`));
+      return { data: { items } as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task === "style-extract") {
       return { data: mockStyleExtract(String(v.text ?? "")) as unknown as T, provider: this.id, model: this.model };
     }

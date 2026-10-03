@@ -1,5 +1,6 @@
 import type { ChannelId, ID, ISODate } from "./common";
 import type { GeneratedValue } from "./content";
+import type { PreferredTypes } from "@/lib/style-types";
 
 /** Style Memory: 사용자가 선호하는 글/영상 스타일 */
 export interface UserStyle {
@@ -21,6 +22,8 @@ export interface UserStyle {
   ctas: string[];
   /** 제목 패턴: 최종 제목이 아니라 설득 구조 참고용. AI 가 매번 새 제목으로 재해석한다 (docs/STYLE_CONTEXT.md) */
   titlePatterns: string[];
+  /** 원하는 유형 (Hook·CTA·제목, 여러 개). 생성 후보의 약 70% 를 이 유형으로 (lib/style-types.ts, v0.9.23) */
+  preferredTypes?: PreferredTypes;
   /** 기본 스타일: 적용 채널에서 스타일을 고르지 않고 생성하면 자동 적용 (채널마다 1개) */
   isDefault: boolean;
   createdAt: ISODate;

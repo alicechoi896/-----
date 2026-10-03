@@ -344,6 +344,8 @@ alter table public.user_styles add column if not exists profile_id text referenc
 
 -- v0.9.9: 제목 패턴 (설득 구조 참고용, AI 가 새 제목으로 재해석). 추가만 한다 — 기존 행은 빈 배열 '{}', 기존 데이터·RLS(own_rows) 그대로
 alter table public.user_styles add column if not exists title_patterns text[] not null default '{}';
+-- v0.9.23: 원하는 유형 (Hook·CTA·제목, 여러 개). { "hooks": ["shock", …], "ctas": […], "titlePatterns": […] } — lib/style-types.ts
+alter table public.user_styles add column if not exists preferred_types jsonb not null default '{}'::jsonb;
 
 -- 저장한 검색 조건 (YouTube 트렌드 필터 등). params 는 조건 JSON
 create table if not exists public.saved_filters (

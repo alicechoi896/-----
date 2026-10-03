@@ -4,6 +4,7 @@ import { NAVER_LIST_COUNTS, buildTrendIdeas, relatedFirst, seasonOf, seasonalCan
 import { dayKey, publicationDate, platformForChannel } from "@/lib/publish-platforms";
 import { escapeCsvCell, styleToCsv } from "@/lib/style-csv";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
+import { STYLE_TYPES, STYLE_TYPE_KINDS, cleanPreferredTypes } from "@/lib/style-types";
 import type { UserStyle } from "@/lib/types";
 
 const range = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p} ${i + 1}`);
@@ -42,6 +43,34 @@ describe("나의 스타일 → 생성 지시 (Style Context)", () => {
     expect(v.ctas).toHaveLength(3);
     expect(v.titlePatterns).toHaveLength(10);
     expect(styleSnapshot(v).totals.hooks).toBe(12);
+  });
+
+  it("원하는 유형: 후보의 약 70%만 그 유형으로, 나머지는 다른 유형도 (모르는 유형은 버린다)", () => {
+    const typed = { ...style, preferredTypes: { hooks: ["shock", "twist", "없는유형"], titlePatterns: ["number"] } };
+    const v = buildStyleContext({ style: typed, channelId: "youtube" });
+    expect(v.preferredTypes.hooks?.map((t) => t.label)).toEqual(["충격형", "반전형"]);
+    expect(v.preferredTypes.ctas).toBeUndefined();
+    const text = renderStyleBlocks(v).map((b) => b.title + b.lines.join(" ")).join(" ");
+    expect(text).toContain("Hook 후보: 약 70%");
+    expect(text).toContain("충격형(");
+    expect(text).toContain("제목 후보: 약 70%");
+    expect(text).toContain("나머지 약 30%");
+    expect(text).not.toContain("CTA 후보: 약 70%");
+    expect(styleSnapshot(v).preferredTypes).toEqual({ hooks: ["충격형", "반전형"], titlePatterns: ["숫자형"] });
+    // 블로그는 Hook 후보가 없어 도입 문단에 반영
+    const blog = renderStyleBlocks(buildStyleContext({ style: typed, channelId: "naver-blog" })).map((b) => b.lines.join(" ")).join(" ");
+    expect(blog).toContain("도입 문단");
+    // 고르지 않으면 블록 없음
+    expect(renderStyleBlocks(buildStyleContext({ style, channelId: "youtube" })).some((b) => b.title.includes("원하는 유형"))).toBe(false);
+  });
+
+  it("유형 목록: 항목마다 10개, id 중복 없음, 정리 함수", () => {
+    for (const kind of STYLE_TYPE_KINDS) {
+      expect(STYLE_TYPES[kind]).toHaveLength(10);
+      expect(new Set(STYLE_TYPES[kind].map((t) => t.id)).size).toBe(10);
+    }
+    expect(cleanPreferredTypes({ hooks: ["shock", "shock", "x"], ctas: "save", other: ["a"] })).toEqual({ hooks: ["shock"] });
+    expect(cleanPreferredTypes(null)).toEqual({});
   });
 
   it("블로그는 Hook·CTA·제목을 블로그용으로 재해석하라고 지시한다", () => {

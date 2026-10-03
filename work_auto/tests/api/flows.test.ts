@@ -137,6 +137,21 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(r.data.items.title_pattern).toHaveLength(100);
   });
 
+  it("나의 스타일 원하는 유형: 저장 → 예시 만들기 → 생성에 반영", async ({ skip }) => {
+    if (!reachable) skip();
+    const created = await post("/api/styles", { name: "유형 테스트", channelIds: [], hooks: [], ctas: [], titlePatterns: [], preferredTypes: { hooks: ["shock", "twist", "모름"], ctas: ["save"] } });
+    const sty = created.data as { id: string; preferredTypes: Record<string, string[]> };
+    expect(sty.preferredTypes).toEqual({ hooks: ["shock", "twist"], ctas: ["save"] });
+
+    const ex = await post("/api/styles/type-examples", { kind: "hooks", types: ["shock", "twist"], existing: [] });
+    expect((ex.data as { items: string[] }).items).toHaveLength(10);
+    expect((await post("/api/styles/type-examples", { kind: "hooks", types: [] })).ok).toBe(false);
+
+    const gen = (await post("/api/contents/generate", { featureId: "yt-info-video", input: { topic: "유형 테스트", category: "생활", styleId: sty.id } })).data as Content;
+    expect((gen.context.styleSamples as { preferredTypes?: Record<string, string[]> }).preferredTypes).toEqual({ hooks: ["충격형", "반전형"], ctas: ["저장 유도"] });
+    await j(`/api/styles/${sty.id}`, { method: "DELETE" });
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

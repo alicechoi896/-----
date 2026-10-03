@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Download, FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { Download, FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, Wand2, X } from "lucide-react";
 import type { ChannelId, UserStyle, UserStyleInput } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { CHANNELS } from "@/lib/registry";
@@ -23,7 +23,8 @@ import {
   Textarea,
   cardClass,
 } from "@/components/ui";
-import { STYLE_LIMITS } from "@/lib/style-limits";
+import { STYLE_LIMITS, styleItemKey } from "@/lib/style-limits";
+import { PREFERRED_TYPE_RATIO, STYLE_TYPES, findStyleType, type PreferredTypes, type StyleTypeKind } from "@/lib/style-types";
 import { countStyleItems, downloadCsv, styleCsvFileName, styleToCsv } from "@/lib/style-csv";
 import { cn } from "@/lib/utils";
 import { StyleImportDialog, type StyleImportResult, type StyleLists } from "./StyleImportDialog";
@@ -49,6 +50,7 @@ const EMPTY: UserStyleInput = {
   hooks: [],
   ctas: [],
   titlePatterns: [],
+  preferredTypes: {},
   isDefault: false,
 };
 
@@ -162,6 +164,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
               <PhraseSummary label="Hook (초반 3초)" items={s.hooks} />
               <PhraseSummary label="CTA (마지막 행동)" items={s.ctas} />
               <PhraseSummary label="제목 패턴" items={s.titlePatterns ?? []} />
+              <PreferredTypesSummary types={s.preferredTypes} />
               {s.bannedPhrases.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {s.bannedPhrases.slice(0, 12).map((b) => (
@@ -183,6 +186,20 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
         </div>
       )}
     </div>
+  );
+}
+
+/** 카드: 원하는 유형 요약 */
+function PreferredTypesSummary({ types }: { types?: PreferredTypes }) {
+  const rows = (["hooks", "ctas", "titlePatterns"] as StyleTypeKind[])
+    .map((k) => ({ k, labels: (types?.[k] ?? []).map((id) => findStyleType(k, id)?.label).filter(Boolean) }))
+    .filter((r) => r.labels.length);
+  if (!rows.length) return null;
+  const name: Record<StyleTypeKind, string> = { hooks: "Hook", ctas: "CTA", titlePatterns: "제목" };
+  return (
+    <p className="text-xs text-fg-subtle">
+      원하는 유형 · {rows.map((r) => `${name[r.k]}: ${r.labels.join(", ")}`).join(" / ")}
+    </p>
   );
 }
 
@@ -212,6 +229,7 @@ function toForm(s: UserStyleInput) {
     hooks: s.hooks,
     ctas: s.ctas,
     titlePatterns: s.titlePatterns ?? [],
+    preferredTypes: s.preferredTypes ?? {},
     profileId: s.profileId ?? "",
     isDefault: s.isDefault,
   };
@@ -233,6 +251,7 @@ function toInput(form: StyleFormState): UserStyleInput {
     hooks: items(form.hooks),
     ctas: items(form.ctas),
     titlePatterns: items(form.titlePatterns),
+    preferredTypes: form.preferredTypes,
     profileId: form.profileId || null,
     isDefault: form.isDefault,
   };
@@ -265,6 +284,31 @@ function StyleForm({
   const [aiOpen, setAiOpen] = useState(editing.mode === "create" && Boolean(editing.reference));
   const profiles = useAsync(() => api.profiles.list(), []);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  function toggleType(kind: StyleTypeKind, id: string) {
+    const cur = form.preferredTypes[kind] ?? [];
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    set("preferredTypes", { ...form.preferredTypes, [kind]: next });
+  }
+  /** 고른 유형으로 만든 예시를 목록 위에 더한다 (빈 줄 정리, 중복·한도 제외) */
+  function addExamples(kind: StyleTypeKind, fresh: string[]): number {
+    const cur = items(form[kind]);
+    const seen = new Set(cur.map(styleItemKey));
+    const room = Math.max(0, STYLE_LIMITS[kind].max - cur.length);
+    const add = fresh.filter((x) => !seen.has(styleItemKey(x))).slice(0, room);
+    set(kind, [...add, ...cur]);
+    return add.length;
+  }
+  const typePicker = (kind: StyleTypeKind) => (
+    <TypePicker
+      kind={kind}
+      selected={form.preferredTypes[kind] ?? []}
+      onToggle={(id) => toggleType(kind, id)}
+      tone={form.tone}
+      existing={items(form[kind])}
+      onExamples={(list) => addExamples(kind, list)}
+    />
+  );
 
   function toggleChannel(id: ChannelId) {
     set("channelIds", form.channelIds.includes(id) ? form.channelIds.filter((c) => c !== id) : [...form.channelIds, id]);
@@ -425,6 +469,7 @@ function StyleForm({
           items={form.hooks}
           max={STYLE_LIMITS.hooks.max}
           onChange={(v) => set("hooks", v)}
+          extra={typePicker("hooks")}
         />
         <PhraseListField
           label="CTA (마지막 행동 유도)"
@@ -433,6 +478,7 @@ function StyleForm({
           items={form.ctas}
           max={STYLE_LIMITS.ctas.max}
           onChange={(v) => set("ctas", v)}
+          extra={typePicker("ctas")}
         />
         <PhraseListField
           label="제목 패턴"
@@ -441,6 +487,7 @@ function StyleForm({
           items={form.titlePatterns}
           max={STYLE_LIMITS.titlePatterns.max}
           onChange={(v) => set("titlePatterns", v)}
+          extra={typePicker("titlePatterns")}
           className="md:col-span-2"
         />
         <FormField label="규칙" htmlFor="style-rules" hint="한 줄에 하나씩 · 생성할 때 항상 전부 지킵니다">
@@ -457,6 +504,78 @@ function StyleForm({
   );
 }
 
+/**
+ * 원하는 유형 (여러 개 선택). 저장하면 생성할 때 후보의 약 70% 를 이 유형으로, 나머지는 AI 가 다른 유형도 섞어 추천한다.
+ * [고른 유형으로 예시 만들기]: AI 가 예시 10개를 목록 위에 채운다 (저장은 [저장]).
+ */
+function TypePicker({
+  kind,
+  selected,
+  onToggle,
+  tone,
+  existing,
+  onExamples,
+}: {
+  kind: StyleTypeKind;
+  selected: string[];
+  onToggle: (id: string) => void;
+  tone: string;
+  existing: string[];
+  onExamples: (items: string[]) => number;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const pct = Math.round(PREFERRED_TYPE_RATIO * 100);
+
+  async function makeExamples() {
+    setLoading(true);
+    setNote(null);
+    try {
+      const { items } = await api.styles.typeExamples({ kind, types: selected, tone, existing });
+      const n = onExamples(items);
+      setNote(n ? { tone: "ok", text: `예시 ${n}개를 위에 추가했습니다. 고친 뒤 [저장]하세요.` } : { tone: "error", text: "새로 넣을 예시가 없습니다 (중복이거나 한도 초과)." });
+    } catch (e) {
+      setNote({ tone: "error", text: e instanceof Error ? e.message : "예시를 만들지 못했습니다." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mb-2 rounded-control border border-line bg-subtle/60 px-3 py-2.5">
+      <p className="text-xs text-fg-muted">
+        원하는 유형 <span className="text-fg-subtle">(여러 개 선택 · 생성할 때 후보의 약 {pct}%를 이 유형으로, 나머지는 AI 가 다른 유형도 추천)</span>
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {STYLE_TYPES[kind].map((t) => {
+          const on = selected.includes(t.id);
+          return (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={on}
+              title={`${t.hint}\n예: ${t.examples.join(" / ")}`}
+              onClick={() => onToggle(t.id)}
+              className={cn(
+                "h-7 rounded-full border px-2.5 text-xs transition-colors",
+                on ? "border-brand bg-brand-soft font-medium text-brand" : "border-line-strong bg-canvas text-fg-muted hover:border-brand-line hover:text-brand",
+              )}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" icon={Wand2} loading={loading} disabled={!selected.length} onClick={() => void makeExamples()}>
+          고른 유형으로 예시 10개 만들기
+        </Button>
+        {note && <span className={cn("text-xs", note.tone === "ok" ? "text-brand" : "text-danger")}>{note.text}</span>}
+      </div>
+    </div>
+  );
+}
+
 /** 문장 목록 입력: [+ 추가] 로 한 줄씩 늘리고, 줄마다 삭제할 수 있다 */
 /** 처음에 보여 주는 줄 수. 파일로 많이 넣으면 접어 둔다 */
 const VISIBLE_ROWS = 8;
@@ -468,6 +587,7 @@ function PhraseListField({
   items,
   max,
   onChange,
+  extra,
   className,
 }: {
   label: string;
@@ -476,6 +596,8 @@ function PhraseListField({
   items: string[];
   max: number;
   onChange: (items: string[]) => void;
+  /** 목록 위에 붙는 도구 (원하는 유형) */
+  extra?: ReactNode;
   className?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -484,6 +606,7 @@ function PhraseListField({
   return (
     <FormField label={`${label} · ${items.filter((i) => i.trim()).length}개`} hint={hint} className={className}>
       <div className="space-y-1.5">
+        {extra}
         {visible.map((value, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <span className="tabular w-5 shrink-0 text-right text-xs text-fg-subtle">{i + 1}</span>

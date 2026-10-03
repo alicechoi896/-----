@@ -67,10 +67,13 @@ describe("schema.sql", () => {
     expect((await q(`select role from public.profiles where id='${B}'`)).rows[0].role).toBe("silver");
   });
 
-  it("나의 스타일 제목 패턴 컬럼 (title_patterns, 기본 빈 배열)", async () => {
+  it("나의 스타일 제목 패턴·원하는 유형 컬럼 (기본 빈 배열·빈 객체)", async () => {
     await as(B);
-    const r = await q(`insert into public.user_styles (id, name) values ('sty1','테스트') returning title_patterns`);
+    const r = await q(`insert into public.user_styles (id, name) values ('sty1','테스트') returning title_patterns, preferred_types`);
     expect(r.rows[0].title_patterns).toEqual([]);
+    expect(r.rows[0].preferred_types).toEqual({});
+    const u = await q(`update public.user_styles set preferred_types='{"hooks":["shock"]}' where id='sty1' returning preferred_types`);
+    expect(u.rows[0].preferred_types).toEqual({ hooks: ["shock"] });
   });
 });
 

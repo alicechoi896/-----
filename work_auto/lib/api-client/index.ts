@@ -233,6 +233,9 @@ export const api = {
     /** 참고 자료(텍스트) → 스타일 초안 (AI). 원문은 저장되지 않는다 */
     extract: (text: string, channelIds: ChannelId[]) =>
       request<UserStyleInput & { provider: string }>("/api/styles/extract", { method: "POST", body: json({ text, channelIds }) }),
+    /** 원하는 유형으로 예시 문장 10개 (AI, 저장하지 않음) */
+    typeExamples: (body: { kind: string; types: string[]; tone?: string; existing?: string[] }) =>
+      request<{ items: string[]; provider: string }>("/api/styles/type-examples", { method: "POST", body: json(body) }),
     setDefault: (id: string) => request<UserStyle>(`/api/styles/${id}`, { method: "PATCH" }),
     /** .txt/.csv 파일 일괄 추가 미리보기 (저장하지 않는다). TXT 는 target 필요 */
     importPreview: (file: File, target?: StyleImportKind) => {

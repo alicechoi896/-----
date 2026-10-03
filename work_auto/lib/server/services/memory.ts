@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types";
 import { findGeneratorConfig } from "@/lib/generators/configs";
 import { STYLE_LIMITS, cleanStyleText, styleItemKey } from "@/lib/style-limits";
+import { cleanPreferredTypes } from "@/lib/style-types";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
@@ -49,6 +50,7 @@ export function normalizeStyle(row: UserStyle): UserStyle {
     hooks: rest.hooks ?? [],
     ctas: rest.ctas ?? [],
     titlePatterns: rest.titlePatterns ?? [],
+    preferredTypes: cleanPreferredTypes(rest.preferredTypes),
     profileId: rest.profileId ?? null,
   };
 }
@@ -67,6 +69,7 @@ function cleanStyleInput(input: UserStyleInput): UserStyleInput {
     hooks: strList(input.hooks, STYLE_LIMITS.hooks.max, STYLE_LIMITS.hooks.len),
     ctas: strList(input.ctas, STYLE_LIMITS.ctas.max, STYLE_LIMITS.ctas.len),
     titlePatterns: strList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max, STYLE_LIMITS.titlePatterns.len),
+    preferredTypes: cleanPreferredTypes(input.preferredTypes),
     profileId: typeof input.profileId === "string" && input.profileId ? input.profileId : null,
     isDefault: Boolean(input.isDefault),
   };

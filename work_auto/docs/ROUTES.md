@@ -121,6 +121,7 @@
 | GET/POST | `/api/profiles` | 콘텐츠 프로필 목록 / 만들기 (`{ example: true }` = 가전 콘텐츠 예시) | contentProfileService |
 | PUT/PATCH/DELETE | `/api/profiles/:id` | 수정 / 기본 프로필로 설정 / 삭제 | contentProfileService |
 | POST | `/api/styles/extract` { text, channelIds } | 참고 자료 → 스타일 초안 (AI, 원문 저장 안 함) | styleExtractor |
+| POST | `/api/styles/type-examples` { kind, types, tone?, existing? } | 원하는 유형으로 Hook·CTA·제목 패턴 예시 10개 (AI, 저장 안 함) | styleTypeExamples |
 | GET | `/api/performance` | 성과 데이터 | memoryService.listPerformance |
 | GET | `/api/memory` | Memory 항목별 개수 | memoryService.overview |
 | GET | `/api/connections` | 연결 상태 (공개 DTO) | connectionService.list |

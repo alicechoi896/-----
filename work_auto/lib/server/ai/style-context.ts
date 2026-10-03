@@ -1,5 +1,6 @@
 import "server-only";
 import type { ChannelId, StyleSampleSnapshot, UserStyle } from "@/lib/types";
+import { PREFERRED_TYPE_RATIO, STYLE_TYPE_KINDS, cleanPreferredTypes, findStyleType, type StyleTypeKind, type StyleTypeOption } from "@/lib/style-types";
 
 /**
  * ★ Style Context Builder — "나의 스타일"을 생성 1회분의 AI 지시로 바꾼다. (docs/STYLE_CONTEXT.md)
@@ -14,6 +15,7 @@ import type { ChannelId, StyleSampleSnapshot, UserStyle } from "@/lib/types";
  *  - hooks           도입부 설계 참고      → 10개 초과면 무작위 10개 (블로그는 도입 문장으로 재해석)
  *  - ctas            마무리 방식 참고      → 10개 초과면 무작위 10개 (블로그는 자연스러운 마무리로 재해석)
  *  - titlePatterns   제목 설득 구조 참고   → 10개 초과면 무작위 10개, AI 가 새 제목 후보 약 10개로 재해석
+ *  - preferredTypes  원하는 유형           → 그 항목 후보의 약 70% 를 이 유형으로, 나머지는 AI 가 다른 유형을 섞어 추천
  */
 
 /** 생성 1회에 AI 로 보내는 최대 개수. 이 값만 바꾸면 된다 */
@@ -45,6 +47,8 @@ export interface StyleContext {
   titlePatterns: string[];
   /** 저장된 전체 개수 (표본과 비교해 보여 주기용) */
   totals: { examplePhrases: number; hooks: number; ctas: number; titlePatterns: number };
+  /** 원하는 유형 (항목별, 고른 것만) */
+  preferredTypes: Partial<Record<StyleTypeKind, StyleTypeOption[]>>;
 }
 
 /** NAVER 블로그는 글, 나머지(YouTube·NAVER 클립)는 영상 */
@@ -77,6 +81,12 @@ export function buildStyleContext({
 }): StyleContext {
   const c = STYLE_SAMPLE_CONFIG;
   const titlePatterns = style.titlePatterns ?? [];
+  const chosen = cleanPreferredTypes(style.preferredTypes);
+  const preferredTypes: StyleContext["preferredTypes"] = {};
+  for (const kind of STYLE_TYPE_KINDS) {
+    const list = (chosen[kind] ?? []).map((id) => findStyleType(kind, id)).filter((t): t is StyleTypeOption => Boolean(t));
+    if (list.length) preferredTypes[kind] = list;
+  }
   return {
     styleId: style.id,
     name: style.name,
@@ -95,6 +105,7 @@ export function buildStyleContext({
       ctas: style.ctas.length,
       titlePatterns: titlePatterns.length,
     },
+    preferredTypes,
   };
 }
 
@@ -110,6 +121,7 @@ export function styleSnapshot(sc: StyleContext): StyleSampleSnapshot {
     rulesCount: sc.rules.length,
     bannedCount: sc.bannedPhrases.length,
     totals: sc.totals,
+    preferredTypes: Object.fromEntries(Object.entries(sc.preferredTypes).map(([k, list]) => [k, list.map((t) => t.label)])),
   };
 }
 
@@ -193,5 +205,36 @@ export function renderStyleBlocks(sc: StyleContext): { title: string; lines: str
       ],
     });
   }
+
+  const typeBlock = preferredTypeBlock(sc);
+  if (typeBlock) blocks.push(typeBlock);
   return blocks;
+}
+
+/** 원하는 유형: 고른 유형 위주(약 70%), 나머지는 다른 유형도 섞는다. 블로그는 Hook 후보가 없어 도입 문단에 반영 */
+function preferredTypeBlock(sc: StyleContext): { title: string; lines: string[] } | null {
+  const pct = Math.round(PREFERRED_TYPE_RATIO * 100);
+  const blog = sc.medium === "blog";
+  const describe = (list: StyleTypeOption[]) => list.map((t) => `${t.label}(${t.hint})`).join(", ");
+  const lines: string[] = [];
+  const { hooks, ctas, titlePatterns } = sc.preferredTypes;
+  if (hooks) {
+    lines.push(
+      blog
+        ? `도입 문단(첫 1~2문장): ${describe(hooks)} 중 하나의 방식으로 시작한다. 블로그에 맞게 자연스러운 문장으로 쓴다.`
+        : `Hook 후보: 약 ${pct}%(10개면 7개 안팎)는 ${describe(hooks)} 유형으로, 나머지는 다른 유형으로 만든다.`,
+    );
+  }
+  if (ctas) lines.push(`CTA 후보: 약 ${pct}%는 ${describe(ctas)} 유형으로, 나머지는 다른 유형으로 만든다.${blog ? " 블로그 마무리에 맞게 쓴다." : ""}`);
+  if (titlePatterns) lines.push(`제목 후보: 약 ${pct}%는 ${describe(titlePatterns)} 유형으로, 나머지는 다른 유형으로 만든다.`);
+  if (!lines.length) return null;
+  return {
+    title: `스타일 > 원하는 유형 (약 ${pct}%만 이 유형으로, 전부 같은 유형으로 만들지 않는다)`,
+    lines: [
+      ...lines,
+      "고른 유형이 여러 개면 한 유형에 몰리지 않게 고루 쓴다.",
+      `나머지 약 ${100 - pct}%는 고른 유형이 아닌 다른 유형 중 주제·제품에 잘 맞는 것을 AI 가 골라 추천한다 (사용자가 새 유형을 발견할 수 있게).`,
+      "유형을 맞추느라 [제품 정보]에 없는 사실이나 과장을 만들지 않는다.",
+    ],
+  };
 }
