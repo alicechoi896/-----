@@ -43,7 +43,7 @@
 | `/` | 자동화 지니 | 채널 카드 4개 + 최근 생성·제품·API 상태 요약 | ChannelCard, HomeOverview | Dynamic |
 | `/youtube` | YouTube 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
 | `/youtube/trends` | YouTube 트렌드 찾기 | 검색 조건(저장·기본) → 추천 키워드·주제 → 정렬 가능한 표 + 더 불러오기 → 상세 패널(AI 분석) | YouTubeTrendExplorer | Dynamic |
-| `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드·참고 영상으로 원고 생성 | ContentGenerator | Dynamic |
+| `/youtube/product-video` | 제품 홍보 영상 만들기 | 제품·트렌드로 원고 생성 | ContentGenerator | Dynamic |
 | `/youtube/info-video` | 정보성 영상 만들기 | 주제·트렌드로 원고 생성 | ContentGenerator | Dynamic |
 | `/naver-clip` | NAVER 클립 자동화 | 기능 카드 3개 | ChannelHub | Dynamic |
 | `/naver-clip/trends` | 네이버 트렌드 소재 찾기 | 급상승 주제·키워드, 시즌·관련 키워드 | NaverTrendExplorer `scope="clip"` | Dynamic |

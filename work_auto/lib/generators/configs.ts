@@ -140,8 +140,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     headlineKey: "titles",
     fields: [
       F.product(),
-      F.youtubeTrend(),
-      { name: "referenceVideoId", label: "참고 영상", type: "remote-select", source: "videos", placeholder: "영상 URL 가져오기에서 저장한 영상", span: 1 },
+      { ...F.youtubeTrend(), span: 2 },
       F.keywords(),
       F.videoLength(),
       { name: "style", label: "콘텐츠 스타일", type: "segmented", options: VIDEO_STYLE_OPTIONS, defaultValue: "리뷰형" },
