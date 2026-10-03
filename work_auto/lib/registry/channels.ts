@@ -1,4 +1,4 @@
-import { Brain, CalendarCheck, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
+import { BookOpen, Brain, CalendarCheck, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -92,6 +92,14 @@ export const STANDALONE_PAGES: StandalonePageDef[] = [
     description: "언제, 어느 채널에, 어떤 제품의 콘텐츠를 올렸는지 기록하고 월별 캘린더로 팀 전체 업로드 현황을 봅니다.",
     href: "/uploads",
     icon: CalendarCheck,
+    defaultTiers: ["silver", "gold", "vip"],
+  },
+  {
+    id: "manual",
+    title: "사용 매뉴얼",
+    description: "자동화 지니 사용법을 순서대로 안내합니다. 화면에서 바로 보거나 PDF 로 받을 수 있습니다.",
+    href: "/manual",
+    icon: BookOpen,
     defaultTiers: ["silver", "gold", "vip"],
   },
 ];

@@ -2,6 +2,19 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.25] - 2026-10-03: 자동화 지니 사용 매뉴얼 (사이트 안 + PDF)
+
+### 추가
+- **사용 매뉴얼** 메뉴 (`/manual`, 관리 › 사용 매뉴얼, 모든 등급): 00 시작하기 ~ 10 AI 학습 관리, A 관리자 전용(관리자에게만), B 자주 묻는 질문
+  - 절마다 단계 ①②③ + **실제 화면 스크린샷 위 빨간 강조 상자·번호**, 팁, "다음 단계"
+  - **[PDF 다운로드]**: A4 가로 45쪽 (`public/manual/jadonghwa-genie-manual.pdf`)
+  - 스크린샷은 데모 서버에서 자동으로 찍고(Playwright), 강조 위치는 화면 요소의 실제 좌표 → 화면이 바뀌면 다시 찍기만 하면 된다 (`npm run manual:capture`, `npm run manual:pdf`, docs/MANUAL.md)
+  - 자동 테스트: 단계 번호와 화면 강조 번호가 맞는지 검사
+- devDependency `playwright` (매뉴얼 스크린샷·PDF 용, 배포에는 쓰지 않음)
+
+### 변경
+- 데모 데이터: 업로드 예시의 YouTube 주소를 영상 주소로 (성과 표시 예시)
+
 ## [0.9.24] - 2026-10-03: YouTube 제품 영상 — "참고 영상" 칸 빼기
 
 ### 변경

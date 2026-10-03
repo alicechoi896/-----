@@ -348,7 +348,7 @@ function demoPublications(now: number, userId: string, contents: GeneratedConten
     status: i === 0 ? "published" : "scheduled",
     scheduledAt: i === 0 ? null : iso(2),
     publishedAt: i === 0 ? iso(-1) : null,
-    platformUrl: i === 0 ? "https://www.youtube.com/" : null,
+    platformUrl: i === 0 ? "https://www.youtube.com/watch?v=cw9Sv1Xk2aQ" : null,
   }));
   list.push({
     ...base,

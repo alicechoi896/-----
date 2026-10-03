@@ -1,6 +1,6 @@
 {
   "name": "work_auto",
-  "version": "0.9.24",
+  "version": "0.9.25",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,9 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run tests/unit tests/db",
-    "test:api": "vitest run tests/api"
+    "test:api": "vitest run tests/api",
+    "manual:capture": "node scripts/manual/capture.mjs",
+    "manual:pdf": "node scripts/manual/pdf.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -34,6 +36,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "playwright": "1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

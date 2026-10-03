@@ -18,4 +18,5 @@
 - 기능을 추가하거나 바꾸면 `docs/FEATURE_REGISTRY.md`, `docs/CHANGELOG.md`를 갱신한다.
 - 사용자가 넣은 주소로 서버가 접속할 때는 `safeFetch()` 를 쓴다 (`lib/server/security/safe-url.ts`, SSRF 방지).
 - 서버 IP 로 외부 서비스를 부르는 API 에는 `rateLimit()` 을 건다 (docs/OPERATIONS.md).
+- 화면·버튼 이름을 바꾸면 사용 매뉴얼(`lib/manual/content.ts`, `scripts/manual/shots.mjs`)도 고치고 화면·PDF 를 다시 만든다 (docs/MANUAL.md).
 - 완료 전: `npm run lint && npm run typecheck && npm test && npm run build` (자동 테스트: docs/TESTING.md)
