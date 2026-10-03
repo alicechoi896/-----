@@ -405,6 +405,24 @@ create table if not exists public.learning_profiles (
   unique (channel_id, content_type)
 );
 
+-- v0.9.21: 오류 기록 (서버 API 오류 + 화면 오류). 관리자만 조회·삭제, 30일 뒤 자동 삭제. 비밀값은 저장 전에 가린다
+create table if not exists public.error_logs (
+  id           text primary key,
+  source       text not null check (source in ('server', 'client')),
+  path         text not null default '',
+  method       text not null default '',
+  code         text not null default '',
+  status       int,
+  message      text not null default '',
+  stack        text not null default '',
+  fingerprint  text not null default '',
+  user_id      uuid references auth.users (id) on delete set null,
+  user_email   text not null default '',
+  user_agent   text not null default '',
+  created_at   timestamptz not null default now()
+);
+create index if not exists idx_error_logs_created on public.error_logs (created_at desc);
+
 -- 찜한 트렌드 영상 (영상 정보 텍스트만 저장, 썸네일은 YouTube 주소만)
 create table if not exists public.saved_trends (
   id             text primary key,
@@ -544,6 +562,22 @@ drop policy if exists "learning_delete_admin" on public.learning_profiles;
 create policy "learning_delete_admin" on public.learning_profiles for delete to authenticated
   using ((select public.is_admin()));
 
+-- error_logs (v0.9.21): 로그인 사용자는 자기 이름으로 기록(+자기 기록만 읽기), 전체 조회·삭제는 관리자
+alter table public.error_logs enable row level security;
+drop policy if exists "error_logs_insert" on public.error_logs;
+create policy "error_logs_insert" on public.error_logs for insert to authenticated
+  with check (user_id is null or user_id = (select auth.uid()));
+drop policy if exists "error_logs_select_admin" on public.error_logs;
+create policy "error_logs_select_admin" on public.error_logs for select to authenticated
+  using ((select public.is_admin()));
+-- 본인이 남긴 기록은 본인도 읽을 수 있다 (앱이 저장 직후 결과를 돌려받으므로 필요)
+drop policy if exists "error_logs_select_own" on public.error_logs;
+create policy "error_logs_select_own" on public.error_logs for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists "error_logs_delete_admin" on public.error_logs;
+create policy "error_logs_delete_admin" on public.error_logs for delete to authenticated
+  using ((select public.is_admin()));
+
 -- 통계 갱신: 쿼리 계획이 새 인덱스를 바로 활용하도록
 analyze public.profiles, public.role_permissions, public.audit_logs, public.products, public.generated_contents,
         public.user_feedback, public.user_styles, public.performance_metrics, public.reference_videos;
@@ -589,6 +623,27 @@ begin
   perform cron.schedule('purge-expired-data', '0 3 * * *', 'select public.purge_expired_data()');
 exception when others then
   raise notice 'pg_cron 예약 실패: %', sqlerrm;
+end $$;
+
+-- v0.9.21: 30일 지난 오류 기록 자동 삭제 (매일 새벽 3시 10분 UTC). 기존 purge 작업과 따로 둔다
+create or replace function public.purge_error_logs()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from public.error_logs where created_at < now() - interval '30 days';
+$$;
+revoke all on function public.purge_error_logs() from public, anon, authenticated;
+do $$
+begin
+  begin
+    perform cron.unschedule('purge-error-logs');
+  exception when others then null;
+  end;
+  perform cron.schedule('purge-error-logs', '10 3 * * *', 'select public.purge_error_logs()');
+exception when others then
+  raise notice 'pg_cron 예약 실패(오류 기록 정리): %', sqlerrm;
 end $$;
 
 -- ════════════════════════════════════════════════════════════════

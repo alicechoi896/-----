@@ -13,9 +13,9 @@
 | NAVER 블로그 | 4 | 0 | 4 | 0 |
 | 공통 도구 | 3 | 1 | 2 | 0 |
 | 설정 | 2 | 1 | 0 | 1 |
-| 사이트 관리 (관리자 전용) | 4 | 4 | 0 | 0 |
+| 사이트 관리 (관리자 전용) | 5 | 5 | 0 | 0 |
 | (단독) AI 학습 관리 | 1 | 0 | 1 | 0 |
-| **합계** | **20** | 7 | 12 | 1 |
+| **합계** | **21** | 8 | 12 | 1 |
 
 ## 2. 전체 기능 표
 
@@ -39,6 +39,7 @@
 | 사이트 관리 | `admin-users` | 사용자 관리 | `/admin/users` | admin | ✅ | - | 역할 | 승인된 사용자 목록, 역할 변경 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-permissions` | 권한 관리 | `/admin/permissions` | admin | ✅ | - | 등급별 허용 여부 | 권한표 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-audit-logs` | 활동 기록 | `/admin/audit-logs` | admin | ✅ | - | 종류 필터, 검색 | 활동 기록 | `features/admin` (관리자 전용) |
+| 사이트 관리 | `admin-errors` | 오류 기록 | `/admin/errors` | admin | ✅ | - | 기간·종류 필터, 검색, 같은 오류 묶음, 스택 보기, 삭제 | 오류 기록 | `features/admin/ErrorLogView.tsx` (관리자 전용, v0.9.21) |
 | (단독) | `uploads` | 업로드 관리 | `/uploads` | - | ✅ | - | 플랫폼, 제품, 상태, 담당자 | 월간 캘린더, 날짜 상세, 업로드 등록(기존 콘텐츠·직접), 업로드 상태 배지 | `features/uploads` |
 | (단독) | `ai-learning` | AI 학습 관리 | `/ai-learning` | - | ✅ | - | - | 제품 데이터, 나의 스타일(제목 패턴, 파일 일괄 추가 .txt/.csv), 콘텐츠 히스토리(최근 300건 자동 정리), 학습 프로필(팀 공통 6개, 자동·수동 학습, 되돌리기), 피드백, 성과 데이터 | `features/ai-learning` |
 
@@ -51,7 +52,7 @@
 | `ALL` (실버·골드·VIP) | yt-trends, yt-info-video, clip-trends, clip-info-content, blog-trends, blog-info-writing, video-import, api-center, ai-learning |
 | `GOLD_UP` (골드·VIP) | yt-product-video, clip-product-content, blog-product-writing, product-learning, product-library |
 | `VIP_ONLY` | blog-auto-writing |
-| 관리자 전용 | admin-approvals, admin-users, admin-permissions, admin-audit-logs |
+| 관리자 전용 | admin-approvals, admin-users, admin-permissions, admin-audit-logs, admin-errors |
 | 권한 대상 아님 (모든 승인 사용자) | 내 정보 `/account` |
 
 관리자는 모든 기능에 접근한다. 실제 적용 값은 **사이트 관리 → 권한 관리**에서 바꿀 수 있다 ([AUTH_AND_PERMISSIONS.md](./AUTH_AND_PERMISSIONS.md)).

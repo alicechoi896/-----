@@ -1,0 +1,132 @@
+import { beforeAll, describe, expect, it } from "vitest";
+
+/**
+ * 실행 중인 서버(데모 모드: Supabase·AI 키 없이)에 실제로 요청해 주요 흐름을 확인한다.
+ *   npm run build && npx next start -p 3000   (다른 터미널)
+ *   npm run test:api                          (API_BASE_URL 로 주소 변경 가능)
+ * 데모 데이터가 바뀌므로 서버를 새로 띄운 직후에 돌린다. 1분 호출 한도에 걸리지 않게 AI 호출 수를 줄였다.
+ */
+const BASE = process.env.API_BASE_URL ?? "http://localhost:3000";
+
+async function j<T = unknown>(path: string, init?: RequestInit): Promise<{ ok: boolean; data: T; error?: { code: string; message: string } }> {
+  const res = await fetch(BASE + path, { headers: { "content-type": "application/json" }, ...init });
+  return res.json();
+}
+const post = (path: string, body: unknown, method = "POST") => j(path, { method, body: JSON.stringify(body) });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+let reachable = false;
+beforeAll(async () => {
+  reachable = await fetch(BASE + "/login").then(
+    (r) => r.ok,
+    () => false,
+  );
+  if (!reachable) console.warn(`서버(${BASE})가 꺼져 있어 API 테스트를 건너뜁니다.`);
+});
+
+type Content = { id: string; productId: string | null; output: Record<string, string | string[]>; context: Record<string, unknown> };
+
+describe("생성 → 다시 만들기 → 직접 수정 → 학습", () => {
+  it("YouTube 제품 영상: 출력 구성과 다시 만들기·직접 수정", async ({ skip }) => {
+    if (!reachable) skip();
+    const products = await j<{ id: string }[]>("/api/products");
+    const gen = await post("/api/contents/generate", { featureId: "yt-product-video", input: { productId: products.data[0].id, length: "15s" } });
+    expect(gen.ok).toBe(true);
+    const c = gen.data as Content;
+    expect(c.output.titles).toHaveLength(10);
+    expect(c.output.hooks).toHaveLength(10);
+    expect(c.output.ctas).toHaveLength(10);
+    expect(String(c.output.script)).not.toMatch(/\[컷|0~5초|^##/m);
+
+    const regen = await post(`/api/contents/${c.id}/regenerate`, { key: "hooks" });
+    expect(regen.ok).toBe(true);
+    expect((regen.data as Content).output.titles).toEqual(c.output.titles); // 다른 칸은 그대로
+
+    const edited = await post(`/api/contents/${c.id}/annotations`, { edit: { key: "script", value: "고친 대본이에요\n짧게요" } }, "PATCH");
+    expect(((edited.data as Content).context.userEdits as Record<string, unknown>).script).toBeTruthy();
+    const picked = await post(`/api/contents/${c.id}/annotations`, { pick: { key: "titles", values: [c.output.titles[0]] } }, "PATCH");
+    expect(picked.ok).toBe(true);
+
+    const fb = await post("/api/feedback", { contentId: c.id, rating: "up" });
+    expect(fb.ok).toBe(true);
+    const learning = await j<{ id: string; myPending: number }[]>("/api/learning");
+    expect(learning.data.find((p) => p.id === "youtube:product")!.myPending).toBeGreaterThanOrEqual(3);
+  });
+
+  it("블로그: CTA 후보 10개, 본문에 ## 없음, 본문을 다시 만들면 소제목도 함께", async ({ skip }) => {
+    if (!reachable) skip();
+    const gen = await post("/api/contents/generate", { featureId: "blog-info-writing", input: { writingType: "일반 정보", topic: "겨울철 난방비" } });
+    const c = gen.data as Content;
+    expect(c.output.ctas).toHaveLength(10);
+    expect(String(c.output.body)).not.toMatch(/^#{1,6}\s/m);
+    const regen = (await post(`/api/contents/${c.id}/regenerate`, { key: "body" })).data as Content;
+    expect(regen.output.body).not.toBe(c.output.body);
+    expect(regen.output.headings).not.toEqual(c.output.headings);
+  });
+});
+
+describe("업로드 관리", () => {
+  it("기존 콘텐츠로 등록(자동 채움) → 상태 배지 계산 → YouTube 1·7일 성과 자동 저장", async ({ skip }) => {
+    if (!reachable) skip();
+    const gen = (await post("/api/contents/generate", { featureId: "yt-info-video", input: { topic: "업로드 테스트", category: "생활" } })).data as Content;
+    let status = await j<Record<string, string>>(`/api/publications/status?ids=${gen.id}`);
+    expect(status.data[gen.id]).toBeUndefined(); // 미업로드
+
+    const pub = await post("/api/publications", {
+      contentId: gen.id,
+      status: "published",
+      publishedAt: new Date(Date.now() - 8 * 864e5).toISOString(),
+      platformUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    });
+    expect(pub.ok).toBe(true);
+    expect((pub.data as { title: string; platform: string }).platform).toBe("youtube");
+    status = await j(`/api/publications/status?ids=${gen.id}`);
+    expect(status.data[gen.id]).toBe("published");
+
+    const from = new Date(Date.now() - 40 * 864e5).toISOString();
+    const to = new Date(Date.now() + 40 * 864e5).toISOString();
+    await j(`/api/publications?from=${from}&to=${to}`); // 응답 뒤 성과 수집
+    await sleep(1500);
+    const perf = await j<{ contentId: string; source: string }[]>("/api/performance");
+    expect(perf.data.filter((m) => m.contentId === gen.id).map((m) => m.source).sort()).toEqual(["youtube-d1", "youtube-d7"]);
+  });
+
+  it("입력 검사: 제목 없음·예약일 없음·위험한 URL 거부", async ({ skip }) => {
+    if (!reachable) skip();
+    expect((await post("/api/publications", { platform: "youtube", title: "" })).ok).toBe(false);
+    expect((await post("/api/publications", { platform: "youtube", title: "x", status: "scheduled" })).ok).toBe(false);
+    expect((await post("/api/publications", { platform: "youtube", title: "x", platformUrl: "javascript:alert(1)" })).ok).toBe(false);
+  });
+});
+
+describe("트렌드·스타일·오류 기록", () => {
+  it("NAVER 트렌드: 처음 10개 → [더보기] 10개 더 (중복 없음)", async ({ skip }) => {
+    if (!reachable) skip();
+    const first = await j<{ insight: { risingKeywords: { text: string }[]; more: { rising: boolean } } }>("/api/trends/naver?scope=clip&period=14");
+    expect(first.data.insight.risingKeywords).toHaveLength(10);
+    expect(first.data.insight.more.rising).toBe(true);
+    const more = await j<{ risingKeywords: { text: string }[] }>("/api/trends/naver/more?scope=clip&period=14&section=rising&offset=10");
+    const shown = new Set(first.data.insight.risingKeywords.map((k) => k.text));
+    expect(more.data.risingKeywords.some((k) => shown.has(k.text))).toBe(false);
+  });
+
+  it("나의 스타일 파일 일괄 추가: 추천 예시 300개 미리보기", async ({ skip }) => {
+    if (!reachable) skip();
+    const csv = await fetch(BASE + "/samples/style-starter.csv").then((r) => r.blob());
+    const fd = new FormData();
+    fd.append("file", new File([csv], "style-starter.csv", { type: "text/csv" }));
+    const r = await fetch(BASE + "/api/styles/import", { method: "POST", body: fd }).then((x) => x.json());
+    expect(r.data.items.hook).toHaveLength(100);
+    expect(r.data.items.title_pattern).toHaveLength(100);
+  });
+
+  it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
+    if (!reachable) skip();
+    const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;
+    expect((await post("/api/errors", { message: msg, path: "/test" })).ok).toBe(true);
+    const logs = await j<{ message: string }[]>("/api/admin/errors?days=1");
+    const hit = logs.data.find((l) => l.message.startsWith(msg.slice(0, 20)));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).not.toContain("abcdefghijklmnop");
+  });
+});

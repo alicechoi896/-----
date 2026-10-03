@@ -1,13 +1,15 @@
 {
   "name": "work_auto",
-  "version": "0.9.20",
+  "version": "0.9.21",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run tests/unit tests/db",
+    "test:api": "vitest run tests/api"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -25,6 +27,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -32,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }

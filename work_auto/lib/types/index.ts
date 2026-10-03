@@ -9,3 +9,4 @@ export * from "./settings";
 export * from "./profile";
 export * from "./publication";
 export * from "./learning";
+export * from "./error-log";

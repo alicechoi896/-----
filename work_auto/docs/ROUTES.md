@@ -36,6 +36,7 @@
 | `/account` | 내 정보 | 이름·비밀번호 변경, 회원 탈퇴 | AccountSettings | Dynamic |
 | `/admin/approvals` | 가입 승인 | 승인 대기·거절 목록, 등급 선택 승인 | ApprovalQueue | Dynamic |
 | `/admin/audit-logs` | 활동 기록 | 주요 활동 이력 (관리자) | AuditLogView | Dynamic |
+| `/admin/errors` | 오류 기록 | 서버·화면 오류 모아 보기 (관리자) | ErrorLogView | Dynamic |
 | `/admin` | 사이트 관리 | 관리자 전용 허브 | ChannelHub | Dynamic |
 | `/admin/users` | 사용자 관리 | 사용자 목록, 역할 변경 | UserManagement | Dynamic |
 | `/admin/permissions` | 권한 관리 | 등급 × 메뉴 체크 표 | PermissionMatrix | Dynamic |
@@ -132,6 +133,9 @@
 | POST | `/api/admin/users/:userId/approve` | 가입 승인 `{role}` | adminService.approve |
 | POST | `/api/admin/users/:userId/reject` | 가입 거절 `{reason?}` | adminService.reject |
 | GET | `/api/admin/audit-logs` | 활동 기록 (관리자) | adminService.listAuditLogs |
+| GET / DELETE | `/api/admin/errors?days` | 오류 기록 조회 / 삭제 `{ids: [...] | "all"}` (관리자) | errorLogService |
+| POST | `/api/errors` | 화면 오류 보고 (로그인 사용자, 1분 20회) | errorLogService.capture |
+| GET | `/api/publications/stats?ids=` | YouTube 업로드 조회수·좋아요·댓글 (지금 + 1일·7일 후) | youtubeStatsService.stats |
 | GET / PATCH | `/api/account` | 내 프로필 / 이름 변경 (승인 전에도 가능) | accountService |
 | POST | `/api/account/password` | 비밀번호 변경 `{currentPassword, newPassword}` | accountService.changePassword |
 | POST | `/api/account/withdraw` | 회원 탈퇴 `{password}` | accountService.withdraw |

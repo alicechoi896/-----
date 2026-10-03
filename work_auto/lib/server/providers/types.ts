@@ -121,6 +121,14 @@ export interface YouTubeTrendProvider extends BaseProvider {
   /** 영상 1개를 트렌드 항목으로 조회 (북마크한 영상, 생성 화면의 참고 트렌드) */
   getTrendItem(videoId: string): Promise<YouTubeTrendItem | null>;
   getVideoMeta(url: string): Promise<VideoMeta>;
+  /** 공개 통계 (조회수·좋아요·댓글). 영상 50개까지 1 unit */
+  getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>>;
+}
+
+export interface VideoStats {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
 }
 
 export interface NaverTrendProvider extends BaseProvider {

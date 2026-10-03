@@ -31,8 +31,16 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/** 다음 단계(화면·API)로 넘기는 요청 헤더: 오류 기록이 "어디서" 났는지 알 수 있게 경로·메서드를 붙인다 */
+function forward(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.set("x-pathname", request.nextUrl.pathname);
+  headers.set("x-method", request.method);
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  let response = forward(request);
   if (isDemoBlocked()) {
     // 운영에서 Supabase 설정이 빠졌다 → 로그인 없는 데모로 열지 않고 멈춘다
     console.error("[proxy] Supabase 환경변수가 없어 사이트를 닫았습니다 (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY 확인)");
@@ -50,7 +58,7 @@ export async function proxy(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
+        response = forward(request);
         cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
       },
     },

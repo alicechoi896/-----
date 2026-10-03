@@ -317,6 +317,25 @@ UserStyle 에 `profileId` (선택, `on delete set null`) 를 추가했다. 이 �
 
 생성 콘텐츠의 업로드 상태(미업로드·예약·업로드 완료)는 이 표에서 계산한다 (generated_contents 에 저장하지 않음).
 
+### ErrorLog (error_logs, v0.9.21)
+
+**왜 필요한가**: 직원이 "안 돼요"라고 할 때 무엇이 왜 안 됐는지 관리자가 바로 볼 수 있게. 외부 서비스(Sentry 등) 없이 앱 안에서.
+
+| 필드 | 설명 |
+|------|------|
+| id | |
+| source | server / client |
+| path, method | API 경로·메서드 (화면 오류는 페이지 주소만) |
+| code, status | 앱 오류 코드, HTTP 상태 |
+| message, stack | 비밀값을 가린 메시지(1000자)·스택(6000자) |
+| fingerprint | 같은 오류 묶음용 (메시지 + 첫 위치의 sha1) |
+| userId, userEmail, userAgent | 오류를 겪은 사용자 (탈퇴하면 userId 만 비움) |
+| createdAt | 30일 뒤 자동 삭제 |
+
+RLS: 로그인 사용자는 본인 이름(또는 이름 없이)으로만 기록, 본인 기록만 조회(저장 직후 결과를 돌려받기 위해), 전체 조회·삭제는 관리자.
+
+PerformanceMetric `source` 에 `youtube-d1`, `youtube-d7` 추가 (DB 변경 없음): 업로드 1일·7일 뒤 YouTube 조회수 자동 기록.
+
 ## 4. V2 테이블 설계 (Postgres)
 
 ```sql

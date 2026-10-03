@@ -71,6 +71,15 @@
 - **[+ 업로드 등록]**: [기존 콘텐츠 선택](검색 → 제품·제목·원고 유형·플랫폼 자동) / [직접 등록]
 - **생성 결과 화면 [업로드 등록]** → `/uploads?contentId=…` 로 그 콘텐츠가 선택된 등록 창
 
+## 5-1. YouTube 성과 자동 수집 (v0.9.21)
+
+- 조회수는 계속 변하므로 **업로드 1일 뒤, 7일 뒤 두 번만** 기록한다 (`performance_metrics`, source `youtube-d1`·`youtube-d7`). 같은 시점은 한 번만
+- 대상: 본인이 등록했고, 생성 콘텐츠와 연결됐고, 업로드 완료이며, URL 이 YouTube 영상인 업로드
+- 언제: 업로드 관리·AI 학습 관리 화면을 열 때 응답을 보낸 뒤(`after()`) 본인 YouTube Data API 키로 확인 (cron·서비스 키 없음). 기록되면 학습 프로필 업데이트 신호(`scheduleLearning`)
+- 비용: `videos.list` 1번(영상 50개까지) = 1 unit
+- 날짜 패널에서 YouTube 업로드는 "지금 조회 · 좋아요 · 댓글 (1일 후 · 7일 후)"를 보여 준다 (지금 숫자는 1시간 캐시)
+- 키가 없거나 데모 모드면 건너뛴다 (데모는 가짜 숫자)
+
 ## 6. API
 
 | 메서드 | 경로 | 설명 |
@@ -79,4 +88,5 @@
 | POST | `/api/publications` | 등록 |
 | PUT / DELETE | `/api/publications/:id` | 수정 / 삭제 |
 | GET | `/api/publications/status?ids=` | 콘텐츠별 업로드 상태 |
+| GET | `/api/publications/stats?ids=` | YouTube 업로드의 지금 조회수·좋아요·댓글 + 1일·7일 기록 |
 | GET | `/api/publications/assignees` | 담당자 후보 (관리자: 승인된 직원, 직원: 본인) |

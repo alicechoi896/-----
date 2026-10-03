@@ -29,9 +29,24 @@ export async function handle<T>(fn: () => Promise<T>) {
   try {
     return ok(await fn());
   } catch (err) {
-    if (err instanceof AppError) return fail(err.code, err.message, err.status);
+    if (err instanceof AppError) {
+      // 5xx(외부 AI·API 장애 등)는 오류 기록에 남긴다. 4xx 는 사용자 입력 문제라 남기지 않는다
+      if (err.status >= 500) await captureError({ source: "server", error: err, code: err.code, status: err.status });
+      return fail(err.code, err.message, err.status);
+    }
     console.error("[api] unexpected error", err);
+    await captureError({ source: "server", error: err, code: "INTERNAL", status: 500 });
     return fail("INTERNAL", "서버에서 처리 중 오류가 발생했습니다.", 500);
+  }
+}
+
+/** 오류 기록 (순환 참조를 피하려고 필요할 때 불러온다). 실패해도 응답에는 영향 없음 */
+async function captureError(input: import("./services/error-log").CaptureInput) {
+  try {
+    const { errorLogService } = await import("./services/error-log");
+    await errorLogService.capture(input);
+  } catch {
+    /* 기록 실패는 무시 */
   }
 }
 

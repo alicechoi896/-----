@@ -60,7 +60,8 @@ export interface PerformanceMetric {
   comments: number | null;
   conversions: number | null;
   revenue: number | null;
-  source: "manual" | "youtube-analytics" | "naver" | "mock";
+  /** youtube-d1 · youtube-d7: 업로드 1일·7일 뒤 YouTube 공개 통계를 자동으로 저장한 것 (v0.9.21) */
+  source: "manual" | "youtube-analytics" | "naver" | "mock" | "youtube-d1" | "youtube-d7";
   measuredAt: ISODate;
 }
 

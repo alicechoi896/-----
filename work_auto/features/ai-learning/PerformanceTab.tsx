@@ -11,7 +11,7 @@ import { formatNumber } from "@/lib/utils";
 
 type Row = PerformanceMetric & { headline: string };
 const num = (v: number | null, suffix = "") => (v == null ? "-" : `${formatNumber(v)}${suffix}`);
-const SOURCE = { manual: "수동 입력", "youtube-analytics": "YouTube Analytics", naver: "NAVER", mock: "Mock" } as const;
+const SOURCE = { manual: "수동 입력", "youtube-analytics": "YouTube Analytics", "youtube-d1": "YouTube 1일 후 (자동)", "youtube-d7": "YouTube 7일 후 (자동)", naver: "NAVER", mock: "Mock" } as const;
 
 /** Performance Data: 성과 상위 콘텐츠의 특징이 같은 채널의 다음 생성에 힌트로 들어간다 */
 export function PerformanceTab({ onChanged }: { onChanged?: () => void }) {

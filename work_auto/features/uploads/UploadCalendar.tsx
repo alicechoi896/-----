@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import type { ContentPublicationView } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { PublicationForm } from "./PublicationForm";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const fmt = (n: number | null | undefined) => (n == null ? "-" : n.toLocaleString("ko-KR"));
 const MAX_IN_CELL = 3;
 
 /** 한국 시간 기준 오늘 (YYYY-MM-DD) */
@@ -95,6 +96,20 @@ export function UploadCalendar({ presetContentId }: { presetContentId?: string }
   }
 
   const dayItems = selectedDay ? (byDay.get(selectedDay) ?? []) : [];
+  // 날짜 패널을 열면 YouTube 업로드의 현재 조회수·좋아요·댓글 (+ 내 콘텐츠면 1일·7일 기록)
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof api.publications.stats>>>({});
+  const ytIds = dayItems.filter((p) => p.platformUrl && /youtu/.test(p.platformUrl)).map((p) => p.id).join(",");
+  useEffect(() => {
+    if (!ytIds) return;
+    let active = true;
+    api.publications
+      .stats(ytIds.split(","))
+      .then((r) => active && setStats((prev) => ({ ...prev, ...r })))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [ytIds]);
   const today = todayKey();
 
   return (
@@ -250,6 +265,17 @@ export function UploadCalendar({ presetContentId }: { presetContentId?: string }
                   {p.contentType ? ` · ${p.contentType}` : ""}
                   {p.status === "scheduled" && p.scheduledAt ? ` · 예약 ${new Date(p.scheduledAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
                 </p>
+                {stats[p.id] && (
+                  <p className="tabular mt-1.5 text-xs text-fg-muted">
+                    지금 조회 {fmt(stats[p.id].views)} · 좋아요 {fmt(stats[p.id].likes)} · 댓글 {fmt(stats[p.id].comments)}
+                    {(stats[p.id].d1 != null || stats[p.id].d7 != null) && (
+                      <span className="text-fg-subtle">
+                        {" "}
+                        (1일 후 {fmt(stats[p.id].d1)} · 7일 후 {fmt(stats[p.id].d7)})
+                      </span>
+                    )}
+                  </p>
+                )}
                 {p.note && <p className="mt-1.5 rounded-control bg-subtle px-2.5 py-1.5 text-xs text-fg-muted">{p.note}</p>}
                 <div className="mt-3 flex items-center gap-1">
                   {p.platformUrl && (

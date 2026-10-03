@@ -4,7 +4,7 @@ import { matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
 import type { TrendScope, YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { seededNumber } from "@/lib/utils";
 import { serverConfig } from "../../config";
-import type { VideoMeta, YouTubeTrendProvider } from "../types";
+import type { VideoMeta, YouTubeTrendProvider, VideoStats } from "../types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -80,5 +80,17 @@ export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
       durationSec: seededNumber(url + "d", 30, 900),
       thumbnailColor: ["#dbe4ff", "#ffe3e3", "#d3f9d8", "#fff3bf"][n % 4],
     };
+  }
+
+  /** 데모: 영상 ID 와 시간으로 그럴듯한 숫자 (시간이 지나면 늘어난다) */
+  async getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>> {
+    const hours = Math.floor(Date.now() / 3_600_000);
+    return Object.fromEntries(
+      videoIds.map((id) => {
+        const base = seededNumber(id, 800, 40_000);
+        const views = base + (hours % 1000) * 7;
+        return [id, { views, likes: Math.round(views * 0.03), comments: Math.round(views * 0.002) }];
+      }),
+    );
   }
 }

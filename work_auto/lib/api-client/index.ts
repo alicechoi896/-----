@@ -3,6 +3,7 @@ import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
   ApiConnectionPublic,
+  ErrorLog,
   NaverTrendMore,
   NaverTrendSection,
   LearningProfile,
@@ -195,6 +196,14 @@ export const api = {
     rollback: (id: string) => request<LearningProfile>(`/api/learning/${encodeURIComponent(id)}/rollback`, { method: "POST" }),
   },
 
+  /** 오류 기록 */
+  errors: {
+    /** 화면 오류 보내기 (실패해도 무시) */
+    report: (e: { message: string; stack?: string; path?: string }) => request<{ ok: boolean }>("/api/errors", { method: "POST", body: json(e) }),
+    list: (days: number) => request<ErrorLog[]>(`/api/admin/errors${qs({ days })}`),
+    remove: (ids: string[] | "all") => request<{ deleted: number }>("/api/admin/errors", { method: "DELETE", body: json({ ids }) }),
+  },
+
   /** 업로드 관리 (팀 공용 캘린더) */
   publications: {
     list: (from: string, to: string) => request<ContentPublicationView[]>(`/api/publications${qs({ from, to })}`),
@@ -205,6 +214,11 @@ export const api = {
     /** 생성 콘텐츠별 업로드 상태 (없으면 미업로드) */
     status: (ids: string[]) => request<Record<string, ContentUploadState>>(`/api/publications/status${qs({ ids: ids.join(",") })}`),
     assignees: () => request<{ id: string; name: string }[]>("/api/publications/assignees"),
+    /** YouTube 업로드의 현재 숫자 (+ 1일·7일 기록) */
+    stats: (ids: string[]) =>
+      request<Record<string, { views: number | null; likes: number | null; comments: number | null; d1?: number | null; d7?: number | null }>>(
+        `/api/publications/stats${qs({ ids: ids.join(",") })}`,
+      ),
   },
 
   feedback: {

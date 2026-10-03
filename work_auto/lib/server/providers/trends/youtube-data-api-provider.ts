@@ -3,7 +3,7 @@ import { calcTrendScore } from "@/lib/domain/trend-score";
 import { SHORTS_MAX_SEC, YOUTUBE_COUNTRIES, buildYouTubeSearchQ, categoryLabel, matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
 import type { YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { AppError } from "../../http";
-import type { VideoMeta, YouTubeTrendProvider } from "../types";
+import type { VideoMeta, YouTubeTrendProvider, VideoStats } from "../types";
 
 /**
  * YouTube Data API v3 Provider (실제 연동).
@@ -280,6 +280,20 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
 
     const items = videos.items.map((v, i) => toItem(v, i, now, periodDays, subsByChannel.get(v.snippet.channelId), country.code));
     return { items, nextPageToken };
+  }
+
+  async getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>> {
+    const out: Record<string, VideoStats> = {};
+    const ids = [...new Set(videoIds)].slice(0, 50);
+    if (!ids.length) return out;
+    const res = await this.get<{ items: { id: string; statistics?: { viewCount?: string; likeCount?: string; commentCount?: string } }[] }>("videos", {
+      part: "statistics",
+      id: ids.join(","),
+      maxResults: 50,
+    });
+    const num = (v?: string) => (v == null ? null : Number(v));
+    for (const it of res.items) out[it.id] = { views: num(it.statistics?.viewCount), likes: num(it.statistics?.likeCount), comments: num(it.statistics?.commentCount) };
+    return out;
   }
 
   /** 영상 ID 로 트렌드 항목 1개 조회 (북마크·생성 화면의 참고 트렌드용, 2 units) */
