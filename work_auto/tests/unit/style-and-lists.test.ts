@@ -3,6 +3,7 @@ import { buildStyleContext, renderStyleBlocks, sampleItems, styleSnapshot } from
 import { NAVER_LIST_COUNTS, buildTrendIdeas, relatedFirst, seasonOf, seasonalCandidates } from "@/lib/domain/naver-trend-lists";
 import { dayKey, publicationDate, platformForChannel } from "@/lib/publish-platforms";
 import { escapeCsvCell, styleToCsv } from "@/lib/style-csv";
+import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import type { UserStyle } from "@/lib/types";
 
 const range = (n: number, p: string) => Array.from({ length: n }, (_, i) => `${p} ${i + 1}`);
@@ -96,5 +97,22 @@ describe("나의 스타일 CSV", () => {
     const csv = styleToCsv({ hooks: ["훅"], ctas: [], titlePatterns: [], rules: [], examplePhrases: [], bannedPhrases: ["@멘션"] });
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     expect(csv).toContain(`banned_phrase,"'@멘션"`);
+  });
+});
+
+describe("결과 항목 [추가 만들기]", () => {
+  it("새 후보만 위에 붙이고, 공백·#·대소문자만 다른 것은 같은 후보로 본다", () => {
+    const r = mergeAppend(["#에어팟 추천", "무선 이어폰"], ["에어팟추천", "새 후보", "새 후보", " 노이즈캔슬링 "]);
+    expect(r.added).toEqual(["새 후보", "노이즈캔슬링"]);
+    expect(r.list).toEqual(["새 후보", "노이즈캔슬링", "#에어팟 추천", "무선 이어폰"]);
+  });
+  it(`목록은 ${APPEND_MAX_ITEMS}개까지`, () => {
+    const r = mergeAppend(range(APPEND_MAX_ITEMS - 3, "기존"), range(10, "새"));
+    expect(r.added).toHaveLength(3);
+    expect(r.list).toHaveLength(APPEND_MAX_ITEMS);
+  });
+  it("후보 목록만 추가 만들기 (글은 다시 만들기)", () => {
+    expect(["titles", "hooks", "ctas", "keywords", "tags", "hashtags"].every((k) => APPENDABLE_KEYS.has(k))).toBe(true);
+    expect(["script", "description", "body", "headings"].some((k) => APPENDABLE_KEYS.has(k))).toBe(false);
   });
 });

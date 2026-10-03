@@ -1,5 +1,6 @@
 import "server-only";
 import { findHonestyViolations } from "@/lib/domain/honesty";
+import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
 import { findFeature } from "@/lib/registry";
 import type { OutputSection } from "@/lib/generators/types";
@@ -140,9 +141,11 @@ export const contentGenerationService = {
   },
 
   /**
-   * 결과의 한 항목만 다시 만든다 (제목 후보, Hook 후보, 대본, CTA 후보, 설명글, 키워드, 태그, 블로그 본문 …).
-   * - 같은 입력·Context 로 다시 조립하고(스타일 표본은 새로 뽑힌다), 지금 결과와 겹치지 않게 다른 표현을 요청한다
-   * - AI 호출 1회. 같은 콘텐츠 기록의 그 항목만 바꿔 저장한다 (블로그 본문은 소제목도 함께)
+   * 결과의 한 항목만 새로 만든다 (AI 호출 1회).
+   * - 후보 목록(제목·Hook·CTA·키워드·태그·해시태그, `APPENDABLE_KEYS`): **추가 만들기** — 지금 목록과 겹치지 않는 새 후보를
+   *   목록 위에 더한다. 직접 수정본·체크한 후보·대표 제목은 그대로 둔다
+   * - 글(대본·설명글·본문 …): **다시 만들기** — 다른 내용으로 바꾼다 (블로그 본문은 소제목도 함께)
+   * - 같은 입력·Context 로 다시 조립한다 (스타일 표본은 새로 뽑힌다)
    */
   async regenerateSection(contentId: string, key: string): Promise<GeneratedContent> {
     const repo = getRepositories();
@@ -155,6 +158,13 @@ export const contentGenerationService = {
     const keys = [key, ...(LINKED_SECTIONS[key] ?? [])];
     const sections = config.outputs.filter((o) => keys.includes(o.key));
     if (!sections.length) throw new AppError("VALIDATION", "다시 만들 수 없는 항목입니다.");
+    const append = APPENDABLE_KEYS.has(key);
+    const asList = (v: GeneratedValue | undefined) => (Array.isArray(v) ? v : v ? [v] : []);
+    // 화면에 보이는 목록 (직접 수정했다면 수정본)
+    const shown = (k: string) => content.context.userEdits?.[k]?.value ?? content.output[k];
+    if (append && asList(shown(key)).length >= APPEND_MAX_ITEMS) {
+      throw new AppError("VALIDATION", `후보는 ${APPEND_MAX_ITEMS}개까지 모을 수 있습니다. [직접 수정]에서 안 쓸 후보를 지운 뒤 추가해 주세요.`);
+    }
 
     const input = { ...content.input };
     const context = await buildGenerationContext({ userId, featureId: content.featureId, channelId: content.channelId, config, input });
@@ -163,7 +173,7 @@ export const contentGenerationService = {
 
     // 지금 결과: 다시 만들 항목은 "겹치지 말 것", 나머지는 "어울리게" 참고용 (길이 제한)
     const clip = (v: GeneratedValue | undefined, n: number) => JSON.stringify(v ?? "").slice(0, n);
-    const current = sections.map((o) => `- ${o.label}: ${clip(content.output[o.key], 1500)}`).join("\n");
+    const current = sections.map((o) => `- ${o.label}: ${append ? clip(shown(o.key), 6000) : clip(content.output[o.key], 1500)}`).join("\n");
     const others = config.outputs
       .filter((o) => !keys.includes(o.key))
       .map((o) => `- ${o.label}: ${clip(content.output[o.key], 300)}`)
@@ -171,9 +181,17 @@ export const contentGenerationService = {
     messages.push({
       role: "user",
       content: [
-        `[다시 만들기] 아래 항목만 새로 만든다: ${sections.map((o) => o.label).join(", ")}.`,
-        "지금 결과와 겹치지 않게 다른 표현·다른 각도로 쓴다. 같은 문장을 다시 쓰지 않는다. 형식·개수·규칙은 위와 같다.",
-        "[지금 결과 — 피할 것]",
+        ...(append
+          ? [
+              `[추가 만들기] 아래 항목의 새 후보만 만든다: ${sections.map((o) => `${o.label} ${o.count ?? 10}개`).join(", ")}. 지금 목록에 더할 것이다.`,
+              "지금 목록에 있는 것과 같거나 거의 같은 후보(조사·어순만 바꾼 것 포함)는 쓰지 않는다. 다른 각도·다른 표현으로. 형식·규칙은 위와 같다.",
+              "[지금 목록 — 겹치지 말 것]",
+            ]
+          : [
+              `[다시 만들기] 아래 항목만 새로 만든다: ${sections.map((o) => o.label).join(", ")}.`,
+              "지금 결과와 겹치지 않게 다른 표현·다른 각도로 쓴다. 같은 문장을 다시 쓰지 않는다. 형식·개수·규칙은 위와 같다.",
+              "[지금 결과 — 피할 것]",
+            ]),
         current,
         others ? "[같은 콘텐츠의 다른 항목 — 어울리게 참고]" : "",
         others,
@@ -188,24 +206,36 @@ export const contentGenerationService = {
       messages,
       outputKeys: sections.map((o) => o.key),
       jsonSchema: outputSchema(sections),
-      variables: { featureId: content.featureId, outputs: sections, input, context, previous: content.output },
+      variables: { featureId: content.featureId, outputs: sections, input, context, previous: content.output, append },
     });
     const fresh = normalizeOutput(sections, result.data);
-    const output = { ...content.output, ...fresh };
-    const headlineValue = output[config.headlineKey];
-    const headline = (Array.isArray(headlineValue) ? headlineValue[0] : headlineValue) || content.headline;
+    const userEdits = { ...(content.context.userEdits ?? {}) };
+    const picks = { ...(content.context.picks ?? {}) };
+    let output: Record<string, GeneratedValue>;
+    let headline = content.headline;
+    if (append) {
+      // 원본 목록과 (직접 수정했다면) 수정본 목록 모두 위에 새 후보를 더한다. 체크한 후보는 그대로
+      const added = asList(fresh[key]);
+      const edited = userEdits[key];
+      const forShown = mergeAppend(asList(shown(key)), added);
+      if (!forShown.added.length) throw new AppError("NO_NEW_ITEMS", "겹치지 않는 새 후보를 만들지 못했습니다. 한 번 더 눌러 주세요.", 422);
+      if (edited) userEdits[key] = { ...edited, value: forShown.list };
+      output = { ...content.output, [key]: mergeAppend(asList(content.output[key]), added).list };
+    } else {
+      output = { ...content.output, ...fresh };
+      const headlineValue = output[config.headlineKey];
+      headline = (Array.isArray(headlineValue) ? headlineValue[0] : headlineValue) || content.headline;
+      for (const k of keys) {
+        delete userEdits[k];
+        delete picks[k];
+      }
+    }
     const notes = [...content.context.notes];
     if (context.honestyGuard) {
       const violations = findHonestyViolations(JSON.stringify(fresh));
-      if (violations.length) notes.push(`정직성 검사 경고(다시 만들기): "${violations.join('", "')}" 표현 확인 필요`);
+      if (violations.length) notes.push(`정직성 검사 경고(${append ? "추가 만들기" : "다시 만들기"}): "${violations.join('", "')}" 표현 확인 필요`);
     }
-    const regenerated = [...(content.context.regenerated ?? []), { key, at: nowIso(), provider: result.provider }].slice(-20);
-    const userEdits = { ...(content.context.userEdits ?? {}) };
-    const picks = { ...(content.context.picks ?? {}) };
-    for (const k of keys) {
-      delete userEdits[k];
-      delete picks[k];
-    }
+    const regenerated = [...(content.context.regenerated ?? []), { key, at: nowIso(), provider: result.provider, ...(append ? { mode: "append" as const } : {}) }].slice(-20);
     const updated = await repo.contents.update(content.id, { output, headline, context: { ...content.context, notes, regenerated, userEdits, picks } });
     if (!updated) throw new AppError("NOT_FOUND", "콘텐츠를 찾을 수 없습니다.", 404);
     return updated;

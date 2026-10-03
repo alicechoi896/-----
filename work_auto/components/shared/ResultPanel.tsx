@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, Brain, CalendarPlus, Check, Pencil, RefreshCw, ThumbsDown, ThumbsUp, Undo2 } from "lucide-react";
+import { BookmarkPlus, Brain, CalendarPlus, Check, ListPlus, Pencil, RefreshCw, ThumbsDown, ThumbsUp, Undo2 } from "lucide-react";
+import { APPENDABLE_KEYS, candidateKey } from "@/lib/generators/append";
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -44,9 +45,15 @@ export function ResultPanel({
 
   // 업로드 상태 (업로드 관리 기록에서 계산)
   const uploads = useUploadStatus([content.id]);
-  // 항목별 [다시 만들기]: 한 번에 하나씩 (AI 1회)
+  // 항목별 [다시 만들기]·[추가 만들기]: 한 번에 하나씩 (AI 1회)
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [regenError, setRegenError] = useState<{ key: string; message: string } | null>(null);
+  // 방금 [추가 만들기]로 더해진 후보 (강조 표시용)
+  const [added, setAdded] = useState<{ key: string; items: Set<string> } | null>(null);
+  const shownList = (c: GeneratedContent, key: string) => {
+    const v = c.context.userEdits?.[key]?.value ?? c.output[key];
+    return Array.isArray(v) ? v : v ? [v] : [];
+  };
 
   /** 직접 수정 저장 (원본과 같으면 수정 기록이 지워진다) */
   async function saveEdit(key: string, value: string | string[]) {
@@ -71,8 +78,12 @@ export function ResultPanel({
   async function regenerate(key: string) {
     setRegenerating(key);
     setRegenError(null);
+    setAdded(null);
     try {
-      onChange?.(await api.contents.regenerate(content.id, key));
+      const before = new Set(shownList(content, key).map(candidateKey));
+      const next = await api.contents.regenerate(content.id, key);
+      if (APPENDABLE_KEYS.has(key)) setAdded({ key, items: new Set(shownList(next, key).filter((x) => !before.has(candidateKey(x)))) });
+      onChange?.(next);
     } catch (e) {
       setRegenError({ key, message: e instanceof Error ? e.message : "다시 만들지 못했습니다." });
     } finally {
@@ -134,6 +145,7 @@ export function ResultPanel({
           regenerating={regenerating === section.key || (regenerating === "body" && section.key === "headings")}
           busy={Boolean(regenerating)}
           error={regenError?.key === section.key ? regenError.message : null}
+          added={added?.key === section.key ? added.items : undefined}
         />
       ))}
 
@@ -166,6 +178,7 @@ function OutputBlock({
   regenerating,
   busy,
   error,
+  added,
 }: {
   section: OutputSection;
   value: GeneratedValue | undefined;
@@ -180,7 +193,10 @@ function OutputBlock({
   regenerating?: boolean;
   busy?: boolean;
   error?: string | null;
+  /** 방금 [추가 만들기]로 더해진 후보 */
+  added?: Set<string>;
 }) {
+  const appendable = APPENDABLE_KEYS.has(section.key);
   const list = Array.isArray(value) ? value : value ? [value] : [];
   const isList = section.format === "list" || section.format === "tags";
   const [editing, setEditing] = useState(false);
@@ -226,19 +242,30 @@ function OutputBlock({
             <Button
               size="sm"
               variant="ghost"
-              icon={RefreshCw}
+              icon={appendable ? ListPlus : RefreshCw}
               loading={regenerating}
               disabled={busy && !regenerating}
               onClick={onRegenerate}
-              title={section.key === "body" ? "본문을 다른 내용으로 다시 만듭니다 (소제목도 본문에 맞게 바뀝니다)" : "이 항목만 다른 것으로 다시 만듭니다"}
+              title={
+                appendable
+                  ? `지금 후보는 그대로 두고 새 후보 ${section.count ?? 10}개를 위에 추가합니다`
+                  : section.key === "body"
+                    ? "본문을 다른 내용으로 다시 만듭니다 (소제목도 본문에 맞게 바뀝니다)"
+                    : "이 항목만 다른 것으로 다시 만듭니다"
+              }
             >
-              다시 만들기
+              {appendable ? "추가 만들기" : "다시 만들기"}
             </Button>
           )}
           <CopyButton value={section.format === "tags" ? list.join(" ") : toText(value)} />
         </div>
       </header>
       {error && <p className="border-b border-line bg-danger/5 px-5 py-2 text-xs text-danger">{error}</p>}
+      {added && added.size > 0 && !editing && (
+        <p className="border-b border-line bg-brand-soft/60 px-5 py-1.5 text-[11.5px] text-brand">
+          새 후보 {added.size}개를 위에 추가했습니다 · 모두 {list.length}개
+        </p>
+      )}
       {onTogglePick && list.length > 0 && !editing && (
         <p className="border-b border-line bg-subtle/50 px-5 py-1.5 text-[11.5px] text-fg-subtle">실제로 쓴 것을 체크하면 다음 생성 학습에 힌트가 됩니다.</p>
       )}
@@ -271,7 +298,9 @@ function OutputBlock({
         ) : section.format === "tags" ? (
           <div className="flex flex-wrap gap-1.5">
             {list.map((t) => (
-              <Tag key={t}>{t}</Tag>
+              <Tag key={t} className={cn(added?.has(t) && "border-brand-line bg-brand-soft text-brand")}>
+                {t}
+              </Tag>
             ))}
           </div>
         ) : section.format === "list" ? (
@@ -288,7 +317,10 @@ function OutputBlock({
                   />
                 ) : null}
                 <span className="tabular mt-px w-5 shrink-0 text-right text-xs font-semibold text-fg-subtle">{i + 1}</span>
-                <span className="flex-1">{item}</span>
+                <span className="flex-1">
+                  {added?.has(item) && <span className="mr-1.5 rounded bg-brand-soft px-1.5 py-px text-[10.5px] font-semibold text-brand">새로</span>}
+                  {item}
+                </span>
                 <CopyButton value={item} iconOnly className="opacity-0 group-hover:opacity-100 focus:opacity-100" />
               </li>
             ))}

@@ -84,6 +84,14 @@ export class MockAIProvider implements AIProvider {
         context: v.context as GenerationContext,
       });
       const shuffle = <X,>(xs: X[]) => xs.map((x) => [Math.random(), x] as const).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+      if (v.append) {
+        // 추가 만들기: 지금 목록과 겹치지 않는 새 후보 (데모라 표시를 붙인다)
+        const tag = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+        const fresh = Object.fromEntries(
+          Object.entries(data).map(([k, val]) => [k, Array.isArray(val) ? shuffle(val).map((x, i) => `${x} ${tag}-${i + 1}`) : val]),
+        );
+        return { data: fresh as unknown as T, provider: this.id, model: this.model };
+      }
       const remixed = Object.fromEntries(
         Object.entries(data).map(([k, val]) => [k, Array.isArray(val) ? shuffle(val) : typeof val === "string" ? `${val}\n\n(다시 만든 데모 결과 ${new Date().toLocaleTimeString("ko-KR")})` : val]),
       );

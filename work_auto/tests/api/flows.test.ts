@@ -38,14 +38,28 @@ describe("생성 → 다시 만들기 → 직접 수정 → 학습", () => {
     expect(c.output.ctas).toHaveLength(10);
     expect(String(c.output.script)).not.toMatch(/\[컷|0~5초|^##/m);
 
-    const regen = await post(`/api/contents/${c.id}/regenerate`, { key: "hooks" });
-    expect(regen.ok).toBe(true);
-    expect((regen.data as Content).output.titles).toEqual(c.output.titles); // 다른 칸은 그대로
+    // 후보 목록은 [추가 만들기]: 새 후보 10개가 위에, 기존 후보는 아래에 그대로
+    const added = await post(`/api/contents/${c.id}/regenerate`, { key: "hooks" });
+    expect(added.ok).toBe(true);
+    const hooks = (added.data as Content).output.hooks as string[];
+    expect(hooks).toHaveLength(20);
+    expect(hooks.slice(10)).toEqual(c.output.hooks);
+    expect((added.data as Content).output.titles).toEqual(c.output.titles); // 다른 칸은 그대로
+
+    // 대본은 [다시 만들기]: 바뀐다
+    const regen = await post(`/api/contents/${c.id}/regenerate`, { key: "script" });
+    expect((regen.data as Content).output.script).not.toBe(c.output.script);
 
     const edited = await post(`/api/contents/${c.id}/annotations`, { edit: { key: "script", value: "고친 대본이에요\n짧게요" } }, "PATCH");
     expect(((edited.data as Content).context.userEdits as Record<string, unknown>).script).toBeTruthy();
     const picked = await post(`/api/contents/${c.id}/annotations`, { pick: { key: "titles", values: [c.output.titles[0]] } }, "PATCH");
     expect(picked.ok).toBe(true);
+
+    // 체크한 제목·대표 제목은 추가 만들기 뒤에도 그대로
+    const moreTitles = (await post(`/api/contents/${c.id}/regenerate`, { key: "titles" })).data as Content & { headline: string };
+    expect(moreTitles.output.titles).toHaveLength(20);
+    expect((moreTitles.context.picks as Record<string, { values: string[] }>).titles.values).toEqual([c.output.titles[0]]);
+    expect(moreTitles.headline).toBe((gen.data as { headline: string }).headline);
 
     const fb = await post("/api/feedback", { contentId: c.id, rating: "up" });
     expect(fb.ok).toBe(true);
@@ -53,7 +67,7 @@ describe("생성 → 다시 만들기 → 직접 수정 → 학습", () => {
     expect(learning.data.find((p) => p.id === "youtube:product")!.myPending).toBeGreaterThanOrEqual(3);
   });
 
-  it("블로그: CTA 후보 10개, 본문에 ## 없음, 본문을 다시 만들면 소제목도 함께", async ({ skip }) => {
+  it("블로그: CTA 후보 10개, 본문에 ## 없음, 본문을 다시 만들면 소제목도 함께, 해시태그는 추가", async ({ skip }) => {
     if (!reachable) skip();
     const gen = await post("/api/contents/generate", { featureId: "blog-info-writing", input: { writingType: "일반 정보", topic: "겨울철 난방비" } });
     const c = gen.data as Content;
@@ -62,6 +76,9 @@ describe("생성 → 다시 만들기 → 직접 수정 → 학습", () => {
     const regen = (await post(`/api/contents/${c.id}/regenerate`, { key: "body" })).data as Content;
     expect(regen.output.body).not.toBe(c.output.body);
     expect(regen.output.headings).not.toEqual(c.output.headings);
+    const tags = (await post(`/api/contents/${c.id}/regenerate`, { key: "hashtags" })).data as Content;
+    expect(tags.output.hashtags).toHaveLength(60);
+    expect(tags.output.body).toBe(regen.output.body);
   });
 });
 
