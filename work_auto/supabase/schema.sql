@@ -425,6 +425,21 @@ create table if not exists public.error_logs (
 );
 create index if not exists idx_error_logs_created on public.error_logs (created_at desc);
 
+-- v0.9.26: 대본 포맷 (참고 대본 → 대본 구조 가이드라인). 유형(product/info)마다 기본 1개. 본인 것만. docs/SCRIPT_FORMATS.md
+create table if not exists public.script_formats (
+  id            text primary key,
+  user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name          text not null,
+  content_type  text not null default 'product' check (content_type in ('product', 'info')),
+  channel_ids   text[] not null default '{}',
+  examples      jsonb not null default '[]',      -- [{ title, views, text }] 최대 30개
+  guideline     text not null default '',
+  is_default    boolean not null default false,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists idx_script_formats_user on public.script_formats (user_id, created_at desc);
+
 -- 찜한 트렌드 영상 (영상 정보 텍스트만 저장, 썸네일은 YouTube 주소만)
 create table if not exists public.saved_trends (
   id             text primary key,
@@ -563,6 +578,13 @@ create policy "learning_update_team" on public.learning_profiles for update to a
 drop policy if exists "learning_delete_admin" on public.learning_profiles;
 create policy "learning_delete_admin" on public.learning_profiles for delete to authenticated
   using ((select public.is_admin()));
+
+-- script_formats (v0.9.26): 본인 행만 + 승인된 사용자만 (own_rows 와 같은 규칙, 기존 정책은 그대로)
+alter table public.script_formats enable row level security;
+drop policy if exists "own_rows" on public.script_formats;
+create policy "own_rows" on public.script_formats for all to authenticated
+  using (user_id = (select auth.uid()) and (select public.is_active()))
+  with check (user_id = (select auth.uid()) and (select public.is_active()));
 
 -- error_logs (v0.9.21): 로그인 사용자는 자기 이름으로 기록(+자기 기록만 읽기), 전체 조회·삭제는 관리자
 alter table public.error_logs enable row level security;

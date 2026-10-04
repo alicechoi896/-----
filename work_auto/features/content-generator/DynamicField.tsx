@@ -108,6 +108,16 @@ function RemoteSelectField({
         에서 만들 수 있습니다.
       </>
     );
+  else if (!loading && loaded.length === 0 && field.source === "script-formats")
+    hint = (
+      <>
+        대본 포맷이 없습니다.{" "}
+        <Link href="/ai-learning?tab=formats" className="font-medium text-brand hover:underline">
+          대본 포맷
+        </Link>
+        에서 참고 대본으로 만들 수 있습니다.
+      </>
+    );
   else if (selected?.description) hint = <span className="line-clamp-2">{selected.description}</span>;
 
   return (

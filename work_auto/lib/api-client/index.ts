@@ -2,6 +2,10 @@ import type { PermissionRow } from "@/lib/permissions";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
+  ScriptExample,
+  ScriptFormat,
+  ScriptFormatInput,
+  ScriptFormatType,
   ApiConnectionPublic,
   ErrorLog,
   NaverTrendMore,
@@ -247,6 +251,17 @@ export const api = {
     remove: (id: string) => request<{ id: string }>(`/api/styles/${id}`, { method: "DELETE" }),
   },
 
+  scriptFormats: {
+    list: () => request<ScriptFormat[]>("/api/script-formats"),
+    create: (input: ScriptFormatInput) => request<ScriptFormat>("/api/script-formats", { method: "POST", body: json(input) }),
+    update: (id: string, input: ScriptFormatInput) => request<ScriptFormat>(`/api/script-formats/${id}`, { method: "PUT", body: json(input) }),
+    setDefault: (id: string) => request<ScriptFormat>(`/api/script-formats/${id}`, { method: "PATCH" }),
+    remove: (id: string) => request<{ id: string }>(`/api/script-formats/${id}`, { method: "DELETE" }),
+    /** 참고 대본 → 포맷 가이드라인 (AI, 저장하지 않음) */
+    analyze: (examples: ScriptExample[], contentType: ScriptFormatType) =>
+      request<{ name: string; guideline: string; provider: string }>("/api/script-formats/analyze", { method: "POST", body: json({ examples, contentType }) }),
+  },
+
   photos: {
     /** 블로그 사진 설명 (AI Vision). 작은 미리보기만 보내고 저장하지 않는다 */
     describe: (images: { mediaType: string; data: string }[], productName?: string) =>
@@ -271,7 +286,7 @@ export const api = {
     deleteMany: (kind: "contents" | "products" | "feedback" | "performance", ids: string[]) =>
       request<{ deleted: number }>("/api/memory/delete", { method: "POST", body: json({ kind, ids }) }),
     overview: () =>
-      request<{ counts: Record<"profiles" | "products" | "styles" | "contents" | "exemplars" | "feedback" | "performance", number> }>(
+      request<{ counts: Record<"profiles" | "products" | "styles" | "scriptFormats" | "contents" | "exemplars" | "feedback" | "performance", number> }>(
         "/api/memory",
       ),
     performance: () => request<(PerformanceMetric & { headline: string })[]>("/api/performance"),

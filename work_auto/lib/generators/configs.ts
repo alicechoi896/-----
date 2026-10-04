@@ -1,3 +1,4 @@
+import { scriptFormatTypeOf } from "@/lib/script-format";
 import type { FieldDef, FieldOption, GeneratorConfig, OutputSection } from "./types";
 
 /* ─────────────────────────────────────────────
@@ -293,6 +294,18 @@ for (const config of Object.values(GENERATOR_CONFIGS)) {
       source: "profiles",
       placeholder: "자동 (스타일 연결 → 기본 프로필)",
       hideIfSingle: true,
+    });
+  }
+  // 대본 포맷: 영상·클립만. 비우면 이 유형(제품 홍보·정보성)의 기본 포맷 자동 적용
+  const formatType = scriptFormatTypeOf(config.featureId);
+  if (formatType && !config.fields.some((f) => f.name === "scriptFormatId")) {
+    config.fields.push({
+      name: "scriptFormatId",
+      label: "대본 포맷",
+      type: "remote-select",
+      source: "script-formats",
+      sourceParam: `${formatType}:${styleChannelOf(config.featureId)}`,
+      placeholder: "기본 포맷 자동 적용",
     });
   }
   if (!config.fields.some((f) => f.name === "styleId")) {

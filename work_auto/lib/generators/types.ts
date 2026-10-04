@@ -13,7 +13,7 @@ export interface FieldOption {
  * 원격 데이터로 채우는 선택 목록의 출처.
  * 새 출처를 추가하면 features/content-generator/useRemoteOptions.ts 에도 추가한다.
  */
-export type RemoteSource = "products" | "youtube-trends" | "naver-trends" | "videos" | "styles" | "profiles";
+export type RemoteSource = "products" | "youtube-trends" | "naver-trends" | "videos" | "styles" | "profiles" | "script-formats";
 
 export type FieldType =
   | "text" // 한 줄 입력

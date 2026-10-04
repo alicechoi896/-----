@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  ScriptFormat,
   ErrorLog,
   LearningProfile,
   ContentPublication,
@@ -57,4 +58,6 @@ export interface Repositories {
   publications: Repository<ContentPublication>;
   learningProfiles: Repository<LearningProfile>;
   errorLogs: Repository<ErrorLog>;
+  /** 대본 포맷 (v0.9.26, 본인 것만) */
+  scriptFormats: Repository<ScriptFormat>;
 }

@@ -8,6 +8,7 @@ import type {
   Product,
   ProductAnalysis,
   ReferenceVideo,
+  ScriptFormat,
   TrendOption,
   UserStyle,
 } from "@/lib/types";
@@ -38,6 +39,8 @@ export interface GenerationContext {
   /** 현재 트렌드 */
   trend: TrendOption | null;
   referenceVideo: ReferenceVideo | null;
+  /** 대본 포맷: 생성 폼에서 고른 것 → 이 유형·채널의 기본 포맷 (영상·클립만, docs/SCRIPT_FORMATS.md) */
+  scriptFormat: ScriptFormat | null;
   /** 정직성 가드레일 활성화 여부 (실제 경험 미입력) */
   honestyGuard: boolean;
   /** 결과와 함께 저장할 요약 */

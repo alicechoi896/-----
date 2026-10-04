@@ -44,6 +44,17 @@ const LOADERS: Record<RemoteSource, (param?: string) => Promise<RemoteOption[]>>
         label: `${p.isDefault ? "★ " : ""}${p.name}`,
         description: [p.mainCategory, ...p.subCategories].join(" · "),
       })),
+  // 이 유형(제품 홍보·정보성)·채널에 쓸 수 있는 대본 포맷. 기본 포맷은 ★ (param = "product:youtube")
+  "script-formats": async (param) => {
+    const [type, channelId] = (param ?? "").split(":");
+    return (await api.scriptFormats.list())
+      .filter((f) => f.contentType === type && (f.channelIds.length === 0 || f.channelIds.includes(channelId as (typeof f.channelIds)[number])))
+      .map((f) => ({
+        value: f.id,
+        label: `${f.isDefault ? "★ " : ""}${f.name}`,
+        description: [f.examples.length ? `참고 대본 ${f.examples.length}개` : "", f.guideline.split("\n").find((l) => /^\s*1\)/.test(l))?.trim() ?? ""].filter(Boolean).join(" · "),
+      }));
+  },
   // 이 채널에 쓸 수 있는 스타일(적용 채널에 포함되거나 모든 채널)만. 기본 스타일은 ★
   styles: async (channelId) =>
     (await api.styles.list())

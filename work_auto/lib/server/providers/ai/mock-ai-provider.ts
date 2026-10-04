@@ -112,6 +112,29 @@ export class MockAIProvider implements AIProvider {
       return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
     }
 
+    if (request.task === "script-format-extract") {
+      // 데모: 참고 대본의 줄 수·글자 수·마무리 표현으로 간단한 포맷을 만든다
+      const ex = (v.examples as { text: string }[]) ?? [];
+      const lines = ex.map((e) => e.text.split("\n").filter((l) => l.trim()));
+      const avgLines = Math.round(lines.reduce((s, l) => s + l.length, 0) / Math.max(1, lines.length)) || 10;
+      const all = lines.flat();
+      const avgLen = Math.round(all.reduce((s, l) => s + l.length, 0) / Math.max(1, all.length)) || 15;
+      const product = v.contentType !== "info";
+      const has = (re: RegExp) => ex.some((e) => re.test(e.text));
+      const guideline = [
+        "[구조]",
+        product ? "1) Hook (1~2줄): [제품] + '아무거나 사면 후회' / '이거 모르면 손해' 처럼 손해·후회를 짚는다" : "1) Hook (1~2줄): '[주제], 결국 난리 났습니다' 처럼 사건·변화를 먼저 던진다",
+        product ? "2) 핵심 정보 (3~5줄): 숫자가 들어간 스펙·장점 2~3개" : "2) 핵심 사실 (3~5줄): 무슨 일인지 숫자·출처와 함께",
+        product ? "3) 비교·추천 대상 (1~2줄): 누구에게 맞는지, 다른 모델과 차이" : "3) 의미·영향 (1~2줄): 시청자에게 무엇이 달라지는지",
+        has(/아래|링크|제품 ?보기|태그/) ? "4) CTA (1~2줄): '아래 제품 보기에서 확인하세요' 처럼 링크로 안내" : "4) CTA (1줄): 저장·댓글로 마무리",
+        `[리듬] 한 줄 약 ${Math.max(5, avgLen - 4)}~${avgLen + 6}자, 전체 ${Math.max(6, avgLines - 2)}~${avgLines + 3}줄, 15~40초`,
+        "[Hook 방식] 후회·손해 경고 / '이런 걸 왜 사지?' 같은 반문 / '믿어지세요?' 같은 놀람",
+        "[CTA 방식] 아래 링크·제품 보기 안내, 가격 확인 유도",
+        "[피할 것] 제품 정보에 없는 할인·배송 약속, '무조건'·'100%'·'역대급' 같은 단정 (근거가 있을 때만)",
+      ].join("\n");
+      return { data: { name: product ? "후회형 제품 쇼츠" : "이슈 요약 쇼츠", guideline } as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task === "style-type-examples") {
       // 데모: 고른 유형의 예시를 번갈아 (부족하면 번호를 붙여 다르게)
       const types = (v.types as { label: string; examples: string[] }[]) ?? [];

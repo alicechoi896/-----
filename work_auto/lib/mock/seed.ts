@@ -1,4 +1,5 @@
 import type {
+  ScriptFormat,
   ErrorLog,
   LearningProfile,
   ContentPublication,
@@ -45,6 +46,7 @@ export interface StoreState {
   publications: ContentPublication[];
   learningProfiles: LearningProfile[];
   errorLogs: ErrorLog[];
+  scriptFormats: ScriptFormat[];
 }
 
 const DAY = 86_400_000;
@@ -312,6 +314,40 @@ export function createSeedState(now: number = Date.now()): StoreState {
     publications: demoPublications(now, userId, contents, products),
     learningProfiles: [],
     errorLogs: [],
+    // 데모 대본 포맷 (제품 홍보 기본 1개). 참고 대본은 예시로 쓴 가상의 문장
+    scriptFormats: [
+      {
+        id: "sfm_seed1",
+        userId,
+        name: "후회형 제품 쇼츠",
+        contentType: "product",
+        channelIds: [],
+        examples: [
+          {
+            title: "무선청소기 아무거나 사면 후회합니다",
+            views: 18_000,
+            text: "무선청소기\n아무거나 사면 후회합니다\n1.3kg 가벼운 무게라\n한 손으로 계단까지 끝\n180AW 흡입력에\n최대 60분 사용\n먼지통도 원터치로 비워요\n자세한 가격은\n아래 제품 보기에서 확인하세요",
+          },
+          {
+            title: "에어프라이어 이거 모르면 손해",
+            views: 9_500,
+            text: "에어프라이어 고민 중이라면\n이거 모르면 손해예요\n위아래 듀얼 히터라\n뒤집지 않아도 고르게 익고\n12L 대용량에\n세척도 간편해요\n지금 가격은\n아래 링크에서 확인해 보세요",
+          },
+        ],
+        guideline: [
+          "[구조]",
+          "1) Hook (1~2줄): 제품명 + '아무거나 사면 후회' / '이거 모르면 손해' 처럼 손해를 짚는 한마디",
+          "2) 핵심 정보 (3~5줄): 숫자가 들어간 스펙·장점 2~3개 (무게, 성능, 사용 시간 등)",
+          "3) 차별점 (1~2줄): 다른 제품과 다른 점 또는 쓰는 장면",
+          "4) CTA (1~2줄): '아래 제품 보기에서 확인하세요' 처럼 링크로 안내",
+          "[리듬] 한 줄 5~20자, 전체 8~14줄, 15~30초",
+          "[피할 것] 제품 정보에 없는 할인·배송 약속, '무조건'·'100%' 같은 단정",
+        ].join("\n"),
+        isDefault: true,
+        createdAt: iso(5),
+        updatedAt: iso(5),
+      },
+    ],
     auditLogs: [
       { id: "log_seed1", actorId: userId, actorEmail: "demo@example.com", actorName: "데모 관리자", action: "user.approve", targetType: "user", targetId: "demo-member-1", targetLabel: "김크리", detail: { role: "gold", roleLabel: "골드" }, createdAt: iso(10) },
     ],

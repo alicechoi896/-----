@@ -286,19 +286,22 @@ export const memoryService = {
   async overview() {
     const userId = await getCurrentUserId();
     const repo = getRepositories();
-    const [profiles, products, styles, contents, feedback, performance] = await Promise.all([
+    const [profiles, products, styles, contents, feedback, performance, scriptFormats] = await Promise.all([
       repo.contentProfiles.list((p) => p.userId === userId),
       repo.products.list((p) => p.userId === userId),
       repo.styles.list((s) => s.userId === userId),
       repo.contents.list((c) => c.userId === userId),
       repo.feedback.list((f) => f.userId === userId),
       this.listPerformance(),
+      // 대본 포맷 테이블이 아직 없어도(schema.sql 재실행 전) 화면은 열린다
+      repo.scriptFormats.list((f) => f.userId === userId).catch(() => []),
     ]);
     return {
       counts: {
         profiles: profiles.length,
         products: products.length,
         styles: styles.length,
+        scriptFormats: scriptFormats.length,
         contents: contents.length,
         exemplars: contents.filter((c) => c.isExemplar).length,
         feedback: feedback.length,

@@ -9,6 +9,7 @@
 import path from "node:path";
 
 const SAMPLE_CSV = path.resolve(import.meta.dirname, "../../public/samples/style-starter.csv");
+const SAMPLE_SCRIPTS = path.resolve(import.meta.dirname, "./sample-scripts.txt");
 
 const btn = (p, text) => p.locator("button", { hasText: text });
 const sideLink = (p, name) => p.locator("aside").getByRole("link", { name, exact: true });
@@ -271,7 +272,7 @@ export const SHOTS = [
   },
   {
     id: "05-yt-info",
-    viewport: { width: 1280, height: 900 },
+    viewport: { width: 1280, height: 1000 },
     url: "/youtube/info-video",
     marks: {
       1: (p) => field(p, "카테고리"),
@@ -450,6 +451,41 @@ export const SHOTS = [
       1: (p) => btn(p, "파일 고르기").first(),
       2: (p) => p.locator("[role=dialog]").getByText("항목을 찾았습니다").first().locator("xpath=ancestor::div[contains(@class,'rounded')][1]"),
       3: (p) => p.locator("[role=dialog] button", { hasText: /개 추가$/ }).first(),
+    },
+  },
+
+  {
+    id: "08-formats",
+    url: "/ai-learning?tab=formats",
+    prepare: async (p) => {
+      await p.getByText("후회형 제품 쇼츠").first().waitFor({ timeout: 10_000 });
+    },
+    scrollTo: (p) => p.locator("main [role=tablist]").first(),
+    marks: {
+      1: (p) => tab(p, "대본 포맷"),
+      2: (p) => btn(p, "포맷 추가").first(),
+      3: (p) => p.locator("main article", { hasText: "후회형 제품 쇼츠" }).first(),
+    },
+  },
+  {
+    id: "08-format-form",
+    url: "/ai-learning?tab=formats",
+    viewport: { width: 1280, height: 1400 },
+    prepare: async (p) => {
+      await btn(p, "포맷 추가").first().click();
+      await p.waitForTimeout(400);
+      await p.locator("main input[type=file][accept*='.txt']").first().setInputFiles(SAMPLE_SCRIPTS);
+      await p.getByText("개를 추가했습니다").first().waitFor({ timeout: 10_000 });
+      await btn(p, "AI 로 포맷 만들기").first().click();
+      await p.locator("main textarea[data-guideline]").first().waitFor();
+      await p.waitForFunction(() => (document.querySelector("main textarea[data-guideline]")?.value ?? "").includes("[구조]"), null, { timeout: 15_000 });
+    },
+    scrollTo: (p) => p.locator("h2, h3", { hasText: "새 대본 포맷" }).first(),
+    marks: {
+      1: (p) => btn(p, "메모장 파일 불러오기").first(),
+      2: (p) => p.getByPlaceholder("영상 제목 (선택)").first().locator("xpath=ancestor::div[contains(@class,'rounded-control')][1]"),
+      3: (p) => btn(p, "AI 로 포맷").first(),
+      4: (p) => p.locator("main textarea[data-guideline]").first(),
     },
   },
 

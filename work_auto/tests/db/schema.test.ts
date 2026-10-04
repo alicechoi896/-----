@@ -114,6 +114,21 @@ describe("학습 프로필 (learning_profiles) — 팀 공통", () => {
   });
 });
 
+describe("대본 포맷 (script_formats) — 본인 것만", () => {
+  it("본인 이름으로 만들고 남의 포맷은 안 보인다, 유형은 product/info 만", async () => {
+    await as(B);
+    const r = await q(`insert into public.script_formats (id, name, content_type, examples, guideline) values ('sf1','후회형','product','[{"title":"t","views":1,"text":"대본"}]','[구조]') returning examples, channel_ids, is_default`);
+    expect(r.rows[0].examples).toEqual([{ title: "t", views: 1, text: "대본" }]);
+    expect(r.rows[0].channel_ids).toEqual([]);
+    expect((await q(`insert into public.script_formats (id, user_id, name) values ('sf2','${C}','남의 이름')`)).err).toBeTruthy();
+    expect((await q(`insert into public.script_formats (id, name, content_type) values ('sf3','x','blog')`)).err).toBeTruthy();
+    await as(C);
+    expect((await q(`select count(*)::int n from public.script_formats`)).rows[0].n).toBe(0);
+    await as(PENDING);
+    expect((await q(`select count(*)::int n from public.script_formats`)).rows[0].n).toBe(0);
+  });
+});
+
 describe("오류 기록 (error_logs) — 기록은 누구나, 전체 조회·삭제는 관리자", () => {
   it("직원은 자기 이름으로 기록 (저장 직후 결과를 돌려받을 수 있어야 한다), 남의 이름은 불가", async () => {
     await as(B);

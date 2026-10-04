@@ -27,6 +27,7 @@ npm run test:api              # 다른 주소는 API_BASE_URL=http://127.0.0.1:4
 |------|------|
 | `tests/unit/style-and-lists.test.ts` | 나의 스타일 표본(10개)·규칙/금지 전부·블로그 재해석 지시, 계절, 시즌 키워드 순서, 관련 검색어 정렬, 아이디어 30개 중복 없음, 업로드 날짜(한국 시간), CSV 수식 주입 방지 |
 | `tests/unit/server-rules.test.ts` | SSRF(내부 주소 거부), 스타일 파일 검사(TXT/CSV/바이너리), 오류 기록 비밀값 가림, 학습 프로필 정리 규칙(중복·근거·10개 제한·짧은 요약), YouTube 업로드 판별 |
+| `tests/unit/script-format.test.ts` | 대본 포맷: 메모장 파일 나누기(제목·조회수·구분선·잡음 줄), 조회수 읽기, 저장 전 정리·30개 제한, 생성용 예시 2개 |
 | `tests/unit/manual.test.ts` | 사용 매뉴얼: 절마다 스크린샷 존재, 단계 번호 = 강조 번호, 강조 상자가 화면 안 (docs/MANUAL.md) |
 | `tests/db/schema.test.ts` | `supabase/schema.sql` 을 내장 Postgres 에서 **두 번** 실행(재실행 안전) + RLS: 본인 데이터만, 등급 셀프 변경 불가, 업로드 팀 공용·수정/삭제 권한, 학습 프로필 삭제는 관리자, 오류 기록 권한 |
 | `tests/api/flows.test.ts` | 생성 결과 구성(제목·Hook·CTA 10개, 블로그 `##` 없음) → 후보 [추가 만들기](기존 후보 유지·체크 유지)·글 [다시 만들기](다른 칸 유지) → 직접 수정·후보 선택 → 피드백 → 학습 대기 수, 업로드 등록·상태 배지·YouTube 1·7일 성과 저장, 입력 검사, NAVER [더보기] 중복 없음, 스타일 CSV 300개, 원하는 유형 저장·예시·생성 반영, 오류 기록 |

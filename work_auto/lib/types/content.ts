@@ -12,6 +12,8 @@ export interface ContextSummary {
   profile?: { id: ID; name: string } | null;
   product: { id: ID; name: string; analysisVersion: number } | null;
   style: { id: ID; name: string } | null;
+  /** 대본 포맷 (v0.9.26~, 영상·클립) */
+  scriptFormat?: { id: ID; name: string } | null;
   exemplars: { id: ID; label: string }[];
   avoidNotes: string[];
   performanceHints: string[];

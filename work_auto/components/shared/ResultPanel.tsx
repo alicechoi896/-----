@@ -345,6 +345,7 @@ function ContextSummaryBox({ content }: { content: GeneratedContent }) {
     { label: "콘텐츠 프로필", value: c.profile?.name ?? null },
     { label: "제품", value: c.product ? `${c.product.name} (분석 v${c.product.analysisVersion})` : null },
     { label: "스타일", value: c.style?.name ?? null },
+    { label: "대본 포맷", value: c.scriptFormat?.name ?? null },
     { label: "좋은 예시", value: c.goodExampleIds?.length ? `${c.goodExampleIds.length}건 (요약)` : c.exemplars.length ? `${c.exemplars.length}건` : null },
     { label: "학습 프로필", value: c.learningProfile ? `v${c.learningProfile.version} · 경향 ${c.learningProfile.insightCount}개` : null },
     { label: "피드백", value: c.avoidNotes.length ? `${c.avoidNotes.length}건 반영` : null },

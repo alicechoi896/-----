@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Compass, GraduationCap, History, MessageSquare, Package, Palette, Plus } from "lucide-react";
+import { BarChart3, Compass, FileText, GraduationCap, History, MessageSquare, Package, Palette, Plus } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { StatTile, Tabs, type TabItem } from "@/components/ui";
@@ -12,18 +12,19 @@ import { FeedbackTab } from "./FeedbackTab";
 import { LearningProfileTab } from "./LearningProfileTab";
 import { PerformanceTab } from "./PerformanceTab";
 import { ProductMemoryTab } from "./ProductMemoryTab";
+import { ScriptFormatTab } from "./ScriptFormatTab";
 import { StyleTab } from "./StyleTab";
 
-type TabKey = "profiles" | "products" | "styles" | "contents" | "feedback" | "performance" | "learning";
+type TabKey = "profiles" | "products" | "styles" | "formats" | "contents" | "feedback" | "performance" | "learning";
 
 /** 생성 시 Context 로 들어가는 순서 (docs/AI_LEARNING_SYSTEM.md) */
-const FLOW = ["고정 프롬프트", "콘텐츠 프로필", "스타일 데이터", "제품 데이터", "현재 트렌드", "학습 프로필", "좋은 예시(요약)", "피드백"];
+const FLOW = ["고정 프롬프트", "콘텐츠 프로필", "스타일 데이터", "대본 포맷", "제품 데이터", "현재 트렌드", "학습 프로필", "좋은 예시(요약)", "피드백"];
 
 /**
  * AI 학습 관리 — "학습" = Fine-tuning 이 아니라, 저장 데이터를 생성 시 Context 로 주입하는 것.
  * 이 화면에서 각 Memory 를 확인하고 관리한다.
  */
-const TAB_KEYS: TabKey[] = ["profiles", "products", "styles", "contents", "feedback", "performance", "learning"];
+const TAB_KEYS: TabKey[] = ["profiles", "products", "styles", "formats", "contents", "feedback", "performance", "learning"];
 
 export function AiLearningCenter({
   initialTab,
@@ -44,6 +45,7 @@ export function AiLearningCenter({
     { value: "profiles", label: "콘텐츠 프로필", icon: Compass, count: c?.profiles },
     { value: "products", label: "제품 데이터", icon: Package, count: c?.products },
     { value: "styles", label: "나의 스타일", icon: Palette, count: c?.styles },
+    { value: "formats", label: "대본 포맷", icon: FileText, count: c?.scriptFormats },
     { value: "contents", label: "콘텐츠 히스토리", icon: History, count: c?.contents },
     { value: "feedback", label: "피드백", icon: MessageSquare, count: c?.feedback },
     { value: "performance", label: "성과 데이터", icon: BarChart3, count: c?.performance },
@@ -81,6 +83,7 @@ export function AiLearningCenter({
           {tab === "profiles" && <ContentProfileTab />}
           {tab === "products" && <ProductMemoryTab onChanged={overview.reload} />}
           {tab === "styles" && <StyleTab initialReference={styleRef} initialChannel={styleChannel} />}
+          {tab === "formats" && <ScriptFormatTab />}
           {tab === "contents" && <ContentHistoryTab onChanged={overview.reload} />}
           {tab === "feedback" && <FeedbackTab onChanged={overview.reload} />}
           {tab === "performance" && <PerformanceTab onChanged={overview.reload} />}

@@ -318,6 +318,20 @@ UserStyle 에 `profileId` (선택, `on delete set null`) 를 추가했다. 이 �
 
 생성 콘텐츠의 업로드 상태(미업로드·예약·업로드 완료)는 이 표에서 계산한다 (generated_contents 에 저장하지 않음).
 
+### ScriptFormat (script_formats, v0.9.26)
+
+**왜 필요한가**: 잘된 영상 대본의 공통 구조(Hook → 핵심 정보 → CTA, 줄 수·리듬)를 저장해 영상·클립 대본에 적용한다. 말투(나의 스타일)와 구조를 나눈다. 자세한 내용은 [SCRIPT_FORMATS.md](./SCRIPT_FORMATS.md).
+
+| 필드 | 설명 |
+|------|------|
+| id, userId | 본인 것만 |
+| name, contentType | 이름, 유형 `product`(제품 홍보) / `info`(정보성) |
+| channelIds | YouTube·NAVER 클립 (비면 둘 다) |
+| examples | 참고 대본 `[{ title, views, text }]` 최대 30개 (jsonb) |
+| guideline | 대본 구조 가이드라인 (AI 가 만들고 사용자가 고친다) |
+| isDefault | 유형마다 기본 1개 |
+| createdAt / updatedAt | |
+
 ### ErrorLog (error_logs, v0.9.21)
 
 **왜 필요한가**: 직원이 "안 돼요"라고 할 때 무엇이 왜 안 됐는지 관리자가 바로 볼 수 있게. 외부 서비스(Sentry 등) 없이 앱 안에서.

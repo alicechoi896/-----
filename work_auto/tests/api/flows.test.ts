@@ -152,6 +152,28 @@ describe("트렌드·스타일·오류 기록", () => {
     await j(`/api/styles/${sty.id}`, { method: "DELETE" });
   });
 
+  it("대본 포맷: 메모장 대본 → AI 포맷 → 저장(기본) → 제품 영상에 자동 적용, 블로그에는 없음", async ({ skip }) => {
+    if (!reachable) skip();
+    const examples = [
+      { title: "청소기 후회", views: 18000, text: "무선청소기\n아무거나 사면 후회합니다\n1.3kg 가벼운 무게\n아래 제품 보기에서 확인하세요" },
+      { title: "에어프라이어", views: 9000, text: "에어프라이어\n이거 모르면 손해예요\n듀얼 히터라 고르게 익어요\n아래 링크 확인하세요" },
+    ];
+    const a = (await post("/api/script-formats/analyze", { examples, contentType: "product" })).data as { name: string; guideline: string };
+    expect(a.guideline).toContain("[구조]");
+    expect((await post("/api/script-formats/analyze", { examples: [], contentType: "product" })).ok).toBe(false);
+    const saved = (await post("/api/script-formats", { name: "테스트 포맷", contentType: "product", channelIds: [], examples, guideline: a.guideline, isDefault: true })).data as { id: string; isDefault: boolean };
+    expect(saved.isDefault).toBe(true);
+    const list = (await j<{ id: string; isDefault: boolean; contentType: string }[]>("/api/script-formats")).data;
+    expect(list.filter((f) => f.contentType === "product" && f.isDefault).map((f) => f.id)).toEqual([saved.id]); // 유형마다 기본 1개
+
+    const products = await j<{ id: string }[]>("/api/products");
+    const gen = (await post("/api/contents/generate", { featureId: "yt-product-video", input: { productId: products.data[0].id } })).data as Content;
+    expect((gen.context.scriptFormat as { name: string }).name).toBe("테스트 포맷");
+    const blog = (await post("/api/contents/generate", { featureId: "blog-info-writing", input: { writingType: "일반 정보", topic: "포맷 테스트" } })).data as Content;
+    expect(blog.context.scriptFormat ?? null).toBeNull();
+    await j(`/api/script-formats/${saved.id}`, { method: "DELETE" });
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;
