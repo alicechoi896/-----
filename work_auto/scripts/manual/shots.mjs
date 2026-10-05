@@ -250,6 +250,7 @@ export const SHOTS = [
     id: "04-yt-result",
     url: "/youtube/trends",
     prepare: async (p) => {
+      await p.locator("main select").nth(1).selectOption("");
       await p.locator("[data-rising]").first().click();
       await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       await btn(p, "AI 주제 추천").first().click();
@@ -266,6 +267,7 @@ export const SHOTS = [
     id: "04-yt-outlier",
     url: "/youtube/trends",
     prepare: async (p) => {
+      await p.locator("main select").nth(1).selectOption("");
       await p.locator("[data-rising]").first().click();
       await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       await p.locator("[data-outlier-button]").first().click();
@@ -304,6 +306,7 @@ export const SHOTS = [
     url: "/youtube/trends",
     viewport: { width: 1280, height: 1000 },
     prepare: async (p) => {
+      await p.locator("main select").nth(1).selectOption("");
       await p.locator("[data-rising]").first().click();
       await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
@@ -616,7 +619,7 @@ export const SHOTS = [
     id: "09-day",
     url: "/uploads",
     prepare: async (p) => {
-      await p.locator("main").getByText("YouTube · 클린웨이", { exact: false }).first().click();
+      await p.locator("main [title^=\"YouTube · \"]", { hasText: "클린웨이브" }).first().click();
       await p.getByText("지금 조회").first().waitFor({ timeout: 10_000 });
     },
     marks: {

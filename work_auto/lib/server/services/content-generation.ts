@@ -103,6 +103,35 @@ async function prepare({ featureId, input }: GenerateContentRequest) {
 }
 
 /** 5)~6) 정직성 검사 + 저장 (빠른·정밀 공통) */
+/** 사용자가 넣은 주요 키워드 (주요 키워드·메인·서브 키워드, 순서 유지·중복 제거) */
+function userKeywords(input: Record<string, unknown>): string[] {
+  const raw = [input.mainKeyword, ...(Array.isArray(input.keywords) ? input.keywords : [input.keywords]), ...(Array.isArray(input.subKeywords) ? input.subKeywords : [])];
+  return dedupeKeywords(raw.map((x) => String(x ?? "")));
+}
+const kwKey = (s: string) => s.replace(/^#/, "").replace(/\s+/g, "").toLowerCase();
+function dedupeKeywords(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list) {
+    const k = raw.replace(/\s+/g, " ").trim();
+    if (k.replace(/^#/, "").length < 2 || seen.has(kwKey(k))) continue;
+    seen.add(kwKey(k));
+    out.push(k);
+  }
+  return out;
+}
+/** 키워드 30개·태그·해시태그에 주요 키워드를 모두 포함 (v0.9.46: 여러 개 넣어도 하나만 반영되던 문제) */
+function mergeUserKeywords(config: Prepared["config"], input: Record<string, unknown>, output: Record<string, GeneratedValue>) {
+  const mine = userKeywords(input);
+  for (const sec of config.outputs) {
+    const v = output[sec.key];
+    if (!Array.isArray(v)) continue;
+    if (sec.key === "keywords") output.keywords = dedupeKeywords([...mine, ...v]).slice(0, Math.max(30, sec.count ?? 30));
+    else if (sec.key === "tags") output.tags = dedupeKeywords([...mine, ...v]).slice(0, sec.count ?? 30);
+    else if (sec.key === "hashtags") output.hashtags = dedupeKeywords([...mine.map((k) => `#${k.replace(/\s+/g, "")}`), ...v]).slice(0, sec.count ?? 8);
+  }
+}
+
 async function finish(
   p: Prepared,
   output: Record<string, GeneratedValue>,
@@ -110,6 +139,7 @@ async function finish(
   extra: { headline?: string; quality?: PreciseQuality; workflow?: ContentWorkflow; keywordIntel?: KeywordIntelligence | null } = {},
 ): Promise<GeneratedContent> {
   const { feature, config, featureId, channelId, userId, input, context, template } = p;
+  mergeUserKeywords(config, input, output);
   if (context.honestyGuard) {
     const violations = findHonestyViolations(JSON.stringify(output));
     if (violations.length) context.summary.notes.push(`정직성 검사 경고: "${violations.join('", "')}" 표현 확인 필요`);
@@ -270,7 +300,7 @@ export const contentGenerationService = {
         isInfo
           ? "3. 3편은 설득 구조가 다르다: ① 가장 중요한 정보부터 ② 궁금증·반전형 ③ 체크리스트·정리형. script_structures 에 각 편의 구조 이름을 쓴다."
           : "3. 3편은 설득 구조가 다르다: ① 문제 해결형 ② 핵심 장점·결론 먼저 ③ 비교·구매 판단형. script_structures 에 각 편의 구조 이름을 쓴다.",
-        "4. primary_keyword 는 이 제목의 검색 의도에 맞는 핵심 키워드 1개, related_keywords 는 제목·대본 방향에 맞는 관련 키워드(검색 의도 intent: purchase·info·compare·review·howto 중 하나). Keyword Intelligence 의 실제 표현을 우선 쓰고, 제목과 관계없는 키워드는 넣지 않는다.",
+        "4. primary_keyword 는 이 제목의 검색 의도에 맞는 핵심 키워드 1개, related_keywords 는 제목·대본 방향에 맞는 관련 키워드(검색 의도 intent: purchase·info·compare·review·howto 중 하나). Keyword Intelligence 의 실제 표현을 우선 쓰고, 제목과 관계없는 키워드는 넣지 않는다. 사용자가 주요 키워드를 여러 개 넣었으면 그 키워드를 모두 포함하고 각각에서 파생된 키워드를 고르게 섞어 related_keywords 를 20~29개 만든다.",
         tagKey ? `5. ${tagKey} 는 최종 키워드(primary_keyword + related_keywords)에서 만든다. 중복·의미 없는 일반 단어는 뺀다.` : "",
         "6. 설명(description)은 이 제목과 대본에 실제로 나온 내용만 쓴다. 제품 스펙은 [제품 정보] 범위 안에서만.",
       ]
@@ -298,9 +328,11 @@ export const contentGenerationService = {
     const relatedKeywords = listOf(result.data.related_keywords)
       .map((r) => ({ keyword: str((r as { keyword?: unknown })?.keyword, 60), intent: str((r as { intent?: unknown })?.intent, 20) || "info" }))
       .filter((r, i, arr) => r.keyword && r.keyword !== primaryKeyword && arr.findIndex((x) => x.keyword === r.keyword) === i)
-      .slice(0, 20);
+      .slice(0, 29);
     // 키워드 칸 = 최종 키워드 (제목 기준), 태그는 중복 제거
-    if (outputs.some((o) => o.key === "keywords")) output.keywords = [primaryKeyword, ...relatedKeywords.map((r) => r.keyword)].filter(Boolean);
+    // 핵심 → 주요 키워드(사용자) → 관련 키워드 → AI 키워드 순서로 최대 30개 (finish 에서 한 번 더 정리)
+    if (outputs.some((o) => o.key === "keywords"))
+      output.keywords = dedupeKeywords([primaryKeyword, ...userKeywords(p.input), ...relatedKeywords.map((r) => r.keyword), ...(Array.isArray(output.keywords) ? output.keywords : [])]).slice(0, 30);
     if (tagKey && Array.isArray(output[tagKey])) output[tagKey] = [...new Set((output[tagKey] as string[]).map((t) => t.trim()).filter((t) => t.replace(/^#/, "").length >= 2))];
     const scripts = Array.isArray(output.script) ? output.script : [];
     const structures = listOf(result.data.script_structures).map((x) => str(x, 30));

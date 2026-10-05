@@ -184,6 +184,10 @@ export function renderContentPrompt(
   const userInput = Object.entries(input)
     .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId" && key !== "styleId" && key !== "profileId" && key !== "scriptFormatId")
     .map(([key, v]) => `${labels[key] ?? key}: ${Array.isArray(v) ? v.map((x) => optionLabel(key, x)).join(", ") : optionLabel(key, v)}`);
+  // 주요 키워드를 여러 개 넣으면 하나만 쓰지 않고 모두 반영한다 (v0.9.46)
+  const kwList = [...(Array.isArray(input.keywords) ? input.keywords : []), ...(Array.isArray(input.subKeywords) ? input.subKeywords : []), ...(input.mainKeyword ? [input.mainKeyword] : [])].map(String).filter(Boolean);
+  if (kwList.length > 1)
+    userInput.push(`키워드 반영: 넣은 키워드 ${kwList.length}개(${kwList.join(", ")})를 모두 쓴다 — 키워드·태그·해시태그는 각 키워드에서 파생된 표현을 고르게 섞어 풍성하게(키워드 최대 30개) 만들고, 제목·본문에도 여러 키워드를 자연스럽게 나눠 넣는다.`);
   // 콘텐츠 스타일을 여러 개 고르면 후보·대본을 그 유형들로 섞는다 (v0.9.41)
   if (Array.isArray(input.style) && input.style.length > 1)
     userInput.push(`스타일 섞기: 고른 스타일 ${input.style.length}가지(${input.style.map((x) => optionLabel("style", x)).join(" / ")})를 골고루 섞는다 — 제목·Hook·CTA 후보는 유형별로 나눠 만들고, 대본(또는 본문)도 편마다 다른 유형을 따른다.`);

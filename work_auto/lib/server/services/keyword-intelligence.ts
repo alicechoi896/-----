@@ -28,22 +28,26 @@ export function clearKeywordIntelCache(): void {
 
 /* ── 검색어(Seed) 고르기: 기능별 우선순위, 1개만 ── */
 
-const first = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? "")).trim();
+/** 주요 키워드 여러 개면 최대 3개를 'a|b|c' 로 묶는다 (YouTube 검색 OR, NAVER 는 첫 키워드로 검색 + 데이터랩에 모두) */
+const multi = (v: unknown, extra: unknown[] = []) => {
+  const list = [...(Array.isArray(v) ? v : [v]), ...extra].map((x) => String(x ?? "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  return [...new Set(list)].slice(0, 3).join("|");
+};
 
 export function pickSeed(featureId: string, input: Record<string, unknown>, ctx: { productName?: string | null; trendTitle?: string | null; category?: string | null }): string {
   const candidates =
     featureId === "yt-product-video" || featureId === "clip-product-content"
-      ? [first(input.keywords), ctx.productName, ctx.trendTitle]
+      ? [multi(input.keywords), ctx.productName, ctx.trendTitle]
       : featureId === "yt-info-video" || featureId === "clip-info-content"
-        ? [first(input.keywords), String(input.topic ?? ""), ctx.trendTitle, ctx.category]
+        ? [multi(input.keywords), String(input.topic ?? ""), ctx.trendTitle, ctx.category]
         : featureId === "blog-product-writing"
-          ? [String(input.mainKeyword ?? ""), ctx.productName]
+          ? [multi(input.mainKeyword, Array.isArray(input.subKeywords) ? input.subKeywords : []), ctx.productName]
           : featureId === "blog-info-writing"
-            ? [String(input.mainKeyword ?? ""), String(input.topic ?? ""), ctx.trendTitle]
+            ? [multi(input.mainKeyword, Array.isArray(input.subKeywords) ? input.subKeywords : []), String(input.topic ?? ""), ctx.trendTitle]
             : featureId === "blog-auto-writing"
               ? [String(input.topic ?? "")]
               : [];
-  return (candidates.map((c) => (c ?? "").replace(/\s+/g, " ").trim()).find(Boolean) ?? "").slice(0, 40);
+  return (candidates.map((c) => (c ?? "").replace(/\s+/g, " ").trim()).find(Boolean) ?? "").slice(0, 80);
 }
 
 export const platformOf = (featureId: string): "youtube" | "naver" | null =>
@@ -128,11 +132,12 @@ async function fromYouTube(seed: string, requestId: string): Promise<KeywordInte
 async function fromNaver(seed: string, requestId: string): Promise<KeywordIntelligence> {
   const nv = await getNaverTrendProvider();
   console.info("[KeywordIntel]", JSON.stringify({ requestId, platform: "naver", calls: "blog-search+datalab", seed }));
-  const posts: KeywordEvidencePost[] = await nv.blogEvidence(seed, keywordIntelConfig.naverPosts);
+  const parts = seed.split("|").map((x) => x.trim()).filter(Boolean);
+  const posts: KeywordEvidencePost[] = await nv.blogEvidence(parts[0] ?? seed, keywordIntelConfig.naverPosts);
   const docs = posts.map((p) => ({ title: p.title, body: p.description, tags: [], weight: recency(p.postdate) }));
   const candidates = extract(seed, docs, "naver", `블로그 글 ${posts.length}개`);
   let trendSignals: KeywordTrendSignal[] = [];
-  const top = [seed, ...candidates.map((c) => c.keyword).filter((k) => k !== seed)].slice(0, keywordIntelConfig.datalabTop);
+  const top = [...new Set([...parts, ...candidates.map((c) => c.keyword)])].slice(0, keywordIntelConfig.datalabTop);
   try {
     const rel = await nv.relativeInterest(top);
     trendSignals = Object.entries(rel).map(([keyword, r]) => ({
