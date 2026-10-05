@@ -53,6 +53,8 @@ export function TwoStageWorkspace({
   const [adding, setAdding] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [active, setActive] = useState<string>(groups[0]?.id ?? "");
+  // 2단계 결과가 있으면 1단계(고르기)는 접고 최종 결과 화면만 보여 준다 (v0.9.49)
+  const [pickOpen, setPickOpen] = useState(groups.length === 0);
   const busy = useRef(false);
   // 제목별 결과 [업로드 예약하기] (v0.9.48)
   const [scheduleFor, setScheduleFor] = useState<GeneratedContent | null>(null);
@@ -104,12 +106,25 @@ export function TwoStageWorkspace({
     setRunning(null);
     setPickedTitles([]);
     busy.current = false;
+    if (nextGroups.length > groups.length) setPickOpen(false);
   }
 
   const activeGroup = groups.find((g) => g.id === active) ?? groups[0] ?? null;
 
   return (
     <div className="space-y-4" data-two-stage>
+      {!pickOpen && groups.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-subtle/50 px-4 py-3" data-stage1-collapsed>
+          <p className="text-[13px] text-fg-muted">
+            <Check className="mr-1 inline size-4 text-success" />
+            1단계 완료 · 제목 {groups.length}개로 대본을 만들었습니다. 아래 최종 결과를 확인하고 업로드를 예약하세요.
+          </p>
+          <Button size="sm" variant="ghost" icon={ListPlus} onClick={() => setPickOpen(true)}>
+            다른 제목으로 더 만들기
+          </Button>
+        </div>
+      )}
+      {pickOpen && (
       <SectionCard
         title="1단계 · 제목 · Hook · CTA 고르기"
         icon={Sparkles}
@@ -208,10 +223,22 @@ export function TwoStageWorkspace({
             </Button>
           </div>
         </div>
+        {groups.length > 0 && (
+          <div className="mt-3 text-right">
+            <Button size="sm" variant="ghost" onClick={() => setPickOpen(false)}>
+              1단계 접기
+            </Button>
+          </div>
+        )}
       </SectionCard>
+      )}
 
       {groups.length > 0 && activeGroup && (
         <div className="space-y-3" data-stage2-groups>
+          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-fg">
+            <Sparkles className="size-4 text-brand" />
+            2단계 · 최종 결과 <span className="text-xs font-normal text-fg-subtle">제목마다 대본·키워드·태그·설명 — 확인한 뒤 업로드를 예약하세요</span>
+          </h2>
           <Tabs
             items={groups.map((g, i) => ({ value: g.id, label: `${i + 1}. ${(g.context.workflow?.selected?.title ?? g.headline).slice(0, 18)}` }))}
             value={activeGroup.id}
