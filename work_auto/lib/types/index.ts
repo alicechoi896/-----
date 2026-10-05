@@ -10,5 +10,6 @@ export * from "./profile";
 export * from "./publication";
 export * from "./script-format";
 export * from "./xhs";
+export * from "./social";
 export * from "./learning";
 export * from "./error-log";

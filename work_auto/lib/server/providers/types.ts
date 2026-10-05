@@ -106,7 +106,7 @@ export interface AIProvider extends BaseProvider {
 
 export interface VideoMeta {
   url: string;
-  platform: "youtube" | "naver" | "xiaohongshu" | "other";
+  platform: "youtube" | "naver" | "xiaohongshu" | "douyin" | "other";
   title: string;
   channelName: string;
   durationSec: number;

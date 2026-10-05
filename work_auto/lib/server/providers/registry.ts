@@ -14,6 +14,9 @@ import { MockYouTubeTrendProvider } from "./trends/mock-youtube-provider";
 import { NaverApiProvider } from "./trends/naver-api-provider";
 import { NaverSearchAdProvider } from "./trends/naver-searchad";
 import { YouTubeDataApiProvider } from "./trends/youtube-data-api-provider";
+import { MockDouyinProvider } from "./douyin/mock-douyin-provider";
+import { TikHubDouyinProvider } from "./douyin/tikhub-douyin-provider";
+import type { DouyinProvider } from "./douyin/types";
 import { MockXiaohongshuProvider } from "./xiaohongshu/mock-xiaohongshu-provider";
 import { TikHubXiaohongshuProvider } from "./xiaohongshu/tikhub-xiaohongshu-provider";
 import { XhsSearchError, type XiaohongshuSearchProvider } from "./xiaohongshu/types";
@@ -33,6 +36,7 @@ const mockAI = new MockAIProvider();
 const mockYouTube = new MockYouTubeTrendProvider();
 const mockNaver = new MockNaverTrendProvider();
 const mockXhs = new MockXiaohongshuProvider();
+const mockDouyin = new MockDouyinProvider();
 
 /** 연결된 Provider 의 자격증명을 복호화해서 읽는다 (서버 내부 전용) */
 async function loadCredentials<P extends ProviderId>(provider: P): Promise<ProviderCredentialMap[P] | null> {
@@ -92,6 +96,14 @@ export async function getXiaohongshuSearchProvider(): Promise<XiaohongshuSearchP
   const cred = await loadCredentials("tikhub");
   if (!cred) throw new XhsSearchError("NOT_CONNECTED", "TikHub API 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 TikHub 키를 연결해 주세요.");
   return new TikHubXiaohongshuProvider(cred.apiKey);
+}
+
+/** 도우인 (검색·공유 링크): TikHub 키 필요 (샤오홍슈와 같은 키). 데모 모드는 가짜 결과 */
+export async function getDouyinProvider(): Promise<DouyinProvider> {
+  if (serverConfig.providerMode !== "live") return mockDouyin;
+  const cred = await loadCredentials("tikhub");
+  if (!cred) throw new XhsSearchError("NOT_CONNECTED", "TikHub API 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 TikHub 키를 연결해 주세요.");
+  return new TikHubDouyinProvider(cred.apiKey);
 }
 
 /** 검색광고 키: 별도 연결(naver-searchad), 없으면 예전처럼 NAVER 연결 안에 저장된 값 */

@@ -1,8 +1,9 @@
 import "server-only";
+import { resolveDouyin } from "../providers/douyin/douyin-resolver";
 import type { ReferenceVideo } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
-import { detectPlatform, xiaohongshuId } from "@/lib/video-links";
+import { detectPlatform, douyinId, xiaohongshuId } from "@/lib/video-links";
 import { getYouTubeTrendProvider } from "../providers/registry";
 import { resolveXiaohongshu } from "../providers/video/xiaohongshu-resolver";
 import type { VideoMeta } from "../providers/types";
@@ -31,11 +32,26 @@ function xiaohongshuMeta(url: string, titleHint?: string): VideoMeta {
   };
 }
 
+function douyinMeta(url: string, titleHint?: string): VideoMeta {
+  const id = douyinId(url);
+  return {
+    url,
+    platform: "douyin",
+    title: titleHint?.trim() || `도우인 영상${id ? ` ${id.slice(-6)}` : ""}`,
+    channelName: "도우인",
+    durationSec: 0,
+    thumbnailColor: "#e8e8f0",
+  };
+}
+
 /** 영상 URL 가져오기 유스케이스 */
 export const videoService = {
-  async list(): Promise<ReferenceVideo[]> {
+  /** productId: 특정 제품 / "none" = 제품 연결 안 된 영상 / 없으면 전체 */
+  async list(filter: { productId?: string | null } = {}): Promise<ReferenceVideo[]> {
     const userId = await getCurrentUserId();
-    return (await getRepositories().videos.list((v) => v.userId === userId)).sort((a, b) =>
+    const pid = filter.productId?.trim();
+    const match = (v: ReferenceVideo) => v.userId === userId && (!pid || (pid === "none" ? !v.productId : v.productId === pid));
+    return (await getRepositories().videos.list(match)).sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
     );
   },
@@ -48,9 +64,22 @@ export const videoService = {
     const dup = await repo.videos.list((v) => v.userId === userId && v.url === trimmed);
     if (dup.length) throw new AppError("DUPLICATE", "이미 가져온 영상입니다.", 409);
 
-    // 샤오홍슈: 모바일 웹 페이지에서 제목·작성자·길이를 읽는다
+    // 샤오홍슈: 모바일 웹 페이지에서 제목·작성자·길이를 읽는다 / 도우인: TikHub 공유 링크 API / 그 밖: YouTube
+    const platform = detectPlatform(trimmed);
     const meta =
-      detectPlatform(trimmed) === "xiaohongshu"
+      platform === "douyin"
+        ? await resolveDouyin(trimmed).then(
+            (v): VideoMeta => ({
+              url: trimmed,
+              platform: "douyin",
+              title: titleHint?.trim() || v.title,
+              channelName: v.author || "도우인",
+              durationSec: v.durationSec ?? 0,
+              thumbnailColor: "#e8e8f0",
+            }),
+            () => douyinMeta(trimmed, titleHint), // TikHub 미연결·오류여도 저장 (다운로드할 때 다시 시도)
+          )
+        : platform === "xiaohongshu"
         ? await resolveXiaohongshu(trimmed).then(
             (v): VideoMeta => ({
               url: trimmed,

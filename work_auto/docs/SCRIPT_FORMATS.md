@@ -45,6 +45,11 @@
 - 생성 기록 `context.scriptFormat` 에 쓴 포맷 이름이 남고, 결과 화면 "이번 생성에 사용된 학습 데이터"에 보인다
 - 테이블이 아직 없으면(schema.sql 재실행 전) 포맷 없이 생성한다 (고른 포맷이 있을 때만 오류)
 
+### 제목만 담기 (v0.9.30)
+
+트렌드 찾기(YouTube 표·NAVER 급상승 주제·콘텐츠 아이디어)와 영상 검색의 **[대본 포맷에 담기]**는 `{ title, views, text: "" }` 를 참고 대본 목록 위에 더한다 (`POST /api/script-formats/titles`, 기존 포맷 또는 새 포맷).
+제목만 담긴 참고는 **제목 패턴**(`promptTitles`)에만 쓰고, 대본 예시(`promptExamples`)와 AI 구조 분석(`analyze`)에서는 뺀다. 같은 제목은 다시 넣지 않고, 30개 한도를 넘으면 빼고 알려 준다.
+
 ## 4. 데이터 (`script_formats`)
 
 | 컬럼 | 설명 |

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 import { useState } from "react";
 import { ArrowUpRight, CalendarRange, Info, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
 import { ProfileBar } from "@/features/content-profile/ProfileBar";
@@ -269,13 +270,22 @@ function BlogView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverT
     <SectionCard
       title={`${keyword ? `'${keyword}' 글 아이디어` : "콘텐츠 아이디어"} · ${pg.ideas.length}개`}
       icon={Lightbulb}
-      actions={pg.ideas.length > 0 && <CopyButton value={pg.ideas} label="전체 복사" />}
+      actions={
+        pg.ideas.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <SaveTitlesToFormat titles={pg.ideas.map((t) => ({ title: t, views: null }))} source="NAVER 트렌드 콘텐츠 아이디어" buttonLabel="전체 대본 포맷에 담기" variant="ghost" iconOnly />
+            <CopyButton value={pg.ideas} label="전체 복사" />
+          </div>
+        )
+      }
       flush
     >
       <ul className="divide-y divide-line">
         {pg.ideas.map((idea) => (
           <li key={idea} className="flex items-center justify-between gap-3 px-5 py-3">
             <span className="text-sm text-fg">{idea}</span>
+            <span className="flex shrink-0 items-center gap-1">
+            <SaveTitlesToFormat titles={[{ title: idea, views: null }]} source="NAVER 트렌드 콘텐츠 아이디어" buttonLabel="대본 포맷에 담기" variant="ghost" iconOnly />
             <Link
               href={`/naver-blog/info-writing?${new URLSearchParams({ topic: idea, ...(keyword ? { mainKeyword: keyword } : {}) }).toString()}`}
               className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand"
@@ -283,6 +293,7 @@ function BlogView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverT
               글쓰기
               <ArrowUpRight className="size-3.5" />
             </Link>
+            </span>
           </li>
         ))}
       </ul>
@@ -393,7 +404,14 @@ function RisingTopicsCard({
       title={`급상승 주제 · ${topics.length}개`}
       icon={Zap}
       description={description}
-      actions={topics.length > 0 && <CopyButton value={topics.map((t) => t.title)} label="전체 복사" />}
+      actions={
+        topics.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <SaveTitlesToFormat titles={topics.map((t) => ({ title: t.title, views: null }))} source="NAVER 트렌드 급상승 주제" buttonLabel="전체 대본 포맷에 담기" variant="ghost" iconOnly />
+            <CopyButton value={topics.map((t) => t.title)} label="전체 복사" />
+          </div>
+        )
+      }
       flush
     >
       {topics.length === 0 && <EmptyNote text="급상승 주제를 찾지 못했습니다. 위쪽 안내 문구를 확인하거나 다른 검색어로 조회해 보세요." />}
@@ -416,10 +434,13 @@ function RisingTopicsCard({
                     </div>
                   )}
                 </div>
-                <Link href={makeHref(t)} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand">
-                  {makeLabel}
-                  <ArrowUpRight className="size-3.5" />
-                </Link>
+                <span className="flex shrink-0 items-center gap-1">
+                  <SaveTitlesToFormat titles={[{ title: t.title, views: null }]} source="NAVER 트렌드 급상승 주제" buttonLabel="대본 포맷에 담기" variant="ghost" iconOnly />
+                  <Link href={makeHref(t)} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand">
+                    {makeLabel}
+                    <ArrowUpRight className="size-3.5" />
+                  </Link>
+                </span>
               </li>
             ))}
           </ul>

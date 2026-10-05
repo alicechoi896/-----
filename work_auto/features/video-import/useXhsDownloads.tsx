@@ -4,18 +4,18 @@ import { useState } from "react";
 import { CircleCheck } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { downloadBlob } from "@/lib/photo-process";
-import { downloadXhsMuted, type XhsStage } from "@/lib/xhs-download";
+import { MediaBlockedError, downloadXhsMuted, type XhsStage } from "@/lib/xhs-download";
 import { createZip } from "@/lib/zip";
 import { Badge } from "@/components/ui";
 
 /**
- * 샤오홍슈 영상 받기 (영상 URL 가져오기 화면과 제품 상세 화면이 함께 쓴다).
- * 워터마크 없는 원본을 받아 소리만 뺀다.
+ * 샤오홍슈·도우인 영상 받기 (영상 URL 가져오기 화면과 제품 상세 화면이 함께 쓴다).
+ * 샤오홍슈는 워터마크 없는 원본을, 도우인은 TikHub 가 준 재생 주소를 받아 소리만 뺀다.
  * 파일은 브라우저가 직접 받아 처리한다 (서버는 영상 주소만 찾는다).
  */
 
 /** 행마다 진행 상태 */
-export type XhsJob = { stage: XhsStage | "error"; progress?: number; error?: string; note?: string };
+export type XhsJob = { stage: XhsStage | "error"; progress?: number; error?: string; note?: string; openUrl?: string };
 
 const STAGE_LABEL: Record<XhsStage, string> = {
   resolve: "영상 찾는 중",
@@ -41,10 +41,12 @@ export function useXhsDownloads() {
       const onStage = (stage: XhsStage, progress?: number) => set({ stage, progress });
       const out = await downloadXhsMuted(v.url, onStage);
       if (save) downloadBlob(out.blob, out.name);
-      set({ stage: "done", note: save ? "워터마크 없는 원본을 소리 없이 저장했습니다" : "받았습니다 (ZIP 에 담는 중)" });
+      const kind = v.platform === "douyin" ? "도우인 영상을" : "워터마크 없는 원본을";
+      set({ stage: "done", note: save ? `${kind} 소리 없이 저장했습니다` : "받았습니다 (ZIP 에 담는 중)" });
       return out;
     } catch (e) {
-      set({ stage: "error", error: e instanceof Error ? e.message : "받지 못했습니다." });
+      if (e instanceof MediaBlockedError) set({ stage: "error", error: e.message, openUrl: e.openUrl });
+      else set({ stage: "error", error: e instanceof Error ? e.message : "받지 못했습니다." });
       return null;
     }
   }
@@ -59,7 +61,7 @@ export function useXhsDownloads() {
     if (!videos.length) return;
     const results: { blob: Blob; name: string }[] = [];
     for (const [i, v] of videos.entries()) {
-      setBulk(`샤오홍슈 ${i + 1}/${videos.length} 처리 중…`);
+      setBulk(`영상 ${i + 1}/${videos.length} 처리 중…`);
       const out = await run(v, false);
       if (out) results.push(out);
     }
@@ -83,7 +85,17 @@ export function useXhsDownloads() {
 /** 행 아래 진행 상태 (단계 · 진행률 · 결과) */
 export function XhsJobStatus({ job }: { job?: XhsJob }) {
   if (!job) return null;
-  if (job.stage === "error") return <p className="mt-0.5 text-xs text-danger">{job.error}</p>;
+  if (job.stage === "error")
+    return (
+      <p className="mt-0.5 text-xs text-danger">
+        {job.error}
+        {job.openUrl && (
+          <a href={job.openUrl} target="_blank" rel="noreferrer noopener" className="ml-1.5 font-medium text-brand underline">
+            새 탭에서 열기
+          </a>
+        )}
+      </p>
+    );
   if (job.stage === "done")
     return (
       <p className="mt-0.5 flex items-center gap-1 text-xs text-success">

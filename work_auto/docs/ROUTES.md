@@ -58,10 +58,10 @@
 | `/tools/product-learning` | 제품 상세페이지 학습 | URL/이미지/텍스트 → 분석 → 저장 | ProductLearningWorkspace | Dynamic |
 | `/tools/product-library` | 제품 라이브러리 | 카드/목록, 검색, 삭제, 콘텐츠 만들기 | ProductLibrary | Dynamic |
 | `/tools/product-library/[productId]` | 제품 상세 | 전체 분석·원본·생성 이력, `?mode=edit` 수정 | ProductDetailView | Dynamic |
-| `/tools/video-import` | 영상 URL 가져오기 | URL 여러 개 저장 + 소리 없는 영상 다운로드 명령 | VideoImport | Dynamic |
+| `/tools/video-import` | 영상 URL 가져오기 | URL 여러 개 저장(샤오홍슈·도우인·YouTube) + 영상 검색 + 소리 없는 영상 다운로드 | VideoImport | Dynamic |
 | POST | `/api/memory/delete` { kind, ids[] } | AI 학습 관리 체크 삭제 (contents·products·feedback·performance) | memoryService.deleteMany |
 | PATCH | `/api/videos/:id` { productId } | 영상의 연관 제품 바꾸기 | videoService.setProduct |
-| POST | `/api/videos/resolve` { url } | 샤오홍슈 노트의 영상 주소 (주소만, 파일은 브라우저가 직접 받음) | resolveXiaohongshu |
+| POST | `/api/videos/resolve` { url } | 샤오홍슈 노트·도우인 영상의 재생 주소 (주소만, 파일은 브라우저가 직접 받음) | resolveXiaohongshu / resolveDouyin |
 | POST | `/api/videos/batch` { urls[], note? } | 여러 영상 한 번에 가져오기 (최대 20개, URL 별 결과) | videoService.importMany |
 | `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |
 | `/manual` | 사용 매뉴얼 | 장별 사용법 + 화면 강조, PDF 다운로드 | ManualView | Dynamic |
@@ -125,6 +125,7 @@
 | GET / POST | `/api/script-formats` | 대본 포맷 목록 / 만들기 | scriptFormatService |
 | PUT / PATCH / DELETE | `/api/script-formats/:id` | 수정 / 기본으로 / 삭제 | scriptFormatService |
 | POST | `/api/script-formats/analyze` { examples, contentType } | 참고 대본 → 포맷 가이드라인 (AI, 저장 안 함) | scriptFormatService.analyze |
+| POST | `/api/script-formats/titles` { formatId? \| newFormat, titles } | [대본 포맷에 담기]: 제목칸에만 (기존 포맷에 더하기 / 새 포맷) | scriptFormatService.addTitles |
 | POST | `/api/styles/type-examples` { kind, types, tone?, existing? } | 원하는 유형으로 Hook·CTA·제목 패턴 예시 10개 (AI, 저장 안 함) | styleTypeExamples |
 | GET | `/api/performance` | 성과 데이터 | memoryService.listPerformance |
 | GET | `/api/memory` | Memory 항목별 개수 | memoryService.overview |
@@ -132,6 +133,7 @@
 | PUT/DELETE | `/api/connections/:provider` | 연결 (암호화 저장) / 해제 | connectionService |
 | POST | `/api/connections/:provider/test` | 연결 테스트 | connectionService.test |
 | GET/POST | `/api/videos` | 참고 영상 조회 / 가져오기 | videoService |
+| POST | `/api/videos/social-search` { keyword, platforms, autoTranslate, sort, period, continue? } | 샤오홍슈·도우인·둘 다 검색 (한국어는 AI 1회 변환, 플랫폼별 보조 검색, 저장 안 함) | socialSearchService.search |
 | POST | `/api/videos/xhs-search` { keyword, sort, period, cursor? } | 샤오홍슈 영상 검색 (TikHub, 저장 안 함, 최대 3페이지·10분 캐시) | xhsSearchService.search |
 | GET | `/api/videos/xhs-search/detail?noteId=` | 상세 (상세보기에서만, 1시간 캐시) | xhsSearchService.detail |
 | POST | `/api/videos/xhs-search/keywords` { keyword } | AI 중국어 검색어 추천 (누를 때만 AI 1회) | xhsSearchService.suggestKeywords |

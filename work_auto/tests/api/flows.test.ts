@@ -230,6 +230,61 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(kw.keywords[0]).toBe("无线吸尘器");
   });
 
+  it("영상 검색(데모): 둘 다 → 변환 1번·플랫폼 표시, 도우인만 보조 검색, 도우인 URL 가져오기, 제품별 목록", async ({ skip }) => {
+    if (!reachable) skip();
+    type Item = { platform: string; originalUrl: string; title: string; queryType: string };
+    type P = { platform: string; items: Item[]; error: unknown; queriesUsed: { type: string }[] };
+    type R = { translation: { translated: boolean; primaryZh: string }; platforms: P[] };
+    // CASE 3: 둘 다
+    const both = (await post("/api/videos/social-search", { keyword: "무선청소기", platforms: ["xiaohongshu", "douyin"], sort: "general", period: "all" })).data as R;
+    expect(both.translation).toMatchObject({ translated: true, primaryZh: "无线吸尘器" });
+    expect(both.platforms.map((p) => p.platform)).toEqual(["xiaohongshu", "douyin"]);
+    expect(both.platforms.every((p) => p.items.length > 0 && p.items.every((i) => i.platform === p.platform))).toBe(true);
+    // CASE 7: 데모 도우인은 少 가 들어간 검색어에 4개만 → 도우인만 보조 검색어
+    const few = (await post("/api/videos/social-search", { keyword: "무선청소기 적음", platforms: ["xiaohongshu", "douyin"], period: "all" })).data as R;
+    expect(few.platforms[0].queriesUsed.map((q) => q.type)).toEqual(["primary"]);
+    expect(few.platforms[1].queriesUsed.map((q) => q.type)).toEqual(["primary", "alternate"]);
+    // CASE 5: 중국어는 그대로
+    const zh = (await post("/api/videos/social-search", { keyword: "空气炸锅", platforms: ["douyin"] })).data as R;
+    expect(zh.translation.translated).toBe(false);
+
+    // CASE 2·4: 도우인 결과·v.douyin.com 링크를 기존 가져오기로 (제품·메모 함께)
+    const products = await j<{ id: string }[]>("/api/products");
+    const pid = products.data[1]?.id ?? products.data[0].id;
+    const dy = both.platforms[1].items[0];
+    const res = (await post("/api/videos/batch", { items: [{ url: dy.originalUrl, titleHint: dy.title }, { url: "https://v.douyin.com/iRNBho6u/" }], note: "도우인 참고", productId: pid })).data as { ok: boolean; video?: { id: string; platform: string; title: string; productId: string } }[];
+    expect(res.every((x) => x.ok)).toBe(true);
+    expect(res.map((x) => x.video!.platform)).toEqual(["douyin", "douyin"]);
+    expect(res[0].video!.title).toBe(dy.title);
+    // CASE 9: 목록은 제품별로 (화면은 처음에 전체를 부르지 않는다)
+    const byProduct = (await j<{ id: string; productId: string | null }[]>(`/api/videos?productId=${pid}`)).data;
+    expect(byProduct.length).toBeGreaterThanOrEqual(2);
+    expect(byProduct.every((v) => v.productId === pid)).toBe(true);
+    const none = (await j<{ productId: string | null }[]>("/api/videos?productId=none")).data;
+    expect(none.every((v) => !v.productId)).toBe(true);
+    // 데모 도우인은 재생 주소가 없다 → 다운로드 안내 오류 (주소를 만들어 붙이지 않는다)
+    const resolved = await post("/api/videos/resolve", { url: "https://v.douyin.com/iRNBho6u/" });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.error?.code).toBe("DOUYIN_NO_MEDIA");
+    for (const x of res) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
+  });
+
+  it("[대본 포맷에 담기]: 제목칸에만, 새 포맷 만들기·기존 포맷에 더하기·중복 제외", async ({ skip }) => {
+    if (!reachable) skip();
+    type F = { id: string; name: string; examples: { title: string; views: number | null; text: string }[] };
+    type Res = { format: F; added: number; duplicated: number; overLimit: number };
+    const created = (await post("/api/script-formats/titles", { newFormat: { name: "트렌드 제목 모음", contentType: "info" }, titles: [{ title: "요즘 난리 난 이유", views: 52000 }] })).data as Res;
+    expect(created.added).toBe(1);
+    expect(created.format.examples[0]).toEqual({ title: "요즘 난리 난 이유", views: 52000, text: "" });
+    const more = (await post("/api/script-formats/titles", { formatId: created.format.id, titles: [{ title: "요즘 난리 난 이유", views: null }, { title: "이거 모르면 손해", views: null }] })).data as Res;
+    expect(more).toMatchObject({ added: 1, duplicated: 1 });
+    expect(more.format.examples.map((e) => e.title)).toEqual(["이거 모르면 손해", "요즘 난리 난 이유"]);
+    expect((await post("/api/script-formats/titles", { formatId: created.format.id, titles: [] })).ok).toBe(false);
+    // 제목만으로는 AI 구조 분석을 하지 않는다
+    expect((await post("/api/script-formats/analyze", { examples: more.format.examples, contentType: "info" })).ok).toBe(false);
+    await j(`/api/script-formats/${created.format.id}`, { method: "DELETE" });
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

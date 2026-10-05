@@ -237,15 +237,15 @@ export const FEATURES: FeatureDef[] = [
     channelId: "tools",
     order: 3,
     title: "영상 URL 가져오기",
-    description: "샤오홍슈·YouTube 영상 링크를 여러 개 한 번에 등록합니다. 샤오홍슈 영상은 워터마크 없는 원본을 소리 없이 저장하고, 여러 개를 골라 한 번에 받을 수 있습니다.",
+    description: "샤오홍슈·도우인·YouTube 영상 링크를 여러 개 한 번에 등록하거나, 샤오홍슈·도우인에서 검색해 가져옵니다. 샤오홍슈·도우인 영상은 소리 없이 바로 저장하고, 여러 개를 골라 한 번에 받을 수 있습니다.",
     href: "/tools/video-import",
     icon: Link2,
     kind: "tool",
     status: "live",
     defaultTiers: ALL,
     requiredProviders: ["youtube"],
-    inputs: ["영상 URL 여러 개(줄바꿈)", "메모"],
-    outputs: ["영상 메타데이터", "참고 영상 목록", "샤오홍슈: 소리 없는 mp4 바로 저장·ZIP", "YouTube: 다운로드 명령(yt-dlp)"],
+    inputs: ["영상 URL 여러 개(줄바꿈)", "검색어 (샤오홍슈·도우인·둘 다, 한국어 자동 변환)", "메모"],
+    outputs: ["영상 메타데이터", "참고 영상 목록", "샤오홍슈·도우인: 소리 없는 mp4 바로 저장·ZIP", "YouTube: 다운로드 명령(yt-dlp)"],
   },
 
   // ───────── 설정 ─────────

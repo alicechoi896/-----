@@ -16,6 +16,7 @@ import { TrendFilterPanel, type TrendDraft } from "./TrendFilterPanel";
 import { TrendInsights } from "./TrendInsights";
 import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
 import { infoVideoHref, trendPrefill } from "./trend-links";
+import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 /** 처음 검색할 때 조건에 맞는 영상이 이보다 적으면 다음 페이지를 자동으로 더 불러온다 */
@@ -44,6 +45,8 @@ export function YouTubeTrendExplorer() {
   const [saved, setSaved] = useState<SavedTrend[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [detail, setDetail] = useState<YouTubeTrendItem | null>(null);
+  // 체크해서 고른 영상 → [제목 N개 대본 포맷에 담기]
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const requestId = useRef(0);
   /** 이번 검색에 적용할 콘텐츠 프로필 ("none" = 적용 안 함) */
@@ -321,6 +324,7 @@ export function YouTubeTrendExplorer() {
           >
             <PanelRightOpen className="size-4" />
           </button>
+          <SaveTitlesToFormat titles={[{ title: r.title, views: r.views }]} source="YouTube 트렌드" buttonLabel="제목 대본 포맷에 담기" variant="ghost" iconOnly />
           <Link
             href={infoVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis))}
             aria-label="이 트렌드로 정보성 영상 만들기"
@@ -394,10 +398,26 @@ export function YouTubeTrendExplorer() {
         description={`${summary}${summary ? " — " : ""}Trend Score = 조회 속도 50% + 구독자 대비 조회 비율 30% + 최근성 20%. 열 제목을 누르면 정렬합니다.`}
         flush
         actions={
-          !loading && nextPageToken ? (
-            <Button size="sm" icon={ChevronDown} loading={loadingMore} onClick={() => void loadMore()}>
-              50개 더 불러오기
-            </Button>
+          !loading && (picked.size > 0 || nextPageToken) ? (
+            <div className="flex items-center gap-2">
+              {picked.size > 0 && (
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+                    선택 해제
+                  </Button>
+                  <SaveTitlesToFormat
+                    titles={items.filter((r) => picked.has(r.id)).map((r) => ({ title: r.title, views: r.views }))}
+                    source="YouTube 트렌드"
+                    buttonLabel={`제목 ${picked.size}개 대본 포맷에 담기`}
+                  />
+                </>
+              )}
+              {nextPageToken && (
+                <Button size="sm" icon={ChevronDown} loading={loadingMore} onClick={() => void loadMore()}>
+                  50개 더 불러오기
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
         footer={
@@ -430,6 +450,7 @@ export function YouTubeTrendExplorer() {
             columns={columns}
             rows={items}
             rowKey={(r) => r.id}
+            selection={{ selected: picked, onChange: setPicked }}
             onRowClick={setDetail}
             defaultSort={{ key: "trendScore", dir: "desc" }}
             empty={

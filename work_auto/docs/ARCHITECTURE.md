@@ -329,6 +329,12 @@ URL 쿼리(`?productId=`)로 받는 값은 페이지(Server)에서 `await search
 5. **Memory → Context → Prompt(버전) → Provider → 이력 저장**: AI 호출의 표준 파이프라인으로 삼는다.
 6. **서버 전용 경계**: `lib/server` + `server-only`로 비밀정보 유출을 구조적으로 막는다.
 
+## 영상 소싱: 샤오홍슈·도우인 (v0.9.30)
+
+공통 TikHub 클라이언트(`providers/tikhub/client.ts`) 위에 `XiaohongshuSearchProvider`·`DouyinProvider` 가 있고, `social-search.ts` 가
+한국어 변환(기본 AI 1회) → 플랫폼별 검색어 순서(1순위 → 보조 → 영어) → 오류 분리 → 유사 표시를 맡는다. 화면은 공통 모델 `SocialVideoItem` 만 쓰고,
+가져오기·다운로드는 기존 `videoService.importMany()`·`/api/videos/resolve` 를 그대로 쓴다. 자세한 내용은 [SOCIAL_VIDEO_SOURCING.md](./SOCIAL_VIDEO_SOURCING.md).
+
 ## 샤오홍슈 영상 검색 (v0.9.29)
 
 `XiaohongshuSearchProvider` (lib/server/providers/xiaohongshu) → TikHub 구현 / 데모 Mock. 서비스 `xhs-search.ts` 가 기간·페이지·캐시를 맡고,

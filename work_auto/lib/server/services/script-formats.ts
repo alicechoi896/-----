@@ -1,5 +1,5 @@
 import "server-only";
-import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, formatViews } from "@/lib/script-format";
+import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, exampleKey, formatViews } from "@/lib/script-format";
 import type { ChannelId, ScriptFormat, ScriptFormatInput, ScriptFormatType } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { getPromptTemplate } from "../ai/prompts/templates";
@@ -105,12 +105,49 @@ export const scriptFormatService = {
   },
 
   /**
+   * [대본 포맷에 담기] (트렌드 찾기·영상 검색): 마음에 든 제목을 포맷의 참고 대본 '제목칸에만' 넣는다 (대본은 비움, v0.9.30)
+   * - formatId 가 있으면 그 포맷에 더하고, 없으면 newFormat(이름·유형)으로 새로 만든다
+   * - 같은 제목은 다시 넣지 않고, 포맷 한도(참고 30개)를 넘는 것은 빼고 알려 준다
+   */
+  async addTitles(input: {
+    formatId?: unknown;
+    newFormat?: { name?: unknown; contentType?: unknown } | null;
+    titles?: unknown;
+  }): Promise<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }> {
+    const incoming = cleanScriptExamples(
+      (Array.isArray(input.titles) ? input.titles : []).map((t) => ({ title: (t as { title?: unknown })?.title, views: (t as { views?: unknown })?.views ?? null, text: "" })),
+    );
+    if (!incoming.length) throw new AppError("VALIDATION", "담을 제목이 없습니다.");
+    const formatId = typeof input.formatId === "string" ? input.formatId : "";
+    if (!formatId) {
+      const name = String(input.newFormat?.name ?? "").trim();
+      const kept = incoming.slice(0, SCRIPT_FORMAT_LIMITS.examples);
+      const format = await this.create({ name, contentType: input.newFormat?.contentType as ScriptFormatType, channelIds: [], examples: kept, guideline: "", isDefault: false });
+      return { format, added: kept.length, duplicated: 0, overLimit: incoming.length - kept.length };
+    }
+    const current = await own(formatId);
+    const seen = new Set(current.examples.map(exampleKey));
+    const fresh = incoming.filter((e) => !seen.has(exampleKey(e)));
+    const room = Math.max(0, SCRIPT_FORMAT_LIMITS.examples - current.examples.length);
+    const kept = fresh.slice(0, room);
+    let format = current;
+    if (kept.length) {
+      // 새로 담은 제목이 목록 위로
+      const updated = await getRepositories().scriptFormats.update(formatId, { examples: [...kept, ...current.examples], updatedAt: nowIso() });
+      if (!updated) notFound("대본 포맷");
+      format = normalize(updated);
+    }
+    return { format, added: kept.length, duplicated: incoming.length - fresh.length, overLimit: fresh.length - kept.length };
+  },
+
+  /**
    * 참고 대본 → 대본 구조 가이드라인 (AI 1회). 저장하지 않고 폼에 채운다 (사용자가 고친 뒤 저장).
    * 스타일 추출(style-extractor)처럼 생성 1회분이 아닌 편집 도구라 Generation Context 를 쓰지 않는다.
    */
   async analyze(input: { examples?: unknown; contentType?: string }): Promise<{ name: string; guideline: string; provider: string }> {
-    const examples = cleanScriptExamples(input.examples);
-    if (!examples.length) throw new AppError("VALIDATION", "참고 대본을 1개 이상 넣어 주세요.");
+    // 제목만 담은 참고는 구조 분석에 쓰지 않는다 (제목 패턴으로만 쓴다)
+    const examples = cleanScriptExamples(input.examples).filter((e) => e.text.trim());
+    if (!examples.length) throw new AppError("VALIDATION", "대본 내용이 있는 참고 대본을 1개 이상 넣어 주세요. (제목만 담은 것은 제목 패턴으로만 씁니다)");
     const contentType: ScriptFormatType = input.contentType === "info" ? "info" : "product";
     let budget: number = SCRIPT_FORMAT_LIMITS.analyzeChars;
     const parts: string[] = [];

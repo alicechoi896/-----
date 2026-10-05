@@ -3,10 +3,6 @@ import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
   XhsNote,
-  XhsPeriodOption,
-  XhsSearchCursor,
-  XhsSearchResultDto,
-  XhsSortOption,
   ScriptExample,
   ScriptFormat,
   ScriptFormatInput,
@@ -53,6 +49,11 @@ import type {
   YouTubeTrendPage,
   YouTubeTrendQuery,
   YouTubeVideoAnalysis,
+  SocialContinue,
+  SocialPeriodOption,
+  SocialPlatform,
+  SocialSearchResultDto,
+  SocialSortOption,
 } from "@/lib/types";
 
 /**
@@ -268,6 +269,9 @@ export const api = {
     update: (id: string, input: ScriptFormatInput) => request<ScriptFormat>(`/api/script-formats/${id}`, { method: "PUT", body: json(input) }),
     setDefault: (id: string) => request<ScriptFormat>(`/api/script-formats/${id}`, { method: "PATCH" }),
     remove: (id: string) => request<{ id: string }>(`/api/script-formats/${id}`, { method: "DELETE" }),
+    /** [대본 포맷에 담기]: 제목만 기존 포맷에 더하거나 새 포맷으로 */
+    addTitles: (body: { formatId?: string; newFormat?: { name: string; contentType: ScriptFormatType }; titles: { title: string; views: number | null }[] }) =>
+      request<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }>("/api/script-formats/titles", { method: "POST", body: json(body) }),
     /** 참고 대본 → 포맷 가이드라인 (AI, 저장하지 않음) */
     analyze: (examples: ScriptExample[], contentType: ScriptFormatType) =>
       request<{ name: string; guideline: string; provider: string }>("/api/script-formats/analyze", { method: "POST", body: json({ examples, contentType }) }),
@@ -313,9 +317,10 @@ export const api = {
   },
 
   videos: {
-    list: () => request<ReferenceVideo[]>("/api/videos"),
+    /** productId: 특정 제품 / "none" = 제품 연결 안 됨 / 생략 = 전체 */
+    list: (productId?: string) => request<ReferenceVideo[]>(`/api/videos${qs({ productId })}`),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),
-    /** 샤오홍슈 노트의 영상 주소 (서버는 주소만, 파일은 브라우저가 직접 받는다) */
+    /** 샤오홍슈 노트·도우인 영상의 재생 주소 (서버는 주소만, 파일은 브라우저가 직접 받는다) */
     resolve: (url: string) =>
       request<{
         noteId: string;
@@ -324,11 +329,16 @@ export const api = {
         durationSec: number;
         streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
       }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
-    /** 샤오홍슈 영상 검색 (TikHub). 결과는 저장하지 않는다 */
-    xhsSearch: (body: { keyword: string; sort: XhsSortOption; period: XhsPeriodOption; cursor?: XhsSearchCursor | null }) =>
-      request<XhsSearchResultDto>("/api/videos/xhs-search", { method: "POST", body: json(body) }),
+    /** 샤오홍슈·도우인·둘 다 검색 (한국어는 AI 로 한 번 변환). 결과는 저장하지 않는다 */
+    socialSearch: (body: {
+      keyword: string;
+      platforms: SocialPlatform[];
+      autoTranslate: boolean;
+      sort: SocialSortOption;
+      period: SocialPeriodOption;
+      continue?: { platform: SocialPlatform; next: SocialContinue } | null;
+    }) => request<SocialSearchResultDto>("/api/videos/social-search", { method: "POST", body: json(body) }),
     xhsDetail: (noteId: string) => request<XhsNote | null>(`/api/videos/xhs-search/detail${qs({ noteId })}`),
-    xhsKeywords: (keyword: string) => request<{ keywords: string[]; provider: string }>("/api/videos/xhs-search/keywords", { method: "POST", body: json({ keyword }) }),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
     importMany: (items: { url: string; titleHint?: string }[], note?: string, productId?: string | null) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {

@@ -76,7 +76,7 @@ export interface ReferenceVideo {
   id: ID;
   userId: ID;
   url: string;
-  platform: "youtube" | "naver" | "xiaohongshu" | "other";
+  platform: "youtube" | "naver" | "xiaohongshu" | "douyin" | "other";
   title: string;
   channelName: string;
   durationSec: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blogTitleFormatTypeOf, cleanScriptExamples, formatViews, parseScriptFile, parseViews, promptExamples, promptTitles, scriptFormatTypeOf } from "@/lib/script-format";
+import { blogTitleFormatTypeOf, cleanScriptExamples, isTitleOnly, formatViews, parseScriptFile, parseViews, promptExamples, promptTitles, scriptFormatTypeOf } from "@/lib/script-format";
 
 // 실제로 받은 메모장 파일 모양 (제목·썸넬·조회수 줄, 구분선, 빈 줄 여러 개, 음성 인식 잡음)
 const FILE_A = `4.2만회
@@ -103,5 +103,25 @@ describe("대본 포맷: 메모장 파일 나누기", () => {
     expect(scriptFormatTypeOf("yt-product-video")).toBe("product");
     expect(scriptFormatTypeOf("clip-info-content")).toBe("info");
     expect(scriptFormatTypeOf("blog-product-writing")).toBeNull();
+  });
+});
+
+describe("대본 포맷에 담기: 제목칸에만 (v0.9.30)", () => {
+  it("대본 없이 제목만 있는 것도 남기고, 같은 제목은 한 번만", () => {
+    const r = cleanScriptExamples([
+      { title: "  다이슨 V12  사기 전에 꼭 보세요 ", views: 120000, text: "" },
+      { title: "다이슨 V12 사기 전에 꼭 보세요", views: null, text: "" },
+      { title: "", views: null, text: "" },
+    ]);
+    expect(r).toEqual([{ title: "다이슨 V12 사기 전에 꼭 보세요", views: 120000, text: "" }]);
+    expect(isTitleOnly(r[0])).toBe(true);
+  });
+  it("제목만 담은 것은 대본 예시에서 빠지고 제목 패턴에는 들어간다", () => {
+    const ex = [
+      { title: "제목만", views: 999999, text: "" },
+      { title: "대본 있음", views: 10, text: "아무거나 사면 후회합니다. 이 세 가지만 보세요." },
+    ];
+    expect(promptExamples(ex).map((e) => e.title)).toEqual(["대본 있음"]);
+    expect(promptTitles(ex)).toEqual(["제목만", "대본 있음"]);
   });
 });

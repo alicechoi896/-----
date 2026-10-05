@@ -116,7 +116,12 @@ export function parseScriptFile(raw: string): ScriptExample[] {
   return out;
 }
 
-/** 저장 전 정리: 빈 대본·중복 제거, 길이·개수 제한 */
+/** 제목만 담은 참고 (트렌드·영상 검색에서 [대본 포맷에 담기], v0.9.30): 제목 패턴으로만 쓰고 대본 구조 분석에는 빠진다 */
+export const isTitleOnly = (e: ScriptExample) => !e.text.trim() && Boolean(e.title.trim());
+/** 같은 참고인지 비교하는 키 (대본이 있으면 대본, 제목만이면 제목) */
+export const exampleKey = (e: { title: string; text: string }) => (e.text.trim() ? scriptKey(e.text) : `t:${scriptKey(e.title)}`);
+
+/** 저장 전 정리: 빈 대본·중복 제거, 길이·개수 제한 (대본 없이 제목만 있는 것도 남긴다) */
 export function cleanScriptExamples(value: unknown): ScriptExample[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -125,13 +130,14 @@ export function cleanScriptExamples(value: unknown): ScriptExample[] {
     if (!raw || typeof raw !== "object") continue;
     const r = raw as Record<string, unknown>;
     const text = String(r.text ?? "").replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim().slice(0, SCRIPT_FORMAT_LIMITS.exampleChars);
-    if (!text) continue;
-    const key = scriptKey(text);
+    const title = String(r.title ?? "").replace(/\s+/g, " ").trim().slice(0, SCRIPT_FORMAT_LIMITS.titleChars);
+    if (!text && !title) continue;
+    const key = exampleKey({ title, text });
     if (seen.has(key)) continue;
     seen.add(key);
     const views = r.views == null || r.views === "" ? null : Number(r.views);
     out.push({
-      title: String(r.title ?? "").trim().slice(0, SCRIPT_FORMAT_LIMITS.titleChars),
+      title,
       views: views != null && Number.isFinite(views) && views >= 0 ? Math.round(views) : null,
       text,
     });
@@ -142,7 +148,8 @@ export function cleanScriptExamples(value: unknown): ScriptExample[] {
 
 /** 생성할 때 같이 보낼 예시: 조회수가 높은 순, 짧게 */
 export function promptExamples(examples: ScriptExample[]): ScriptExample[] {
-  return [...examples]
+  return examples
+    .filter((e) => e.text.trim())
     .sort((a, b) => (b.views ?? -1) - (a.views ?? -1))
     .slice(0, SCRIPT_FORMAT_LIMITS.promptExamples)
     .map((e) => ({ ...e, text: e.text.length > SCRIPT_FORMAT_LIMITS.promptExampleChars ? e.text.slice(0, SCRIPT_FORMAT_LIMITS.promptExampleChars) + "…" : e.text }));

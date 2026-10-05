@@ -37,15 +37,8 @@ export interface XiaohongshuSearchProvider extends BaseProvider {
   getVideoDetail(noteId: string, xsecToken?: string | null): Promise<XhsNote | null>;
 }
 
-/** 업체 오류를 화면용으로 나눈다 (키·헤더 같은 민감정보는 담지 않는다) */
-export class XhsSearchError extends Error {
-  constructor(
-    public code: "NOT_CONNECTED" | "AUTH" | "PAYMENT" | "RATE_LIMIT" | "TIMEOUT" | "UPSTREAM" | "BAD_RESPONSE",
-    message: string,
-  ) {
-    super(message);
-  }
-}
+/** 업체 오류 (TikHub 공용 오류를 그대로 쓴다) */
+export { TikHubError as XhsSearchError } from "../tikhub/client";
 
 export function xhsNoteUrl(noteId: string, xsecToken: string | null): string {
   const qs = new URLSearchParams({ ...(xsecToken ? { xsec_token: xsecToken } : {}), xsec_source: "app_share" });

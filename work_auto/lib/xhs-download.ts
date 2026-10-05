@@ -9,6 +9,10 @@
  *  - H.265(hevc) 스트림에는 샤오홍슈 워터마크(로고·작성자 이름)가 없고
  *  - H.264 스트림에는 화면 아래에 워터마크가 들어 있다
  * → 기본은 H.265 를 먼저 받는다. H.265 가 없으면 H.264.
+ *
+ * 도우인도 같은 길로 받는다 (서버가 TikHub 응답의 재생 주소만 넘긴다, docs/SOCIAL_VIDEO_SOURCING.md).
+ *  - 워터마크가 없다고 가정하지 않는다
+ *  - 도우인 영상 서버가 브라우저 직접 받기를 막으면(CORS) MediaBlockedError → 화면이 새 탭으로 여는 링크를 보여 준다
  */
 import { api } from "@/lib/api-client";
 import { removeAudio } from "@/lib/video-mute";
@@ -35,6 +39,13 @@ async function fetchWithProgress(url: string, onProgress: (ratio: number) => voi
   return new Blob(chunks as BlobPart[], { type: "video/mp4" });
 }
 
+/** 브라우저가 영상 파일을 직접 받지 못함 (영상 서버가 막음). openUrl 을 새 탭으로 열어 저장하게 안내한다 */
+export class MediaBlockedError extends Error {
+  constructor(public readonly openUrl: string) {
+    super("브라우저에서 바로 받을 수 없는 영상입니다. [새 탭에서 열기]로 연 뒤 영상 위 마우스 오른쪽 → 동영상 저장을 눌러 주세요 (소리 포함).");
+  }
+}
+
 export interface XhsSource {
   blob: Blob;
   title: string;
@@ -50,6 +61,8 @@ export async function fetchXhsSource(url: string, onStage: (stage: XhsStage, pro
   const video = await api.videos.resolve(url);
   const ordered = [...video.streams].sort((a, b) => Number(isHevc(b.codec)) - Number(isHevc(a.codec)));
   let lastError: unknown = null;
+  let blocked = 0;
+  let tried = 0;
   for (const s of ordered) {
     for (const candidate of [s.url, ...s.backupUrls]) {
       try {
@@ -58,9 +71,12 @@ export async function fetchXhsSource(url: string, onStage: (stage: XhsStage, pro
         return { blob, title: video.title, noteId: video.noteId, codec: s.codec, clean: isHevc(s.codec) };
       } catch (e) {
         lastError = e;
+        tried++;
+        if (e instanceof TypeError) blocked++; // fetch 가 응답 없이 실패 = 대부분 CORS·네트워크 차단
       }
     }
   }
+  if (tried && blocked === tried && ordered[0]) throw new MediaBlockedError(ordered[0].url);
   throw new Error(lastError instanceof Error ? lastError.message : "영상을 받지 못했습니다.");
 }
 

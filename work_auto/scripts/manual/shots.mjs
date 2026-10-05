@@ -188,25 +188,25 @@ export const SHOTS = [
   {
     id: "03-video-import",
     url: "/tools/video-import",
+    viewport: { width: 1280, height: 1150 },
     marks: {
       1: (p) => sideLink(p, "영상 URL 가져오기"),
       2: (p) => p.locator("main textarea").first(),
       3: (p) => btn(p, "가져오기").first(),
+      4: (p) => p.getByText("제품을 선택하세요").first(),
     },
   },
 
   {
-    id: "03-xhs-search",
+    id: "03-social-search",
     url: "/tools/video-import",
     viewport: { width: 1280, height: 1300 },
     prepare: async (p) => {
-      await p.getByRole("radio", { name: "샤오홍슈 검색" }).click();
-      await p.getByPlaceholder("예: 무선청소기 또는 无线吸尘器").fill("무선청소기");
-      await btn(p, "AI 중국어 검색어 추천").first().click();
-      await p.getByText("(원래)").first().waitFor({ timeout: 10_000 });
-      await p.locator("button", { hasText: /^无线吸尘器$/ }).first().click();
-      await btn(p, "샤오홍슈 검색").last().click();
-      await p.locator("main ul li input[type=checkbox]").first().waitFor({ timeout: 15_000 });
+      await p.getByRole("radio", { name: "영상 검색" }).click();
+      await p.getByRole("radio", { name: "둘 다" }).click();
+      await p.locator("#social-keyword").fill("무선청소기");
+      await btn(p, "둘 다 검색").first().click();
+      await p.locator("[data-platform=douyin] li input[type=checkbox]").first().waitFor({ timeout: 15_000 });
       const boxes = p.locator("main ul li input[type=checkbox]");
       await boxes.nth(0).check();
       await boxes.nth(1).check();
@@ -214,10 +214,10 @@ export const SHOTS = [
     },
     scrollTo: (p) => p.locator("h2, h3", { hasText: "영상 가져오기" }).first(),
     marks: {
-      1: (p) => p.getByRole("radio", { name: "샤오홍슈 검색" }).locator("xpath=.."),
-      2: (p) => btn(p, "AI 중국어 검색어 추천").first(),
-      3: (p) => btn(p, "샤오홍슈 검색").last(),
-      4: (p) => p.locator("main ul li").first(),
+      1: (p) => p.getByRole("radio", { name: "영상 검색" }).locator("xpath=.."),
+      2: (p) => p.getByRole("radio", { name: "둘 다" }).locator("xpath=.."),
+      3: (p) => btn(p, "둘 다 검색").first(),
+      4: (p) => p.locator("[data-platform=xiaohongshu] ul li").first(),
       5: (p) => btn(p, /선택한 \d+개 가져오기/).first(),
     },
   },
@@ -263,6 +263,27 @@ export const SHOTS = [
       1: (p) => btn(p, "조회").first(),
       2: (p) => card(p, "관련 검색어"),
       3: (p) => p.locator("h2", { hasText: "급상승 주제" }).first().locator("xpath=.."),
+    },
+  },
+
+  {
+    id: "04-save-titles",
+    url: "/youtube/trends",
+    viewport: { width: 1280, height: 1000 },
+    prepare: async (p) => {
+      await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
+      const boxes = p.locator("main table tbody [role=checkbox]");
+      await boxes.nth(0).click();
+      await boxes.nth(1).click();
+      await btn(p, /제목 \d+개 대본 포맷에 담기/).first().click();
+      await p.getByRole("dialog").waitFor();
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: (p) => btn(p, /제목 \d+개 대본 포맷에 담기/).first(),
+      2: (p) => p.getByRole("dialog").locator("ul").first(),
+      3: (p) => p.getByRole("dialog").getByRole("radiogroup").first(),
+      4: (p) => p.getByRole("dialog").locator("button", { hasText: /이 포맷에 담기|새 포맷 만들고 담기/ }).first(),
     },
   },
 

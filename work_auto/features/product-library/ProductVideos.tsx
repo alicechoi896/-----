@@ -6,7 +6,7 @@ import { ArrowRight, Download, ExternalLink, Film, FolderDown, ListPlus, Unlink 
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { PLATFORM_LABEL, parseVideoLinks } from "@/lib/video-links";
+import { PLATFORM_LABEL, canDirectDownload, parseVideoLinks } from "@/lib/video-links";
 import { Button, EmptyState, ErrorState, IconButton, LoadingState, Notice, SectionCard, Textarea } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { formatRelative } from "@/lib/utils";
@@ -21,7 +21,7 @@ const MAX_BATCH = 20;
  * - 링크를 넣으면 이 제품에 연결된 채로 가져온다
  */
 export function ProductVideos({ productId }: { productId: string }) {
-  const list = useAsync(() => api.videos.list(), []);
+  const list = useAsync(() => api.videos.list(productId), [productId]);
   const xhs = useXhsDownloads();
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
@@ -29,7 +29,7 @@ export function ProductVideos({ productId }: { productId: string }) {
   const [message, setMessage] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
 
   const videos = (list.data ?? []).filter((v) => v.productId === productId);
-  const xhsVideos = videos.filter((v) => v.platform === "xiaohongshu");
+  const xhsVideos = videos.filter((v) => canDirectDownload(v.platform));
   const links = parseVideoLinks(text);
 
   async function handleImport() {
@@ -133,7 +133,7 @@ export function ProductVideos({ productId }: { productId: string }) {
                   <XhsJobStatus job={xhs.jobs[v.id]} />
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {v.platform === "xiaohongshu" ? (
+                  {canDirectDownload(v.platform) ? (
                     <>
                       <Button
                         size="sm"

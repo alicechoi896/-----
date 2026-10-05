@@ -156,7 +156,10 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
   const fileRef = useRef<HTMLInputElement>(null);
   const set = <K extends keyof ScriptFormatInput>(k: K, v: ScriptFormatInput[K]) => setForm((f) => ({ ...f, [k]: v }));
   const setExample = (i: number, patch: Partial<ScriptExample>) => set("examples", form.examples.map((e, j) => (j === i ? { ...e, ...patch } : e)));
-  const filled = form.examples.filter((e) => e.text.trim());
+  // 저장할 참고 (제목만 담은 것 포함) / AI 구조 분석에 쓸 대본
+  const filled = form.examples.filter((e) => e.text.trim() || e.title.trim());
+  const withText = filled.filter((e) => e.text.trim());
+  const titleOnly = filled.length - withText.length;
 
   /** 메모장 파일(여러 개) → 대본으로 나눠 목록 위에 더한다. 파일은 브라우저에서만 읽는다 */
   async function importFiles(files: FileList | null) {
@@ -200,7 +203,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
     setAnalyzing(true);
     setError(null);
     try {
-      const r = await api.scriptFormats.analyze(filled, form.contentType);
+      const r = await api.scriptFormats.analyze(withText, form.contentType);
       setForm((f) => ({ ...f, guideline: r.guideline, name: f.name.trim() ? f.name : r.name }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "포맷을 만들지 못했습니다.");
@@ -280,7 +283,8 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
       <div className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[13.5px] font-semibold text-fg">
-            ① 참고 대본 · {filled.length}개 <span className="text-xs font-normal text-fg-subtle">(최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 잘된 영상의 대본일수록 좋습니다)</span>
+            ① 참고 대본 · {filled.length}개{titleOnly > 0 && <span className="text-xs font-normal text-fg-muted"> (제목만 {titleOnly}개)</span>}{" "}
+            <span className="text-xs font-normal text-fg-subtle">(최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 잘된 영상의 대본일수록 좋습니다)</span>
           </p>
           <div className="flex flex-wrap gap-2">
             <input ref={fileRef} type="file" accept=".txt,.md,.srt,.vtt,text/plain" multiple hidden onChange={(e) => void importFiles(e.target.files)} />
@@ -328,7 +332,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
               <Textarea
                 className="mt-2"
                 rows={4}
-                placeholder={"대본을 붙여 넣으세요.\n예: 무선청소기\n아무거나 사면 후회합니다…"}
+                placeholder={ex.title.trim() && !ex.text.trim() ? "제목만 담겨 있습니다 (제목 패턴으로 씁니다). 대본을 붙여 넣으면 구조 분석에도 씁니다." : "대본을 붙여 넣으세요.\n예: 무선청소기\n아무거나 사면 후회합니다…"}
                 maxLength={SCRIPT_FORMAT_LIMITS.exampleChars}
                 value={ex.text}
                 onChange={(e) => setExample(i, { text: e.target.value })}
@@ -352,7 +356,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
       <div className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[13.5px] font-semibold text-fg">② ③ 포맷 가이드라인</p>
-          <Button size="sm" variant="secondary" icon={Sparkles} loading={analyzing} disabled={!filled.length} onClick={() => void analyze()}>
+          <Button size="sm" variant="secondary" icon={Sparkles} loading={analyzing} disabled={!withText.length} onClick={() => void analyze()}>
             {form.guideline ? "AI 로 포맷 다시 만들기" : "AI 로 포맷 만들기"}
           </Button>
         </div>

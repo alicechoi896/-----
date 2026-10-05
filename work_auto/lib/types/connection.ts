@@ -40,6 +40,6 @@ export interface ProviderCredentialMap {
   naver: { clientId: string; clientSecret: string; adApiKey?: string; adSecretKey?: string; adCustomerId?: string };
   /** 검색광고 API (월간 검색량·연관 키워드·경쟁도) */
   "naver-searchad": { apiKey: string; secretKey: string; customerId: string };
-  /** 샤오홍슈 영상 검색 (v0.9.29) */
+  /** 샤오홍슈 영상 검색 (v0.9.29) · 도우인 검색·링크 (v0.9.30) */
   tikhub: { apiKey: string };
 }
