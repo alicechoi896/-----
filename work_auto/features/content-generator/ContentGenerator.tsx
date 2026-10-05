@@ -141,8 +141,19 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               if (missing.length === 0) generate();
             }}
           >
-            {config.fields.filter((f) => f.type !== "hidden" && !(f.showIfInitial && !initialValues?.[f.name])).map((field) =>
-              field.type === "images" ? (
+            {config.fields.filter((f) => !(f.type === "hidden" && !values[f.name]) && !(f.showIfInitial && !initialValues?.[f.name])).map((field) =>
+              field.type === "hidden" ? (
+                // 트렌드 찾기에서 넘어온 트렌드: 고르는 칸 없이 영상(주제) 제목만 보여 준다
+                <div key={field.name} className="col-span-2" data-carried-trend>
+                  <p className="mb-1.5 text-[13px] font-medium text-fg">{field.label}</p>
+                  <div className="flex items-center justify-between gap-2 rounded-control border border-brand-line bg-brand-soft/50 px-3 py-2 text-[13px] text-fg">
+                    <span className="min-w-0 truncate" title={initialValues?.trendTitle}>{initialValues?.trendTitle || initialValues?.topic || "트렌드 찾기에서 고른 트렌드"}</span>
+                    <button type="button" onClick={() => setValues((prev) => ({ ...prev, [field.name]: "" }))} className="shrink-0 text-xs text-fg-subtle hover:text-danger">
+                      빼기
+                    </button>
+                  </div>
+                </div>
+              ) : field.type === "images" ? (
                 <PhotoField
                   key={field.name}
                   field={field}

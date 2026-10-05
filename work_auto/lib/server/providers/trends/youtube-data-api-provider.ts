@@ -278,7 +278,10 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
       channels.items.map((c) => [c.id, c.statistics.hiddenSubscriberCount ? null : Number(c.statistics.subscriberCount ?? 0)]),
     );
 
-    const items = videos.items.map((v, i) => toItem(v, i, now, periodDays, subsByChannel.get(v.snippet.channelId), country.code));
+    // videoDuration=short 는 4분 미만이라 3~4분 영상(롱폼 판정)이 섞인다 → 고른 영상 유형으로 한 번 더 거른다 (v0.9.42)
+    const items = videos.items
+      .map((v, i) => toItem(v, i, now, periodDays, subsByChannel.get(v.snippet.channelId), country.code))
+      .filter((it) => !query.format || query.format === "all" || it.format === query.format);
     return { items, nextPageToken };
   }
 

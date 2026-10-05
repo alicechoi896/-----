@@ -231,7 +231,7 @@ function ClipView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverT
           topics={pg.risingTopics}
           onKeyword={onKeyword}
           description="클립 소재로 쓰기 좋은 주제입니다."
-          makeHref={(t) => `/naver-clip/info-content?${new URLSearchParams({ trendId: t.id, topic: t.title, category: insight.query.category ?? insight.query.profileScope?.mainCategory ?? t.category ?? "" }).toString()}`}
+          makeHref={(t) => `/naver-clip/info-content?${new URLSearchParams({ trendId: t.id, trendTitle: t.title, topic: t.title, category: insight.query.category ?? insight.query.profileScope?.mainCategory ?? t.category ?? "" }).toString()}`}
           makeLabel="클립 만들기"
           more={<MoreButton show={pg.more.rising} loading={pg.loading === "rising"} onClick={() => void pg.loadMore("rising")} error={pg.error} />}
         />
