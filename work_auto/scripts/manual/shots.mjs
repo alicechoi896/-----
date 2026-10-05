@@ -141,10 +141,14 @@ export const SHOTS = [
   {
     id: "03-learn",
     url: "/tools/product-learning",
+    prepare: async (p) => {
+      await p.locator("#product-url").fill("https://www.coupang.com/vp/products/9024167492");
+      await p.waitForTimeout(200);
+    },
     marks: {
       1: (p) => sideLink(p, "제품 상세페이지 학습"),
-      2: (p) => p.locator("[role=tablist]").first(),
-      3: (p) => btn(p, "분석하기").first(),
+      2: (p) => p.locator("#product-url"),
+      3: (p) => btn(p, "상세페이지 학습").first(),
     },
   },
   {

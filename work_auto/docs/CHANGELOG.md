@@ -2,6 +2,22 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.36] - 2026-10-05: 쿠팡·스마트스토어 상품 URL 학습 (Bright Data)
+
+자세한 내용은 docs/PRODUCT_DATA_COLLECTION.md
+
+### 추가
+- 제품 상세페이지 학습 **[상품 URL]** 탭 (기본 탭): 쿠팡 `/vp/products/{id}`·스마트스토어 `/{스토어}/products/{id}` 만, URL 로 쇼핑몰 자동 판별 (로컬, 외부 0회)
+- **Bright Data** (API 연결 센터 카드, provider `brightdata`, 기존 암호화 저장): Trigger 1회 → 같은 작업 상태만 확인(3초·최대 20번) → 결과 정리 → 기존 AI 제품 분석 → 저장
+- **같은 상품은 다시 수집하지 않음**: 추적 파라미터와 무관한 상품 키로 기존 제품 확인 → "이미 학습된 제품입니다" + [기존 제품 열기] (Bright Data 0회)
+- 제품 상세 **[상세페이지 다시 학습]** (확인 창 → 1회, 분석 버전 +1, 콘텐츠·영상 그대로)
+- 중복 방지: 클릭 즉시 잠금 + 서버 진행 중 작업 기억 (동시 클릭·진행 중 재클릭 → Trigger 1회), 자동 재시도 없음, AI 분석만 실패하면 [다시 시도]는 AI 만
+- 설명이 짧으면 상세 이미지 최대 6장만 AI Vision 으로 읽기 (이미지 저장 없음)
+- `[BrightData]` 로그 (requestId·operation·platform·상품 키, 토큰·응답 없음)
+- 사용 매뉴얼 03장 상세페이지 학습·제품 상세, 01장 API 연결 (화면·PDF 다시 만듦)
+
+DB 변경 없음 (같은 상품 판별 = products.source_url, 정리된 수집 데이터 = product_sources.raw). 원본 HTML·전체 응답·이미지 파일은 저장하지 않음.
+
 ## [0.9.35] - 2026-10-05: TikHub 검색 호출 제어 — [검색] 1번 = TikHub 정확히 1회
 
 ### 변경

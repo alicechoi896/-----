@@ -52,6 +52,7 @@ import type {
   YouTubeTrendQuery,
   YouTubeVideoAnalysis,
   SocialContinue,
+  RawProductData,
   SocialPeriodOption,
   SocialPlatform,
   SocialSearchResultDto,
@@ -220,6 +221,20 @@ export const api = {
     analyze: (source: ProductSourceInput) =>
       request<ProductAnalysisDraft>("/api/products/analyze", { method: "POST", body: json({ source }) }),
     save: (draft: ProductAnalysisDraft) => request<Product>("/api/products", { method: "POST", body: json(draft) }),
+    /** [상세페이지 학습] 1번: 이미 학습한 상품이면 existing (외부 0회), 새 상품이면 Bright Data Trigger 1회 */
+    learnUrl: (body: { url: string; clientRequestId: string; force?: boolean; productId?: string }) =>
+      request<
+        | { status: "existing"; productId: string; name: string }
+        | { status: "collecting"; jobId: string; platform: string; canonicalKey: string; reused: boolean }
+        | { status: "collected"; raw: RawProductData }
+      >("/api/products/learn-url", { method: "POST", body: json(body) }),
+    /** 같은 수집 작업의 상태만 (새 Trigger 아님) */
+    learnStatus: (body: { jobId: string; url: string; clientRequestId: string }) =>
+      request<{ status: "collecting"; progress: string } | { status: "collected"; raw: RawProductData }>("/api/products/learn-url/status", { method: "POST", body: json(body) }),
+    /** 수집한 데이터 → AI 분석 (Bright Data 0회) */
+    analyzeCollected: (raw: RawProductData) => request<ProductAnalysisDraft>("/api/products/analyze-collected", { method: "POST", body: json({ raw }) }),
+    /** [상세페이지 다시 학습] 결과 저장 (같은 제품의 새 분석 버전) */
+    relearn: (id: string, draft: ProductAnalysisDraft) => request<ProductDetail>(`/api/products/${id}/relearn`, { method: "POST", body: json({ draft }) }),
     update: (id: string, input: ProductUpdateInput) =>
       request<ProductDetail>(`/api/products/${id}`, { method: "PATCH", body: json(input) }),
     remove: (id: string) => request<{ id: string }>(`/api/products/${id}`, { method: "DELETE" }),

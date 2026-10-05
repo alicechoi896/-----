@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowRight, Check, FileText, ImageUp, Library, ScanSearch, Upload, X } from "lucide-react";
-import type { Product, ProductAnalysisDraft, ProductSourceInput } from "@/lib/types";
-import { api } from "@/lib/api-client";
+import { useRef, useState } from "react";
+import { ArrowRight, Check, FileText, ImageUp, Library, Link2, ScanSearch, Upload, X } from "lucide-react";
+import type { Product, ProductAnalysisDraft, ProductSourceInput, RawProductData } from "@/lib/types";
+import { ApiError, api } from "@/lib/api-client";
+import { PLATFORM_LABEL_KO, PRODUCT_URL_ERROR, parseSupportedProductUrl } from "@/lib/product-url";
+import { CollectedError, analyzeRaw, learnProductUrl, type LearnStage } from "@/lib/product-learn-flow";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -16,10 +18,11 @@ import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
 import { MAX_SLICES, batchSlices, sliceImageFile, type ImageSlice } from "@/lib/image-slicer";
 import { cn } from "@/lib/utils";
 
-type SourceTab = "image" | "text";
+type SourceTab = "url" | "image" | "text";
 
-/** 상품 URL 입력은 v0.9.11 에서 뺐다 (쇼핑몰 대부분이 서버 접속을 막는다) */
+/** 상품 URL: v0.9.36 부터 Bright Data 로 쿠팡·스마트스토어만 (직접 접속 수집은 v0.9.11 에서 뺐다) */
 const TABS = [
+  { value: "url" as const, label: "상품 URL", icon: Link2 },
   { value: "image" as const, label: "이미지 업로드", icon: ImageUp },
   { value: "text" as const, label: "텍스트 직접 입력", icon: FileText },
 ];
@@ -28,7 +31,15 @@ const TABS = [
 const PIPELINE = ["상품 입력", "Product Data Collector", "Raw Product Data", "AI Analyzer", "Structured Product Data", "Product Library"];
 
 export function ProductLearningWorkspace() {
-  const [tab, setTab] = useState<SourceTab>("image");
+  const [tab, setTab] = useState<SourceTab>("url");
+  // 상품 URL 학습 (Bright Data). 버튼 handler 에서만 부르고, 잠금은 ref 로 클릭 즉시
+  const [url, setUrl] = useState("");
+  const [learnStage, setLearnStage] = useState<LearnStage | null>(null);
+  const [existing, setExisting] = useState<{ productId: string; name: string } | null>(null);
+  const [collected, setCollected] = useState<RawProductData | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const learnBusy = useRef(false);
+  const parsedUrl = url.trim() ? parseSupportedProductUrl(url) : null;
   const [files, setFiles] = useState<File[]>([]);
   const [text, setText] = useState("");
   const [productName, setProductName] = useState("");
@@ -94,6 +105,56 @@ export function ProductLearningWorkspace() {
     }
   }
 
+  /** [상세페이지 학습] 클릭 1번 = 기존 제품 확인 → (새 상품만) Bright Data 1회 → AI 분석 */
+  async function learnUrl() {
+    if (learnBusy.current || !parsedUrl?.supported) return;
+    learnBusy.current = true;
+    setAnalyzing(true);
+    setError(null);
+    setErrorCode(null);
+    setDraft(null);
+    setSaved(null);
+    setExisting(null);
+    setCollected(null);
+    try {
+      const r = await learnProductUrl(url.trim(), { onStage: setLearnStage });
+      if ("existing" in r) setExisting(r.existing);
+      else setDraft(r.draft);
+    } catch (e) {
+      if (e instanceof CollectedError) setCollected(e.raw); // 수집은 끝났다 → AI 만 다시
+      setErrorCode(e instanceof ApiError ? e.code : null);
+      setError(e instanceof Error ? e.message : "상세페이지를 불러오지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      learnBusy.current = false;
+      setAnalyzing(false);
+      setLearnStage(null);
+    }
+  }
+
+  /** 수집은 끝나고 AI 분석만 실패했을 때: AI 만 다시 (Bright Data 0회) */
+  async function retryAnalyze() {
+    if (!collected || learnBusy.current) return;
+    learnBusy.current = true;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      setDraft(await analyzeRaw(collected, setLearnStage));
+      setCollected(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "제품 분석에 실패했습니다.");
+    } finally {
+      learnBusy.current = false;
+      setAnalyzing(false);
+      setLearnStage(null);
+    }
+  }
+
+  const LEARN_STAGE_LABEL: Record<LearnStage, string> = {
+    checking: "1/3 상세페이지 확인 중 (이미 학습한 상품인지 확인)",
+    collecting: "2/3 상품정보 수집 중 (Bright Data, 보통 10~60초)",
+    analyzing: "3/3 AI 가 제품을 분석하는 중",
+  };
+
   const canAnalyze = Boolean(buildSource()) && !analyzing;
 
   return (
@@ -102,6 +163,31 @@ export function ProductLearningWorkspace() {
 
       <SectionCard title="상세페이지 입력" description="쿠팡, 스마트스토어 등의 상품 정보를 분석해 제품 라이브러리에 저장합니다.">
         <Tabs items={TABS} value={tab} onChange={setTab} className="-mt-1 mb-5" />
+
+        {tab === "url" && (
+          <div className="space-y-3">
+            <FormField
+              label="상품 상세페이지 URL"
+              htmlFor="product-url"
+              hint={
+                parsedUrl == null
+                  ? "쿠팡 coupang.com/vp/products/… · 네이버 스마트스토어 smartstore.naver.com/스토어/products/… 주소를 붙여 넣으세요."
+                  : parsedUrl.supported
+                    ? `${PLATFORM_LABEL_KO[parsedUrl.platform]} 상품 URL · 상품번호 ${parsedUrl.productId}`
+                    : PRODUCT_URL_ERROR[parsedUrl.reason]
+              }
+              error={parsedUrl && !parsedUrl.supported ? PRODUCT_URL_ERROR[parsedUrl.reason] : null}
+            >
+              <Input id="product-url" inputMode="url" placeholder="https://www.coupang.com/vp/products/9024167492" value={url} onChange={(e) => setUrl(e.target.value)} />
+            </FormField>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-fg-subtle">새 상품만 한 번 수집하고(Bright Data), 이미 학습한 상품은 다시 수집하지 않습니다. 콘텐츠를 만들 때도 다시 수집하지 않습니다.</p>
+              <Button variant="primary" icon={ScanSearch} loading={analyzing} disabled={!parsedUrl?.supported || analyzing} onClick={() => void learnUrl()}>
+                {analyzing ? "학습 중…" : "상세페이지 학습"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {tab === "image" && (
           <div className="space-y-3">
@@ -165,18 +251,40 @@ export function ProductLearningWorkspace() {
         )}
 
         <Notice tone="neutral" className="mt-5">
-          쿠팡·스마트스토어 등 쇼핑몰 상세페이지를 캡처해 이미지로 올리면 가장 정확합니다. 세로로 긴 캡처도 그대로 올리면 자동으로 나눠 읽습니다.
+          쿠팡·스마트스토어는 상품 URL 로 바로 학습할 수 있습니다 (Bright Data 연결 필요). 자동으로 읽지 못하면 상세페이지를 캡처해 이미지로 올리면 가장 정확합니다. 세로로 긴 캡처도 그대로 올리면 자동으로 나눠 읽습니다.
           텍스트로 복사할 수 있는 상세페이지는 &lsquo;텍스트 직접 입력&rsquo;에 붙여 넣어도 됩니다.
         </Notice>
       </SectionCard>
 
       {analyzing ? (
         <SectionCard>
-          <LoadingState label={progress ?? "상세페이지를 수집하고 AI가 분석하는 중입니다…"} className="py-20" />
+          <LoadingState label={(learnStage && LEARN_STAGE_LABEL[learnStage]) ?? progress ?? "상세페이지를 수집하고 AI가 분석하는 중입니다…"} className="py-20" />
+        </SectionCard>
+      ) : existing ? (
+        <SectionCard>
+          <div className="flex flex-col items-center gap-3 py-12 text-center" data-existing-product>
+            <p className="text-[15px] font-semibold text-fg">이미 학습된 제품입니다</p>
+            <p className="text-sm text-fg-muted">{existing.name} — 다시 수집하지 않았습니다 (Bright Data 호출 없음).</p>
+            <LinkButton href={`/tools/product-library/${existing.productId}`} iconRight={ArrowRight}>
+              기존 제품 열기
+            </LinkButton>
+            <p className="text-xs text-fg-subtle">상세페이지가 바뀌었다면 제품 상세의 [상세페이지 다시 학습]을 누르세요.</p>
+          </div>
         </SectionCard>
       ) : error ? (
         <SectionCard>
-          <ErrorState message={error} onRetry={analyze} />
+          <ErrorState message={error} onRetry={tab === "url" ? (collected ? retryAnalyze : learnUrl) : analyze} />
+          <div className="-mt-4 flex flex-wrap justify-center gap-2 pb-6">
+            {collected && <span className="text-xs text-fg-subtle">상품정보는 이미 받아 두었습니다. [다시 시도]는 AI 분석만 다시 합니다.</span>}
+            {errorCode === "BRIGHTDATA_NOT_CONNECTED" && (
+              <LinkButton href="/settings/api" size="sm">
+                API 연결하기
+              </LinkButton>
+            )}
+            {tab === "url" && !collected && errorCode !== "BRIGHTDATA_NOT_CONNECTED" && errorCode !== "UNSUPPORTED_PRODUCT_URL" && (
+              <span className="text-xs text-fg-subtle">자동으로 읽지 못하면 &lsquo;이미지 업로드&rsquo;나 &lsquo;텍스트 직접 입력&rsquo;으로 학습할 수 있습니다.</span>
+            )}
+          </div>
         </SectionCard>
       ) : draft ? (
         <div className="space-y-4">

@@ -308,6 +308,44 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(blog.ok).toBe(false); // 블로그는 정밀 생성 없음 (또는 호출 한도)
   }, 120_000);
 
+  it("상품 URL 학습(데모 Bright Data): 새 상품 → 상태 확인 → AI 분석 → 저장 → 다시 넣으면 기존 제품 → 다시 학습", async ({ skip }) => {
+    if (!reachable) skip();
+    type Start = { status: string; jobId?: string; productId?: string; raw?: Record<string, unknown> };
+    const url = `https://www.coupang.com/vp/products/${Date.now() % 1e9}`;
+    // 지원하지 않는 주소는 외부 호출 없이 거부
+    const bad = await post("/api/products/learn-url", { url: "https://www.gmarket.co.kr/item/1", clientRequestId: "product_learn_bad" });
+    expect(bad.error?.code).toBe("UNSUPPORTED_PRODUCT_URL");
+    // 시드 제품(쿠팡 7300001)은 추적 파라미터가 붙어도 기존 제품
+    const seed = (await post("/api/products/learn-url", { url: "https://www.coupang.com/vp/products/7300001?itemId=1&utm_source=x", clientRequestId: "product_learn_seed" })).data as Start;
+    expect(seed.status).toBe("existing");
+    // 새 상품: 작업 id → 같은 작업 상태만 확인
+    const start = (await post("/api/products/learn-url", { url, clientRequestId: "product_learn_new" })).data as Start;
+    expect(start.status).toBe("collecting");
+    let raw: Record<string, unknown> | null = null;
+    for (let i = 0; i < 10 && !raw; i++) {
+      await sleep(800);
+      const s = (await post("/api/products/learn-url/status", { jobId: start.jobId, url, clientRequestId: "product_learn_new" })).data as Start;
+      if (s.status === "collected") raw = s.raw!;
+    }
+    expect(raw).toMatchObject({ sourceType: "url", platform: "coupang", url });
+    const draft = (await post("/api/products/analyze-collected", { raw })).data as { raw: unknown; analysis: { basicInfo: { name: string } } };
+    expect(draft.analysis.basicInfo.name).toBeTruthy();
+    const saved = (await post("/api/products", draft)).data as { id: string; sourceUrl: string };
+    expect(saved.sourceUrl).toBe(url);
+    expect((await post("/api/products", draft)).error?.code).toBe("DUPLICATE_PRODUCT"); // 같은 상품을 또 저장하지 않는다
+    const again = (await post("/api/products/learn-url", { url: `${url}?vendorItemId=3`, clientRequestId: "product_learn_again" })).data as Start;
+    expect(again).toMatchObject({ status: "existing", productId: saved.id });
+    // 다시 학습: 같은 제품의 새 분석 버전
+    const re = (await post("/api/products/learn-url", { url, force: true, productId: saved.id, clientRequestId: "product_learn_re" })).data as Start;
+    expect(re.status).toBe("collecting");
+    await sleep(1700);
+    const s2 = (await post("/api/products/learn-url/status", { jobId: re.jobId, url, clientRequestId: "product_learn_re" })).data as Start;
+    const d2 = (await post("/api/products/analyze-collected", { raw: s2.raw })).data;
+    const detail = (await post(`/api/products/${saved.id}/relearn`, { draft: d2 })).data as { analysis: { version: number } };
+    expect(detail.analysis.version).toBe(2);
+    await j(`/api/products/${saved.id}`, { method: "DELETE" });
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

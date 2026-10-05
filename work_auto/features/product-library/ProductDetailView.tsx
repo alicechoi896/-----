@@ -22,6 +22,7 @@ import { CreateContentMenu } from "@/components/shared/ProductCard";
 import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { ProductVideos } from "./ProductVideos";
+import { RelearnButton } from "./RelearnButton";
 
 /** 제품 상세: 저장된 모든 분석 데이터 + 연결된 영상(샤오홍슈 다시 받기) + 원본 수집 데이터 + 이 제품으로 만든 콘텐츠 */
 export function ProductDetailView({ productId, initialMode }: { productId: string; initialMode: "view" | "edit" }) {
@@ -62,6 +63,7 @@ export function ProductDetailView({ productId, initialMode }: { productId: strin
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <RelearnButton detail={detail.data} onDone={(next) => detail.setData(() => next)} />
           <Button icon={Pencil} onClick={() => setEditing((v) => !v)}>
             {editing ? "수정 닫기" : "수정"}
           </Button>

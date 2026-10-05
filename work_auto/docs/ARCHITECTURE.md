@@ -329,6 +329,12 @@ URL 쿼리(`?productId=`)로 받는 값은 페이지(Server)에서 `await search
 5. **Memory → Context → Prompt(버전) → Provider → 이력 저장**: AI 호출의 표준 파이프라인으로 삼는다.
 6. **서버 전용 경계**: `lib/server` + `server-only`로 비밀정보 유출을 구조적으로 막는다.
 
+## 상품 상세페이지 수집: Bright Data (v0.9.36)
+
+`ProductPageCollector` interface (trigger / progress / result) → `BrightDataCollector` / 데모 `MockBrightDataCollector` (`getProductPageCollector()`).
+`productUrlLearning` 이 로컬 URL 판별 → 기존 제품 확인 → Trigger 1회 → 상태 확인 → 정리(`normalizeBrightDataRecord`) → 기존 `productAnalyzer` 로 이어 준다.
+제품 라이브러리·AI 분석·저장 구조는 그대로. 자세한 내용은 [PRODUCT_DATA_COLLECTION.md](./PRODUCT_DATA_COLLECTION.md).
+
 ## 영상 소싱: 샤오홍슈·도우인 (v0.9.30)
 
 공통 TikHub 클라이언트(`providers/tikhub/client.ts`) 위에 `XiaohongshuSearchProvider`·`DouyinProvider` 가 있고, `social-search.ts` 가

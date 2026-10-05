@@ -20,7 +20,7 @@ import { encryptSecret, maskSecret } from "../security/crypto";
  *  - 평문 Key 를 로그로 남기지 않는다.
  */
 
-export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver", "naver-searchad", "tikhub"];
+export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver", "naver-searchad", "tikhub", "brightdata"];
 
 function toPublic(c: ApiConnection): ApiConnectionPublic {
   // encryptedCredentials, userId 를 명시적으로 제거한다

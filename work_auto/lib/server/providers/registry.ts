@@ -16,6 +16,8 @@ import { NaverSearchAdProvider } from "./trends/naver-searchad";
 import { YouTubeDataApiProvider } from "./trends/youtube-data-api-provider";
 import { MockDouyinProvider } from "./douyin/mock-douyin-provider";
 import { TikHubDouyinProvider } from "./douyin/tikhub-douyin-provider";
+import { BrightDataCollector, type ProductPageCollector } from "./product/brightdata";
+import { MockBrightDataCollector } from "./product/mock-brightdata";
 import type { DouyinProvider } from "./douyin/types";
 import { MockXiaohongshuProvider } from "./xiaohongshu/mock-xiaohongshu-provider";
 import { TikHubXiaohongshuProvider } from "./xiaohongshu/tikhub-xiaohongshu-provider";
@@ -106,6 +108,15 @@ export async function getDouyinProvider(): Promise<DouyinProvider> {
   return new TikHubDouyinProvider(cred.apiKey);
 }
 
+/** 상품 상세페이지 수집 (쿠팡·스마트스토어): Bright Data 토큰 필요. 데모 모드는 가짜 수집기 */
+const mockBrightData = new MockBrightDataCollector();
+export async function getProductPageCollector(): Promise<ProductPageCollector> {
+  if (serverConfig.providerMode !== "live") return mockBrightData;
+  const cred = await loadCredentials("brightdata");
+  if (!cred) throw new AppError("BRIGHTDATA_NOT_CONNECTED", "Bright Data API 연결이 필요합니다. 설정 › API 연결 센터에서 Bright Data 토큰을 연결해 주세요.", 409);
+  return new BrightDataCollector(cred.apiKey);
+}
+
 /** 검색광고 키: 별도 연결(naver-searchad), 없으면 예전처럼 NAVER 연결 안에 저장된 값 */
 function createNaverProvider(c: ProviderCredentialMap["naver"], ad: ProviderCredentialMap["naver-searchad"] | null = null): NaverApiProvider {
   const legacy = c.adApiKey && c.adSecretKey && c.adCustomerId ? { apiKey: c.adApiKey, secretKey: c.adSecretKey, customerId: c.adCustomerId } : null;
@@ -121,9 +132,9 @@ const LIVE_COLLECTORS: ProductDataCollector[] = [new ImageTextCollector(), new T
 const MOCK_COLLECTORS: ProductDataCollector[] = [new ImageTextCollector(), new MockImageCollector(), new TextCollector()];
 
 export function getProductCollector(source: ProductSourceInput): ProductDataCollector {
-  // 상품 URL 수집은 v0.9.11 에서 뺐다 (쇼핑몰 대부분이 서버 접속을 막아 쓸 수 없었다). 예전 화면·API 호출에도 이유를 안내한다
+  // 서버 직접 접속 수집은 v0.9.11 에서 뺐다. 상품 URL 은 v0.9.36 부터 /api/products/learn-url (Bright Data, 쿠팡·스마트스토어) 로만
   if (source.type === "url") {
-    throw new AppError("URL_NOT_SUPPORTED", "상품 URL 로 읽기는 지원하지 않습니다. 상세페이지를 캡처해 '이미지 업로드'로 올리거나 '텍스트 직접 입력'을 이용해 주세요.");
+    throw new AppError("URL_NOT_SUPPORTED", "상품 URL 은 '상품 URL' 탭(쿠팡·스마트스토어, Bright Data)으로 학습해 주세요. 그 밖의 쇼핑몰은 상세페이지를 캡처해 '이미지 업로드'로 올리거나 '텍스트 직접 입력'을 이용해 주세요.");
   }
   const collectors = serverConfig.providerMode === "live" ? LIVE_COLLECTORS : MOCK_COLLECTORS;
   const collector = collectors.find((c) => c.supports(source));
@@ -150,6 +161,10 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new NaverSearchAdProvider(cred as ProviderCredentialMap["naver-searchad"]);
     case "tikhub":
       return new TikHubXiaohongshuProvider((cred as ProviderCredentialMap["tikhub"]).apiKey);
+    case "brightdata": {
+      const c = new BrightDataCollector((cred as ProviderCredentialMap["brightdata"]).apiKey);
+      return { id: c.id, label: "Bright Data", testConnection: () => c.testConnection() } as BaseProvider;
+    }
     default:
       return null;
   }

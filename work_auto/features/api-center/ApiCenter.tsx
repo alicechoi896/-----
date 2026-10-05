@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Bot, Film, MonitorPlay, Search, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Bot, Film, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
 import type { AiProviderId, ApiConnectionPublic } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -71,6 +71,15 @@ const PROVIDERS: ProviderMeta[] = [
     icon: Film,
     fields: [{ name: "apiKey", label: "API Key", placeholder: "TikHub API Key", hint: "tikhub.io → 대시보드 → API Keys. 키는 서버에만 암호화해 저장합니다" }],
     docsUrl: "https://user.tikhub.io",
+  },
+  {
+    id: "brightdata",
+    name: "Bright Data",
+    description: "쿠팡·네이버 스마트스토어 상세페이지 수집 (제품 상세페이지 학습 › 상품 URL). 새 상품을 학습할 때만 1회 호출하고, 이미 학습한 상품·콘텐츠 생성에는 부르지 않습니다 · [테스트]는 무료(Dataset 목록 확인) · #쿠팡 #스마트스토어 #상품데이터",
+    usages: ["쿠팡 상세페이지", "스마트스토어 상세페이지"],
+    icon: ShoppingBag,
+    fields: [{ name: "apiKey", label: "API Token", placeholder: "Bright Data API Token", hint: "brightdata.com → Account settings → API tokens. 토큰은 서버에만 암호화해 저장합니다" }],
+    docsUrl: "https://docs.brightdata.com/scraping-automation/web-scraper-api/overview",
   },
 ];
 

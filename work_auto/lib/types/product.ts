@@ -27,6 +27,10 @@ export interface RawProductData {
   reviewSnippets: string[];
   collectedBy: string;
   collectedAt: ISODate;
+  /** 상품 URL 수집 (v0.9.36, Bright Data): 같은 상품 판별 키 · 쇼핑몰 · 쇼핑몰 상품 id */
+  canonicalKey?: string;
+  platform?: "coupang" | "naver_smartstore";
+  externalProductId?: string;
 }
 
 /** AI Analyzer 의 출력. 콘텐츠 생성 시 Product Memory 로 재사용된다. */

@@ -42,4 +42,6 @@ export interface ProviderCredentialMap {
   "naver-searchad": { apiKey: string; secretKey: string; customerId: string };
   /** 샤오홍슈 영상 검색 (v0.9.29) · 도우인 검색·링크 (v0.9.30) */
   tikhub: { apiKey: string };
+  /** 쿠팡·스마트스토어 상세페이지 수집 (v0.9.36, Web Scraper API 토큰) */
+  brightdata: { apiKey: string };
 }

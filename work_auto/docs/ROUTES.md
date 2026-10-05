@@ -135,6 +135,10 @@
 | POST | `/api/connections/:provider/test` | 연결 테스트 | connectionService.test |
 | GET/POST | `/api/videos` | 참고 영상 조회 / 가져오기 | videoService |
 | POST | `/api/videos/social-search` { keyword, platform, autoTranslate, sort, period, next? } | 샤오홍슈 또는 도우인 검색 = TikHub 1회 (한국어는 AI 1회 변환, 30분 기억, 저장 안 함) | socialSearchService.search |
+| POST | `/api/products/learn-url` { url, clientRequestId, force?, productId? } | 상품 URL 학습 시작: 기존 제품이면 existing (외부 0회), 새 상품이면 Bright Data Trigger 1회 | productUrlLearning.start |
+| POST | `/api/products/learn-url/status` { jobId, url } | 같은 수집 작업 상태만 (새 Trigger 없음) | productUrlLearning.status |
+| POST | `/api/products/analyze-collected` { raw } | 수집한 상품 정보 → AI 분석 (Bright Data 0회) | productUrlLearning.analyze |
+| POST | `/api/products/:id/relearn` { draft } | 다시 학습 결과 저장 (분석 버전 +1) | productService.relearn |
 | POST | `/api/trends/youtube/outliers` { items: [{ videoId, channelId, views }] } | 아웃라이어 점수 (채널 최근 15개 중앙값 대비, 누를 때만) | youtubeOutlierService.scores |
 | GET | `/api/performance/prompts` | 프롬프트 버전별 성과표 | memoryService.promptStats |
 | POST | `/api/videos/translate-titles` { items: [{ id, title }] } | 검색 결과 중국어 제목 → 한국어 (한 페이지 묶어 AI 1회, 저장 안 함) | titleTranslateService.translate |

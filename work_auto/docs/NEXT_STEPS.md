@@ -36,6 +36,10 @@
 
 ## 3. 다음 개발 순서 (추천)
 
+### 상품 URL 학습 후속 (v0.9.36 이후)
+- 실제 Bright Data 토큰으로 쿠팡·스마트스토어 1건씩 학습 → 응답 필드 확인 후 `normalizeBrightDataRecord` 보정
+- 쿠팡 상세 이미지가 부족하면 (A) Image Scraper (B) Scraper Studio 맞춤 1개 (C) 그대로 — 비용·품질 비교 후 결정 (승인 전 두 번째 Scraper 호출 없음)
+
 ### 영상 소싱 후속 (v0.9.30 이후)
 - 실제 TikHub 키로 샤오홍슈·도우인 첫 검색 → 응답 구조 확인 후 `xiaohongshu/parse.ts`·`douyin/parse.ts` 보정
 - 도우인 영상·썸네일 CDN 이 브라우저를 막으면(CORS·핫링크) 서버 프록시 검토 (지금은 [새 탭에서 열기])
