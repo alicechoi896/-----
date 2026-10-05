@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Download, FileUp, Sparkles } from "lucide-react";
+import { Download, FileUp } from "lucide-react";
 import type { StyleImportPreview } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import {
@@ -27,7 +27,6 @@ export interface StyleImportResult {
   overLimit: number;
 }
 
-const STARTER_URL = "/samples/style-starter.csv";
 
 const CSV_SAMPLE = [
   "type,text",
@@ -144,23 +143,6 @@ export function StyleImportDialog({
     }
   }
 
-  /** 추천 예시 (Hook 100 · CTA 100 · 제목 패턴 100, public/samples/style-starter.csv) 를 파일처럼 같은 미리보기로 불러온다 */
-  async function loadStarter() {
-    reset();
-    setLoading(true);
-    try {
-      const res = await fetch(STARTER_URL, { cache: "no-store" });
-      if (!res.ok) throw new Error("추천 예시를 불러오지 못했습니다.");
-      const file = new File([await res.blob()], "style-starter.csv", { type: "text/csv" });
-      setFileName("추천 예시 (Hook 100 · CTA 100 · 제목 패턴 100)");
-      setPreview(await api.styles.importPreview(file));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "추천 예시를 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function downloadSample() {
     // 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM 을 붙인다
     const url = URL.createObjectURL(new Blob(["﻿" + CSV_SAMPLE], { type: "text/csv;charset=utf-8" }));
@@ -218,16 +200,9 @@ export function StyleImportDialog({
           <Button size="sm" variant="secondary" icon={FileUp} loading={loading} onClick={() => fileRef.current?.click()}>
             파일 고르기 (.txt / .csv)
           </Button>
-          <Button size="sm" variant="secondary" icon={Sparkles} disabled={loading} onClick={() => void loadStarter()}>
-            추천 예시 불러오기 (Hook·CTA·제목 패턴 각 100개)
-          </Button>
           <Button size="sm" variant="ghost" icon={Download} onClick={downloadSample}>
             CSV 형식 예시 받기
           </Button>
-          <a href={STARTER_URL} download="추천예시-각100개.csv" className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] text-fg-muted hover:bg-subtle hover:text-fg">
-            <Download className="size-3.5" />
-            추천 예시 CSV 받기 (각 100개)
-          </a>
           {fileName && <span className="truncate text-xs text-fg-subtle">{fileName}</span>}
         </div>
 

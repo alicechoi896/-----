@@ -98,7 +98,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-subtle">
           생성 화면의 <b className="font-medium text-fg-muted">스타일</b> 에서 골라 씁니다. 고르지 않으면 채널마다 기본 스타일(★) 1개가 자동 적용됩니다.
-          Hook·CTA·제목 패턴은 <b className="font-medium text-fg-muted">대본 포맷</b>에서 관리합니다. 자주 쓰는 표현은 많으면 생성할 때마다 10개씩 골라 참고합니다.
+          자주 쓰는 표현은 많으면 생성할 때마다 10개씩 골라 참고합니다.
         </p>
         <Button variant="primary" size="sm" icon={Plus} onClick={() => setEditing(editing ? null : { mode: "create" })}>
           스타일 추가
@@ -120,7 +120,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
 
       {!data?.length ? (
         <SectionCard>
-          <EmptyState title="등록된 스타일이 없습니다" description="자주 쓰는 말투·규칙·Hook·CTA 를 등록하면 결과가 일정해집니다. 참고 글을 넣으면 AI 가 초안을 만들어 줍니다." />
+          <EmptyState title="등록된 스타일이 없습니다" description="자주 쓰는 말투·규칙·표현을 등록하면 결과가 일정해집니다. 참고 글을 넣으면 AI 가 초안을 만들어 줍니다." />
         </SectionCard>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -435,9 +435,6 @@ function StyleForm({
         <FormField label="설명" htmlFor="style-desc">
           <Input id="style-desc" placeholder="예: 첫 문장에서 불편을 짚는다" value={form.description} onChange={(e) => set("description", e.target.value)} />
         </FormField>
-        <Notice tone="info" className="md:col-span-2">
-          Hook·CTA·제목 패턴은 <b>대본 포맷</b>에서 관리합니다 (제품 홍보·정보성·블로그마다 따로). 예전에 여기 저장한 값은 그대로 두고, 스타일 카드의 [대본 포맷으로 복사]로 옮길 수 있습니다.
-        </Notice>
         <FormField label="규칙" htmlFor="style-rules" hint="한 줄에 하나씩 · 생성할 때 항상 전부 지킵니다">
           <Textarea id="style-rules" rows={4} value={form.rules} onChange={(e) => set("rules", e.target.value)} />
         </FormField>
@@ -700,7 +697,7 @@ function ReferenceExtractor({
       <div>
         <p className="text-[13px] font-semibold text-fg">참고 자료로 AI 초안 만들기</p>
         <p className="mt-0.5 text-xs leading-relaxed text-fg-subtle">
-          닮고 싶은 블로그 글, 영상 대본·자막, 영상 제목·설명을 붙여 넣으세요. AI 가 말투·구조·Hook·CTA 를 뽑아 아래 칸을 채웁니다. 자료와 파일은 저장하지 않습니다 (최대 12,000자 사용).
+          닮고 싶은 블로그 글, 영상 대본·자막, 영상 제목·설명을 붙여 넣으세요. AI 가 말투·규칙·자주 쓰는 표현을 뽑아 아래 칸을 채웁니다. 자료와 파일은 저장하지 않습니다 (최대 12,000자 사용).
         </p>
       </div>
       <Textarea rows={6} value={text} placeholder="여기에 참고 글이나 대본을 붙여 넣으세요" onChange={(e) => setText(e.target.value)} />
