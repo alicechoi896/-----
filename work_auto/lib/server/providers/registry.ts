@@ -14,6 +14,9 @@ import { MockYouTubeTrendProvider } from "./trends/mock-youtube-provider";
 import { NaverApiProvider } from "./trends/naver-api-provider";
 import { NaverSearchAdProvider } from "./trends/naver-searchad";
 import { YouTubeDataApiProvider } from "./trends/youtube-data-api-provider";
+import { MockXiaohongshuProvider } from "./xiaohongshu/mock-xiaohongshu-provider";
+import { TikHubXiaohongshuProvider } from "./xiaohongshu/tikhub-xiaohongshu-provider";
+import { XhsSearchError, type XiaohongshuSearchProvider } from "./xiaohongshu/types";
 import type { AIProvider, BaseProvider, NaverTrendProvider, ProductDataCollector, YouTubeTrendProvider } from "./types";
 
 /**
@@ -29,6 +32,7 @@ import type { AIProvider, BaseProvider, NaverTrendProvider, ProductDataCollector
 const mockAI = new MockAIProvider();
 const mockYouTube = new MockYouTubeTrendProvider();
 const mockNaver = new MockNaverTrendProvider();
+const mockXhs = new MockXiaohongshuProvider();
 
 /** 연결된 Provider 의 자격증명을 복호화해서 읽는다 (서버 내부 전용) */
 async function loadCredentials<P extends ProviderId>(provider: P): Promise<ProviderCredentialMap[P] | null> {
@@ -80,6 +84,16 @@ export async function getNaverTrendProvider(): Promise<NaverTrendProvider> {
   return mockNaver;
 }
 
+/**
+ * 샤오홍슈 영상 검색: live 모드에서는 TikHub 키가 있어야 한다 (가짜 결과로 바꿔치기하지 않음). 데모 모드는 가짜 결과
+ */
+export async function getXiaohongshuSearchProvider(): Promise<XiaohongshuSearchProvider> {
+  if (serverConfig.providerMode !== "live") return mockXhs;
+  const cred = await loadCredentials("tikhub");
+  if (!cred) throw new XhsSearchError("NOT_CONNECTED", "TikHub API 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 TikHub 키를 연결해 주세요.");
+  return new TikHubXiaohongshuProvider(cred.apiKey);
+}
+
 /** 검색광고 키: 별도 연결(naver-searchad), 없으면 예전처럼 NAVER 연결 안에 저장된 값 */
 function createNaverProvider(c: ProviderCredentialMap["naver"], ad: ProviderCredentialMap["naver-searchad"] | null = null): NaverApiProvider {
   const legacy = c.adApiKey && c.adSecretKey && c.adCustomerId ? { apiKey: c.adApiKey, secretKey: c.adSecretKey, customerId: c.adCustomerId } : null;
@@ -122,6 +136,8 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return createNaverProvider(cred as ProviderCredentialMap["naver"]);
     case "naver-searchad":
       return new NaverSearchAdProvider(cred as ProviderCredentialMap["naver-searchad"]);
+    case "tikhub":
+      return new TikHubXiaohongshuProvider((cred as ProviderCredentialMap["tikhub"]).apiKey);
     default:
       return null;
   }

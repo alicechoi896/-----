@@ -204,6 +204,32 @@ describe("트렌드·스타일·오류 기록", () => {
     await j(`/api/script-formats/${saved.id}`, { method: "DELETE" });
   });
 
+  it("샤오홍슈 검색(데모): 검색 → 기간 필터 → 고른 영상을 기존 가져오기로 저장, 검색어 추천", async ({ skip }) => {
+    if (!reachable) skip();
+    type Note = { noteId: string; url: string; title: string; publishedAt: string | null };
+    const r = (await post("/api/videos/xhs-search", { keyword: "무선청소기", sort: "latest", period: "21" })).data as { notes: Note[]; next: unknown; calls: number };
+    expect(r.notes.length).toBeGreaterThan(0);
+    const cutoff = Date.now() - 21 * 86_400_000 - 60_000; // 경계값 여유 1분
+    expect(r.notes.every((n) => n.publishedAt && Date.parse(n.publishedAt) >= cutoff)).toBe(true); // 21일은 게시일로 다시 거른다
+    expect(r.notes.every((n) => n.url.includes("xsec_token="))).toBe(true);
+    const again = (await post("/api/videos/xhs-search", { keyword: "무선청소기", sort: "latest", period: "21" })).data as { calls: number };
+    expect(again.calls).toBe(0); // 같은 조건은 10분 동안 다시 부르지 않는다
+    expect((await post("/api/videos/xhs-search", { keyword: "" })).ok).toBe(false);
+
+    // 기존 URL 가져오기와 같은 API 로 저장 (제품·메모 함께)
+    const products = await j<{ id: string }[]>("/api/products");
+    const pick = r.notes.slice(0, 2);
+    const res = (await post("/api/videos/batch", { items: pick.map((n) => ({ url: n.url, titleHint: n.title })), note: "Hook 참고", productId: products.data[0].id })).data as { ok: boolean; video?: { id: string; title: string; productId: string; note: string; platform: string } }[];
+    expect(res.every((x) => x.ok)).toBe(true);
+    expect(res[0].video).toMatchObject({ platform: "xiaohongshu", note: "Hook 참고", productId: products.data[0].id, title: pick[0].title });
+    const list = (await j<{ id: string }[]>("/api/videos")).data;
+    expect(res.every((x) => list.some((v) => v.id === x.video!.id))).toBe(true);
+    for (const x of res) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
+
+    const kw = (await post("/api/videos/xhs-search/keywords", { keyword: "무선청소기" })).data as { keywords: string[] };
+    expect(kw.keywords[0]).toBe("无线吸尘器");
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

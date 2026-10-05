@@ -16,7 +16,8 @@ export const LIMITS = {
   "xhs-resolve": 20, // 샤오홍슈 영상 주소 찾기 (서버 IP 공유 → 가장 보수적으로)
   "video-import": 10, // 영상 여러 개 가져오기 (한 번에 최대 20개)
   "describe-photos": 10,
-  "client-errors": 20, // 화면 오류 기록 (오류가 반복돼도 폭주하지 않게)
+  "client-errors": 20,
+  "xhs-search": 10, // TikHub 샤오홍슈 검색 (사용자 키·검색 1회 약 $0.01, [검색] 1번 = 최대 3페이지) // 화면 오류 기록 (오류가 반복돼도 폭주하지 않게)
   "photo-ai": 10, // 제품 사진 AI 배경 연출 (OpenAI 이미지, 장당 비용)
   "style-import": 20, // 나의 스타일 파일 일괄 추가 미리보기 (파일 파싱만, 외부 호출 없음)
   "ai-generate": 20, // 콘텐츠 생성·분석·주제 추천 등 AI 호출

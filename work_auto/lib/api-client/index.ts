@@ -2,6 +2,11 @@ import type { PermissionRow } from "@/lib/permissions";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type {
+  XhsNote,
+  XhsPeriodOption,
+  XhsSearchCursor,
+  XhsSearchResultDto,
+  XhsSortOption,
   ScriptExample,
   ScriptFormat,
   ScriptFormatInput,
@@ -319,6 +324,11 @@ export const api = {
         durationSec: number;
         streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
       }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
+    /** 샤오홍슈 영상 검색 (TikHub). 결과는 저장하지 않는다 */
+    xhsSearch: (body: { keyword: string; sort: XhsSortOption; period: XhsPeriodOption; cursor?: XhsSearchCursor | null }) =>
+      request<XhsSearchResultDto>("/api/videos/xhs-search", { method: "POST", body: json(body) }),
+    xhsDetail: (noteId: string) => request<XhsNote | null>(`/api/videos/xhs-search/detail${qs({ noteId })}`),
+    xhsKeywords: (keyword: string) => request<{ keywords: string[]; provider: string }>("/api/videos/xhs-search/keywords", { method: "POST", body: json({ keyword }) }),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
     importMany: (items: { url: string; titleHint?: string }[], note?: string, productId?: string | null) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {

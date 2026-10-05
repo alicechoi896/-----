@@ -74,6 +74,7 @@ export const SHOTS = [
   {
     id: "00-home",
     url: "/",
+    viewport: { width: 1280, height: 900 },
     marks: {
       1: (p) => p.locator("aside nav").first(),
       2: (p) => p.locator("main a", { hasText: "바로가기" }).first(),
@@ -191,6 +192,33 @@ export const SHOTS = [
       1: (p) => sideLink(p, "영상 URL 가져오기"),
       2: (p) => p.locator("main textarea").first(),
       3: (p) => btn(p, "가져오기").first(),
+    },
+  },
+
+  {
+    id: "03-xhs-search",
+    url: "/tools/video-import",
+    viewport: { width: 1280, height: 1300 },
+    prepare: async (p) => {
+      await p.getByRole("radio", { name: "샤오홍슈 검색" }).click();
+      await p.getByPlaceholder("예: 무선청소기 또는 无线吸尘器").fill("무선청소기");
+      await btn(p, "AI 중국어 검색어 추천").first().click();
+      await p.getByText("(원래)").first().waitFor({ timeout: 10_000 });
+      await p.locator("button", { hasText: /^无线吸尘器$/ }).first().click();
+      await btn(p, "샤오홍슈 검색").last().click();
+      await p.locator("main ul li input[type=checkbox]").first().waitFor({ timeout: 15_000 });
+      const boxes = p.locator("main ul li input[type=checkbox]");
+      await boxes.nth(0).check();
+      await boxes.nth(1).check();
+      await p.waitForTimeout(300);
+    },
+    scrollTo: (p) => p.locator("h2, h3", { hasText: "영상 가져오기" }).first(),
+    marks: {
+      1: (p) => p.getByRole("radio", { name: "샤오홍슈 검색" }).locator("xpath=.."),
+      2: (p) => btn(p, "AI 중국어 검색어 추천").first(),
+      3: (p) => btn(p, "샤오홍슈 검색").last(),
+      4: (p) => p.locator("main ul li").first(),
+      5: (p) => btn(p, /선택한 \d+개 가져오기/).first(),
     },
   },
 

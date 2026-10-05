@@ -112,6 +112,13 @@ export class MockAIProvider implements AIProvider {
       return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
     }
 
+    if (request.task === "xhs-search-keywords") {
+      const k = String(v.keyword ?? "");
+      const dict: Record<string, string> = { 무선청소기: "无线吸尘器", 에어프라이어: "空气炸锅", 마사지건: "筋膜枪", 가습기: "加湿器", 노트북: "笔记本电脑" };
+      const base = Object.entries(dict).find(([ko]) => k.includes(ko))?.[1] ?? k;
+      return { data: { keywords: [base, `${base}测评`, `${base}推荐`, `平价${base}`] } as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task === "script-format-extract") {
       // 데모: 참고 대본의 줄 수·글자 수·마무리 표현으로 간단한 포맷을 만든다
       const ex = (v.examples as { text: string }[]) ?? [];

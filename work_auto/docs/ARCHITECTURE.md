@@ -77,7 +77,7 @@ work_auto/
 ├── features/                         # 기능별 화면 로직 (Client Component)
 │   ├── content-generator/            # ★ 생성형 기능 7개가 공유하는 범용 생성기
 │   ├── youtube-trends/  naver-trends/
-│   ├── product-learning/  product-library/  video-import/
+│   ├── product-learning/  product-library/  video-import/   (video-import/XhsSearchPanel = 샤오홍슈 검색 탭)
 │   ├── ai-learning/  api-center/  home/
 ├── lib/
 │   ├── registry/                     # ★ Feature Registry (채널, 기능 정의)
@@ -328,3 +328,8 @@ URL 쿼리(`?productId=`)로 받는 값은 페이지(Server)에서 `await search
 4. **Provider 인터페이스 + Mock 우선**: 외부 API 없이 전체 UX를 먼저 완성하고, 구현체만 교체한다.
 5. **Memory → Context → Prompt(버전) → Provider → 이력 저장**: AI 호출의 표준 파이프라인으로 삼는다.
 6. **서버 전용 경계**: `lib/server` + `server-only`로 비밀정보 유출을 구조적으로 막는다.
+
+## 샤오홍슈 영상 검색 (v0.9.29)
+
+`XiaohongshuSearchProvider` (lib/server/providers/xiaohongshu) → TikHub 구현 / 데모 Mock. 서비스 `xhs-search.ts` 가 기간·페이지·캐시를 맡고,
+가져오기는 기존 `videoService.importMany()` 를 그대로 쓴다. 검색 결과는 저장하지 않는다. 자세한 내용은 [XIAOHONGSHU_SEARCH.md](./XIAOHONGSHU_SEARCH.md).

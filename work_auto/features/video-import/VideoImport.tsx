@@ -20,12 +20,14 @@ import {
   LoadingState,
   Notice,
   SectionCard,
+  SegmentedControl,
   Textarea,
   type Column,
 } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatRelative } from "@/lib/utils";
 import { XhsJobStatus, useXhsDownloads } from "./useXhsDownloads";
+import { XhsSearchPanel } from "./XhsSearchPanel";
 
 const MAX_BATCH = 20;
 
@@ -51,6 +53,8 @@ export function VideoImport() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   // 체크해서 고른 영상 (전체 선택은 표 머리의 체크 상자)
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // 가져오기 방식: 기존 URL 입력(기본) / 샤오홍슈 검색 (TikHub)
+  const [mode, setMode] = useState<"url" | "xhs">("url");
   const xhs = useXhsDownloads();
   const { jobs, bulk, busy } = xhs;
 
@@ -80,6 +84,13 @@ export function VideoImport() {
     if (pickedXhs.length) await xhs.runAll(pickedXhs);
   }
 
+  /** 가져오기 결과 반영 (URL 입력·샤오홍슈 검색 공통) */
+  function applyImported(res: { url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]) {
+    const added = res.filter((r) => r.ok && r.video).map((r) => r.video!);
+    list.setData((prev) => [...added, ...(prev ?? [])]);
+    setResults(res.map(({ url, ok, error: e }) => ({ url, ok, error: e })));
+  }
+
   async function handleImport() {
     if (!urls.length) return;
     setImporting(true);
@@ -87,9 +98,7 @@ export function VideoImport() {
     setResults(null);
     try {
       const res = await api.videos.importMany(links.slice(0, MAX_BATCH), note, productId || null);
-      const added = res.filter((r) => r.ok && r.video).map((r) => r.video!);
-      list.setData((prev) => [...added, ...(prev ?? [])]);
-      setResults(res.map(({ url, ok, error: e }) => ({ url, ok, error: e })));
+      applyImported(res);
       // 실패한 URL 만 입력칸에 남겨 다시 시도할 수 있게
       setText(res.filter((r) => !r.ok).map((r) => r.url).join("\n"));
       if (res.every((r) => r.ok)) setNote("");
@@ -194,8 +203,26 @@ export function VideoImport() {
       <SectionCard
         title="영상 가져오기"
         icon={ListPlus}
-        description="샤오홍슈·YouTube 영상 링크를 한 줄에 하나씩 넣으세요. 샤오홍슈 앱의 공유 문구를 그대로 붙여넣어도 됩니다. 한 번에 20개까지."
+        description={
+          mode === "url"
+            ? "샤오홍슈·YouTube 영상 링크를 한 줄에 하나씩 넣으세요. 샤오홍슈 앱의 공유 문구를 그대로 붙여넣어도 됩니다. 한 번에 20개까지."
+            : "샤오홍슈에서 영상을 검색해 골라 가져옵니다 (TikHub API). 가져온 영상은 아래 '저장된 참고 영상'에 똑같이 들어갑니다."
+        }
+        actions={
+          <SegmentedControl
+            size="sm"
+            options={[
+              { value: "url", label: "URL로 가져오기" },
+              { value: "xhs", label: "샤오홍슈 검색" },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+        }
       >
+        {mode === "xhs" ? (
+          <XhsSearchPanel productOptions={productOptions} productsLoading={products.loading} maxBatch={MAX_BATCH} onImported={applyImported} />
+        ) : (
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -237,6 +264,7 @@ export function VideoImport() {
             </Button>
           </div>
         </form>
+        )}
         {results && (
           <ul className="mt-3 space-y-1 text-xs">
             <li className="font-medium text-fg-muted">
