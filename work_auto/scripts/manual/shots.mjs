@@ -246,6 +246,21 @@ export const SHOTS = [
     },
   },
   {
+    id: "04-yt-outlier",
+    url: "/youtube/trends",
+    prepare: async (p) => {
+      await p.locator("[data-outlier-button]").first().click();
+      await p.getByText(/채널 \d+개 비교/).first().waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(300);
+    },
+    scrollTo: (p) => p.locator("h2, h3", { hasText: "트렌드 영상" }).first(),
+    marks: {
+      1: (p) => p.locator("main th", { hasText: "아웃라이어" }).first(),
+      2: (p) => p.getByText(/^×\d/).first().locator("xpath=.."),
+      3: (p) => p.getByText(/채널 \d+개 비교/).first(),
+    },
+  },
+  {
     id: "04-clip-trends",
     url: "/naver-clip/trends",
     marks: {
@@ -616,6 +631,21 @@ export const SHOTS = [
       1: (p) => p.locator("h3", { hasText: "YouTube 제품 영상" }).first().locator("xpath=ancestor::*[contains(@class,'rounded-card')][1]"),
       2: (p) => btn(p, "지금 학습 업데이트").first(),
       3: (p) => btn(p, "학습 내용 보기").first(),
+    },
+  },
+  {
+    id: "10-prompt-stats",
+    url: "/ai-learning",
+    prepare: async (p) => {
+      await tab(p, "성과 데이터").click();
+      await p.getByText("프롬프트 버전별 성과").first().waitFor();
+      await p.waitForTimeout(600);
+    },
+    scrollTo: (p) => p.locator("h2, h3", { hasText: "프롬프트 버전별 성과" }).first(),
+    marks: {
+      1: (p) => p.locator("main table").first().locator("tbody tr").first().locator("td").first(),
+      2: (p) => p.locator("main th", { hasText: "👍 비율" }).first(),
+      3: (p) => p.locator("main th", { hasText: "생성" }).first(),
     },
   },
   {

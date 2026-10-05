@@ -296,6 +296,21 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     return out;
   }
 
+  /** 채널 최근 업로드 (업로드 재생목록 = "UU" + 채널 ID 뒷부분 → channels.list 없이 1 unit) */
+  async getChannelRecentVideoIds(channelId: string, count: number): Promise<string[]> {
+    if (!/^UC[\w-]{22}$/.test(channelId)) return [];
+    const res = await this.get<{ items?: { contentDetails?: { videoId?: string } }[] }>("playlistItems", {
+      part: "contentDetails",
+      playlistId: `UU${channelId.slice(2)}`,
+      maxResults: Math.min(50, Math.max(1, count)),
+    }).catch((e) => {
+      // 업로드 목록이 없거나 비공개인 채널은 점수 없이 넘어간다 (할당량·키 오류는 그대로 알린다)
+      if (e instanceof AppError && (e.code === "YOUTUBE_QUOTA" || e.code.startsWith("YOUTUBE_KEY"))) throw e;
+      return { items: [] };
+    });
+    return (res.items ?? []).map((i) => i.contentDetails?.videoId ?? "").filter(Boolean);
+  }
+
   /** 영상 ID 로 트렌드 항목 1개 조회 (북마크·생성 화면의 참고 트렌드용, 2 units) */
   async getTrendItem(videoId: string): Promise<YouTubeTrendItem | null> {
     const res = await this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: videoId });

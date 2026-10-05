@@ -123,6 +123,8 @@ export interface YouTubeTrendProvider extends BaseProvider {
   getVideoMeta(url: string): Promise<VideoMeta>;
   /** 공개 통계 (조회수·좋아요·댓글). 영상 50개까지 1 unit */
   getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>>;
+  /** 채널의 최근 업로드 영상 ID (업로드 재생목록, 1 unit). 아웃라이어 점수용 */
+  getChannelRecentVideoIds(channelId: string, count: number): Promise<string[]>;
 }
 
 export interface VideoStats {

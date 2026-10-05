@@ -239,7 +239,27 @@ const LEARNING_SYSTEM = [
   "5. 성과(조회수 등)는 제품·시즌 영향이 있으니 한 콘텐츠의 수치만으로 강한 결론을 내리지 않는다. 다만 '잘된 영상'(같은 유형 중앙값의 2배 이상)으로 표시된 콘텐츠의 제목·Hook·대본 구조·CTA 는 강한 긍정 근거로, '반응 낮음'은 약한 부정 근거로 본다. 잘된 영상과 반응 낮은 영상의 차이를 positive_traits / negative_traits 에 적는다.",
   "6. 특정 제품명·수치 같은 사실은 넣지 않는다. 다른 콘텐츠에도 적용할 수 있는 일반적인 경향만 쓴다.",
   "7. 오래되고 근거가 약한 Insight 부터 지워 개수 제한을 지킨다. 응답은 지정된 JSON 형식으로만 한다.",
+  "8. [성과 비교]가 있으면 가장 중요하게 본다: 실제 조회수 상위 3개와 하위 3개의 제목·첫 문장(Hook)·대본 구조·CTA 를 나란히 비교해, 상위에만 있는 공통점은 title_insights·hook_insights·structure_insights·positive_traits 로, 하위에만 있는 공통점은 negative_traits 로 적는다 (근거 콘텐츠 수를 support_count 에 반영). 제품·시즌 차이로 설명되는 차이는 적지 않는다.",
 ].join("\n");
+
+/**
+ * 성과 비교 (v0.9.34, 2단계): 같은 학습 프로필(채널·유형) 콘텐츠 중 실제 조회수 상위 N개 vs 하위 N개.
+ * 조회수가 있는 콘텐츠가 min 개 이상일 때만 (적으면 우연이 커서 비교하지 않는다). 콘텐츠별 가장 큰 조회수 기준
+ */
+export const CONTRAST_CONFIG = { size: 3, minContents: 6 } as const;
+export function performanceContrast<C extends { id: string }>(
+  contents: C[],
+  performance: { contentId: string; views: number | null }[],
+  size: number = CONTRAST_CONFIG.size,
+  minContents: number = CONTRAST_CONFIG.minContents,
+): { top: { c: C; views: number }[]; bottom: { c: C; views: number }[] } | null {
+  const byId = new Map(contents.map((c) => [c.id, c]));
+  const best = new Map<string, number>();
+  for (const m of performance) if (m.views != null && byId.has(m.contentId)) best.set(m.contentId, Math.max(best.get(m.contentId) ?? 0, m.views));
+  if (best.size < Math.max(minContents, size * 2)) return null;
+  const ranked = [...best.entries()].sort((a, b) => b[1] - a[1]).map(([id, views]) => ({ c: byId.get(id)!, views }));
+  return { top: ranked.slice(0, size), bottom: ranked.slice(-size).reverse() };
+}
 
 /** 콘텐츠별 최고 조회수 → 같은 묶음 안의 상대 위치 (콘텐츠 2개 이상일 때만) */
 export function performanceTiers(rows: { contentId: string; views: number | null }[]): Map<string, string> {
@@ -270,6 +290,20 @@ export function scheduleLearning(contentId: string | null | undefined) {
   } catch {
     /* 요청 밖(테스트 등)에서는 건너뛴다 */
   }
+}
+
+/** [성과 비교] 프롬프트 블록 (조건이 안 되면 빈 배열) */
+function contrastBlock(contents: GeneratedContent[], performance: { contentId: string; views: number | null }[]): string[] {
+  const k = performanceContrast(contents, performance);
+  if (!k) return [];
+  const line = (x: { c: GeneratedContent; views: number }, i: number) => `(${i + 1}) 조회 ${x.views}\n${compressContent(x.c, 500)}`;
+  return [
+    `[성과 비교 — 실제 조회수 상위 ${k.top.length}개 vs 하위 ${k.bottom.length}개 (같은 채널·유형)]`,
+    "▲ 상위",
+    ...k.top.map(line),
+    "▼ 하위",
+    ...k.bottom.map(line),
+  ];
 }
 
 /* ───────── 서비스 ───────── */
@@ -317,7 +351,7 @@ export const learningService = {
     const [channelId, contentType] = profileId.split(":") as [string, "product" | "info"];
     const current = (await this.get(profileId)) ?? emptyProfile(channelId, contentType);
     const since = current.userCursors?.[userId] ?? null;
-    const { signals, contents } = await collectSignals(userId, profileId, since);
+    const { signals, contents, performance } = await collectSignals(userId, profileId, since);
     if (!signals.length) throw new AppError("NO_SIGNALS", "새 학습 데이터가 없습니다. 결과에 👍/👎, 직접 수정, 제목 선택, 업로드 완료를 남기면 쌓입니다.");
 
     // 콘텐츠별로 신호를 묶고 최근 것부터 최대 N개 (요약본만)
@@ -350,6 +384,7 @@ export const learningService = {
             JSON.stringify(current.summaryJson).slice(0, 6000),
             `[새 학습 신호 — 콘텐츠 ${samples.length}개, 신호 ${signals.length}개]`,
             sampleText,
+            ...contrastBlock(contents, performance),
           ].join("\n"),
         },
       ],

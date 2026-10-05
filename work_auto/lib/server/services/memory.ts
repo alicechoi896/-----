@@ -1,4 +1,5 @@
 import "server-only";
+import { promptVersionStats, type PromptVersionRow } from "@/lib/domain/prompt-stats";
 import type {
   ChannelId,
   GeneratedContent,
@@ -307,6 +308,20 @@ export const memoryService = {
     const byId = new Map(contents.map((c) => [c.id, c]));
     const metrics = await repo.performance.list((m) => byId.has(m.contentId));
     return metrics.map((m) => ({ ...m, headline: byId.get(m.contentId)!.headline }));
+  },
+
+  /** 프롬프트 버전별 성과 (생성 수·👍 비율·직접 수정·업로드율·평균 조회수). 기존 데이터로 계산, 저장 없음 */
+  async promptStats(): Promise<PromptVersionRow[]> {
+    const repo = getRepositories();
+    const userId = await getCurrentUserId();
+    const contents = await this.listContents();
+    const ids = new Set(contents.map((c) => c.id));
+    const [feedback, publications, performance] = await Promise.all([
+      repo.feedback.list((f) => f.userId === userId && ids.has(f.contentId)),
+      repo.publications.list((p) => p.userId === userId && p.contentId != null && ids.has(p.contentId)),
+      repo.performance.list((m) => ids.has(m.contentId)),
+    ]);
+    return promptVersionStats({ contents, feedback, publications, performance });
   },
 
   /* ── Overview ── */

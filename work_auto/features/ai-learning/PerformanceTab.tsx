@@ -8,6 +8,7 @@ import { getChannel } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { Badge, BulkDeleteButton, DataTable, EmptyState, ErrorState, LoadingState, Notice, SectionCard, type Column } from "@/components/ui";
 import { formatNumber } from "@/lib/utils";
+import { PromptStatsCard } from "./PromptStatsCard";
 
 type Row = PerformanceMetric & { headline: string };
 const num = (v: number | null, suffix = "") => (v == null ? "-" : `${formatNumber(v)}${suffix}`);
@@ -40,8 +41,9 @@ export function PerformanceTab({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <div className="space-y-4">
-      <Notice tone="info" icon={Info} title="성과 데이터 자동 수집은 다음 단계에서 연동합니다">
-        YouTube Analytics, 블로그 통계, 판매 데이터를 연결하면 이 표가 자동으로 채워집니다. 현재는 Mock/수동 입력 데이터입니다.
+      <PromptStatsCard />
+      <Notice tone="info" icon={Info} title="성과 데이터는 어디서 오나요">
+        YouTube 에 올린 콘텐츠는 업로드 1일·7일 뒤 조회수를 자동으로 저장합니다. 그 밖의 채널은 업로드 관리에서 조회수를 직접 입력하면 여기에 쌓입니다.
       </Notice>
       <SectionCard
         title="성과 데이터 (Performance Data)"

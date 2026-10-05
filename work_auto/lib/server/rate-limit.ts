@@ -13,6 +13,7 @@ import { getCurrentUserId } from "./repositories";
  * 사용자가 많아지면 DB·Redis 기반으로 바꾼다 (docs/OPERATIONS.md).
  */
 export const LIMITS = {
+  "youtube-outlier": 10, // 아웃라이어 점수 (사용자 YouTube 키 할당량: 채널당 1 unit + 영상 50개당 1 unit)
   "xhs-resolve": 20, // 샤오홍슈 영상 주소 찾기 (서버 IP 공유 → 가장 보수적으로)
   "video-import": 10, // 영상 여러 개 가져오기 (한 번에 최대 20개)
   "describe-photos": 10,

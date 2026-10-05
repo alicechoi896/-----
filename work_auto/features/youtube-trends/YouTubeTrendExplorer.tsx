@@ -16,6 +16,7 @@ import { TrendFilterPanel, type TrendDraft } from "./TrendFilterPanel";
 import { TrendInsights } from "./TrendInsights";
 import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
 import { infoVideoHref, trendPrefill } from "./trend-links";
+import { isOutlierHit, type OutlierScore } from "@/lib/domain/outlier";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -47,6 +48,27 @@ export function YouTubeTrendExplorer() {
   const [detail, setDetail] = useState<YouTubeTrendItem | null>(null);
   // 체크해서 고른 영상 → [제목 N개 대본 포맷에 담기]
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // 아웃라이어 점수 (videoId → 점수, 계산한 것만). [아웃라이어 점수 계산]을 누를 때만 YouTube 할당량을 쓴다
+  const [outliers, setOutliers] = useState<Record<string, OutlierScore | null>>({});
+  const [scoring, setScoring] = useState(false);
+  const [scoreNote, setScoreNote] = useState<string | null>(null);
+  const unscored = items.filter((r) => !(r.videoId in outliers));
+
+  async function computeOutliers() {
+    if (!unscored.length) return;
+    setScoring(true);
+    setScoreNote(null);
+    try {
+      const r = await api.trends.outliers(unscored.map((v) => ({ videoId: v.videoId, channelId: v.channelId, views: v.views })));
+      setOutliers((prev) => ({ ...prev, ...r.scores }));
+      const hits = Object.values(r.scores).filter((x) => isOutlierHit(x)).length;
+      setScoreNote(`채널 ${r.channels}개 비교 · 터진 영상 ${hits}개 · YouTube 약 ${r.unitsUsed} units${r.cachedChannels ? ` (채널 ${r.cachedChannels}개는 기억한 값)` : ""}`);
+    } catch (e) {
+      setScoreNote(errorText(e, "아웃라이어 점수를 계산하지 못했습니다."));
+    } finally {
+      setScoring(false);
+    }
+  }
 
   const requestId = useRef(0);
   /** 이번 검색에 적용할 콘텐츠 프로필 ("none" = 적용 안 함) */
@@ -277,6 +299,13 @@ export function YouTubeTrendExplorer() {
     },
     { key: "trendScore", header: "Trend Score", width: "120px", sortValue: (r) => r.trendScore, render: (r) => <TrendScore score={r.trendScore} /> },
     {
+      key: "outlier",
+      header: "아웃라이어",
+      numeric: true,
+      sortValue: (r) => outliers[r.videoId]?.score ?? -1,
+      render: (r) => <OutlierCell score={outliers[r.videoId]} computed={r.videoId in outliers} />,
+    },
+    {
       key: "channel",
       header: "채널",
       sortValue: (r) => r.channelSubscribers,
@@ -398,8 +427,22 @@ export function YouTubeTrendExplorer() {
         description={`${summary}${summary ? " — " : ""}Trend Score = 조회 속도 50% + 구독자 대비 조회 비율 30% + 최근성 20%. 열 제목을 누르면 정렬합니다.`}
         flush
         actions={
-          !loading && (picked.size > 0 || nextPageToken) ? (
-            <div className="flex items-center gap-2">
+          !loading && items.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {scoreNote && <span className="text-xs text-fg-subtle">{scoreNote}</span>}
+              {unscored.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={Flame}
+                  loading={scoring}
+                  onClick={() => void computeOutliers()}
+                  title="이 영상 조회수 ÷ 그 채널 최근 15개 영상 조회수 중앙값. YouTube 할당량: 채널당 1 unit + 영상 50개당 1 unit (같은 채널은 6시간 기억)"
+                  data-outlier-button
+                >
+                  아웃라이어 점수 계산{Object.keys(outliers).length ? ` (+${unscored.length})` : ""}
+                </Button>
+              )}
               {picked.size > 0 && (
                 <>
                   <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
@@ -497,6 +540,19 @@ function withProfilePeriod(q: TrendDraft, p: ContentProfile): TrendDraft {
 /** 콘텐츠 프로필의 국가·기본 분석기간을 검색 조건에 넣는다 (나머지 조건은 유지) */
 function withProfileDefaults(q: TrendDraft, p: ContentProfile): TrendDraft {
   return { ...q, country: p.country, recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
+}
+
+/** 아웃라이어: ×8.0, 3배 이상이면 '터진 영상' */
+function OutlierCell({ score, computed }: { score: OutlierScore | null | undefined; computed: boolean }) {
+  if (!computed) return <span className="text-xs text-fg-subtle">-</span>;
+  if (!score) return <span className="text-xs text-fg-subtle" title="채널 최근 영상이 적어 비교하지 못했습니다">비교 불가</span>;
+  const hit = isOutlierHit(score);
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap" title={`채널 최근 ${score.sample}개 중앙값 ${formatNumber(score.median)}회 대비`}>
+      <span className={cn("tabular font-semibold", hit ? "text-danger" : score.score >= 1 ? "text-fg" : "text-fg-subtle")}>×{score.score.toFixed(1)}</span>
+      {hit && <Badge tone="danger">터진 영상</Badge>}
+    </span>
+  );
 }
 
 function KeywordTags({ item }: { item: YouTubeTrendItem }) {

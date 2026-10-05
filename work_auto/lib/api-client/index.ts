@@ -2,6 +2,8 @@ import type { PermissionRow } from "@/lib/permissions";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type { PreciseStage } from "@/lib/generators/quality";
+import type { OutlierScore } from "@/lib/domain/outlier";
+import type { PromptVersionRow } from "@/lib/domain/prompt-stats";
 import type {
   ScriptExample,
   ScriptFormat,
@@ -172,6 +174,9 @@ export const api = {
     },
     analyzeVideo: (video: YouTubeTrendItem) =>
       request<YouTubeVideoAnalysis & { provider: string }>("/api/trends/youtube/analyze", { method: "POST", body: json({ video }) }),
+    /** 아웃라이어 점수 (누를 때만, YouTube 할당량 사용) */
+    outliers: (items: { videoId: string; channelId: string; views: number }[]) =>
+      request<{ scores: Record<string, OutlierScore | null>; unitsUsed: number; channels: number; cachedChannels: number }>("/api/trends/youtube/outliers", { method: "POST", body: json({ items }) }),
     suggestTopics: (videos: YouTubeTrendItem[], keywords: string[]) =>
       request<{ topics: YouTubeTopicSuggestion[]; provider: string }>("/api/trends/youtube/topics", {
         method: "POST",
@@ -343,6 +348,8 @@ export const api = {
         "/api/memory",
       ),
     performance: () => request<(PerformanceMetric & { headline: string })[]>("/api/performance"),
+    /** 프롬프트 버전별 성과표 */
+    promptStats: () => request<PromptVersionRow[]>("/api/performance/prompts"),
   },
 
   connections: {

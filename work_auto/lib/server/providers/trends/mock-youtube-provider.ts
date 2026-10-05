@@ -83,6 +83,11 @@ export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
   }
 
   /** 데모: 영상 ID 와 시간으로 그럴듯한 숫자 (시간이 지나면 늘어난다) */
+  /** 데모: 채널마다 정해진 가짜 영상 ID 15개 */
+  async getChannelRecentVideoIds(channelId: string, count: number): Promise<string[]> {
+    return Array.from({ length: count }, (_, i) => `${channelId}-recent-${i}`);
+  }
+
   async getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>> {
     const hours = Math.floor(Date.now() / 3_600_000);
     return Object.fromEntries(
