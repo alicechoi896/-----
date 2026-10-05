@@ -226,6 +226,11 @@ describe("트렌드·스타일·오류 기록", () => {
     const zh = (await post("/api/videos/social-search", { keyword: "空气炸锅", platform: "douyin" })).data as R;
     expect(zh.translation.translated).toBe(false);
 
+    // 중국어 제목: 한 페이지를 묶어 번역 (영어·한국어는 보내지 않음)
+    const tr = (await post("/api/videos/translate-titles", { items: [...dy.items.slice(0, 10).map((it, i) => ({ id: `dy${i}`, title: it.title })), { id: "en", title: "Vacuum review" }] })).data as { items: { id: string; translatedTitle: string }[] };
+    expect(tr.items.length).toBe(Math.min(10, dy.items.length));
+    expect(tr.items.some((x) => x.id === "en")).toBe(false);
+    expect(tr.items[0].translatedTitle).toMatch(/무선청소기/);
     // 검색 결과 메타로 저장 (상세 API 없이) + v.douyin.com 링크
     const products = await j<{ id: string }[]>("/api/products");
     const pid = products.data[1]?.id ?? products.data[0].id;

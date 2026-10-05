@@ -117,6 +117,7 @@ async function searchXhs(query: string, type: SocialQueryType, sort: SocialSortO
       shareCount: null,
       matchedQuery: query,
       queryType: type,
+      previewUrl: n.previewUrl ?? null,
     })),
     next: res.next ? { query, queryType: type, page: res.next.page, searchId: res.next.searchId, sessionId: res.next.sessionId } : null,
   };
@@ -160,6 +161,7 @@ async function searchDouyin(userId: string, query: string, type: SocialQueryType
       shareCount: v.shares,
       matchedQuery: query,
       queryType: type,
+      previewUrl: v.playUrls[0] ?? null,
     });
   }
   const next: SocialContinue | null =

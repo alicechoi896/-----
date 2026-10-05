@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Heart, Languages, ListPlus, MessageCircle, Search, Share2, Star } from "lucide-react";
+import { ExternalLink, Heart, Languages, ListPlus, Loader2, MessageCircle, Play, RotateCcw, Search, Share2, Star, X } from "lucide-react";
 import type {
   ReferenceVideo,
   SocialContinue,
@@ -13,9 +13,9 @@ import type {
   SocialVideoItem,
 } from "@/lib/types";
 import { ApiError, api } from "@/lib/api-client";
-import { Button, Checkbox, Combobox, Drawer, FormField, Input, Notice, SegmentedControl } from "@/components/ui";
+import { isChineseTitle } from "@/lib/social-title";
+import { Button, Checkbox, Combobox, FormField, Input, Notice, SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 
 const PLATFORM_CHOICES: { value: SocialPlatform; label: string }[] = [
   { value: "xiaohongshu", label: "샤오홍슈" },
@@ -49,48 +49,64 @@ const keyOf = (it: SocialVideoItem) => `${it.platform}:${it.sourceId}`;
 
 type ImportResult = { url: string; ok: boolean; video?: ReferenceVideo; error?: string };
 
-/* ── 검색 결과 세션 기억 (DB 저장 없음) ───────────────
- * 같은 조건(플랫폼·검색어·자동 변환·정렬·기간)을 이 브라우저 세션에서 다시 검색하면 서버·TikHub 를 부르지 않고 보여 준다.
- * [더 보기]로 받은 결과까지 함께 기억한다. 30분 지나면 버린다 (socialVideoSearchConfig.searchCacheTtlMinutes).
+/* ── 화면 세션 기억 (DB 저장 없음) ─────────────────────
+ * ① 검색 결과: 같은 조건(플랫폼·검색어·자동 변환·정렬·기간)은 30분 동안 서버·TikHub 를 부르지 않는다
+ * ② 제목 번역: 플랫폼 + sourceId + 원문 제목 → 한국어 (세션 동안)
+ * ③ 미리보기 재생 주소: 플랫폼 + sourceId → 주소 (20분, 만료될 수 있어 오래 믿지 않는다)
  */
-const SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
-const STORAGE_KEY = "social-search-cache-v1";
-type CachedSearch = { at: number; translation: SocialQueryTranslation; translationError: string | null; items: SocialVideoItem[]; next: SocialContinue | null; filteredByDate: boolean };
-const memoryCache = new Map<string, CachedSearch>();
+export const SEARCH_PREVIEW_CONFIG = {
+  searchCacheTtlMinutes: 30,
+  /** 재생 주소 기억 (분). 검색 응답의 주소도 검색 후 이 시간까지만 쓴다 */
+  mediaCacheTtlMinutes: 20,
+} as const;
+const SEARCH_TTL_MS = SEARCH_PREVIEW_CONFIG.searchCacheTtlMinutes * 60_000;
+const MEDIA_TTL_MS = SEARCH_PREVIEW_CONFIG.mediaCacheTtlMinutes * 60_000;
 
-function readCache(key: string): CachedSearch | null {
-  let hit = memoryCache.get(key) ?? null;
-  if (!hit) {
+type CachedSearch = { at: number; translation: SocialQueryTranslation; translationError: string | null; items: SocialVideoItem[]; next: SocialContinue | null; filteredByDate: boolean };
+
+function sessionMap<V>(storageKey: string, ttlMs: number | null, max: number) {
+  const memory = new Map<string, V & { at: number }>();
+  const readAll = (): Record<string, V & { at: number }> => {
     try {
-      const all = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, CachedSearch>;
-      hit = all[key] ?? null;
+      return JSON.parse(sessionStorage.getItem(storageKey) ?? "{}");
     } catch {
-      hit = null;
+      return {};
     }
-  }
-  return hit && Date.now() - hit.at < SEARCH_CACHE_TTL_MS ? hit : null;
+  };
+  return {
+    get(key: string): (V & { at: number }) | null {
+      const hit = memory.get(key) ?? readAll()[key] ?? null;
+      return hit && (ttlMs == null || Date.now() - hit.at < ttlMs) ? hit : null;
+    },
+    set(key: string, value: V) {
+      const entry = { ...value, at: (value as { at?: number }).at ?? Date.now() } as V & { at: number };
+      memory.set(key, entry);
+      try {
+        const fresh = Object.entries({ ...readAll(), [key]: entry })
+          .filter(([, v]) => ttlMs == null || Date.now() - v.at < ttlMs)
+          .sort((a, b) => b[1].at - a[1].at)
+          .slice(0, max);
+        sessionStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(fresh)));
+      } catch {
+        /* 저장 공간이 없거나 막혀 있으면 메모리 기억만 */
+      }
+    },
+  };
 }
-function writeCache(key: string, value: CachedSearch) {
-  memoryCache.set(key, value);
-  try {
-    const all = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, CachedSearch>;
-    // 오래된 것은 지우고 최근 20개만 (브라우저 저장 공간 보호)
-    const fresh = Object.entries({ ...all, [key]: value })
-      .filter(([, v]) => Date.now() - v.at < SEARCH_CACHE_TTL_MS)
-      .sort((a, b) => b[1].at - a[1].at)
-      .slice(0, 20);
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(fresh)));
-  } catch {
-    /* 저장 공간이 없거나 막혀 있으면 메모리 기억만 */
-  }
-}
+const searchCache = sessionMap<Omit<CachedSearch, "at"> & { at?: number }>("social-search-cache-v2", SEARCH_TTL_MS, 20);
+const titleCache = sessionMap<{ ko: string }>("social-title-cache-v1", null, 500);
+const mediaCache = sessionMap<{ url: string }>("social-media-cache-v1", MEDIA_TTL_MS, 50);
+const titleKey = (it: SocialVideoItem) => `${keyOf(it)}:${it.title}`;
+
+/** 미리보기 상태 (동시에 한 영상만) */
+type Preview = { key: string; status: "loading" | "ready" | "error"; url?: string; message?: string };
 
 /**
- * 영상 URL 가져오기 › [영상 검색] 탭 (docs/SOCIAL_VIDEO_SOURCING.md 「비용 정책」)
- * - [검색] = TikHub 검색 1회 (같은 조건은 30분 동안 다시 부르지 않음), [더 보기] = 1회 더. 자동 추가 호출 없음
- * - 한국어 검색어는 서버가 AI 로 중국어 1개로 바꾼다 (같은 검색어는 플랫폼을 바꿔도 다시 바꾸지 않음)
- * - [선택한 영상 가져오기] = 기존 api.videos.importMany() + 검색 결과에 있는 작성자·길이·썸네일 → 상세 API 0회
- * - 검색 결과는 이 화면과 브라우저 세션에만 있고 DB 에 저장하지 않는다
+ * 영상 URL 가져오기 › [영상 검색] 탭 (docs/SOCIAL_VIDEO_SOURCING.md)
+ * - [검색] = TikHub 검색 1회 (같은 조건 30분 기억), [더 보기] = 1회 더. 결과 카드는 추가 호출 없이 그린다
+ * - 중국어 제목은 결과를 먼저 보여 준 뒤 뒤에서 한 페이지를 묶어 AI 1회로 한국어 번역 (기다리지 않음)
+ * - ▶ 를 누를 때만 그 카드 안에서 재생: 검색 응답의 재생 주소 → 없으면 그 영상 1개만 주소 찾기. 동시에 하나만
+ * - 체크 → [선택한 영상 가져오기] = 기존 api.videos.importMany() + 검색 결과 메타 (상세 API 0회). 재생·검색은 저장하지 않는다
  */
 export function SocialSearchPanel({
   productOptions,
@@ -108,7 +124,6 @@ export function SocialSearchPanel({
   const [autoTranslate, setAutoTranslate] = useState(true);
   const [sort, setSort] = useState<SocialSortOption>("general");
   const [period, setPeriod] = useState<SocialPeriodOption>("21");
-  // 지금 보이는 검색 (어떤 조건의 결과인지 함께 둔다)
   const [view, setView] = useState<(CachedSearch & { key: string; platform: SocialPlatform; fromCache: boolean }) | null>(null);
   const [searching, setSearching] = useState<"search" | "more" | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
@@ -116,10 +131,13 @@ export function SocialSearchPanel({
   const [productId, setProductId] = useState("");
   const [memo, setMemo] = useState("");
   const [importing, setImporting] = useState(false);
-  const [open, setOpen] = useState<SocialVideoItem | null>(null);
+  // 한국어 제목 (번역이 끝난 것만), 번역 중인 카드
+  const [koTitles, setKoTitles] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<Preview | null>(null);
 
   const sorts = platform === "douyin" ? SORTS_ALL.slice(0, 3) : SORTS_ALL;
-  const cacheKey = (k = keyword.trim()) => JSON.stringify([platform, k, autoTranslate, sort, period]);
+  const cacheKey = (k: string) => JSON.stringify([platform, k, autoTranslate, sort, period]);
 
   const fail = (e: unknown) => setError(e instanceof ApiError ? { code: e.code, message: e.message } : { code: "", message: e instanceof Error ? e.message : "실패했습니다." });
 
@@ -128,25 +146,58 @@ export function SocialSearchPanel({
     if (next === "douyin" && (sort === "comments" || sort === "collects")) setSort("general");
   }
 
+  /** 결과를 먼저 보여 준 뒤, 아직 번역 안 된 중국어 제목만 모아 AI 1회 (실패해도 원문 그대로) */
+  function translateInBackground(items: SocialVideoItem[]) {
+    const known: Record<string, string> = {};
+    const need: SocialVideoItem[] = [];
+    for (const it of items) {
+      const hit = titleCache.get(titleKey(it));
+      if (hit) known[keyOf(it)] = hit.ko;
+      else if (isChineseTitle(it.title)) need.push(it);
+    }
+    if (Object.keys(known).length) setKoTitles((prev) => ({ ...prev, ...known }));
+    if (!need.length) return;
+    const ids = need.map(keyOf);
+    setTranslating((prev) => new Set([...prev, ...ids]));
+    void api.videos
+      .translateTitles(need.map((it) => ({ id: keyOf(it), title: it.title })))
+      .then((r) => {
+        const byId = new Map(need.map((it) => [keyOf(it), it]));
+        const got: Record<string, string> = {};
+        for (const t of r.items) {
+          const it = byId.get(t.id);
+          if (!it) continue;
+          got[t.id] = t.translatedTitle;
+          titleCache.set(titleKey(it), { ko: t.translatedTitle });
+        }
+        setKoTitles((prev) => ({ ...prev, ...got }));
+      })
+      .catch(() => undefined)
+      .finally(() => setTranslating((prev) => new Set([...prev].filter((k) => !ids.includes(k)))));
+  }
+
   async function search() {
     const k = keyword.trim();
     if (!k) return;
     setError(null);
+    setPreview(null);
     const key = cacheKey(k);
-    const hit = readCache(key);
+    const hit = searchCache.get(key);
     if (hit) {
       // 같은 조건: TikHub·AI 를 다시 부르지 않는다
       setView({ ...hit, key, platform, fromCache: true });
       setSelected(new Map());
+      translateInBackground(hit.items);
       return;
     }
     setSearching("search");
     try {
       const r = await api.videos.socialSearch({ keyword: k, platform, autoTranslate, sort, period });
       const entry: CachedSearch = { at: Date.now(), translation: r.translation, translationError: r.translationError, items: r.items, next: r.next, filteredByDate: r.filteredByDate };
-      writeCache(key, entry);
+      searchCache.set(key, entry);
       setView({ ...entry, key, platform, fromCache: false });
       setSelected(new Map());
+      translateInBackground(r.items);
     } catch (e) {
       fail(e);
     } finally {
@@ -154,7 +205,7 @@ export function SocialSearchPanel({
     }
   }
 
-  /** [더 보기]: 다음 페이지 1회 (번역 다시 안 함) */
+  /** [더 보기]: 다음 페이지 1회 (검색어 변환 다시 안 함) */
   async function more() {
     if (!view?.next) return;
     setSearching("more");
@@ -162,13 +213,40 @@ export function SocialSearchPanel({
     try {
       const r = await api.videos.socialSearch({ keyword: view.translation.original, platform: view.platform, autoTranslate: false, sort, period, next: view.next });
       const seen = new Set(view.items.map(keyOf));
-      const entry: CachedSearch = { ...view, items: [...view.items, ...r.items.filter((x) => !seen.has(keyOf(x)))], next: r.next };
-      writeCache(view.key, { ...entry, at: view.at });
+      const added = r.items.filter((x) => !seen.has(keyOf(x)));
+      const entry: CachedSearch = { ...view, items: [...view.items, ...added], next: r.next };
+      searchCache.set(view.key, entry);
       setView({ ...entry, key: view.key, platform: view.platform, fromCache: false });
+      translateInBackground(added);
     } catch (e) {
       fail(e);
     } finally {
       setSearching(null);
+    }
+  }
+
+  /**
+   * ▶ 재생: ① 기억한 주소 → ② 검색 응답의 재생 주소(검색 후 20분 안) → ③ 그 영상 1개만 주소 찾기 (/api/videos/resolve)
+   * 다른 카드가 재생 중이면 그 카드는 닫힌다 (플레이어는 한 개만 존재)
+   */
+  async function play(it: SocialVideoItem) {
+    const key = keyOf(it);
+    const cached = mediaCache.get(key);
+    if (cached) return setPreview({ key, status: "ready", url: cached.url });
+    if (it.previewUrl && view && Date.now() - view.at < MEDIA_TTL_MS) {
+      mediaCache.set(key, { url: it.previewUrl });
+      return setPreview({ key, status: "ready", url: it.previewUrl });
+    }
+    setPreview({ key, status: "loading" });
+    try {
+      const r = await api.videos.resolve(it.originalUrl);
+      // 브라우저에서 잘 열리는 H.264 를 먼저
+      const stream = [...r.streams].sort((a, b) => Number(/264|avc/i.test(b.codec)) - Number(/264|avc/i.test(a.codec)))[0];
+      if (!stream) throw new Error("재생할 주소가 없습니다.");
+      mediaCache.set(key, { url: stream.url });
+      setPreview((p) => (p?.key === key ? { key, status: "ready", url: stream.url } : p));
+    } catch (e) {
+      setPreview((p) => (p?.key === key ? { key, status: "error", message: e instanceof Error ? e.message : "영상 미리보기를 재생할 수 없습니다." } : p));
     }
   }
 
@@ -182,12 +260,13 @@ export function SocialSearchPanel({
     });
   }
 
-  async function importItems(list: SocialVideoItem[]) {
+  async function importSelected() {
+    const list = [...selected.values()];
     if (!list.length) return;
     setImporting(true);
     setError(null);
     try {
-      // 기존 URL 가져오기와 같은 함수. 검색 결과에 있는 값을 같이 넘겨 서버가 상세 API 를 부르지 않게 한다
+      // 기존 URL 가져오기와 같은 함수. 원문 제목 + 검색 결과에 있는 값을 넘겨 서버가 상세 API 를 부르지 않게 한다
       const res = await api.videos.importMany(
         list.map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec, thumbnailUrl: it.thumbnailUrl } })),
         memo,
@@ -196,7 +275,6 @@ export function SocialSearchPanel({
       onImported(res);
       const done = new Set(res.filter((r) => r.ok).map((r) => r.url));
       setSelected((prev) => new Map([...prev].filter(([, it]) => !done.has(it.originalUrl))));
-      setOpen(null);
     } catch (e) {
       fail(e);
     } finally {
@@ -205,7 +283,6 @@ export function SocialSearchPanel({
   }
 
   const items = view?.items ?? [];
-  const pickedTitles = [...selected.values()].map((it) => ({ title: it.title, views: null }));
 
   return (
     <div className="space-y-4">
@@ -273,12 +350,18 @@ export function SocialSearchPanel({
             영상 {items.length}개{view.filteredByDate ? ` · 게시일 기준 최근 ${period}일만` : ""}
           </span>
           {view.fromCache && <span className="rounded bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">이미 검색한 결과 · API 호출 없음</span>}
+          {translating.size > 0 && (
+            <span className="inline-flex items-center gap-1 text-fg-subtle">
+              <Loader2 className="size-3 animate-spin" />
+              제목 한국어로 옮기는 중
+            </span>
+          )}
         </p>
       )}
       {view?.translationError && <Notice tone="warning">{view.translationError}</Notice>}
 
       {view && items.length > 0 && (
-        <div className="sticky top-2 z-10 grid items-end gap-3 rounded-control border border-line bg-canvas/95 p-3 shadow-card backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+        <div className="sticky top-2 z-10 grid items-end gap-3 rounded-control border border-line bg-canvas/95 p-3 shadow-card backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <FormField label="연관 제품 (선택한 영상 모두에 저장)" htmlFor="social-product" optional>
             <Combobox
               id="social-product"
@@ -293,8 +376,7 @@ export function SocialSearchPanel({
           <FormField label="메모 (선택한 영상 모두에 저장)" htmlFor="social-memo" optional>
             <Input id="social-memo" placeholder="예: Hook 참고" value={memo} onChange={(e) => setMemo(e.target.value)} />
           </FormField>
-          <SaveTitlesToFormat titles={pickedTitles} source="영상 검색" buttonLabel={`제목 ${selected.size}개 대본 포맷에 담기`} disabled={!selected.size} />
-          <Button variant="primary" icon={ListPlus} loading={importing} disabled={!selected.size} onClick={() => void importItems([...selected.values()])}>
+          <Button variant="primary" icon={ListPlus} loading={importing} disabled={!selected.size} onClick={() => void importSelected()}>
             선택한 {selected.size}개 가져오기
           </Button>
         </div>
@@ -308,9 +390,24 @@ export function SocialSearchPanel({
             </p>
           ) : (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {items.map((it) => (
-                <ResultCard key={keyOf(it)} item={it} on={selected.has(keyOf(it))} full={selected.size >= maxBatch} onToggle={() => toggle(it)} onOpen={() => setOpen(it)} />
-              ))}
+              {items.map((it) => {
+                const k = keyOf(it);
+                return (
+                  <ResultCard
+                    key={k}
+                    item={it}
+                    koTitle={koTitles[k] ?? null}
+                    translating={translating.has(k)}
+                    on={selected.has(k)}
+                    full={selected.size >= maxBatch}
+                    onToggle={() => toggle(it)}
+                    preview={preview?.key === k ? preview : null}
+                    onPlay={() => void play(it)}
+                    onClose={() => setPreview(null)}
+                    onPlayerError={() => setPreview((p) => (p?.key === k ? { key: k, status: "error", message: "영상 미리보기를 재생할 수 없습니다." } : p))}
+                  />
+                );
+              })}
             </ul>
           )}
           {view.next && (
@@ -321,124 +418,149 @@ export function SocialSearchPanel({
             </div>
           )}
           <p className="text-xs text-fg-subtle">
-            최대 {maxBatch}개까지 골라 가져올 수 있습니다. 검색 결과는 저장되지 않고, 가져온 영상만 저장됩니다. 같은 조건은 30분 동안 다시 불러오지 않습니다.
+            ▶ 를 누른 영상만 불러와 카드 안에서 재생합니다 (한 번에 하나). 최대 {maxBatch}개까지 골라 가져올 수 있고, 검색·재생한 영상은 저장되지 않습니다.
           </p>
         </section>
       )}
-
-      <Drawer
-        open={Boolean(open)}
-        onClose={() => setOpen(null)}
-        title={open?.title ?? ""}
-        footer={
-          open && (
-            <div className="flex gap-2">
-              <a
-                href={open.originalUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-control border border-line text-sm text-fg-muted hover:text-brand"
-              >
-                <ExternalLink className="size-4" />
-                {PLATFORM_NAME[open.platform]}에서 보기
-              </a>
-              <Button className="flex-1" variant="primary" icon={ListPlus} loading={importing} onClick={() => void importItems([open])}>
-                이 영상 가져오기
-              </Button>
-            </div>
-          )
-        }
-      >
-        {open && (
-          <div className="space-y-3 text-sm">
-            {open.thumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- 업체 CDN 썸네일 (저장하지 않음)
-              <img src={open.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="max-h-80 w-full rounded-control bg-subtle object-contain" />
-            )}
-            <dl className="grid grid-cols-[72px_1fr] gap-y-1.5 text-[13px]">
-              <dt className="text-fg-subtle">플랫폼</dt>
-              <dd>{PLATFORM_NAME[open.platform]}</dd>
-              {(
-                [
-                  ["작성자", open.authorName],
-                  ["게시일", day(open.publishedAt)],
-                  ["좋아요", num(open.likeCount)],
-                  ["댓글", num(open.commentCount)],
-                  ["저장", num(open.collectCount)],
-                  ["공유", num(open.shareCount)],
-                  ["길이", dur(open.durationSec)],
-                  ["검색어", open.matchedQuery],
-                ] as const
-              ).map(([k, v]) =>
-                v ? (
-                  <div key={k} className="contents">
-                    <dt className="text-fg-subtle">{k}</dt>
-                    <dd>{v}</dd>
-                  </div>
-                ) : null,
-              )}
-            </dl>
-            {open.desc ? (
-              <p className="rounded-control bg-subtle px-3 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap text-fg-muted">{open.desc}</p>
-            ) : (
-              <p className="text-xs text-fg-subtle">검색 결과에 설명이 없습니다. (비용을 줄이려고 상세 API 는 부르지 않습니다 — {PLATFORM_NAME[open.platform]}에서 보기로 확인하세요)</p>
-            )}
-            <SaveTitlesToFormat titles={[{ title: open.title, views: null }]} source="영상 검색" buttonLabel="제목 대본 포맷에 담기" />
-          </div>
-        )}
-      </Drawer>
     </div>
   );
 }
 
-function ResultCard({ item: it, on, full, onToggle, onOpen }: { item: SocialVideoItem; on: boolean; full: boolean; onToggle: () => void; onOpen: () => void }) {
+function ResultCard({
+  item: it,
+  koTitle,
+  translating,
+  on,
+  full,
+  onToggle,
+  preview,
+  onPlay,
+  onClose,
+  onPlayerError,
+}: {
+  item: SocialVideoItem;
+  koTitle: string | null;
+  translating: boolean;
+  on: boolean;
+  full: boolean;
+  onToggle: () => void;
+  preview: Preview | null;
+  onPlay: () => void;
+  onClose: () => void;
+  onPlayerError: () => void;
+}) {
   return (
-    <li className={cn("overflow-hidden rounded-card border bg-canvas", on ? "border-brand ring-2 ring-brand-soft" : "border-line")}>
-      <button type="button" className={cn("relative block aspect-[3/4] w-full", COVER_BG[it.platform])} onClick={onOpen} title="자세히 보기">
-        {it.thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- 업체 CDN 썸네일 (저장하지 않음)
-          <img src={it.thumbnailUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className="size-full object-cover" />
+    <li className={cn("overflow-hidden rounded-card border bg-canvas", on ? "border-brand ring-2 ring-brand-soft" : "border-line")} data-card>
+      <div className={cn("relative aspect-[3/4] w-full", COVER_BG[it.platform])}>
+        {preview?.status === "ready" && preview.url ? (
+          <Player url={preview.url} onError={onPlayerError} />
         ) : (
-          <span className="flex size-full items-center justify-center text-xs text-fg-subtle">미리보기 없음</span>
+          <>
+            {it.thumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 업체 CDN 썸네일 (저장하지 않음)
+              <img src={it.thumbnailUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className="size-full object-cover" />
+            ) : (
+              <span className="block size-full" aria-label="썸네일 없음" />
+            )}
+            {preview?.status === "error" ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 px-3 text-center text-[12px] text-white" data-preview-error>
+                영상 미리보기를 재생할 수 없습니다.
+                <span className="flex gap-1.5">
+                  <button type="button" onClick={onPlay} className="inline-flex items-center gap-1 rounded bg-white/20 px-2 py-1 hover:bg-white/30">
+                    <RotateCcw className="size-3" />
+                    다시 시도
+                  </button>
+                  <a href={it.originalUrl} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 rounded bg-white/20 px-2 py-1 hover:bg-white/30">
+                    <ExternalLink className="size-3" />
+                    원본 보기
+                  </a>
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onPlay}
+                disabled={preview?.status === "loading"}
+                aria-label="재생"
+                title="이 영상만 불러와 여기서 재생합니다"
+                className="absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition hover:scale-105 hover:bg-black/70"
+                data-play
+              >
+                {preview?.status === "loading" ? <Loader2 className="size-5 animate-spin" /> : <Play className="ml-0.5 size-5 fill-current" />}
+              </button>
+            )}
+          </>
         )}
-        <span className={cn("absolute top-1.5 left-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold", PLATFORM_TONE[it.platform])}>{PLATFORM_NAME[it.platform]}</span>
-        {dur(it.durationSec) && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-white">{dur(it.durationSec)}</span>}
-      </button>
+        <span className={cn("pointer-events-none absolute top-1.5 left-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold", PLATFORM_TONE[it.platform])}>{PLATFORM_NAME[it.platform]}</span>
+        {preview?.status === "ready" ? (
+          <button type="button" onClick={onClose} aria-label="재생 닫기" title="썸네일로 돌아가기" className="absolute top-1.5 right-1.5 z-10 rounded-full bg-black/60 p-1 text-white hover:bg-black/80">
+            <X className="size-3.5" />
+          </button>
+        ) : (
+          dur(it.durationSec) && <span className="pointer-events-none absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-white">{dur(it.durationSec)}</span>
+        )}
+      </div>
       <div className="space-y-1.5 px-3 py-2.5">
         <label className="flex cursor-pointer items-start gap-2">
-          <input type="checkbox" checked={on} disabled={!on && full} onChange={onToggle} className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]" />
-          <span className="line-clamp-2 text-[13px] leading-snug font-medium text-fg">{it.title}</span>
+          <input type="checkbox" checked={on} disabled={!on && full} onChange={onToggle} className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]" aria-label="가져올 영상으로 선택" />
+          <span className="min-w-0">
+            <span className="line-clamp-2 text-[13px] leading-snug font-medium text-fg">{koTitle ?? it.title}</span>
+            {koTitle && <span className="mt-0.5 line-clamp-1 block text-[11px] text-fg-subtle">{it.title}</span>}
+            {!koTitle && translating && <span className="mt-0.5 block text-[11px] text-fg-subtle">번역 중…</span>}
+          </span>
         </label>
         <p className="truncate text-xs text-fg-subtle">{[it.authorName, day(it.publishedAt)].filter(Boolean).join(" · ")}</p>
-        <p className="tabular flex flex-wrap gap-x-2.5 text-xs text-fg-muted">
-          {num(it.likeCount) && (
-            <span className="inline-flex items-center gap-0.5">
-              <Heart className="size-3" />
-              {num(it.likeCount)}
-            </span>
-          )}
-          {num(it.commentCount) && (
-            <span className="inline-flex items-center gap-0.5">
-              <MessageCircle className="size-3" />
-              {num(it.commentCount)}
-            </span>
-          )}
-          {num(it.collectCount) && (
-            <span className="inline-flex items-center gap-0.5">
-              <Star className="size-3" />
-              {num(it.collectCount)}
-            </span>
-          )}
-          {num(it.shareCount) && (
-            <span className="inline-flex items-center gap-0.5">
-              <Share2 className="size-3" />
-              {num(it.shareCount)}
-            </span>
-          )}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="tabular flex min-w-0 flex-wrap gap-x-2.5 text-xs text-fg-muted">
+            {num(it.likeCount) && (
+              <span className="inline-flex items-center gap-0.5" title="좋아요">
+                <Heart className="size-3" />
+                {num(it.likeCount)}
+              </span>
+            )}
+            {num(it.commentCount) && (
+              <span className="inline-flex items-center gap-0.5" title="댓글">
+                <MessageCircle className="size-3" />
+                {num(it.commentCount)}
+              </span>
+            )}
+            {num(it.collectCount) && (
+              <span className="inline-flex items-center gap-0.5" title="저장">
+                <Star className="size-3" />
+                {num(it.collectCount)}
+              </span>
+            )}
+            {num(it.shareCount) && (
+              <span className="inline-flex items-center gap-0.5" title="공유">
+                <Share2 className="size-3" />
+                {num(it.shareCount)}
+              </span>
+            )}
+          </p>
+          <a href={it.originalUrl} target="_blank" rel="noreferrer noopener" className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-fg-subtle hover:text-brand" title={`${PLATFORM_NAME[it.platform]}에서 원본 보기`}>
+            <ExternalLink className="size-3" />
+            원본
+          </a>
+        </div>
       </div>
     </li>
   );
+}
+
+/** 카드 안 플레이어: ▶ 를 누른 뒤에만 만들어진다 (그 전에는 video 요소·주소 모두 없음). 닫히면 주소를 비워 받기를 멈춘다 */
+function Player({ url, onError }: { url: string; onError: () => void }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.play().catch(() => undefined); // 자동 재생이 막히면 컨트롤로 직접 재생
+    return () => {
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+    };
+  }, [url]);
+  return <video ref={ref} src={url} controls playsInline preload="none" className="size-full bg-black object-contain" onError={onError} data-player />;
 }
 
 function TikHubNotice({ error }: { error: { code: string; message: string } }) {

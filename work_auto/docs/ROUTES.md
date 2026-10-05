@@ -135,6 +135,7 @@
 | POST | `/api/connections/:provider/test` | 연결 테스트 | connectionService.test |
 | GET/POST | `/api/videos` | 참고 영상 조회 / 가져오기 | videoService |
 | POST | `/api/videos/social-search` { keyword, platform, autoTranslate, sort, period, next? } | 샤오홍슈 또는 도우인 검색 = TikHub 1회 (한국어는 AI 1회 변환, 30분 기억, 저장 안 함) | socialSearchService.search |
+| POST | `/api/videos/translate-titles` { items: [{ id, title }] } | 검색 결과 중국어 제목 → 한국어 (한 페이지 묶어 AI 1회, 저장 안 함) | titleTranslateService.translate |
 | GET | `/api/videos/page?productId=&offset=` | 기존 참고 영상 30개씩 (제품 id / none / all) | videoService.page |
 | DELETE | `/api/videos/:id` | 참고 영상 삭제 | videoService.remove |
 | GET | `/api/admin/users` | 사용자 목록 (관리자) | adminService.listUsers |

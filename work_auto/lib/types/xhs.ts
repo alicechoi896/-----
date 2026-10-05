@@ -13,6 +13,8 @@ export interface XhsNote {
   comments: number | null;
   collects: number | null;
   durationSec: number | null;
+  /** 검색 응답에 들어 있는 H.264 재생 주소 (미리보기용, 만료됨 — 저장하지 않는다) */
+  previewUrl?: string | null;
 }
 
 export type XhsSortOption = "general" | "latest" | "likes" | "comments" | "collects";

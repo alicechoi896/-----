@@ -376,6 +376,9 @@ export const api = {
       period: SocialPeriodOption;
       next?: SocialContinue | null;
     }) => request<SocialSearchResultDto>("/api/videos/social-search", { method: "POST", body: json(body) }),
+    /** 검색 결과 중국어 제목 → 한국어 (한 페이지를 묶어 AI 1회). 저장하지 않는다 */
+    translateTitles: (items: { id: string; title: string }[]) =>
+      request<{ items: { id: string; translatedTitle: string }[]; provider: string | null }>("/api/videos/translate-titles", { method: "POST", body: json({ items }) }),
     /** 기존 참고 영상 30개씩 (productId: 제품 id / none / all) */
     page: (productId: string, offset = 0) =>
       request<{ items: ReferenceVideo[]; hasMore: boolean; nextOffset: number }>(`/api/videos/page${qs({ productId, offset })}`),

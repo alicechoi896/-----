@@ -77,6 +77,21 @@ function findItems(data: unknown): unknown[] {
   return walk(data, 0) ?? [];
 }
 
+/**
+ * 검색 응답 안의 H.264 재생 주소 (있으면). 브라우저 미리보기용이라 H.265 는 쓰지 않는다.
+ * 샤오홍슈 App 응답의 흔한 위치: video_info_v2.media.stream.h264[].master_url / backup_urls (문서에 구조가 없어 너그럽게)
+ */
+function previewUrlOf(note: Obj): string | null {
+  const streams = pick(note, "video_info_v2.media.stream.h264", "video_info.media.stream.h264", "video.media.stream.h264");
+  const list = Array.isArray(streams) ? streams : [];
+  for (const s of list) {
+    const u = pick(s as Obj, "master_url", "backup_urls.0", "url");
+    if (typeof u === "string" && /^https?:\/\//.test(u)) return u.replace(/^http:\/\//, "https://");
+  }
+  const direct = pick(note, "video_info_v2.media.video.url", "video.url");
+  return typeof direct === "string" && /^https?:\/\//.test(direct) ? direct.replace(/^http:\/\//, "https://") : null;
+}
+
 export function parseNote(item: unknown): XhsNote | null {
   if (!isObj(item)) return null;
   const note = (isObj(item.note) ? item.note : isObj(item.note_card) ? item.note_card : item) as Obj;
@@ -104,6 +119,7 @@ export function parseNote(item: unknown): XhsNote | null {
     comments: parseCount(pick(note, "comments_count", "comment_count", "interact_info.comment_count")),
     collects: parseCount(pick(note, "collected_count", "collect_count", "interact_info.collected_count")),
     durationSec: toSeconds(pick(note, "video_info_v2.capa.duration", "video_info.duration", "video.capa.duration", "video.duration", "duration")),
+    previewUrl: previewUrlOf(note),
   };
 }
 

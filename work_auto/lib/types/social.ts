@@ -23,6 +23,11 @@ export interface SocialVideoItem {
   shareCount: number | null;
   matchedQuery: string;
   queryType: SocialQueryType;
+  /**
+   * 검색 응답에 이미 있는 재생 주소 (카드 안 미리보기용). 없으면 null → ▶ 를 누를 때만 그 영상 1개를 찾는다.
+   * 만료될 수 있어 DB 에 저장하지 않는다 (화면 세션에서만 짧게).
+   */
+  previewUrl: string | null;
 }
 
 export interface SocialQueryTranslation {

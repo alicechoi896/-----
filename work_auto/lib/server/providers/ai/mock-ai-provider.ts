@@ -164,6 +164,21 @@ export class MockAIProvider implements AIProvider {
       return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
     }
 
+    if (request.task === "social-title-translate") {
+      // 데모: 자주 나오는 말만 바꾼다 (실제 AI 는 자연스러운 한국어로 옮긴다)
+      const words: [RegExp, string][] = [
+        [/无线吸尘器/g, "무선청소기"], [/手持吸尘器/g, "핸디 청소기"], [/吸尘器/g, "청소기"], [/空气炸锅/g, "에어프라이어"], [/真实测评/g, "솔직 리뷰"], [/测评/g, "리뷰"],
+        [/开箱/g, "언박싱"], [/避坑指南|避坑/g, "후회 안 하는 법"], [/一周使用感受|使用一个月/g, "써 본 후기"], [/平价替代/g, "가성비 대안"], [/对比/g, "비교"],
+        [/好物分享|好物推荐/g, "추천템"], [/使用技巧/g, "사용 꿀팁"], [/值不值得买|值得买吗/g, "살 만할까?"], [/租房必备|租房好物/g, "자취 필수템"], [/性价比/g, "가성비"],
+        [/清洁技巧/g, "청소 꿀팁"], [/宿舍必备/g, "기숙사 필수템"], [/保姆级教程/g, "초보용 설명서"], [/抖音/g, ""],
+      ];
+      const items = ((v.items as { id: string; title: string }[]) ?? []).map((it) => ({
+        id: it.id,
+        translatedTitle: words.reduce((t, [re, ko]) => t.replace(re, ` ${ko} `), it.title).replace(/\s+/g, " ").trim(),
+      }));
+      return { data: { items } as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task === "social-query-translate") {
       // 데모: 몇 단어만 사전으로 바꾼다 (중국어 1개만 쓴다)
       const k = String(v.keyword ?? "");

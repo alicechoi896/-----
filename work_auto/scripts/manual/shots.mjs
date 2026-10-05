@@ -216,7 +216,7 @@ export const SHOTS = [
       1: (p) => p.getByRole("radio", { name: "영상 검색" }).locator("xpath=.."),
       2: (p) => p.getByRole("radio", { name: "도우인" }).locator("xpath=.."),
       3: (p) => btn(p, "샤오홍슈 검색").first(),
-      4: (p) => p.locator("[data-platform] ul li").first(),
+      4: (p) => p.locator("[data-play]").first(),
       5: (p) => btn(p, /선택한 \d+개 가져오기/).first(),
     },
   },
