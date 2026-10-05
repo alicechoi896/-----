@@ -38,6 +38,21 @@ export interface Repository<T extends { id: string }> {
   remove(id: string): Promise<boolean>;
 }
 
+/** 참고 영상 전용 조회 (전체를 읽지 않는다, v0.9.32) */
+export interface VideoPageQuery {
+  userId: string;
+  /** 특정 제품 id / "none" = 제품 연결 안 된 영상 / null = 전체 */
+  productId: string | null;
+  limit: number;
+  offset: number;
+}
+export interface VideoRepository extends Repository<ReferenceVideo> {
+  /** 최신순 한 페이지 (Supabase: where + range) */
+  listPage(q: VideoPageQuery): Promise<ReferenceVideo[]>;
+  /** 이미 저장된 URL 만 (가져오기 중복 확인) */
+  findUrls(userId: string, urls: string[]): Promise<string[]>;
+}
+
 export interface Repositories {
   profiles: Repository<UserProfile>;
   rolePermissions: Repository<RolePermission>;
@@ -51,7 +66,7 @@ export interface Repositories {
   styles: Repository<UserStyle>;
   feedback: Repository<UserFeedback>;
   performance: Repository<PerformanceMetric>;
-  videos: Repository<ReferenceVideo>;
+  videos: VideoRepository;
   savedFilters: Repository<SavedFilter>;
   savedTrends: Repository<SavedTrend>;
   contentProfiles: Repository<ContentProfile>;

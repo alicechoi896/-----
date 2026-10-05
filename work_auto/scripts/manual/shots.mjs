@@ -203,10 +203,9 @@ export const SHOTS = [
     viewport: { width: 1280, height: 1300 },
     prepare: async (p) => {
       await p.getByRole("radio", { name: "영상 검색" }).click();
-      await p.getByRole("radio", { name: "둘 다" }).click();
       await p.locator("#social-keyword").fill("무선청소기");
-      await btn(p, "둘 다 검색").first().click();
-      await p.locator("[data-platform=douyin] li input[type=checkbox]").first().waitFor({ timeout: 15_000 });
+      await btn(p, "샤오홍슈 검색").first().click();
+      await p.locator("[data-platform] li input[type=checkbox]").first().waitFor({ timeout: 15_000 });
       const boxes = p.locator("main ul li input[type=checkbox]");
       await boxes.nth(0).check();
       await boxes.nth(1).check();
@@ -215,9 +214,9 @@ export const SHOTS = [
     scrollTo: (p) => p.locator("h2, h3", { hasText: "영상 가져오기" }).first(),
     marks: {
       1: (p) => p.getByRole("radio", { name: "영상 검색" }).locator("xpath=.."),
-      2: (p) => p.getByRole("radio", { name: "둘 다" }).locator("xpath=.."),
-      3: (p) => btn(p, "둘 다 검색").first(),
-      4: (p) => p.locator("[data-platform=xiaohongshu] ul li").first(),
+      2: (p) => p.getByRole("radio", { name: "도우인" }).locator("xpath=.."),
+      3: (p) => btn(p, "샤오홍슈 검색").first(),
+      4: (p) => p.locator("[data-platform] ul li").first(),
       5: (p) => btn(p, /선택한 \d+개 가져오기/).first(),
     },
   },

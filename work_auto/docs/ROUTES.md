@@ -134,10 +134,8 @@
 | PUT/DELETE | `/api/connections/:provider` | 연결 (암호화 저장) / 해제 | connectionService |
 | POST | `/api/connections/:provider/test` | 연결 테스트 | connectionService.test |
 | GET/POST | `/api/videos` | 참고 영상 조회 / 가져오기 | videoService |
-| POST | `/api/videos/social-search` { keyword, platforms, autoTranslate, sort, period, continue? } | 샤오홍슈·도우인·둘 다 검색 (한국어는 AI 1회 변환, 플랫폼별 보조 검색, 저장 안 함) | socialSearchService.search |
-| POST | `/api/videos/xhs-search` { keyword, sort, period, cursor? } | 샤오홍슈 영상 검색 (TikHub, 저장 안 함, 최대 3페이지·10분 캐시) | xhsSearchService.search |
-| GET | `/api/videos/xhs-search/detail?noteId=` | 상세 (상세보기에서만, 1시간 캐시) | xhsSearchService.detail |
-| POST | `/api/videos/xhs-search/keywords` { keyword } | AI 중국어 검색어 추천 (누를 때만 AI 1회) | xhsSearchService.suggestKeywords |
+| POST | `/api/videos/social-search` { keyword, platform, autoTranslate, sort, period, next? } | 샤오홍슈 또는 도우인 검색 = TikHub 1회 (한국어는 AI 1회 변환, 30분 기억, 저장 안 함) | socialSearchService.search |
+| GET | `/api/videos/page?productId=&offset=` | 기존 참고 영상 30개씩 (제품 id / none / all) | videoService.page |
 | DELETE | `/api/videos/:id` | 참고 영상 삭제 | videoService.remove |
 | GET | `/api/admin/users` | 사용자 목록 (관리자) | adminService.listUsers |
 | PATCH | `/api/admin/users/:userId` | 역할 변경 `{role}` (관리자, 자기 자신 제외) | adminService.updateRole |

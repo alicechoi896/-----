@@ -42,7 +42,7 @@ const PLATFORM_BADGE: Partial<Record<ReferenceVideo["platform"], string>> = {
 /**
  * 영상 URL 가져오기.
  * - URL 여러 개를 줄바꿈으로 넣으면 한 번에 목록이 생긴다. 샤오홍슈·도우인 앱의 공유 문구를 그대로 붙여넣어도 링크·제목을 뽑는다
- * - [영상 검색] 탭: 샤오홍슈·도우인·둘 다 (TikHub). 가져오기는 URL 가져오기와 같은 함수
+ * - [영상 검색] 탭: 샤오홍슈 또는 도우인 (TikHub, 검색 1번 = 1회). 가져오기는 URL 가져오기와 같은 함수 (검색 결과 메타로 저장, 상세 API 없음)
  * - 처음 열 때 저장된 영상 전체를 부르지 않는다: '이번에 가져온 영상'만 보이고, 기존 영상은 제품을 골라야 불러온다
  * - 샤오홍슈·도우인 [다운로드]: 사이트에서 바로 소리 없는 mp4 로 저장 (서버는 영상 주소만 찾고, 파일은 브라우저가 직접 받아 소리를 뺀다)
  * - YouTube [다운로드]: 서버에서 받을 수 없어(봇 차단) 내 PC 에서 실행할 yt-dlp 명령을 복사한다
@@ -52,10 +52,30 @@ export function VideoImport() {
   const [productId, setProductId] = useState("");
   // 기존 참고 영상: "" = 아직 안 고름(부르지 않음) / "all" 전체 / "none" 제품 미연결 / 제품 id
   const [existingFilter, setExistingFilter] = useState("");
+  // 30개씩 읽고 [더 불러오기]를 누를 때만 다음 30개 (DB 읽기·화면 부하 줄이기)
   const existing = useAsync(
-    () => (existingFilter ? api.videos.list(existingFilter === "all" ? undefined : existingFilter) : Promise.resolve([] as ReferenceVideo[])),
+    () => (existingFilter ? api.videos.page(existingFilter) : Promise.resolve({ items: [] as ReferenceVideo[], hasMore: false, nextOffset: 0 })),
     [existingFilter],
   );
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  async function loadMoreExisting() {
+    const cur = existing.data;
+    if (!cur?.hasMore || !existingFilter) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const next = await api.videos.page(existingFilter, cur.nextOffset);
+      existing.setData((prev) => {
+        const seen = new Set((prev?.items ?? []).map((v) => v.id));
+        return { items: [...(prev?.items ?? []), ...next.items.filter((v) => !seen.has(v.id))], hasMore: next.hasMore, nextOffset: next.nextOffset };
+      });
+    } catch (e) {
+      setMoreError(e instanceof Error ? e.message : "더 불러오지 못했습니다.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   // 이번에 가져온 영상 (이 화면을 연 뒤 가져온 것만, 저장은 이미 됐다)
   const [session, setSession] = useState<ReferenceVideo[]>([]);
   const [text, setText] = useState("");
@@ -75,7 +95,7 @@ export function VideoImport() {
 
   const links = parseVideoLinks(text);
   const urls = links.map((l) => l.url);
-  const existingRows = existingFilter ? (existing.data ?? []).filter((v) => !session.some((s) => s.id === v.id)) : [];
+  const existingRows = existingFilter ? (existing.data?.items ?? []).filter((v) => !session.some((s) => s.id === v.id)) : [];
   const productOptions = (products.data ?? []).map((p) => ({ value: p.id, label: p.name, description: [p.brand, p.category].filter(Boolean).join(" · ") }));
   const youtubeAll = [...session, ...existingRows].filter((v) => !canDirectDownload(v.platform));
 
@@ -106,7 +126,7 @@ export function VideoImport() {
 
   const patchEverywhere = (id: string, fn: (v: ReferenceVideo) => ReferenceVideo | null) => {
     setSession((prev) => prev.flatMap((v) => (v.id === id ? (fn(v) ?? []) : [v])));
-    existing.setData((prev) => prev?.flatMap((v) => (v.id === id ? (fn(v) ?? []) : [v])) ?? null);
+    existing.setData((prev) => (prev ? { ...prev, items: prev.items.flatMap((v) => (v.id === id ? (fn(v) ?? []) : [v])) } : null));
   };
 
   async function changeProduct(v: ReferenceVideo, next: string) {
@@ -350,7 +370,7 @@ export function VideoImport() {
       <SectionCard
         title="기존 참고 영상"
         icon={History}
-        description="예전에 가져온 영상은 제품을 골라야 불러옵니다 (처음 열 때 전체를 불러오지 않습니다)."
+        description="예전에 가져온 영상은 제품을 골라야 불러옵니다 (처음 열 때 전체를 불러오지 않습니다). 30개씩 보입니다."
         flush
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -383,6 +403,14 @@ export function VideoImport() {
             selection={{ selected: existingSel, onChange: setExistingSel }}
             empty={<EmptyState compact title={`'${existingLabel}' 영상이 없습니다`} />}
           />
+        )}
+        {existingFilter && existing.data?.hasMore && (
+          <div className="flex items-center justify-center gap-3 border-t border-line px-5 py-3">
+            {moreError && <span className="text-xs text-danger">{moreError}</span>}
+            <Button size="sm" variant="ghost" loading={loadingMore} onClick={() => void loadMoreExisting()}>
+              더 불러오기 (30개)
+            </Button>
+          </div>
         )}
       </SectionCard>
 

@@ -1,23 +1,22 @@
 import "server-only";
-import { getPromptTemplate } from "../ai/prompts/templates";
 import { AppError } from "../http";
-import { getAIProvider, getXiaohongshuSearchProvider } from "../providers/registry";
+import { getXiaohongshuSearchProvider } from "../providers/registry";
 import { XhsSearchError, type XhsNote, type XhsSearchPage, type XhsSort, type XhsTimeFilter } from "../providers/xiaohongshu/types";
 import { getCurrentUserId } from "../repositories";
 
 /**
- * 샤오홍슈 영상 검색 (영상 URL 가져오기 화면의 [샤오홍슈 검색] 탭). docs/XIAOHONGSHU_SEARCH.md
- * - 검색 결과는 DB 에 저장하지 않는다 (서버 메모리에 10분, 같은 조건 재검색 비용 절약)
+ * 샤오홍슈 영상 검색 (영상 URL 가져오기 › [영상 검색], social-search.ts 가 부른다). docs/SOCIAL_VIDEO_SOURCING.md
+ * - 검색 결과는 DB 에 저장하지 않는다 (서버 메모리에 30분, 같은 조건 재검색 비용 절약)
  * - 가져오기는 기존 videoService.importMany() 를 그대로 쓴다 (화면이 원본 URL 을 넘긴다)
- * - 상세는 [상세보기]를 누를 때만 1회 (1시간 기억)
+ * - 검색 1번 = 검색 API 1회 (자동 페이지 넘김 없음). 상세 API 는 부르지 않는다 (검색 응답의 값으로 저장)
  */
 export const XHS_SEARCH_CONFIG = {
-  /** [검색]·[더 보기] 한 번에 부르는 최대 페이지 수 */
-  maxPages: 3,
-  /** 이만큼 모이면 더 부르지 않는다 */
-  targetResults: 20,
-  cacheMs: 10 * 60 * 1000,
-  detailCacheMs: 60 * 60 * 1000,
+  /** [검색]·[더 보기] 한 번 = 검색 API 1회 (자동으로 다음 페이지를 부르지 않는다, v0.9.32 비용 정책) */
+  maxPages: 1,
+  /** 업체가 한 페이지에 준 결과는 모두 쓴다 (개수로 끊지 않음) */
+  targetResults: Number.POSITIVE_INFINITY,
+  /** 같은 조건은 30분 동안 다시 부르지 않는다 (socialVideoSearchConfig.searchCacheTtlMinutes 와 같게) */
+  cacheMs: 30 * 60 * 1000,
 } as const;
 
 export type XhsPeriod = "7" | "21" | "30" | "all";
@@ -44,7 +43,6 @@ function timeFilterOf(period: XhsPeriod): XhsTimeFilter {
 }
 
 const cache = new Map<string, { at: number; value: XhsSearchResult }>();
-const detailCache = new Map<string, { at: number; value: XhsNote | null }>();
 
 function toAppError(e: unknown): never {
   if (e instanceof AppError) throw e;
@@ -53,6 +51,11 @@ function toAppError(e: unknown): never {
     throw new AppError(`TIKHUB_${e.code}`, e.message, status);
   }
   throw new AppError("TIKHUB_UPSTREAM", "샤오홍슈 검색에 실패했습니다. 잠시 후 다시 시도해 주세요.", 502);
+}
+
+/** 테스트용: 서버 메모리 기억 비우기 */
+export function xhsSearchServiceCacheClear(): void {
+  cache.clear();
 }
 
 export const xhsSearchService = {
@@ -100,43 +103,5 @@ export const xhsSearchService = {
     cache.set(key, { at: Date.now(), value });
     if (cache.size > 300) cache.delete(cache.keys().next().value!);
     return value;
-  },
-
-  async detail(noteId: string): Promise<XhsNote | null> {
-    if (!/^[0-9a-f]{24}$/i.test(noteId)) throw new AppError("VALIDATION", "노트 ID 가 올바르지 않습니다.");
-    const hit = detailCache.get(noteId);
-    if (hit && Date.now() - hit.at < XHS_SEARCH_CONFIG.detailCacheMs) return hit.value;
-    const provider = await getXiaohongshuSearchProvider().catch(toAppError);
-    const value = await provider.getVideoDetail(noteId).catch(toAppError);
-    detailCache.set(noteId, { at: Date.now(), value });
-    if (detailCache.size > 500) detailCache.delete(detailCache.keys().next().value!);
-    return value;
-  },
-
-  /** [AI 중국어 검색어 추천] — 누를 때만 기본 AI 1회 */
-  async suggestKeywords(keyword: unknown): Promise<{ keywords: string[]; provider: string }> {
-    const k = String(keyword ?? "").trim().slice(0, 60);
-    if (!k) throw new AppError("VALIDATION", "검색어를 입력해 주세요.");
-    const template = getPromptTemplate("xhs.search-keywords");
-    const ai = await getAIProvider();
-    const result = await ai.generateStructured<{ keywords?: unknown }>({
-      task: "xhs-search-keywords",
-      messages: [
-        { role: "system", content: template.system },
-        { role: "user", content: `${template.task}\n[검색어] ${k}` },
-      ],
-      outputKeys: ["keywords"],
-      jsonSchema: {
-        type: "object",
-        additionalProperties: false,
-        required: ["keywords"],
-        properties: { keywords: { type: "array", items: { type: "string" }, description: "샤오홍슈 검색어 (간체 중국어) 3~5개" } },
-      },
-      variables: { keyword: k },
-      maxTokens: 300,
-    });
-    const keywords = [...new Set((Array.isArray(result.data.keywords) ? result.data.keywords : []).map((x) => String(x).trim()).filter((x) => x && x.length <= 30))].slice(0, 5);
-    if (!keywords.length) throw new AppError("AI_BAD_OUTPUT", "검색어를 추천하지 못했습니다. 다시 시도해 주세요.", 502);
-    return { keywords, provider: `${result.provider}/${result.model}` };
   },
 };

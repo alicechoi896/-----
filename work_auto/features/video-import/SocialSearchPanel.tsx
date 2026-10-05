@@ -2,29 +2,24 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, ExternalLink, Heart, Languages, ListPlus, MessageCircle, Search, Share2, Star } from "lucide-react";
+import { ExternalLink, Heart, Languages, ListPlus, MessageCircle, Search, Share2, Star } from "lucide-react";
 import type {
   ReferenceVideo,
+  SocialContinue,
   SocialPeriodOption,
   SocialPlatform,
-  SocialPlatformResult,
   SocialQueryTranslation,
-  SocialQueryType,
   SocialSortOption,
   SocialVideoItem,
-  XhsNote,
 } from "@/lib/types";
 import { ApiError, api } from "@/lib/api-client";
-import { Badge, Button, Checkbox, Combobox, Drawer, FormField, Input, Notice, SegmentedControl } from "@/components/ui";
+import { Button, Checkbox, Combobox, Drawer, FormField, Input, Notice, SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 
-type PlatformChoice = SocialPlatform | "both";
-
-const PLATFORM_CHOICES: { value: PlatformChoice; label: string }[] = [
+const PLATFORM_CHOICES: { value: SocialPlatform; label: string }[] = [
   { value: "xiaohongshu", label: "샤오홍슈" },
   { value: "douyin", label: "도우인" },
-  { value: "both", label: "둘 다" },
 ];
 const PLATFORM_NAME: Record<SocialPlatform, string> = { xiaohongshu: "샤오홍슈", douyin: "도우인" };
 const PLATFORM_TONE: Record<SocialPlatform, string> = {
@@ -46,7 +41,6 @@ const PERIODS: { value: SocialPeriodOption; label: string }[] = [
   { value: "30", label: "최근 30일" },
   { value: "all", label: "전체" },
 ];
-const QUERY_LABEL: Record<SocialQueryType, string> = { original: "입력 그대로", primary: "1순위", alternate: "보조", english: "영어" };
 
 const num = (n: number | null) => (n == null ? null : n >= 10_000 ? `${Math.round(n / 1000) / 10}만` : n.toLocaleString("ko-KR"));
 const dur = (s: number | null) => (s == null ? null : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
@@ -55,11 +49,48 @@ const keyOf = (it: SocialVideoItem) => `${it.platform}:${it.sourceId}`;
 
 type ImportResult = { url: string; ok: boolean; video?: ReferenceVideo; error?: string };
 
+/* ── 검색 결과 세션 기억 (DB 저장 없음) ───────────────
+ * 같은 조건(플랫폼·검색어·자동 변환·정렬·기간)을 이 브라우저 세션에서 다시 검색하면 서버·TikHub 를 부르지 않고 보여 준다.
+ * [더 보기]로 받은 결과까지 함께 기억한다. 30분 지나면 버린다 (socialVideoSearchConfig.searchCacheTtlMinutes).
+ */
+const SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
+const STORAGE_KEY = "social-search-cache-v1";
+type CachedSearch = { at: number; translation: SocialQueryTranslation; translationError: string | null; items: SocialVideoItem[]; next: SocialContinue | null; filteredByDate: boolean };
+const memoryCache = new Map<string, CachedSearch>();
+
+function readCache(key: string): CachedSearch | null {
+  let hit = memoryCache.get(key) ?? null;
+  if (!hit) {
+    try {
+      const all = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, CachedSearch>;
+      hit = all[key] ?? null;
+    } catch {
+      hit = null;
+    }
+  }
+  return hit && Date.now() - hit.at < SEARCH_CACHE_TTL_MS ? hit : null;
+}
+function writeCache(key: string, value: CachedSearch) {
+  memoryCache.set(key, value);
+  try {
+    const all = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, CachedSearch>;
+    // 오래된 것은 지우고 최근 20개만 (브라우저 저장 공간 보호)
+    const fresh = Object.entries({ ...all, [key]: value })
+      .filter(([, v]) => Date.now() - v.at < SEARCH_CACHE_TTL_MS)
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, 20);
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(fresh)));
+  } catch {
+    /* 저장 공간이 없거나 막혀 있으면 메모리 기억만 */
+  }
+}
+
 /**
- * 영상 URL 가져오기 › [영상 검색] 탭 (docs/SOCIAL_VIDEO_SOURCING.md)
- * 샤오홍슈·도우인·둘 다 → 한국어 검색어는 서버가 AI 로 한 번 변환 → 플랫폼별 결과 (모자랄 때만 보조 검색어)
- * 여러 개 체크 → [선택한 영상 가져오기] = URL 가져오기와 같은 api.videos.importMany() (원본 URL + 제목)
- * 검색 결과는 이 화면에만 있고 저장하지 않는다. TikHub 가 안 돼도 URL 가져오기 탭은 그대로 쓴다.
+ * 영상 URL 가져오기 › [영상 검색] 탭 (docs/SOCIAL_VIDEO_SOURCING.md 「비용 정책」)
+ * - [검색] = TikHub 검색 1회 (같은 조건은 30분 동안 다시 부르지 않음), [더 보기] = 1회 더. 자동 추가 호출 없음
+ * - 한국어 검색어는 서버가 AI 로 중국어 1개로 바꾼다 (같은 검색어는 플랫폼을 바꿔도 다시 바꾸지 않음)
+ * - [선택한 영상 가져오기] = 기존 api.videos.importMany() + 검색 결과에 있는 작성자·길이·썸네일 → 상세 API 0회
+ * - 검색 결과는 이 화면과 브라우저 세션에만 있고 DB 에 저장하지 않는다
  */
 export function SocialSearchPanel({
   productOptions,
@@ -73,47 +104,49 @@ export function SocialSearchPanel({
   onImported: (results: ImportResult[]) => void;
 }) {
   const [keyword, setKeyword] = useState("");
-  const [choice, setChoice] = useState<PlatformChoice>("xiaohongshu");
+  const [platform, setPlatform] = useState<SocialPlatform>("xiaohongshu");
   const [autoTranslate, setAutoTranslate] = useState(true);
   const [sort, setSort] = useState<SocialSortOption>("general");
   const [period, setPeriod] = useState<SocialPeriodOption>("21");
-  const [results, setResults] = useState<SocialPlatformResult[]>([]);
-  const [translation, setTranslation] = useState<SocialQueryTranslation | null>(null);
-  const [translationError, setTranslationError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
-  const [searching, setSearching] = useState<"all" | SocialPlatform | null>(null);
+  // 지금 보이는 검색 (어떤 조건의 결과인지 함께 둔다)
+  const [view, setView] = useState<(CachedSearch & { key: string; platform: SocialPlatform; fromCache: boolean }) | null>(null);
+  const [searching, setSearching] = useState<"search" | "more" | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [selected, setSelected] = useState<Map<string, SocialVideoItem>>(new Map());
   const [productId, setProductId] = useState("");
   const [memo, setMemo] = useState("");
   const [importing, setImporting] = useState(false);
   const [open, setOpen] = useState<SocialVideoItem | null>(null);
-  // 샤오홍슈 상세는 이 화면(세션) 안에서 한 번만 (도우인은 검색 결과에 설명이 있다)
-  const [details, setDetails] = useState<Record<string, XhsNote | null>>({});
-  const [detailLoading, setDetailLoading] = useState(false);
 
-  const platforms: SocialPlatform[] = choice === "both" ? ["xiaohongshu", "douyin"] : [choice];
-  const sorts = platforms.includes("douyin") ? SORTS_ALL.slice(0, 3) : SORTS_ALL;
-  const total = results.reduce((s, r) => s + r.items.length, 0);
+  const sorts = platform === "douyin" ? SORTS_ALL.slice(0, 3) : SORTS_ALL;
+  const cacheKey = (k = keyword.trim()) => JSON.stringify([platform, k, autoTranslate, sort, period]);
 
   const fail = (e: unknown) => setError(e instanceof ApiError ? { code: e.code, message: e.message } : { code: "", message: e instanceof Error ? e.message : "실패했습니다." });
 
-  function changeChoice(next: PlatformChoice) {
-    setChoice(next);
-    if (next !== "xiaohongshu" && (sort === "comments" || sort === "collects")) setSort("general");
+  function changePlatform(next: SocialPlatform) {
+    setPlatform(next);
+    if (next === "douyin" && (sort === "comments" || sort === "collects")) setSort("general");
   }
 
   async function search() {
-    if (!keyword.trim()) return;
-    setSearching("all");
+    const k = keyword.trim();
+    if (!k) return;
     setError(null);
-    try {
-      const r = await api.videos.socialSearch({ keyword: keyword.trim(), platforms, autoTranslate, sort, period });
-      setResults(r.platforms);
-      setTranslation(r.translation);
-      setTranslationError(r.translationError);
+    const key = cacheKey(k);
+    const hit = readCache(key);
+    if (hit) {
+      // 같은 조건: TikHub·AI 를 다시 부르지 않는다
+      setView({ ...hit, key, platform, fromCache: true });
       setSelected(new Map());
-      setSearched(true);
+      return;
+    }
+    setSearching("search");
+    try {
+      const r = await api.videos.socialSearch({ keyword: k, platform, autoTranslate, sort, period });
+      const entry: CachedSearch = { at: Date.now(), translation: r.translation, translationError: r.translationError, items: r.items, next: r.next, filteredByDate: r.filteredByDate };
+      writeCache(key, entry);
+      setView({ ...entry, key, platform, fromCache: false });
+      setSelected(new Map());
     } catch (e) {
       fail(e);
     } finally {
@@ -121,21 +154,17 @@ export function SocialSearchPanel({
     }
   }
 
-  /** 한 플랫폼만 이어서 (번역·다른 플랫폼은 다시 부르지 않는다) */
-  async function more(r: SocialPlatformResult) {
-    if (!r.next) return;
-    setSearching(r.platform);
+  /** [더 보기]: 다음 페이지 1회 (번역 다시 안 함) */
+  async function more() {
+    if (!view?.next) return;
+    setSearching("more");
     setError(null);
     try {
-      const res = await api.videos.socialSearch({ keyword: keyword.trim() || r.next.query, platforms: [r.platform], autoTranslate: false, sort, period, continue: { platform: r.platform, next: r.next } });
-      const got = res.platforms[0];
-      setResults((prev) =>
-        prev.map((p) => {
-          if (p.platform !== r.platform) return p;
-          const seen = new Set(p.items.map(keyOf));
-          return { ...p, items: [...p.items, ...got.items.filter((x) => !seen.has(keyOf(x)))], next: got.next, error: got.error, calls: p.calls + got.calls };
-        }),
-      );
+      const r = await api.videos.socialSearch({ keyword: view.translation.original, platform: view.platform, autoTranslate: false, sort, period, next: view.next });
+      const seen = new Set(view.items.map(keyOf));
+      const entry: CachedSearch = { ...view, items: [...view.items, ...r.items.filter((x) => !seen.has(keyOf(x)))], next: r.next };
+      writeCache(view.key, { ...entry, at: view.at });
+      setView({ ...entry, key: view.key, platform: view.platform, fromCache: false });
     } catch (e) {
       fail(e);
     } finally {
@@ -158,9 +187,9 @@ export function SocialSearchPanel({
     setImporting(true);
     setError(null);
     try {
-      // 기존 URL 가져오기와 같은 함수 (원본 주소 + 제목 힌트)
+      // 기존 URL 가져오기와 같은 함수. 검색 결과에 있는 값을 같이 넘겨 서버가 상세 API 를 부르지 않게 한다
       const res = await api.videos.importMany(
-        list.map((it) => ({ url: it.originalUrl, titleHint: it.title })),
+        list.map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec, thumbnailUrl: it.thumbnailUrl } })),
         memo,
         productId || null,
       );
@@ -175,33 +204,14 @@ export function SocialSearchPanel({
     }
   }
 
-  async function openDetail(it: SocialVideoItem) {
-    setOpen(it);
-    if (it.platform !== "xiaohongshu" || it.desc || it.sourceId in details) return;
-    setDetailLoading(true);
-    try {
-      const d = await api.videos.xhsDetail(it.sourceId);
-      setDetails((prev) => ({ ...prev, [it.sourceId]: d }));
-    } catch {
-      setDetails((prev) => ({ ...prev, [it.sourceId]: null }));
-    } finally {
-      setDetailLoading(false);
-    }
-  }
-
-  const extra = open && open.platform === "xiaohongshu" ? details[open.sourceId] : null;
-  const shown: SocialVideoItem | null = open
-    ? extra
-      ? { ...open, desc: extra.desc ?? open.desc, likeCount: extra.likes ?? open.likeCount, commentCount: extra.comments ?? open.commentCount, collectCount: extra.collects ?? open.collectCount }
-      : open
-    : null;
+  const items = view?.items ?? [];
   const pickedTitles = [...selected.values()].map((it) => ({ title: it.title, views: null }));
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <FormField label="플랫폼">
-          <SegmentedControl size="sm" options={PLATFORM_CHOICES} value={choice} onChange={changeChoice} />
+          <SegmentedControl size="sm" options={PLATFORM_CHOICES} value={platform} onChange={changePlatform} />
         </FormField>
         <label className="flex cursor-pointer items-center gap-2 pb-2 text-[13px] text-fg-muted">
           <Checkbox checked={autoTranslate} onChange={setAutoTranslate} label="한국어 검색어 자동 변환" />
@@ -213,7 +223,7 @@ export function SocialSearchPanel({
         htmlFor="social-keyword"
         hint={
           autoTranslate
-            ? "한국어로 넣으면 기본 AI 가 중국어 검색어로 한 번 바꿔 검색합니다 (결과가 모자랄 때만 다른 표현으로 한 번 더). 중국어·영어는 그대로 검색합니다."
+            ? "한국어로 넣으면 기본 AI 가 중국어 검색어 1개로 바꿔 검색합니다. 중국어·영어는 그대로 검색합니다."
             : "입력한 검색어 그대로 검색합니다."
         }
       >
@@ -239,27 +249,35 @@ export function SocialSearchPanel({
         <FormField label="기간">
           <SegmentedControl size="sm" options={PERIODS} value={period} onChange={setPeriod} />
         </FormField>
-        <p className="pb-2 text-xs text-fg-subtle">콘텐츠 유형: 영상</p>
-        <Button className="ml-auto" variant="primary" icon={Search} loading={searching === "all"} disabled={!keyword.trim() || Boolean(searching)} onClick={() => void search()}>
-          {choice === "both" ? "둘 다 검색" : `${PLATFORM_NAME[choice]} 검색`}
+        <p className="pb-2 text-xs text-fg-subtle">콘텐츠 유형: 영상 · 검색 1번 = TikHub 1회</p>
+        <Button className="ml-auto" variant="primary" icon={Search} loading={searching === "search"} disabled={!keyword.trim() || Boolean(searching)} onClick={() => void search()}>
+          {PLATFORM_NAME[platform]} 검색
         </Button>
       </div>
 
       {error && <TikHubNotice error={error} />}
 
-      {searched && translation?.translated && (
-        <p className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
-          <Languages className="size-3.5 text-fg-subtle" />
+      {view && (
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted" data-search-summary>
+          {view.translation.translated && (
+            <>
+              <Languages className="size-3.5 text-fg-subtle" />
+              <span>
+                &lsquo;{view.translation.original}&rsquo; → <b className="font-medium text-fg">{view.translation.query}</b>
+              </span>
+              <span className="text-fg-subtle">·</span>
+            </>
+          )}
+          <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", PLATFORM_TONE[view.platform])}>{PLATFORM_NAME[view.platform]}</span>
           <span>
-            &lsquo;{translation.original}&rsquo; → <b className="font-medium text-fg">{translation.primaryZh}</b>
+            영상 {items.length}개{view.filteredByDate ? ` · 게시일 기준 최근 ${period}일만` : ""}
           </span>
-          {translation.alternateZh && <span className="text-fg-subtle">· 보조 {translation.alternateZh}</span>}
-          {translation.english && <span className="text-fg-subtle">· 영어 {translation.english}</span>}
+          {view.fromCache && <span className="rounded bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">이미 검색한 결과 · API 호출 없음</span>}
         </p>
       )}
-      {searched && translationError && <Notice tone="warning">{translationError}</Notice>}
+      {view?.translationError && <Notice tone="warning">{view.translationError}</Notice>}
 
-      {searched && total > 0 && (
+      {view && items.length > 0 && (
         <div className="sticky top-2 z-10 grid items-end gap-3 rounded-control border border-line bg-canvas/95 p-3 shadow-card backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
           <FormField label="연관 제품 (선택한 영상 모두에 저장)" htmlFor="social-product" optional>
             <Combobox
@@ -282,80 +300,74 @@ export function SocialSearchPanel({
         </div>
       )}
 
-      {searched &&
-        results.map((r) => (
-          <section key={r.platform} className="space-y-3" data-platform={r.platform}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", PLATFORM_TONE[r.platform])}>{PLATFORM_NAME[r.platform]}</span>
-              <span className="text-xs text-fg-subtle">
-                영상 {r.items.length}개{period === "21" || period === "30" ? ` · 게시일 기준 최근 ${period}일만` : ""}
-                {r.queriesUsed.length > 0 && ` · 검색어 ${r.queriesUsed.map((q) => `${q.query}(${QUERY_LABEL[q.type]} ${q.count})`).join(", ")}`}
-              </span>
+      {view && (
+        <section className="space-y-3" data-platform={view.platform}>
+          {items.length === 0 ? (
+            <p className="rounded-control border border-dashed border-line-strong px-4 py-8 text-center text-sm text-fg-subtle">
+              {view.next ? "이 페이지에는 조건에 맞는 영상이 없습니다. [더 보기]로 다음 결과를 볼 수 있습니다." : "조건에 맞는 영상이 없습니다. 검색어나 기간을 바꿔 보세요."}
+            </p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {items.map((it) => (
+                <ResultCard key={keyOf(it)} item={it} on={selected.has(keyOf(it))} full={selected.size >= maxBatch} onToggle={() => toggle(it)} onOpen={() => setOpen(it)} />
+              ))}
+            </ul>
+          )}
+          {view.next && (
+            <div className="text-center">
+              <Button size="sm" variant="ghost" loading={searching === "more"} disabled={Boolean(searching)} onClick={() => void more()} title="다음 결과를 불러옵니다 (TikHub 1회)">
+                더 보기
+              </Button>
             </div>
-            {r.error ? (
-              <TikHubNotice error={r.error} />
-            ) : r.items.length === 0 ? (
-              <p className="rounded-control border border-dashed border-line-strong px-4 py-8 text-center text-sm text-fg-subtle">조건에 맞는 영상이 없습니다. 검색어나 기간을 바꿔 보세요.</p>
-            ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {r.items.map((it) => (
-                  <ResultCard key={keyOf(it)} item={it} on={selected.has(keyOf(it))} full={selected.size >= maxBatch} onToggle={() => toggle(it)} onOpen={() => void openDetail(it)} />
-                ))}
-              </ul>
-            )}
-            {r.next && !r.error && (
-              <div className="text-center">
-                <Button size="sm" variant="ghost" loading={searching === r.platform} disabled={Boolean(searching)} onClick={() => void more(r)}>
-                  {PLATFORM_NAME[r.platform]} 더 보기
-                </Button>
-              </div>
-            )}
-          </section>
-        ))}
-      {searched && <p className="text-xs text-fg-subtle">최대 {maxBatch}개까지 골라 가져올 수 있습니다. 검색 결과는 저장되지 않습니다.</p>}
+          )}
+          <p className="text-xs text-fg-subtle">
+            최대 {maxBatch}개까지 골라 가져올 수 있습니다. 검색 결과는 저장되지 않고, 가져온 영상만 저장됩니다. 같은 조건은 30분 동안 다시 불러오지 않습니다.
+          </p>
+        </section>
+      )}
 
       <Drawer
-        open={Boolean(shown)}
+        open={Boolean(open)}
         onClose={() => setOpen(null)}
-        title={shown?.title ?? ""}
+        title={open?.title ?? ""}
         footer={
-          shown && (
+          open && (
             <div className="flex gap-2">
               <a
-                href={shown.originalUrl}
+                href={open.originalUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-control border border-line text-sm text-fg-muted hover:text-brand"
               >
                 <ExternalLink className="size-4" />
-                {PLATFORM_NAME[shown.platform]}에서 보기
+                {PLATFORM_NAME[open.platform]}에서 보기
               </a>
-              <Button className="flex-1" variant="primary" icon={ListPlus} loading={importing} onClick={() => void importItems([shown])}>
+              <Button className="flex-1" variant="primary" icon={ListPlus} loading={importing} onClick={() => void importItems([open])}>
                 이 영상 가져오기
               </Button>
             </div>
           )
         }
       >
-        {shown && (
+        {open && (
           <div className="space-y-3 text-sm">
-            {shown.thumbnailUrl && (
+            {open.thumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- 업체 CDN 썸네일 (저장하지 않음)
-              <img src={shown.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="max-h-80 w-full rounded-control bg-subtle object-contain" />
+              <img src={open.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="max-h-80 w-full rounded-control bg-subtle object-contain" />
             )}
             <dl className="grid grid-cols-[72px_1fr] gap-y-1.5 text-[13px]">
               <dt className="text-fg-subtle">플랫폼</dt>
-              <dd>{PLATFORM_NAME[shown.platform]}</dd>
+              <dd>{PLATFORM_NAME[open.platform]}</dd>
               {(
                 [
-                  ["작성자", shown.authorName],
-                  ["게시일", day(shown.publishedAt)],
-                  ["좋아요", num(shown.likeCount)],
-                  ["댓글", num(shown.commentCount)],
-                  ["저장", num(shown.collectCount)],
-                  ["공유", num(shown.shareCount)],
-                  ["길이", dur(shown.durationSec)],
-                  ["검색어", `${shown.matchedQuery} (${QUERY_LABEL[shown.queryType]})`],
+                  ["작성자", open.authorName],
+                  ["게시일", day(open.publishedAt)],
+                  ["좋아요", num(open.likeCount)],
+                  ["댓글", num(open.commentCount)],
+                  ["저장", num(open.collectCount)],
+                  ["공유", num(open.shareCount)],
+                  ["길이", dur(open.durationSec)],
+                  ["검색어", open.matchedQuery],
                 ] as const
               ).map(([k, v]) =>
                 v ? (
@@ -366,12 +378,12 @@ export function SocialSearchPanel({
                 ) : null,
               )}
             </dl>
-            {shown.desc ? (
-              <p className="rounded-control bg-subtle px-3 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap text-fg-muted">{shown.desc}</p>
+            {open.desc ? (
+              <p className="rounded-control bg-subtle px-3 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap text-fg-muted">{open.desc}</p>
             ) : (
-              <p className="text-xs text-fg-subtle">{detailLoading ? "설명 불러오는 중…" : "설명이 없습니다."}</p>
+              <p className="text-xs text-fg-subtle">검색 결과에 설명이 없습니다. (비용을 줄이려고 상세 API 는 부르지 않습니다 — {PLATFORM_NAME[open.platform]}에서 보기로 확인하세요)</p>
             )}
-            <SaveTitlesToFormat titles={[{ title: shown.title, views: null }]} source="영상 검색" buttonLabel="제목 대본 포맷에 담기" />
+            <SaveTitlesToFormat titles={[{ title: open.title, views: null }]} source="영상 검색" buttonLabel="제목 대본 포맷에 담기" />
           </div>
         )}
       </Drawer>
@@ -382,7 +394,7 @@ export function SocialSearchPanel({
 function ResultCard({ item: it, on, full, onToggle, onOpen }: { item: SocialVideoItem; on: boolean; full: boolean; onToggle: () => void; onOpen: () => void }) {
   return (
     <li className={cn("overflow-hidden rounded-card border bg-canvas", on ? "border-brand ring-2 ring-brand-soft" : "border-line")}>
-      <button type="button" className={cn("relative block aspect-[3/4] w-full", COVER_BG[it.platform])} onClick={onOpen} title="상세보기">
+      <button type="button" className={cn("relative block aspect-[3/4] w-full", COVER_BG[it.platform])} onClick={onOpen} title="자세히 보기">
         {it.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- 업체 CDN 썸네일 (저장하지 않음)
           <img src={it.thumbnailUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className="size-full object-cover" />
@@ -424,17 +436,6 @@ function ResultCard({ item: it, on, full, onToggle, onOpen }: { item: SocialVide
             </span>
           )}
         </p>
-        {(it.queryType === "alternate" || it.queryType === "english" || it.similarGroup) && (
-          <div className="flex flex-wrap gap-1">
-            {it.queryType !== "primary" && it.queryType !== "original" && <Badge tone="neutral">{QUERY_LABEL[it.queryType]} 검색어</Badge>}
-            {it.similarGroup && (
-              <Badge tone="warning">
-                <Copy className="mr-0.5 inline size-3" />
-                유사 영상 가능성
-              </Badge>
-            )}
-          </div>
-        )}
       </div>
     </li>
   );

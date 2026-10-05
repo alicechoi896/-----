@@ -164,15 +164,8 @@ export class MockAIProvider implements AIProvider {
       return { data: mockVideoAnalysis(v.video as MockVideo) as unknown as T, provider: this.id, model: this.model };
     }
 
-    if (request.task === "xhs-search-keywords") {
-      const k = String(v.keyword ?? "");
-      const dict: Record<string, string> = { 무선청소기: "无线吸尘器", 에어프라이어: "空气炸锅", 마사지건: "筋膜枪", 가습기: "加湿器", 노트북: "笔记本电脑" };
-      const base = Object.entries(dict).find(([ko]) => k.includes(ko))?.[1] ?? k;
-      return { data: { keywords: [base, `${base}测评`, `${base}推荐`, `平价${base}`] } as unknown as T, provider: this.id, model: this.model };
-    }
-
     if (request.task === "social-query-translate") {
-      // 데모: 몇 단어만 사전으로 바꾼다. "적음" 이 들어가면 1순위 검색어에 少 를 붙인다 (도우인 데모가 결과를 적게 줘 보조 검색 시험용)
+      // 데모: 몇 단어만 사전으로 바꾼다 (중국어 1개만 쓴다)
       const k = String(v.keyword ?? "");
       if (k.includes("변환실패")) throw new Error("데모: 변환 실패");
       const dict: Record<string, [string, string, string]> = {
@@ -183,8 +176,7 @@ export class MockAIProvider implements AIProvider {
         가습기: ["加湿器", "家用加湿器", "humidifier"],
       };
       const hit = Object.entries(dict).find(([ko]) => k.includes(ko))?.[1] ?? [`${k.replace(/적음/g, "").trim() || "好物"}`, `${k.replace(/적음/g, "").trim() || "好物"}推荐`, "recommended"];
-      const primary = k.includes("적음") ? `${hit[0]}少` : hit[0];
-      return { data: { original: k, primary_zh: primary, alternate_zh: hit[1], english: hit[2] } as unknown as T, provider: this.id, model: this.model };
+      return { data: { primary_zh: hit[0] } as unknown as T, provider: this.id, model: this.model };
     }
 
     if (request.task === "script-format-extract") {

@@ -3,7 +3,6 @@ import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type { PreciseStage } from "@/lib/generators/quality";
 import type {
-  XhsNote,
   ScriptExample,
   ScriptFormat,
   ScriptFormatInput,
@@ -368,18 +367,21 @@ export const api = {
         durationSec: number;
         streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
       }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
-    /** 샤오홍슈·도우인·둘 다 검색 (한국어는 AI 로 한 번 변환). 결과는 저장하지 않는다 */
+    /** 샤오홍슈 또는 도우인 검색 = TikHub 1회 (한국어는 AI 로 한 번 변환). next = [더 보기]. 결과는 저장하지 않는다 */
     socialSearch: (body: {
       keyword: string;
-      platforms: SocialPlatform[];
+      platform: SocialPlatform;
       autoTranslate: boolean;
       sort: SocialSortOption;
       period: SocialPeriodOption;
-      continue?: { platform: SocialPlatform; next: SocialContinue } | null;
+      next?: SocialContinue | null;
     }) => request<SocialSearchResultDto>("/api/videos/social-search", { method: "POST", body: json(body) }),
-    xhsDetail: (noteId: string) => request<XhsNote | null>(`/api/videos/xhs-search/detail${qs({ noteId })}`),
+    /** 기존 참고 영상 30개씩 (productId: 제품 id / none / all) */
+    page: (productId: string, offset = 0) =>
+      request<{ items: ReferenceVideo[]; hasMore: boolean; nextOffset: number }>(`/api/videos/page${qs({ productId, offset })}`),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
-    importMany: (items: { url: string; titleHint?: string }[], note?: string, productId?: string | null) =>
+    /** meta: 검색 결과에 이미 있는 작성자·길이·썸네일 (있으면 서버가 상세 API 를 부르지 않는다) */
+    importMany: (items: { url: string; titleHint?: string; meta?: { channelName?: string | null; durationSec?: number | null; thumbnailUrl?: string | null } }[], note?: string, productId?: string | null) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {
         method: "POST",
         body: json({ items, note, productId: productId || null }),

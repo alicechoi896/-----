@@ -204,67 +204,48 @@ describe("트렌드·스타일·오류 기록", () => {
     await j(`/api/script-formats/${saved.id}`, { method: "DELETE" });
   });
 
-  it("샤오홍슈 검색(데모): 검색 → 기간 필터 → 고른 영상을 기존 가져오기로 저장, 검색어 추천", async ({ skip }) => {
+  it("영상 검색(데모): 플랫폼 하나씩·검색 1번 = 1회·같은 조건 0회·[더 보기] 1회 → 메타로 가져오기 → 제품별 30개씩", async ({ skip }) => {
     if (!reachable) skip();
-    type Note = { noteId: string; url: string; title: string; publishedAt: string | null };
-    const r = (await post("/api/videos/xhs-search", { keyword: "무선청소기", sort: "latest", period: "21" })).data as { notes: Note[]; next: unknown; calls: number };
-    expect(r.notes.length).toBeGreaterThan(0);
-    const cutoff = Date.now() - 21 * 86_400_000 - 60_000; // 경계값 여유 1분
-    expect(r.notes.every((n) => n.publishedAt && Date.parse(n.publishedAt) >= cutoff)).toBe(true); // 21일은 게시일로 다시 거른다
-    expect(r.notes.every((n) => n.url.includes("xsec_token="))).toBe(true);
-    const again = (await post("/api/videos/xhs-search", { keyword: "무선청소기", sort: "latest", period: "21" })).data as { calls: number };
-    expect(again.calls).toBe(0); // 같은 조건은 10분 동안 다시 부르지 않는다
-    expect((await post("/api/videos/xhs-search", { keyword: "" })).ok).toBe(false);
-
-    // 기존 URL 가져오기와 같은 API 로 저장 (제품·메모 함께)
-    const products = await j<{ id: string }[]>("/api/products");
-    const pick = r.notes.slice(0, 2);
-    const res = (await post("/api/videos/batch", { items: pick.map((n) => ({ url: n.url, titleHint: n.title })), note: "Hook 참고", productId: products.data[0].id })).data as { ok: boolean; video?: { id: string; title: string; productId: string; note: string; platform: string } }[];
-    expect(res.every((x) => x.ok)).toBe(true);
-    expect(res[0].video).toMatchObject({ platform: "xiaohongshu", note: "Hook 참고", productId: products.data[0].id, title: pick[0].title });
-    const list = (await j<{ id: string }[]>("/api/videos")).data;
-    expect(res.every((x) => list.some((v) => v.id === x.video!.id))).toBe(true);
-    for (const x of res) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
-
-    const kw = (await post("/api/videos/xhs-search/keywords", { keyword: "무선청소기" })).data as { keywords: string[] };
-    expect(kw.keywords[0]).toBe("无线吸尘器");
-  });
-
-  it("영상 검색(데모): 둘 다 → 변환 1번·플랫폼 표시, 도우인만 보조 검색, 도우인 URL 가져오기, 제품별 목록", async ({ skip }) => {
-    if (!reachable) skip();
-    type Item = { platform: string; originalUrl: string; title: string; queryType: string };
-    type P = { platform: string; items: Item[]; error: unknown; queriesUsed: { type: string }[] };
-    type R = { translation: { translated: boolean; primaryZh: string }; platforms: P[] };
-    // CASE 3: 둘 다
-    const both = (await post("/api/videos/social-search", { keyword: "무선청소기", platforms: ["xiaohongshu", "douyin"], sort: "general", period: "all" })).data as R;
-    expect(both.translation).toMatchObject({ translated: true, primaryZh: "无线吸尘器" });
-    expect(both.platforms.map((p) => p.platform)).toEqual(["xiaohongshu", "douyin"]);
-    expect(both.platforms.every((p) => p.items.length > 0 && p.items.every((i) => i.platform === p.platform))).toBe(true);
-    // CASE 7: 데모 도우인은 少 가 들어간 검색어에 4개만 → 도우인만 보조 검색어
-    const few = (await post("/api/videos/social-search", { keyword: "무선청소기 적음", platforms: ["xiaohongshu", "douyin"], period: "all" })).data as R;
-    expect(few.platforms[0].queriesUsed.map((q) => q.type)).toEqual(["primary"]);
-    expect(few.platforms[1].queriesUsed.map((q) => q.type)).toEqual(["primary", "alternate"]);
-    // CASE 5: 중국어는 그대로
-    const zh = (await post("/api/videos/social-search", { keyword: "空气炸锅", platforms: ["douyin"] })).data as R;
+    type Item = { platform: string; originalUrl: string; title: string; authorName: string | null; durationSec: number | null; thumbnailUrl: string | null };
+    type R = { platform: string; translation: { translated: boolean; query: string }; items: Item[]; calls: number; next: Record<string, unknown> | null; filteredByDate: boolean };
+    const xhs = (await post("/api/videos/social-search", { keyword: "무선청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data as R;
+    expect(xhs.translation).toMatchObject({ translated: true, query: "无线吸尘器" });
+    expect(xhs.calls).toBe(1);
+    expect(xhs.items).toHaveLength(10); // 데모 한 페이지 10개 → 모두 보여 주고 더 부르지 않는다
+    expect(xhs.items.every((i) => i.platform === "xiaohongshu")).toBe(true);
+    expect(xhs.next).toBeTruthy();
+    const again = (await post("/api/videos/social-search", { keyword: "무선청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data as R;
+    expect(again.calls).toBe(0);
+    const more = (await post("/api/videos/social-search", { keyword: "무선청소기", platform: "xiaohongshu", sort: "general", period: "all", next: xhs.next })).data as R;
+    expect(more.calls).toBe(1);
+    expect(more.items[0].originalUrl).not.toBe(xhs.items[0].originalUrl);
+    const dy = (await post("/api/videos/social-search", { keyword: "무선청소기", platform: "douyin", period: "all" })).data as R;
+    expect(dy.calls).toBe(1);
+    expect(dy.items.every((i) => i.platform === "douyin")).toBe(true);
+    expect((await post("/api/videos/social-search", { keyword: "x", platforms: ["xiaohongshu", "douyin"] })).ok).toBe(false); // 둘 다 없음
+    const zh = (await post("/api/videos/social-search", { keyword: "空气炸锅", platform: "douyin" })).data as R;
     expect(zh.translation.translated).toBe(false);
 
-    // CASE 2·4: 도우인 결과·v.douyin.com 링크를 기존 가져오기로 (제품·메모 함께)
+    // 검색 결과 메타로 저장 (상세 API 없이) + v.douyin.com 링크
     const products = await j<{ id: string }[]>("/api/products");
     const pid = products.data[1]?.id ?? products.data[0].id;
-    const dy = both.platforms[1].items[0];
-    const res = (await post("/api/videos/batch", { items: [{ url: dy.originalUrl, titleHint: dy.title }, { url: "https://v.douyin.com/iRNBho6u/" }], note: "도우인 참고", productId: pid })).data as { ok: boolean; video?: { id: string; platform: string; title: string; productId: string } }[];
+    const picked = [xhs.items[0], dy.items[0]];
+    const res = (await post("/api/videos/batch", {
+      items: [...picked.map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec, thumbnailUrl: it.thumbnailUrl } })), { url: "https://v.douyin.com/iRNBho6u/" }],
+      note: "검색 참고",
+      productId: pid,
+    })).data as { ok: boolean; video?: { id: string; platform: string; title: string; channelName: string; durationSec: number; productId: string } }[];
     expect(res.every((x) => x.ok)).toBe(true);
-    expect(res.map((x) => x.video!.platform)).toEqual(["douyin", "douyin"]);
-    expect(res[0].video!.title).toBe(dy.title);
-    // CASE 9: 목록은 제품별로 (화면은 처음에 전체를 부르지 않는다)
-    const byProduct = (await j<{ id: string; productId: string | null }[]>(`/api/videos?productId=${pid}`)).data;
-    expect(byProduct.length).toBeGreaterThanOrEqual(2);
-    expect(byProduct.every((v) => v.productId === pid)).toBe(true);
-    const none = (await j<{ productId: string | null }[]>("/api/videos?productId=none")).data;
-    expect(none.every((v) => !v.productId)).toBe(true);
-    // 데모 도우인은 재생 주소가 없다 → 다운로드 안내 오류 (주소를 만들어 붙이지 않는다)
+    expect(res.map((x) => x.video!.platform)).toEqual(["xiaohongshu", "douyin", "douyin"]);
+    expect(res[1].video).toMatchObject({ title: dy.items[0].title, channelName: dy.items[0].authorName, durationSec: dy.items[0].durationSec });
+    // 기존 참고 영상: 제품별 30개씩
+    const page = (await j<{ items: { productId: string | null }[]; hasMore: boolean; nextOffset: number }>(`/api/videos/page?productId=${pid}`)).data;
+    expect(page.items.length).toBeGreaterThanOrEqual(3);
+    expect(page.items.every((v) => v.productId === pid)).toBe(true);
+    const none = (await j<{ items: { productId: string | null }[] }>("/api/videos/page?productId=none")).data;
+    expect(none.items.every((v) => !v.productId)).toBe(true);
+    // 데모 도우인은 재생 주소가 없다 → 주소를 만들어 붙이지 않고 안내
     const resolved = await post("/api/videos/resolve", { url: "https://v.douyin.com/iRNBho6u/" });
-    expect(resolved.ok).toBe(false);
     expect(resolved.error?.code).toBe("DOUYIN_NO_MEDIA");
     for (const x of res) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
   });

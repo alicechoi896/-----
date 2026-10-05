@@ -65,7 +65,19 @@ export const memoryRepositories: Repositories = {
   styles: createCollection("styles"),
   feedback: createCollection("feedback"),
   performance: createCollection("performance"),
-  videos: createCollection("videos"),
+  videos: {
+    ...createCollection("videos"),
+    async listPage({ userId, productId, limit, offset }) {
+      const rows = getState()
+        .videos.filter((v) => v.userId === userId && (productId == null || (productId === "none" ? !v.productId : v.productId === productId)))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return structuredClone(rows.slice(offset, offset + limit));
+    },
+    async findUrls(userId, urls) {
+      const want = new Set(urls);
+      return getState().videos.filter((v) => v.userId === userId && want.has(v.url)).map((v) => v.url);
+    },
+  },
   savedFilters: createCollection("savedFilters"),
   savedTrends: createCollection("savedTrends"),
   contentProfiles: createCollection("contentProfiles"),

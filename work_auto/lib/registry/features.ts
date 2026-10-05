@@ -244,7 +244,7 @@ export const FEATURES: FeatureDef[] = [
     status: "live",
     defaultTiers: ALL,
     requiredProviders: ["youtube"],
-    inputs: ["영상 URL 여러 개(줄바꿈)", "검색어 (샤오홍슈·도우인·둘 다, 한국어 자동 변환)", "메모"],
+    inputs: ["영상 URL 여러 개(줄바꿈)", "검색어 (샤오홍슈 또는 도우인, 한국어 자동 변환)", "메모"],
     outputs: ["영상 메타데이터", "참고 영상 목록", "샤오홍슈·도우인: 소리 없는 mp4 바로 저장·ZIP", "YouTube: 다운로드 명령(yt-dlp)"],
   },
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppError } from "../http";
+import type { ReferenceVideo } from "@/lib/types";
 import type { Repositories, Repository } from "./types";
 
 /**
@@ -119,7 +120,25 @@ export const supabaseRepositories: Repositories = {
   styles: createTable("user_styles"),
   feedback: createTable("user_feedback"),
   performance: createTable("performance_metrics"),
-  videos: createTable("reference_videos"),
+  videos: {
+    ...createTable<ReferenceVideo>("reference_videos"),
+    async listPage({ userId, productId, limit, offset }) {
+      const db = await createSupabaseServerClient();
+      let q = db.from("reference_videos").select("*").eq("user_id", userId);
+      if (productId === "none") q = q.is("product_id", null);
+      else if (productId) q = q.eq("product_id", productId);
+      const { data, error } = await q.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+      if (error) fail("reference_videos", "listPage", error);
+      return (data ?? []).map((r) => fromRow<ReferenceVideo>(r));
+    },
+    async findUrls(userId, urls) {
+      if (!urls.length) return [];
+      const db = await createSupabaseServerClient();
+      const { data, error } = await db.from("reference_videos").select("url").eq("user_id", userId).in("url", urls);
+      if (error) fail("reference_videos", "findUrls", error);
+      return (data ?? []).map((r) => String((r as { url: string }).url));
+    },
+  },
   savedFilters: createTable("saved_filters"),
   savedTrends: createTable("saved_trends"),
   contentProfiles: createTable("content_profiles"),

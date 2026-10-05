@@ -1,6 +1,6 @@
 # XIAOHONGSHU_SEARCH — 샤오홍슈 영상 검색 (TikHub)
 
-> v0.9.30 부터 화면은 **[영상 검색]** 탭(샤오홍슈·도우인·둘 다, 한국어 자동 변환)으로 바뀌었다 → [SOCIAL_VIDEO_SOURCING.md](./SOCIAL_VIDEO_SOURCING.md). 아래 샤오홍슈 Provider·파라미터·비용은 그대로다.
+> v0.9.32 비용 정책이 이 문서보다 우선한다 (검색 1번 = 1회, 자동 페이지 넘김·상세 자동 호출 없음, `/api/videos/xhs-search` 경로 삭제). v0.9.30 부터 화면은 **[영상 검색]** 탭(샤오홍슈 또는 도우인, 한국어 자동 변환)으로 바뀌었다 → [SOCIAL_VIDEO_SOURCING.md](./SOCIAL_VIDEO_SOURCING.md). 아래 샤오홍슈 Provider·파라미터·비용은 그대로다.
 >
 > v0.9.29. 공통 도구 › **영상 URL 가져오기** 화면의 **[샤오홍슈 검색]** 탭. 새 페이지·새 저장 흐름을 만들지 않고, "URL 을 찾아 붙여넣는 과정" 앞에 검색만 더했다.
 
