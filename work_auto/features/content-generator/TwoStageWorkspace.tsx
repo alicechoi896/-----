@@ -1,13 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, ListPlus, Loader2, RefreshCw, Search, Sparkles, Star } from "lucide-react";
+import { CalendarPlus, Check, ListPlus, Loader2, RefreshCw, Search, Sparkles, Star } from "lucide-react";
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Badge, Button, Notice, SectionCard, Tabs, Tag } from "@/components/ui";
 import { ResultPanel } from "@/components/shared/ResultPanel";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { PublicationForm } from "@/features/uploads/PublicationForm";
 
 const STAGE1_KEYS = new Set(["topics", "titles", "hooks", "ctas"]);
 const MAX_TITLES = 5;
@@ -52,6 +54,9 @@ export function TwoStageWorkspace({
   const [addError, setAddError] = useState<string | null>(null);
   const [active, setActive] = useState<string>(groups[0]?.id ?? "");
   const busy = useRef(false);
+  // 제목별 결과 [업로드 예약하기] (v0.9.48)
+  const [scheduleFor, setScheduleFor] = useState<GeneratedContent | null>(null);
+  const [scheduledIds, setScheduledIds] = useState<Record<string, string>>({});
   const stage2Outputs = outputs.filter((o) => !STAGE1_KEYS.has(o.key));
   const done = new Set(groups.map((g) => g.context.workflow?.selected?.title));
 
@@ -213,10 +218,22 @@ export function TwoStageWorkspace({
             onChange={setActive}
           />
           <div className="rounded-card border border-line bg-subtle/50 px-4 py-3 text-[13px]">
-            <p className="font-semibold text-fg">
-              <Check className="mr-1 inline size-4 text-success" />
-              {activeGroup.context.workflow?.selected?.title}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="min-w-0 font-semibold text-fg">
+                <Check className="mr-1 inline size-4 text-success" />
+                {activeGroup.context.workflow?.selected?.title}
+              </p>
+              <span className="flex shrink-0 items-center gap-2">
+                {scheduledIds[activeGroup.id] && (
+                  <Link href="/uploads" className="text-xs font-medium text-brand hover:underline">
+                    {scheduledIds[activeGroup.id]} · 업로드 관리 보기
+                  </Link>
+                )}
+                <Button size="sm" variant="primary" icon={CalendarPlus} onClick={() => setScheduleFor(activeGroup)} data-schedule-upload-group>
+                  이 제목 업로드 예약하기
+                </Button>
+              </span>
+            </div>
             <p className="mt-1 text-xs text-fg-muted">
               Hook · {activeGroup.context.workflow?.selected?.hook || "-"} &nbsp;/&nbsp; CTA · {activeGroup.context.workflow?.selected?.cta || "-"}
             </p>
@@ -231,6 +248,20 @@ export function TwoStageWorkspace({
               </div>
             )}
           </div>
+          {scheduleFor && (
+            <PublicationForm
+              open
+              onClose={() => setScheduleFor(null)}
+              editing={null}
+              presetContent={scheduleFor}
+              presetStatus="scheduled"
+              onSaved={(p) => {
+                const at = p.scheduledAt ?? p.publishedAt;
+                setScheduledIds((prev) => ({ ...prev, [scheduleFor.id]: `${p.status === "scheduled" ? "예약됨" : "등록됨"}${at ? ` · ${new Date(at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}` }));
+                setScheduleFor(null);
+              }}
+            />
+          )}
           <ResultPanel content={activeGroup} outputs={stage2Outputs} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
         </div>
       )}
