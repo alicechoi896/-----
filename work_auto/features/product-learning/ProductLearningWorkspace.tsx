@@ -310,6 +310,11 @@ export function ProductLearningWorkspace() {
               />
             </div>
           </div>
+          <ProductNameEditor
+            name={draft.analysis.basicInfo.name}
+            savedId={saved?.id ?? null}
+            onChange={(name) => setDraft((d) => (d ? { ...d, analysis: { ...d.analysis, basicInfo: { ...d.analysis.basicInfo, name } } } : d))}
+          />
           {extracted && (
             <div className="rounded-card border border-line bg-canvas px-5 py-3 shadow-card">
               <button type="button" className="text-[13px] font-medium text-fg-muted hover:text-fg" onClick={() => setShowExtracted((v) => !v)}>
@@ -367,5 +372,39 @@ function Pipeline({ stage }: { stage: number }) {
         );
       })}
     </ol>
+  );
+}
+
+/** 제품명 고치기 (상품 URL·이미지·텍스트 학습 모두). 저장 전에는 저장할 때 반영, 저장 뒤에는 [제품명 저장] */
+function ProductNameEditor({ name, savedId, onChange }: { name: string; savedId: string | null; onChange: (name: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function saveName() {
+    if (!savedId || !name.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.products.update(savedId, { name: name.trim() });
+      setNote("제품명을 저장했습니다.");
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="rounded-card border border-line bg-canvas px-5 py-4 shadow-card" data-product-name-editor>
+      <FormField label="제품명" htmlFor="draft-product-name" hint={savedId ? "고친 뒤 [제품명 저장]을 누르세요." : "쇼핑몰 상품명이 길면 줄여 쓰세요. [제품 라이브러리에 저장]할 때 이 이름으로 저장됩니다."}>
+        <div className="flex gap-2">
+          <Input id="draft-product-name" value={name} maxLength={120} onChange={(e) => onChange(e.target.value)} />
+          {savedId && (
+            <Button variant="secondary" loading={busy} disabled={!name.trim()} onClick={() => void saveName()}>
+              제품명 저장
+            </Button>
+          )}
+        </div>
+      </FormField>
+      {note && <p className="mt-1.5 text-xs text-fg-muted">{note}</p>}
+    </div>
   );
 }

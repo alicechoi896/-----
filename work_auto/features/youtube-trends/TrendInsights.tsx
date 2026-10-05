@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowUpRight, Hash, Sparkles } from "lucide-react";
+import { Hash, Sparkles } from "lucide-react";
 import { recommendKeywords } from "@/lib/domain/youtube";
 import type { YouTubeTopicSuggestion, YouTubeTrendItem } from "@/lib/types";
 import { api } from "@/lib/api-client";
-import { Button, CopyButton, LinkButton, Notice, SectionCard } from "@/components/ui";
+import { Button, CopyButton, Notice, SectionCard } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { FormatBadge } from "./VideoDetailDrawer";
-import { infoVideoHref } from "./trend-links";
+import { infoVideoHref, productVideoHref } from "./trend-links";
+import { MakeMenu } from "@/components/shared/MakeMenu";
 
 /**
  * 추천 키워드 (불러온 영상의 태그·제목에서 즉시 계산) + 추천 주제 (AI, 버튼을 눌렀을 때만).
@@ -110,9 +111,12 @@ export function TrendInsights({
                     <p className="mt-0.5 text-xs leading-relaxed text-fg-subtle">{t.angle}</p>
                     <p className="mt-0.5 text-xs text-fg-muted">{t.keywords.join(" · ")}</p>
                   </div>
-                  <LinkButton size="sm" variant="ghost" iconRight={ArrowUpRight} href={infoVideoHref({ topic: t.title, keywords: t.keywords })}>
-                    만들기
-                  </LinkButton>
+                  <MakeMenu
+                    items={[
+                      { label: "제품 홍보 영상 만들기", href: productVideoHref({ trendTitle: t.title, topic: t.title, keywords: t.keywords }) },
+                      { label: "정보성 영상 만들기", href: infoVideoHref({ trendTitle: t.title, topic: t.title, keywords: t.keywords }) },
+                    ]}
+                  />
                 </li>
               ))}
             </ul>

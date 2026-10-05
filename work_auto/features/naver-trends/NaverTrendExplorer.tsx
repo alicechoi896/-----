@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MakeMenu } from "@/components/shared/MakeMenu";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 import { useState } from "react";
 import { ArrowUpRight, CalendarRange, Info, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
@@ -231,7 +232,11 @@ function ClipView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverT
           topics={pg.risingTopics}
           onKeyword={onKeyword}
           description="클립 소재로 쓰기 좋은 주제입니다."
-          makeHref={(t) => `/naver-clip/info-content?${new URLSearchParams({ trendId: t.id, trendTitle: t.title, topic: t.title, category: insight.query.category ?? insight.query.profileScope?.mainCategory ?? t.category ?? "" }).toString()}`}
+          makeHref={(t) => `/naver-clip/info-content?${clipParams(t, insight)}`}
+          makeChoices={(t) => [
+            { label: "제품 홍보 클립 만들기", href: `/naver-clip/product-content?${clipParams(t, insight)}` },
+            { label: "정보성 클립 만들기", href: `/naver-clip/info-content?${clipParams(t, insight)}` },
+          ]}
           makeLabel="클립 만들기"
           more={<MoreButton show={pg.more.rising} loading={pg.loading === "rising"} onClick={() => void pg.loadMore("rising")} error={pg.error} />}
         />
@@ -381,12 +386,25 @@ function BlogView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverT
 
 /* ───────── 공용 조각 ───────── */
 
+/** 클립 생성 화면으로 넘길 값: 트렌드(표시 = 주제 제목)·주제·키워드·카테고리 */
+function clipParams(t: NaverRisingTopic, insight: NaverTrendInsight): string {
+  const keywords = (t.keywords.length ? t.keywords : [t.title]).slice(0, 6).join(", ");
+  return new URLSearchParams({
+    trendId: t.id,
+    trendTitle: t.title,
+    topic: t.title,
+    keywords,
+    category: insight.query.category ?? insight.query.profileScope?.mainCategory ?? t.category ?? "",
+  }).toString();
+}
+
 function RisingTopicsCard({
   topics,
   onKeyword,
   description,
   makeHref,
   makeLabel,
+  makeChoices,
   compact,
   more,
 }: {
@@ -395,6 +413,8 @@ function RisingTopicsCard({
   description: string;
   makeHref: (t: NaverRisingTopic) => string;
   makeLabel: string;
+  /** 있으면 [만들기]를 눌러 고르는 메뉴 (예: 제품 홍보 클립 / 정보성 클립) */
+  makeChoices?: (t: NaverRisingTopic) => { label: string; href: string }[];
   compact?: boolean;
   /** 목록 아래 [10개 더 보기] */
   more?: React.ReactNode;
@@ -436,10 +456,14 @@ function RisingTopicsCard({
                 </div>
                 <span className="flex shrink-0 items-center gap-1">
                   <SaveTitlesToFormat titles={[{ title: t.title, views: null }]} source="NAVER 트렌드 급상승 주제" buttonLabel="대본 포맷에 담기" variant="ghost" iconOnly />
-                  <Link href={makeHref(t)} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand">
-                    {makeLabel}
-                    <ArrowUpRight className="size-3.5" />
-                  </Link>
+                  {makeChoices ? (
+                    <MakeMenu label={makeLabel} items={makeChoices(t)} />
+                  ) : (
+                    <Link href={makeHref(t)} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-fg-subtle hover:text-brand">
+                      {makeLabel}
+                      <ArrowUpRight className="size-3.5" />
+                    </Link>
+                  )}
                 </span>
               </li>
             ))}

@@ -74,6 +74,8 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
   const twoStage = supportsPrecise(config.outputs);
   const [groups, setGroups] = useState<GeneratedContent[]>([]);
   const busyRef = useRef(false);
+  // 트렌드 찾기에서 넘어온 트렌드 제목 (참고 트렌드 칸 표시용, [빼기]로 지움)
+  const [trendNote, setTrendNote] = useState(initialValues?.trendTitle || (initialValues?.trendId ? initialValues?.topic || "" : ""));
   const missing = config.fields.filter((f) => f.required && !values[f.name]?.trim());
   const showHonesty = Boolean(config.experienceField);
 
@@ -141,14 +143,21 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               if (missing.length === 0) generate();
             }}
           >
-            {config.fields.filter((f) => !(f.type === "hidden" && !values[f.name]) && !(f.showIfInitial && !initialValues?.[f.name])).map((field) =>
+            {config.fields.filter((f) => !(f.type === "hidden" && !values[f.name] && !(f.source && trendNote)) && !(f.showIfInitial && !initialValues?.[f.name])).map((field) =>
               field.type === "hidden" ? (
                 // 트렌드 찾기에서 넘어온 트렌드: 고르는 칸 없이 영상(주제) 제목만 보여 준다
                 <div key={field.name} className="col-span-2" data-carried-trend>
                   <p className="mb-1.5 text-[13px] font-medium text-fg">{field.label}</p>
                   <div className="flex items-center justify-between gap-2 rounded-control border border-brand-line bg-brand-soft/50 px-3 py-2 text-[13px] text-fg">
-                    <span className="min-w-0 truncate" title={initialValues?.trendTitle}>{initialValues?.trendTitle || initialValues?.topic || "트렌드 찾기에서 고른 트렌드"}</span>
-                    <button type="button" onClick={() => setValues((prev) => ({ ...prev, [field.name]: "" }))} className="shrink-0 text-xs text-fg-subtle hover:text-danger">
+                    <span className="min-w-0 truncate" title={trendNote || undefined}>{trendNote || "트렌드 찾기에서 고른 트렌드"}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValues((prev) => ({ ...prev, [field.name]: "" }));
+                        setTrendNote("");
+                      }}
+                      className="shrink-0 text-xs text-fg-subtle hover:text-danger"
+                    >
                       빼기
                     </button>
                   </div>

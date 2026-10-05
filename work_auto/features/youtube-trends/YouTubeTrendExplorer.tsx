@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, ChevronDown, Flame, Info, PanelRightOpen, Star, TrendingUp } from "lucide-react";
+import { ChevronDown, Flame, Info, PanelRightOpen, Star, TrendingUp } from "lucide-react";
 import { trendScoreLevel } from "@/lib/domain/trend-score";
 import { countryLabel, dateRange, defaultYouTubeQuery, refreshRecentRange } from "@/lib/domain/youtube";
 import type { ContentProfile, SavedFilter, SavedTrend, YouTubeTrendItem } from "@/lib/types";
@@ -16,7 +15,8 @@ import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils";
 import { TrendFilterPanel, type TrendDraft } from "./TrendFilterPanel";
 import { TrendInsights } from "./TrendInsights";
 import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
-import { infoVideoHref, trendPrefill } from "./trend-links";
+import { infoVideoHref, productVideoHref, trendPrefill } from "./trend-links";
+import { MakeMenu } from "@/components/shared/MakeMenu";
 import { isOutlierHit, type OutlierScore } from "@/lib/domain/outlier";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 
@@ -364,14 +364,14 @@ export function YouTubeTrendExplorer() {
             <PanelRightOpen className="size-4" />
           </button>
           <SaveTitlesToFormat titles={[{ title: r.title, views: r.views }]} source="YouTube 트렌드" buttonLabel="제목 대본 포맷에 담기" variant="ghost" iconOnly />
-          <Link
-            href={infoVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis))}
-            aria-label="이 트렌드로 정보성 영상 만들기"
-            title="이 트렌드로 정보성 영상 만들기"
-            className="inline-flex size-8 items-center justify-center rounded-control text-fg-subtle hover:bg-muted hover:text-brand"
-          >
-            <ArrowUpRight className="size-4" />
-          </Link>
+          <MakeMenu
+            iconOnly
+            label="이 트렌드로 영상 만들기"
+            items={[
+              { label: "제품 홍보 영상 만들기", href: productVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis)) },
+              { label: "정보성 영상 만들기", href: infoVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis)) },
+            ]}
+          />
         </div>
       ),
     },

@@ -285,7 +285,7 @@ export const SHOTS = [
     marks: {
       1: (p) => btn(p, "조회").first(),
       2: (p) => p.locator("h2", { hasText: "급상승 주제" }).first().locator("xpath=.."),
-      3: (p) => p.locator("main a", { hasText: "클립 만들기" }).first(),
+      3: (p) => p.locator("[data-make-menu] button", { hasText: "클립 만들기" }).first(),
     },
   },
   {
