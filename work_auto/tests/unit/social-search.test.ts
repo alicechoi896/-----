@@ -163,6 +163,35 @@ describe("비용 정책: 검색 1번 = TikHub 1회", () => {
     await expect(socialSearchService.search({ keyword: "x", platform: "douyin" })).rejects.toMatchObject({ code: "TIKHUB_PAYMENT", status: 402 });
   });
 
+  it("CASE 2·4 동시에 같은 요청이 여러 번 와도 (더블클릭) AI 1회·TikHub 1회", async () => {
+    xhsReturns(6);
+    douyinReturns(5);
+    const slowAi = ai.generateStructured.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      return { data: { primary_zh: "无线吸尘器" }, provider: "mock", model: "m" };
+    });
+    void slowAi;
+    const rs = await Promise.all([1, 2, 3].map((i) => socialSearchService.search({ keyword: "무선청소기", platform: "xiaohongshu", clientRequestId: `search_t${i}` })));
+    expect(ai.generateStructured).toHaveBeenCalledTimes(1);
+    expect(xhs.searchVideos).toHaveBeenCalledTimes(1);
+    expect(rs.map((r) => r.calls).sort()).toEqual([0, 0, 1]);
+    const ds = await Promise.all([1, 2].map(() => socialSearchService.search({ keyword: "无线吸尘器", platform: "douyin" })));
+    expect(douyin.searchVideos).toHaveBeenCalledTimes(1);
+    expect(ds.map((r) => r.calls).sort()).toEqual([0, 1]);
+  });
+
+  it("업체를 부를 때만 [SocialSearch] 로그 (requestId·플랫폼·검색어, 키 없음)", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    douyinReturns(2);
+    await socialSearchService.search({ keyword: "无线吸尘器", platform: "douyin", clientRequestId: "search_abc" });
+    await socialSearchService.search({ keyword: "无线吸尘器", platform: "douyin", clientRequestId: "search_def" }); // 기억 → 로그 없음
+    const lines = log.mock.calls.map((c) => c.join(" ")).filter((l) => l.includes("tikhub-search"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("search_abc");
+    expect(lines[0]).not.toMatch(/Bearer|apiKey|authorization/i);
+    log.mockRestore();
+  });
+
   it("⑥ 도우인: 검색 응답의 재생 주소를 기억 → 바로 다운로드해도 Resolver 0회, 처음 보는 링크만 1회", async () => {
     douyinReturns(2);
     const r = await socialSearchService.search({ keyword: "x", platform: "douyin" });

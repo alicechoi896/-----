@@ -2,6 +2,14 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.35] - 2026-10-05: TikHub 검색 호출 제어 — [검색] 1번 = TikHub 정확히 1회
+
+### 변경
+- 검색·더 보기 잠금을 ref 로 (빠른 더블클릭·검색 중 Enter 가 두 번째 요청을 보내지 못함), 검색 중 버튼 "검색 중…"
+- 서버: 같은 사용자·같은 조건 요청이 동시에 들어오면 TikHub·AI 변환을 한 번만 부르고 결과를 나눠 씀 (in-flight 공유, DB 없음)
+- clientRequestId: [검색]·[더 보기] 1번마다 id → 서버 로그 `[SocialSearch] tikhub-search|ai-translate {requestId, platform, query, page}` (키·헤더·응답 본문 없음, 업체를 실제로 부를 때만)
+- 확인: 검색은 버튼·Enter handler 에서만 (useEffect·조건 변경·번역 완료·재생·창 포커스로는 호출 없음), 자동 retry·refetch 없음 (react-query 미사용)
+
 ## [0.9.34] - 2026-10-05: 품질 2단계 — 아웃라이어 점수, 프롬프트 버전별 성과표, 상위 3·하위 3 성과 비교 학습
 
 ### 추가

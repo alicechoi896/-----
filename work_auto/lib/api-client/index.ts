@@ -382,6 +382,7 @@ export const api = {
       sort: SocialSortOption;
       period: SocialPeriodOption;
       next?: SocialContinue | null;
+      clientRequestId?: string;
     }) => request<SocialSearchResultDto>("/api/videos/social-search", { method: "POST", body: json(body) }),
     /** 검색 결과 중국어 제목 → 한국어 (한 페이지를 묶어 AI 1회). 저장하지 않는다 */
     translateTitles: (items: { id: string; title: string }[]) =>

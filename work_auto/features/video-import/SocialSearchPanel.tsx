@@ -98,6 +98,9 @@ const titleCache = sessionMap<{ ko: string }>("social-title-cache-v1", null, 500
 const mediaCache = sessionMap<{ url: string }>("social-media-cache-v1", MEDIA_TTL_MS, 50);
 const titleKey = (it: SocialVideoItem) => `${keyOf(it)}:${it.title}`;
 
+/** [검색]·[더 보기] 1번마다 하나 (서버 로그에서 '요청 1번 → TikHub 몇 번'을 확인) */
+const newRequestId = () => `search_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
 /** 미리보기 상태 (동시에 한 영상만) */
 type Preview = { key: string; status: "loading" | "ready" | "error"; url?: string; message?: string };
 
@@ -135,6 +138,8 @@ export function SocialSearchPanel({
   const [koTitles, setKoTitles] = useState<Record<string, string>>({});
   const [translating, setTranslating] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<Preview | null>(null);
+  // 검색·더 보기 잠금: state 는 다음 렌더에야 바뀌어서, 빠른 더블클릭·검색 중 Enter 를 ref 로 바로 막는다
+  const busyRef = useRef(false);
 
   const sorts = platform === "douyin" ? SORTS_ALL.slice(0, 3) : SORTS_ALL;
   const cacheKey = (k: string) => JSON.stringify([platform, k, autoTranslate, sort, period]);
@@ -176,9 +181,10 @@ export function SocialSearchPanel({
       .finally(() => setTranslating((prev) => new Set([...prev].filter((k) => !ids.includes(k)))));
   }
 
+  /** [검색] 클릭·Enter 에서만 실행 (useEffect·조건 변경으로는 부르지 않는다). 1번 = TikHub 최대 1회 */
   async function search() {
     const k = keyword.trim();
-    if (!k) return;
+    if (!k || busyRef.current) return;
     setError(null);
     setPreview(null);
     const key = cacheKey(k);
@@ -190,28 +196,31 @@ export function SocialSearchPanel({
       translateInBackground(hit.items);
       return;
     }
+    busyRef.current = true;
     setSearching("search");
     try {
-      const r = await api.videos.socialSearch({ keyword: k, platform, autoTranslate, sort, period });
+      const r = await api.videos.socialSearch({ keyword: k, platform, autoTranslate, sort, period, clientRequestId: newRequestId() });
       const entry: CachedSearch = { at: Date.now(), translation: r.translation, translationError: r.translationError, items: r.items, next: r.next, filteredByDate: r.filteredByDate };
       searchCache.set(key, entry);
       setView({ ...entry, key, platform, fromCache: false });
       setSelected(new Map());
       translateInBackground(r.items);
     } catch (e) {
-      fail(e);
+      fail(e); // 자동 재시도 없음 — 사용자가 다시 누를 때만
     } finally {
+      busyRef.current = false;
       setSearching(null);
     }
   }
 
   /** [더 보기]: 다음 페이지 1회 (검색어 변환 다시 안 함) */
   async function more() {
-    if (!view?.next) return;
+    if (!view?.next || busyRef.current) return;
+    busyRef.current = true;
     setSearching("more");
     setError(null);
     try {
-      const r = await api.videos.socialSearch({ keyword: view.translation.original, platform: view.platform, autoTranslate: false, sort, period, next: view.next });
+      const r = await api.videos.socialSearch({ keyword: view.translation.original, platform: view.platform, autoTranslate: false, sort, period, next: view.next, clientRequestId: newRequestId() });
       const seen = new Set(view.items.map(keyOf));
       const added = r.items.filter((x) => !seen.has(keyOf(x)));
       const entry: CachedSearch = { ...view, items: [...view.items, ...added], next: r.next };
@@ -221,6 +230,7 @@ export function SocialSearchPanel({
     } catch (e) {
       fail(e);
     } finally {
+      busyRef.current = false;
       setSearching(null);
     }
   }
@@ -328,7 +338,7 @@ export function SocialSearchPanel({
         </FormField>
         <p className="pb-2 text-xs text-fg-subtle">콘텐츠 유형: 영상 · 검색 1번 = TikHub 1회</p>
         <Button className="ml-auto" variant="primary" icon={Search} loading={searching === "search"} disabled={!keyword.trim() || Boolean(searching)} onClick={() => void search()}>
-          {PLATFORM_NAME[platform]} 검색
+          {searching === "search" ? "검색 중…" : `${PLATFORM_NAME[platform]} 검색`}
         </Button>
       </div>
 

@@ -59,7 +59,7 @@ export function xhsSearchServiceCacheClear(): void {
 }
 
 export const xhsSearchService = {
-  async search(input: { keyword?: unknown; sort?: unknown; period?: unknown; cursor?: Partial<XhsCursor> | null }): Promise<XhsSearchResult> {
+  async search(input: { keyword?: unknown; sort?: unknown; period?: unknown; cursor?: Partial<XhsCursor> | null; onUpstream?: () => void }): Promise<XhsSearchResult> {
     const keyword = String(input.keyword ?? "").trim().slice(0, 60);
     if (!keyword) throw new AppError("VALIDATION", "검색어를 입력해 주세요.");
     const sort = XHS_SORTS.includes(input.sort as XhsSort) ? (input.sort as XhsSort) : "general";
@@ -81,6 +81,7 @@ export const xhsSearchService = {
     let cursor: XhsCursor | null = start;
     let calls = 0;
     while (cursor && calls < XHS_SEARCH_CONFIG.maxPages && notes.length < XHS_SEARCH_CONFIG.targetResults) {
+      input.onUpstream?.();
       const page: XhsSearchPage = await provider
         .searchVideos({ keyword, sort, timeFilter: timeFilterOf(period), page: cursor.page, searchId: cursor.searchId, sessionId: cursor.sessionId })
         .catch(toAppError);
