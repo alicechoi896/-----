@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { BookmarkPlus, Brain, CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, ListPlus, Pencil, RefreshCw, Star, ThumbsDown, ThumbsUp, Undo2, X } from "lucide-react";
 import { APPENDABLE_KEYS, candidateKey } from "@/lib/generators/append";
@@ -9,7 +9,7 @@ import { SKELETON_CHECKS, scriptMetaKey, type PreciseQuality } from "@/lib/gener
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Badge, Tag } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SaveButton } from "@/components/ui/SaveButton";
@@ -230,6 +230,17 @@ function OutputBlock({
     }
   }
   const draftValue = () => (isCards ? splitCards(draft) : isList ? draft.split("\n").map((l) => l.trim()).filter(Boolean) : draft);
+  // 목록·대본은 하나씩 고친다 (전체를 한 칸에서 고치지 않음)
+  const perItem = isCards || section.format === "list";
+  /** 항목 하나 고치기: 빈 값이면 그 항목을 뺀다 */
+  async function saveItem(index: number, text: string) {
+    const next = list.slice();
+    if (text.trim()) next[index] = isCards ? text.replace(/\n{3,}/g, "\n\n").trim() : text.replace(/\s*\n\s*/g, " ").trim();
+    else next.splice(index, 1);
+    if (!onSaveEdit) return;
+    await onSaveEdit(next);
+  }
+  const itemEdit = onSaveEdit && perItem ? saveItem : undefined;
 
   return (
     <section className={cardClass}>
@@ -240,7 +251,12 @@ function OutputBlock({
           {edit && <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand">직접 수정함 · {Math.round(edit.ratio * 100)}% 바뀜</span>}
         </h3>
         <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
-          {onSaveEdit && !editing && (
+          {onSaveEdit && perItem && edit && (
+            <Button size="sm" variant="ghost" icon={Undo2} disabled={busy} onClick={() => void save(Array.isArray(original) ? original : [String(original ?? "")])} title="직접 고친 것을 모두 원본으로 되돌립니다">
+              원본으로
+            </Button>
+          )}
+          {onSaveEdit && !editing && !perItem && (
             <Button size="sm" variant="ghost" icon={Pencil} disabled={busy} onClick={startEdit} title="직접 고치면 학습에 반영됩니다 (원본은 남습니다)">
               직접 수정
             </Button>
@@ -305,7 +321,7 @@ function OutputBlock({
         ) : list.length === 0 ? (
           <p className="text-sm text-fg-subtle">결과 없음</p>
         ) : isCards ? (
-          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} meta={section.key === "script" ? quality?.scripts : undefined} />
+          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} meta={section.key === "script" ? quality?.scripts : undefined} onEditItem={itemEdit} />
         ) : section.format === "tags" ? (
           <div className="flex flex-wrap gap-1.5">
             {list.map((t) => (
@@ -319,7 +335,8 @@ function OutputBlock({
         ) : section.format === "list" ? (
           <ol className="space-y-2">
             {list.map((item, i) => (
-              <li key={i} className={cn("group flex items-start gap-3 text-sm leading-relaxed text-fg", picks?.includes(item) && "font-medium text-brand")}>
+              <EditableItem key={`${i}:${item}`} text={item} onSave={itemEdit ? (t) => itemEdit(i, t) : undefined}>
+              <li className={cn("group flex items-start gap-3 text-sm leading-relaxed text-fg", picks?.includes(item) && "font-medium text-brand")}>
                 {onTogglePick ? (
                   <input
                     type="checkbox"
@@ -334,8 +351,10 @@ function OutputBlock({
                   {added?.has(item) && <span className="mr-1.5 rounded bg-brand-soft px-1.5 py-px text-[10.5px] font-semibold text-brand">새로</span>}
                   {item}
                 </span>
+                <EditTrigger />
                 <CopyButton value={item} iconOnly className="opacity-0 group-hover:opacity-100 focus:opacity-100" />
               </li>
+              </EditableItem>
             ))}
           </ol>
         ) : section.format === "longtext" && photos.length > 0 && section.key === "body" ? (
@@ -426,6 +445,7 @@ function ScriptCards({
   onTogglePick,
   added,
   meta,
+  onEditItem,
 }: {
   items: string[];
   picks?: string[];
@@ -433,7 +453,26 @@ function ScriptCards({
   added?: Set<string>;
   /** 정밀 생성: 대본별 앵글·뼈대 체크·검토 메모 (대본 내용으로 맞춰 찾는다) */
   meta?: PreciseQuality["scripts"];
+  /** 대본 하나만 직접 수정 */
+  onEditItem?: (index: number, text: string) => Promise<void>;
 }) {
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  async function saveCard(i: number) {
+    if (!onEditItem) return;
+    setSaving(true);
+    setEditError(null);
+    try {
+      await onEditItem(i, draft);
+      setEditIdx(null);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
   const metaOf = (text: string) => meta?.find((m) => m.key === scriptMetaKey(text));
   const scroller = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
@@ -473,7 +512,21 @@ function ScriptCards({
                   </span>
                   {added?.has(text) && <span className="ml-1.5 rounded bg-brand-soft px-1.5 py-px text-[10.5px] font-semibold text-brand">새로</span>}
                 </span>
-                <CopyButton value={text} iconOnly />
+                <span className="flex items-center">
+                  {onEditItem && editIdx !== i && (
+                    <IconButton
+                      icon={Pencil}
+                      size="sm"
+                      label={`대본 ${i + 1}만 직접 수정`}
+                      onClick={() => {
+                        setEditIdx(i);
+                        setDraft(text);
+                        setEditError(null);
+                      }}
+                    />
+                  )}
+                  <CopyButton value={text} iconOnly />
+                </span>
               </header>
               {m && (
                 <div className="space-y-1.5 border-b border-line px-3.5 py-2" data-script-meta>
@@ -499,6 +552,20 @@ function ScriptCards({
                   </div>}
                 </div>
               )}
+              {editIdx === i ? (
+                <div className="space-y-2 bg-subtle/60 p-3" data-card-editor>
+                  <Textarea rows={14} value={draft} onChange={(e) => setDraft(e.target.value)} />
+                  {editError && <p className="text-xs text-danger">{editError}</p>}
+                  <div className="flex justify-end gap-1.5">
+                    <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEditIdx(null)}>
+                      취소
+                    </Button>
+                    <Button size="sm" variant="primary" icon={Check} loading={saving} onClick={() => void saveCard(i)}>
+                      저장
+                    </Button>
+                  </div>
+                </div>
+              ) : (
               <div className="aspect-[4/5] overflow-y-auto bg-subtle/60 px-4 py-4">
                 {lines.map((l, j) => (
                   <p key={j} className={cn("text-[15px] leading-[1.75] text-fg", j === 0 && "font-semibold text-brand")}>
@@ -506,6 +573,7 @@ function ScriptCards({
                   </p>
                 ))}
               </div>
+              )}
               {m?.review && (
                 <p className="border-t border-line bg-canvas px-3.5 py-2 text-[12px] leading-relaxed text-fg-muted">
                   <span className="font-semibold text-fg">검토 메모</span> {m.review}
@@ -689,5 +757,47 @@ function FeedbackBar({
       )}
       {rating && <p className="mt-3 text-xs text-success">피드백이 저장되었습니다. AI 학습 관리 &gt; 피드백에서 확인할 수 있습니다.</p>}
     </div>
+  );
+}
+
+/** 목록 항목 하나 직접 수정: 연필을 누르면 그 줄만 입력칸이 된다 */
+const EditCtx = createContext<(() => void) | null>(null);
+function EditTrigger() {
+  const start = useContext(EditCtx);
+  if (!start) return null;
+  return <IconButton icon={Pencil} size="sm" label="이 줄만 직접 수정" onClick={start} className="opacity-0 group-hover:opacity-100 focus:opacity-100" />;
+}
+function EditableItem({ text, onSave, children }: { text: string; onSave?: (text: string) => Promise<void>; children: ReactNode }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!editing || !onSave) return <EditCtx.Provider value={onSave ? () => (setDraft(text), setEditing(true)) : null}>{children}</EditCtx.Provider>;
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave!(draft);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <li className="space-y-1.5 rounded-control bg-subtle/60 p-2" data-item-editor>
+      <Textarea rows={2} value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+      {error && <p className="text-xs text-danger">{error}</p>}
+      <div className="flex justify-end gap-1.5">
+        <span className="mr-auto self-center text-[11px] text-fg-subtle">비우고 저장하면 이 줄을 뺍니다</span>
+        <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEditing(false)}>
+          취소
+        </Button>
+        <Button size="sm" variant="primary" icon={Check} loading={saving} onClick={() => void save()}>
+          저장
+        </Button>
+      </div>
+    </li>
   );
 }

@@ -6,7 +6,7 @@ import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
 
 /** 한 번에 만드는 예시 수 */
-export const TYPE_EXAMPLE_COUNT = 10;
+export const TYPE_EXAMPLE_COUNT = 30;
 
 const KIND_GUIDE: Record<StyleTypeKind, string> = {
   hooks: "Hook: 영상 첫 3초에 말할 문장 (블로그에서는 도입 문장으로 재해석해 쓴다)",
@@ -55,7 +55,7 @@ export const styleTypeExamples = {
         properties: { items: { type: "array", items: { type: "string" }, description: `${STYLE_TYPE_KIND_LABEL[kind]} 예시 ${TYPE_EXAMPLE_COUNT}개` } },
       },
       variables: { kind, types },
-      maxTokens: 1500,
+      maxTokens: 3500,
     });
 
     const seen = new Set(existing.map(styleItemKey));

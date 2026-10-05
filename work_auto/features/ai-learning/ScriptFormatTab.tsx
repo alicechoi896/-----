@@ -5,7 +5,7 @@ import { FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucid
 import type { ChannelId, ScriptExample, ScriptFormat, ScriptFormatInput, ScriptFormatType } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { SCRIPT_FORMAT_LIMITS, SCRIPT_FORMAT_TYPES, formatViews, parseScriptFile, scriptKey } from "@/lib/script-format";
+import { SCRIPT_FORMAT_LIMITS, SCRIPT_FORMAT_TYPES, parseScriptFile, scriptKey } from "@/lib/script-format";
 import { Badge, Button, Checkbox, EmptyState, ErrorState, FormField, IconButton, Input, LoadingState, Notice, SectionCard, SegmentedControl, Textarea, cardClass } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { STYLE_LIMITS } from "@/lib/style-limits";
@@ -240,7 +240,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
     set("examples", [...kept, ...form.examples]);
     setNote({
       tone: kept.length ? "info" : "warning",
-      text: `대본 ${found}개를 찾아 ${kept.length}개를 추가했습니다${dup ? ` · 중복 ${dup}개 제외` : ""}${added.length > kept.length ? ` · ${SCRIPT_FORMAT_LIMITS.examples}개 한도로 ${added.length - kept.length}개 제외` : ""}. 제목·조회수·본문을 확인해 주세요.`,
+      text: `대본 ${found}개를 찾아 ${kept.length}개를 추가했습니다${dup ? ` · 중복 ${dup}개 제외` : ""}${added.length > kept.length ? ` · ${SCRIPT_FORMAT_LIMITS.examples}개 한도로 ${added.length - kept.length}개 제외` : ""}. 제목·본문을 확인해 주세요.`,
     });
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -352,7 +352,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           </div>
         </div>
         <p className="mt-1 text-xs text-fg-subtle">
-          한 파일에 여러 대본이 있어도 됩니다. 구분선(---), 빈 줄 두 줄, &lsquo;제목 :&rsquo;·&lsquo;1.8만회&rsquo; 같은 줄을 기준으로 나누고 제목·조회수를 따로 읽습니다. 파일은 서버에 올리지 않습니다.
+          한 파일에 여러 대본이 있어도 됩니다. 구분선(---), 빈 줄 두 줄, &lsquo;제목 :&rsquo;·&lsquo;1.8만회&rsquo; 같은 줄을 기준으로 나누고 제목을 따로 읽습니다. 파일은 서버에 올리지 않습니다.
         </p>
         {note && (
           <Notice tone={note.tone} className="mt-2">
@@ -365,14 +365,6 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
               <div className="flex items-center gap-2">
                 <span className="tabular w-5 shrink-0 text-right text-xs text-fg-subtle">{i + 1}</span>
                 <Input className="h-9 flex-1" placeholder="영상 제목 (선택)" value={ex.title} maxLength={SCRIPT_FORMAT_LIMITS.titleChars} onChange={(e) => setExample(i, { title: e.target.value })} />
-                <Input
-                  className="h-9 w-28"
-                  inputMode="numeric"
-                  placeholder="조회수"
-                  title={ex.views != null ? formatViews(ex.views) : "조회수 (선택) — 높은 대본을 먼저 참고합니다"}
-                  value={ex.views ?? ""}
-                  onChange={(e) => setExample(i, { views: e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")) : null })}
-                />
                 <IconButton icon={X} label="이 대본 빼기" size="sm" onClick={() => set("examples", form.examples.filter((_, j) => j !== i))} />
               </div>
               <Textarea
@@ -407,7 +399,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           </Button>
         </div>
         <p className="mt-1 text-xs text-fg-subtle">
-          생성할 때 이 가이드라인을 항상 전부 보내고, 조회수가 높은 참고 대본 2개를 구조 참고로 함께 보냅니다. 직접 고쳐도 됩니다.
+          생성할 때 이 가이드라인을 항상 전부 보내고, 참고 대본 2개를 구조 참고로 함께 보냅니다. 직접 고쳐도 됩니다.
         </p>
         <Textarea
           data-guideline

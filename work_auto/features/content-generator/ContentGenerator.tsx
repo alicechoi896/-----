@@ -17,6 +17,7 @@ import { cn, formatRelative } from "@/lib/utils";
 import { DynamicField, type FormValues } from "./DynamicField";
 import { PhotoField, type PhotoItem } from "./PhotoField";
 import { TwoStageWorkspace } from "./TwoStageWorkspace";
+import { contentFieldFromYoutubeCategory, normalizeContentField } from "@/lib/domain/content-fields";
 
 /**
  * ★ 범용 콘텐츠 생성기 — 생성형 기능 7개가 모두 이 컴포넌트를 쓴다.
@@ -140,7 +141,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               if (missing.length === 0) generate();
             }}
           >
-            {config.fields.map((field) =>
+            {config.fields.filter((f) => f.type !== "hidden" && !(f.showIfInitial && !initialValues?.[f.name])).map((field) =>
               field.type === "images" ? (
                 <PhotoField
                   key={field.name}
@@ -265,6 +266,12 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
 function defaultValues(config: GeneratorConfig, initial?: FormValues): FormValues {
   const values: FormValues = {};
   for (const f of config.fields) values[f.name] = initial?.[f.name] ?? f.defaultValue ?? "";
+  // 트렌드 찾기에서 넘어온 카테고리(YouTube 카테고리 이름·프로필 분야)를 생성 화면 카테고리로 맞춘다
+  const cat = config.fields.find((f) => f.name === "category");
+  if (cat && initial?.category) {
+    const v = cat.options?.some((o) => o.value === initial.category) ? initial.category : (contentFieldFromYoutubeCategory(initial.category) ?? normalizeContentField(initial.category));
+    values.category = cat.options?.some((o) => o.value === v) ? v : "";
+  }
   return values;
 }
 
@@ -277,6 +284,10 @@ function toInput(config: GeneratorConfig, values: FormValues, photos: PhotoItem[
       continue;
     }
     const v = (values[f.name] ?? "").trim();
+    if (f.type === "multi") {
+      input[f.name] = v.split(",").map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
     input[f.name] =
       f.type === "tags"
         ? v

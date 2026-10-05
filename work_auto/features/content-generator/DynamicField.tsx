@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import type { FieldDef } from "@/lib/generators/types";
 import { FormField } from "@/components/ui/FormField";
@@ -51,6 +52,8 @@ export function DynamicField({
           placeholder={field.placeholder ?? "선택"}
           onChange={(e) => onChange(e.target.value)}
         />
+      ) : field.type === "multi" ? (
+        <MultiChips options={field.options ?? []} value={value} onChange={onChange} />
       ) : field.type === "segmented" ? (
         <SegmentedControl
           className="flex-wrap"
@@ -60,6 +63,36 @@ export function DynamicField({
         />
       ) : null}
     </FormField>
+  );
+}
+
+/** 여러 개 고르기 (값은 쉼표로 이은 문자열, 최소 1개) */
+function MultiChips({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) {
+  const picked = value.split(",").map((s) => s.trim()).filter(Boolean);
+  return (
+    <div className="flex flex-wrap gap-1.5" data-multi-chips>
+      {options.map((o) => {
+        const on = picked.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => {
+              const next = on ? picked.filter((p) => p !== o.value) : [...picked, o.value];
+              if (next.length) onChange(next.join(","));
+            }}
+            className={cn(
+              "h-8 rounded-full px-3 text-[13px] font-medium ring-1 transition-colors ring-inset",
+              on ? "bg-brand-soft text-brand ring-brand-line" : "text-fg-muted ring-line hover:bg-subtle",
+            )}
+          >
+            {on && "✓ "}
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -104,6 +137,14 @@ function RemoteSelectInner({
 }) {
   const { data, loading, error } = useRemoteOptions(field.source!, field.sourceParam);
   const loaded = data ?? [];
+  // 스타일: 기본 스타일(★)을 처음에 골라 둔다 (무엇이 적용되는지 보이게, v0.9.41)
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current || field.source !== "styles" || value || !data?.length) return;
+    autoPicked.current = true;
+    const def = data.find((o) => o.label.startsWith("★ "));
+    if (def) onChange(def.value);
+  }, [data, field.source, value, onChange]);
   // 고를 것이 1개 이하면 묻지 않는다 (자동 적용)
   if (field.hideIfSingle && !loading && loaded.length <= 1 && !value) return null;
   // 다른 화면에서 넘어온 값(예: 트렌드 화면의 영상)이 목록에 없어도 선택된 상태로 보여준다

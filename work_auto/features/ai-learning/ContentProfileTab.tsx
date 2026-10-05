@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { Compass, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
-import { YOUTUBE_COUNTRIES, countryLabel } from "@/lib/domain/youtube";
+import { YOUTUBE_COUNTRIES, categoryLabel, countryLabel } from "@/lib/domain/youtube";
+import { CONTENT_FIELDS, normalizeContentField, recommendedYoutubeCategory } from "@/lib/domain/content-fields";
+
+/** 콘텐츠 분야 → YouTube 추천 카테고리 이름 (기타 = 전체) */
+const youtubeCategoryText = (main: string) => {
+  const id = recommendedYoutubeCategory(main);
+  return id ? categoryLabel(id) : "전체 카테고리";
+};
 import type { ContentProfile, ContentProfileInput } from "@/lib/types";
 import { EXAMPLE_PROFILE } from "@/lib/types/profile";
 import { api } from "@/lib/api-client";
@@ -176,10 +183,11 @@ function ProfileCard({
       </div>
 
       <dl className="mt-4 space-y-2.5 text-[13px]">
-        <Row label="대표 카테고리">
-          <span className="font-medium text-fg">{p.mainCategory}</span>
+        <Row label="콘텐츠 분야">
+          <span className="font-medium text-fg">{normalizeContentField(p.mainCategory)}</span>
+          <span className="ml-1.5 text-xs text-fg-subtle">→ YouTube {youtubeCategoryText(p.mainCategory)}</span>
         </Row>
-        <Row label="세부 관심분야">
+        <Row label="세부 대표 키워드">
           <Chips items={p.subCategories} />
         </Row>
         <Row label="기본 키워드">
@@ -297,8 +305,19 @@ function ProfileForm({ editing, onCancel, onSaved }: { editing: Editing; onCance
         <FormField label="프로필 이름" htmlFor="pf-name" required>
           <Input id="pf-name" placeholder="예: 가전 콘텐츠" value={form.name} onChange={(e) => set("name", e.target.value)} />
         </FormField>
-        <FormField label="대표 카테고리" htmlFor="pf-main" required>
-          <Input id="pf-main" placeholder="예: 가전" value={form.mainCategory} onChange={(e) => set("mainCategory", e.target.value)} />
+        <FormField
+          label="콘텐츠 분야"
+          htmlFor="pf-main"
+          required
+          hint={<span data-category-preview>YouTube 트렌드 추천 카테고리: <b className="font-medium text-fg-muted">{youtubeCategoryText(form.mainCategory)}</b> (트렌드 화면에서 바꿀 수 있습니다)</span>}
+        >
+          <Select
+            id="pf-main"
+            value={form.mainCategory ? normalizeContentField(form.mainCategory) : ""}
+            options={CONTENT_FIELDS.map((c) => ({ value: c, label: c }))}
+            placeholder="분야 선택"
+            onChange={(e) => set("mainCategory", e.target.value)}
+          />
         </FormField>
         <FormField label="설명" htmlFor="pf-desc" className="md:col-span-2">
           <Input id="pf-desc" placeholder="예: 주방·생활·계절 가전 추천과 살림 노하우" value={form.description} onChange={(e) => set("description", e.target.value)} />
@@ -306,8 +325,20 @@ function ProfileForm({ editing, onCancel, onSaved }: { editing: Editing; onCance
         <FormField label="타깃 시청자" htmlFor="pf-audience" optional hint="누구에게 말하는지 한 줄로. 모든 생성에 넣어 Hook·장면이 그 사람 상황에 맞게 바뀝니다." className="md:col-span-2">
           <Input id="pf-audience" maxLength={200} placeholder="예: 30대 자취 직장인, 퇴근 후 청소가 귀찮음" value={form.audience ?? ""} onChange={(e) => set("audience", e.target.value)} />
         </FormField>
-        <ChipInput label="세부 관심분야" placeholder="예: 주방가전 (Enter 로 추가)" items={form.subCategories} onChange={(v) => set("subCategories", v)} />
-        <ChipInput label="기본 관심 키워드" placeholder="예: 가성비가전 (Enter 로 추가)" items={form.seedKeywords} onChange={(v) => set("seedKeywords", v)} />
+        <ChipInput
+          label="세부 대표 키워드"
+          placeholder="예: 주방가전 (Enter 로 추가)"
+          hint="분야 안에서 주로 다루는 세부 주제입니다. 트렌드를 찾을 때 검색 범위로 씁니다."
+          items={form.subCategories}
+          onChange={(v) => set("subCategories", v)}
+        />
+        <ChipInput
+          label="기본 관심 키워드"
+          placeholder="예: 가성비가전 (Enter 로 추가)"
+          hint="검색어를 비워 두면 이 키워드로 트렌드를 넓게 찾고, 생성할 때 키워드 후보로 참고합니다."
+          items={form.seedKeywords}
+          onChange={(v) => set("seedKeywords", v)}
+        />
         <ChipInput
           label="제외 키워드"
           placeholder="예: 중고가전 (Enter 로 추가)"

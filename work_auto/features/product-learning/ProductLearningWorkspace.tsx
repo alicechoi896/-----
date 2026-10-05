@@ -171,7 +171,7 @@ export function ProductLearningWorkspace() {
               htmlFor="product-url"
               hint={
                 parsedUrl == null
-                  ? "쿠팡 coupang.com/vp/products/… · 네이버 스마트스토어 smartstore.naver.com/스토어/products/… 주소를 붙여 넣으세요."
+                  ? "쿠팡 coupang.com/vp/products/… · 네이버 스마트스토어 smartstore.naver.com/스토어/products/… · 브랜드스토어 brand.naver.com/스토어/products/… 주소를 붙여 넣으세요."
                   : parsedUrl.supported
                     ? `${PLATFORM_LABEL_KO[parsedUrl.platform]} 상품 URL · 상품번호 ${parsedUrl.productId}`
                     : PRODUCT_URL_ERROR[parsedUrl.reason]

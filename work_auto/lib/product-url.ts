@@ -1,6 +1,6 @@
 /**
  * 상품 상세페이지 URL 규칙 (화면·서버 공용, v0.9.36). docs/PRODUCT_DATA_COLLECTION.md
- * 자동 학습 지원: 쿠팡 · 네이버 스마트스토어 두 곳만. 판별은 URL 파서로만 한다 (외부 호출 0회, 문자열 includes 금지).
+ * 자동 학습 지원: 쿠팡 · 네이버 스마트스토어 · 네이버 브랜드스토어(v0.9.41). 판별은 URL 파서로만 한다 (외부 호출 0회, 문자열 includes 금지).
  */
 export type CommercePlatform = "coupang" | "naver_smartstore";
 
@@ -22,6 +22,8 @@ export const PLATFORM_LABEL_KO: Record<CommercePlatform, string> = { coupang: "�
 
 const COUPANG_HOSTS = new Set(["coupang.com", "www.coupang.com"]);
 const SMARTSTORE_HOST = "smartstore.naver.com";
+/** 네이버 브랜드스토어 (v0.9.41): 주소 구조·상품 ID 가 스마트스토어와 같아 같은 수집기로 처리한다 */
+const BRANDSTORE_HOST = "brand.naver.com";
 
 export function parseSupportedProductUrl(input: string): ParsedProductUrl {
   let u: URL;
@@ -55,7 +57,7 @@ export function parseSupportedProductUrl(input: string): ParsedProductUrl {
     };
   }
 
-  if (host === SMARTSTORE_HOST) {
+  if (host === SMARTSTORE_HOST || host === BRANDSTORE_HOST) {
     const m = u.pathname.match(/^\/([A-Za-z0-9_.-]{1,60})\/products\/(\d{4,20})\/?$/);
     if (!m) return { supported: false, reason: "NOT_PRODUCT_PAGE" };
     const [, storeName, productId] = m;
@@ -64,9 +66,9 @@ export function parseSupportedProductUrl(input: string): ParsedProductUrl {
       platform: "naver_smartstore",
       productId,
       storeName,
-      canonicalKey: `naver-smartstore:${storeName.toLowerCase()}:${productId}`,
+      canonicalKey: `${host === BRANDSTORE_HOST ? "naver-brand" : "naver-smartstore"}:${storeName.toLowerCase()}:${productId}`,
       originalUrl: u.toString(),
-      collectionUrl: `https://smartstore.naver.com/${storeName}/products/${productId}`,
+      collectionUrl: `https://${host}/${storeName}/products/${productId}`,
     };
   }
   return { supported: false, reason: "UNSUPPORTED_DOMAIN" };
@@ -75,8 +77,8 @@ export function parseSupportedProductUrl(input: string): ParsedProductUrl {
 export const PRODUCT_URL_ERROR: Record<Exclude<ParsedProductUrl, { supported: true }>["reason"], string> = {
   INVALID_URL: "올바른 상품 주소가 아닙니다.",
   NOT_HTTPS: "https:// 로 시작하는 주소만 지원합니다.",
-  UNSUPPORTED_DOMAIN: "현재 지원하지 않는 상세페이지입니다. 자동 학습은 쿠팡과 네이버 스마트스토어 상품 상세페이지만 지원합니다.",
-  NOT_PRODUCT_PAGE: "상품 상세페이지 주소가 아닙니다. 쿠팡은 coupang.com/vp/products/…, 스마트스토어는 smartstore.naver.com/스토어/products/… 형식이어야 합니다.",
+  UNSUPPORTED_DOMAIN: "현재 지원하지 않는 상세페이지입니다. 자동 학습은 쿠팡과 네이버 스마트스토어·브랜드스토어 상품 상세페이지만 지원합니다.",
+  NOT_PRODUCT_PAGE: "상품 상세페이지 주소가 아닙니다. 쿠팡은 coupang.com/vp/products/…, 스마트스토어는 smartstore.naver.com/스토어/products/…, 브랜드스토어는 brand.naver.com/스토어/products/… 형식이어야 합니다.",
 };
 
 /** 수집 진행 확인 (화면이 같은 작업의 상태만 묻는다 — 새 수집을 만들지 않는다) */

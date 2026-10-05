@@ -24,8 +24,7 @@ import {
   Textarea,
   cardClass,
 } from "@/components/ui";
-import { STYLE_LIMITS, styleItemKey } from "@/lib/style-limits";
-import { PREFERRED_TYPE_RATIO, STYLE_TYPES, findStyleType, type PreferredTypes, type StyleTypeKind } from "@/lib/style-types";
+import { PREFERRED_TYPE_RATIO, STYLE_TYPES, type StyleTypeKind } from "@/lib/style-types";
 import { countStyleItems, downloadCsv, styleCsvFileName, styleToCsv } from "@/lib/style-csv";
 import { cn } from "@/lib/utils";
 import { StyleImportDialog, type StyleImportResult, type StyleLists } from "./StyleImportDialog";
@@ -99,7 +98,7 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-fg-subtle">
           생성 화면의 <b className="font-medium text-fg-muted">스타일</b> 에서 골라 씁니다. 고르지 않으면 채널마다 기본 스타일(★) 1개가 자동 적용됩니다.
-          Hook·CTA·제목 패턴·자주 쓰는 표현은 많으면 생성할 때마다 10개씩 골라 참고합니다.
+          Hook·CTA·제목 패턴은 <b className="font-medium text-fg-muted">대본 포맷</b>에서 관리합니다. 자주 쓰는 표현은 많으면 생성할 때마다 10개씩 골라 참고합니다.
         </p>
         <Button variant="primary" size="sm" icon={Plus} onClick={() => setEditing(editing ? null : { mode: "create" })}>
           스타일 추가
@@ -165,10 +164,6 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
                 ))}
                 {s.rules.length > 4 && <li className="text-fg-subtle">외 {s.rules.length - 4}개 규칙</li>}
               </ul>
-              <PhraseSummary label="Hook (초반 3초)" items={s.hooks} />
-              <PhraseSummary label="CTA (마지막 행동)" items={s.ctas} />
-              <PhraseSummary label="제목 패턴" items={s.titlePatterns ?? []} />
-              <PreferredTypesSummary types={s.preferredTypes} />
               {((s.productFormatIds?.length ?? 0) > 0 || (s.infoFormatIds?.length ?? 0) > 0) && (
                 <p className="text-xs text-fg-subtle">
                   대본 포맷 ·{" "}
@@ -191,9 +186,11 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
                 </div>
               )}
               <div className="flex-1" />
-              <div className="mt-3">
-                <CopyToFormatButton style={s} />
-              </div>
+              {s.hooks.length + s.ctas.length + (s.titlePatterns?.length ?? 0) > 0 && (
+                <div className="mt-3">
+                  <CopyToFormatButton style={s} />
+                </div>
+              )}
               {!s.isDefault && (
                 <Button size="sm" className="mt-4 self-start" icon={Star} onClick={() => setDefault(s)}>
                   기본 스타일로 지정
@@ -203,32 +200,6 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/** 카드: 원하는 유형 요약 */
-function PreferredTypesSummary({ types }: { types?: PreferredTypes }) {
-  const rows = (["hooks", "ctas", "titlePatterns"] as StyleTypeKind[])
-    .map((k) => ({ k, labels: (types?.[k] ?? []).map((id) => findStyleType(k, id)?.label).filter(Boolean) }))
-    .filter((r) => r.labels.length);
-  if (!rows.length) return null;
-  const name: Record<StyleTypeKind, string> = { hooks: "Hook", ctas: "CTA", titlePatterns: "제목" };
-  return (
-    <p className="text-xs text-fg-subtle">
-      원하는 유형 · {rows.map((r) => `${name[r.k]}: ${r.labels.join(", ")}`).join(" / ")}
-    </p>
-  );
-}
-
-function PhraseSummary({ label, items }: { label: string; items: string[] }) {
-  if (!items.length) return null;
-  return (
-    <div className="mt-3">
-      <p className="text-[11.5px] font-medium text-fg-subtle">
-        {label} · {items.length}개
-      </p>
-      <p className="mt-0.5 line-clamp-2 text-[13px] text-fg-muted">&ldquo;{items[0]}&rdquo;{items.length > 1 ? ` 외 ${items.length - 1}개` : ""}</p>
     </div>
   );
 }
@@ -311,31 +282,6 @@ function StyleForm({
   const formatOptions = (type: ScriptFormat["contentType"]) =>
     (formats.data ?? []).filter((f) => f.contentType === type).map((f) => ({ value: f.id, label: `${f.isDefault ? "★ " : ""}${f.name}` }));
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-
-  function toggleType(kind: StyleTypeKind, id: string) {
-    const cur = form.preferredTypes[kind] ?? [];
-    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-    set("preferredTypes", { ...form.preferredTypes, [kind]: next });
-  }
-  /** 고른 유형으로 만든 예시를 목록 위에 더한다 (빈 줄 정리, 중복·한도 제외) */
-  function addExamples(kind: StyleTypeKind, fresh: string[]): number {
-    const cur = items(form[kind]);
-    const seen = new Set(cur.map(styleItemKey));
-    const room = Math.max(0, STYLE_LIMITS[kind].max - cur.length);
-    const add = fresh.filter((x) => !seen.has(styleItemKey(x))).slice(0, room);
-    set(kind, [...add, ...cur]);
-    return add.length;
-  }
-  const typePicker = (kind: StyleTypeKind) => (
-    <TypePicker
-      kind={kind}
-      selected={form.preferredTypes[kind] ?? []}
-      onToggle={(id) => toggleType(kind, id)}
-      tone={form.tone}
-      existing={items(form[kind])}
-      onExamples={(list) => addExamples(kind, list)}
-    />
-  );
 
   function toggleChannel(id: ChannelId) {
     set("channelIds", form.channelIds.includes(id) ? form.channelIds.filter((c) => c !== id) : [...form.channelIds, id]);
@@ -490,36 +436,8 @@ function StyleForm({
           <Input id="style-desc" placeholder="예: 첫 문장에서 불편을 짚는다" value={form.description} onChange={(e) => set("description", e.target.value)} />
         </FormField>
         <Notice tone="info" className="md:col-span-2">
-          Hook·CTA·제목 패턴은 <b>대본 포맷</b>에서 관리하는 것을 권장합니다 (제품 홍보·정보성·블로그마다 따로). 포맷에 있으면 포맷 것을 먼저 쓰고, 없으면 여기 값을 씁니다. 스타일 카드의 [대본 포맷으로 복사]로 옮길 수 있습니다.
+          Hook·CTA·제목 패턴은 <b>대본 포맷</b>에서 관리합니다 (제품 홍보·정보성·블로그마다 따로). 예전에 여기 저장한 값은 그대로 두고, 스타일 카드의 [대본 포맷으로 복사]로 옮길 수 있습니다.
         </Notice>
-        <PhraseListField
-          label="Hook (초반 3초)"
-          hint="영상·글의 첫 문장 패턴. 생성할 때 주제에 맞게 응용합니다."
-          placeholder="예: 아직도 이렇게 하세요?"
-          items={form.hooks}
-          max={STYLE_LIMITS.hooks.max}
-          onChange={(v) => set("hooks", v)}
-          extra={typePicker("hooks")}
-        />
-        <PhraseListField
-          label="CTA (마지막 행동 유도)"
-          hint="구독·댓글·저장·링크 확인 등 마무리 문장"
-          placeholder="예: 더 자세한 정보는 고정 댓글에 있어요"
-          items={form.ctas}
-          max={STYLE_LIMITS.ctas.max}
-          onChange={(v) => set("ctas", v)}
-          extra={typePicker("ctas")}
-        />
-        <PhraseListField
-          label="제목 패턴"
-          hint="최종 제목이 아니라 설득 구조 참고용입니다. 생성할 때 AI 가 주제·제품에 맞는 새 제목 후보 약 10개로 바꿔 씁니다. 바뀌는 부분은 [제품] [숫자] [대상] 처럼 적으세요."
-          placeholder="예: [제품] 사기 전에 꼭 알아야 하는 [숫자]가지"
-          items={form.titlePatterns}
-          max={STYLE_LIMITS.titlePatterns.max}
-          onChange={(v) => set("titlePatterns", v)}
-          extra={typePicker("titlePatterns")}
-          className="md:col-span-2"
-        />
         <FormField label="규칙" htmlFor="style-rules" hint="한 줄에 하나씩 · 생성할 때 항상 전부 지킵니다">
           <Textarea id="style-rules" rows={4} value={form.rules} onChange={(e) => set("rules", e.target.value)} />
         </FormField>
@@ -577,7 +495,7 @@ function FormatChips({ label, hint, options, value, onChange }: { label: string;
 
 /**
  * 원하는 유형 (여러 개 선택). 저장하면 생성할 때 후보의 약 70% 를 이 유형으로, 나머지는 AI 가 다른 유형도 섞어 추천한다.
- * [고른 유형으로 예시 만들기]: AI 가 예시 10개를 목록 위에 채운다 (저장은 [저장]).
+ * [고른 유형으로 예시 만들기]: AI 가 예시 30개를 목록 위에 채운다 (저장은 [저장]).
  */
 export function TypePicker({
   kind,
@@ -639,7 +557,7 @@ export function TypePicker({
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" icon={Wand2} loading={loading} disabled={!selected.length} onClick={() => void makeExamples()}>
-          고른 유형으로 예시 10개 만들기
+          고른 유형으로 예시 30개 만들기
         </Button>
         {note && <span className={cn("text-xs", note.tone === "ok" ? "text-brand" : "text-danger")}>{note.text}</span>}
       </div>

@@ -1,4 +1,5 @@
 import { scriptFormatTypeOf } from "@/lib/script-format";
+import { CONTENT_FIELDS } from "@/lib/domain/content-fields";
 import type { FieldDef, FieldOption, GeneratorConfig, OutputSection } from "./types";
 
 /* ─────────────────────────────────────────────
@@ -6,17 +7,8 @@ import type { FieldDef, FieldOption, GeneratorConfig, OutputSection } from "./ty
  * 여러 기능에서 같은 의미로 쓰는 항목은 여기서 한 번만 정의한다.
  * ───────────────────────────────────────────── */
 
-export const CATEGORY_OPTIONS: FieldOption[] = [
-  "IT/가전",
-  "생활/주방",
-  "뷰티",
-  "건강/식품",
-  "육아",
-  "반려동물",
-  "재테크",
-  "여행",
-  "자기계발",
-].map((v) => ({ value: v, label: v }));
+/** 카테고리 = 콘텐츠 분야 (lib/domain/content-fields.ts) */
+export const CATEGORY_OPTIONS: FieldOption[] = CONTENT_FIELDS.map((v) => ({ value: v, label: v }));
 
 /** 영상 길이 (v0.9.28: 5~8분·10분 이상은 뺐다. 예전 결과의 값은 그대로 보인다) */
 const VIDEO_LENGTH_OPTIONS: FieldOption[] = [
@@ -88,25 +80,11 @@ const F = {
     placeholder: "제품 라이브러리에서 선택",
     hint: "저장된 분석 데이터를 그대로 사용합니다. 상세페이지를 다시 분석하지 않습니다.",
   }),
-  youtubeTrend: (label = "참고 트렌드"): FieldDef => ({
-    name: "trendId",
-    label,
-    type: "remote-select",
-    source: "youtube-trends",
-    placeholder: "YouTube 트렌드에서 선택 (선택 사항)",
-    span: 1,
-    // 트렌드 찾기 화면에서 [만들기]로 넘어올 때만 보인다 (드롭다운 없음)
-    onlyWhenSet: true,
-  }),
-  naverTrend: (label = "트렌드 선택"): FieldDef => ({
-    name: "trendId",
-    label,
-    type: "remote-select",
-    source: "naver-trends",
-    placeholder: "네이버 트렌드에서 선택 (선택 사항)",
-    span: 1,
-    onlyWhenSet: true,
-  }),
+  // 트렌드: 화면에 보이지 않는다 (v0.9.41). 트렌드 찾기에서 넘어온 값만 서버로 보내 생성에 참고한다
+  youtubeTrend: (label = "참고 트렌드"): FieldDef => ({ name: "trendId", label, type: "hidden", source: "youtube-trends" }),
+  naverTrend: (label = "트렌드 선택"): FieldDef => ({ name: "trendId", label, type: "hidden", source: "naver-trends" }),
+  /** 트렌드 찾기에서 넘어온 주제 (넘어왔을 때만 보인다) */
+  trendTopic: (): FieldDef => ({ name: "topic", label: "주제", type: "text", showIfInitial: true, hint: "트렌드 찾기에서 넘어온 주제입니다. 고쳐 써도 됩니다." }),
   keywords: (label = "주요 키워드", required = false): FieldDef => ({
     name: "keywords",
     label,
@@ -160,10 +138,11 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     headlineKey: "titles",
     fields: [
       F.product(),
-      { ...F.youtubeTrend(), span: 2 },
+      F.youtubeTrend(),
+      F.trendTopic(),
       F.keywords(),
       F.videoLength(),
-      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: PRODUCT_VIDEO_STYLES, defaultValue: "리뷰형" },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: PRODUCT_VIDEO_STYLES, defaultValue: "리뷰형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
     ],
     outputs: [O.titles(), O.hooks(), O.script(), O.ctas(), O.description(), O.keywords("주요 키워드"), O.tags()],
   },
@@ -180,7 +159,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { name: "topic", label: "주제", type: "text", placeholder: "예: 2026년 달라지는 청년 지원 정책", hint: "비워두면 트렌드와 카테고리를 기준으로 주제를 추천합니다." },
       F.keywords(),
       F.videoLength(),
-      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형" },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
     ],
     outputs: [O.topics(), O.titles(), O.hooks(), O.script(), O.ctas(), O.description(), O.keywords(), O.tags()],
   },
@@ -195,7 +174,8 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     fields: [
       F.product(),
       F.naverTrend(),
-      { name: "style", label: "콘텐츠 스타일", type: "select", options: PRODUCT_VIDEO_STYLES, defaultValue: "빠른 요약형", span: 1 },
+      F.trendTopic(),
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: PRODUCT_VIDEO_STYLES, defaultValue: "빠른 요약형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
       F.keywords(),
       F.videoLength(CLIP_LENGTH_OPTIONS),
     ],
@@ -219,9 +199,10 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     fields: [
       F.category(),
       F.naverTrend("현재 트렌드"),
+      F.trendTopic(),
       F.keywords("키워드"),
       F.videoLength(CLIP_LENGTH_OPTIONS),
-      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형" },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
     ],
     outputs: [O.topics(), O.titles(), O.hooks(), O.script("클립 대본"), O.ctas(), O.description(), O.keywords()],
   },
@@ -237,7 +218,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.product(),
       { name: "mainKeyword", label: "메인 키워드", type: "text", required: true, placeholder: "예: 무선청소기 추천", span: 1 },
       { name: "subKeywords", label: "서브 키워드", type: "tags", placeholder: "쉼표로 구분", span: 1 },
-      { name: "style", label: "글 스타일", type: "select", options: BLOG_STYLE_OPTIONS, defaultValue: "정보 전달형", span: 1 },
+      { name: "style", label: "글 스타일", type: "multi", options: BLOG_STYLE_OPTIONS, defaultValue: "정보 전달형", hint: "여러 개 고르면 제목·본문을 여러 유형으로 섞어 만듭니다." },
       { name: "length", label: "글 길이", type: "select", options: BLOG_LENGTH_OPTIONS, defaultValue: "medium", span: 1 },
       {
         name: "photos",
@@ -344,7 +325,7 @@ for (const config of Object.values(GENERATOR_CONFIGS)) {
       type: "remote-select",
       source: "styles",
       sourceParam: styleChannelOf(config.featureId),
-      placeholder: "기본 스타일 자동 적용",
+      placeholder: "스타일 선택 (비우면 기본 스타일)",
     });
   }
 }

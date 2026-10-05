@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeContentField } from "@/lib/domain/content-fields";
 import { YOUTUBE_COUNTRIES } from "@/lib/domain/youtube";
 import { EXAMPLE_PROFILE, toTrendScope, type ContentProfile, type ContentProfileInput, type TrendScope } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
@@ -15,8 +16,10 @@ const strList = (v: unknown, max: number, len = 40) =>
 function clean(input: Partial<ContentProfileInput>): ContentProfileInput {
   const name = String(input?.name ?? "").trim().slice(0, 40);
   if (!name) throw new AppError("VALIDATION", "프로필 이름을 입력해 주세요.");
-  const mainCategory = String(input.mainCategory ?? "").trim().slice(0, 40);
-  if (!mainCategory) throw new AppError("VALIDATION", "대표 카테고리를 입력해 주세요. (예: 가전)");
+  const rawCategory = String(input.mainCategory ?? "").trim().slice(0, 40);
+  if (!rawCategory) throw new AppError("VALIDATION", "콘텐츠 분야를 골라 주세요.");
+  // IT테크·IT/테크·가전 처럼 다르게 쓴 값도 같은 분야로 (v0.9.41, DB 컬럼 main_category 그대로)
+  const mainCategory = normalizeContentField(rawCategory);
   const period = Number(input.defaultTrendPeriod);
   return {
     name,

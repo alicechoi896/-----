@@ -41,6 +41,7 @@ export function TrendFilterPanel({
   onMakeDefault,
   onDeleteFilter,
   searching,
+  recommendedCategoryId,
 }: {
   draft: TrendDraft;
   /** [초기화] 를 누르면 돌아갈 조건 (콘텐츠 프로필 기본값 포함) */
@@ -54,6 +55,8 @@ export function TrendFilterPanel({
   onMakeDefault: (id: string) => void;
   onDeleteFilter: (id: string) => void;
   searching: boolean;
+  /** 콘텐츠 프로필 분야로 추천하는 YouTube 카테고리 (lib/domain/content-fields.ts) */
+  recommendedCategoryId?: string;
 }) {
   const [saving, setSaving] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -95,7 +98,7 @@ export function TrendFilterPanel({
           <Field label="카테고리">
             <Select
               value={draft.categoryId ?? ""}
-              options={YOUTUBE_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))}
+              options={YOUTUBE_CATEGORIES.map((c) => ({ value: c.id, label: c.id === recommendedCategoryId ? `${c.label} · 프로필 기준 추천` : c.label }))}
               placeholder="전체 카테고리"
               onChange={(e) => set({ categoryId: e.target.value || undefined })}
             />

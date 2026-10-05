@@ -141,7 +141,7 @@ export const SHOTS = [
     },
     scrollTo: (p) => p.locator("h2, h3", { hasText: "프로필 수정" }).first(),
     marks: {
-      1: (p) => field(p, "세부 관심분야"),
+      1: (p) => field(p, "콘텐츠 분야"),
       2: (p) => field(p, "기본 관심 키워드"),
       3: (p) => field(p, "기본 분석기간"),
     },
@@ -381,7 +381,7 @@ export const SHOTS = [
     marks: {
       1: (p) => field(p, "카테고리"),
       2: (p) => field(p, "주제"),
-      3: (p) => btn(p, "영상 원고 생성하기").last(),
+      3: (p) => btn(p, "1단계 · 제목·Hook·CTA 만들기").last(),
     },
   },
   {
@@ -392,7 +392,7 @@ export const SHOTS = [
     marks: {
       1: (p) => field(p, "제품 선택"),
       2: (p) => field(p, "영상 길이"),
-      3: (p) => btn(p, "클립 원고 생성하기").last(),
+      3: (p) => btn(p, "1단계 · 제목·Hook·CTA 만들기").last(),
     },
   },
 
@@ -516,26 +516,6 @@ export const SHOTS = [
       1: (p) => field(p, "스타일 이름"),
       2: (p) => field(p, "톤"),
       3: (p) => btn(p, "참고 자료로 AI 초안 만들기").first(),
-    },
-  },
-  {
-    id: "08-style-types",
-    url: "/ai-learning",
-    prepare: async (p) => {
-      await tab(p, "나의 스타일").click();
-      await p.waitForTimeout(500);
-      await btn(p, "스타일 추가").first().click();
-      await p.waitForTimeout(500);
-      const box = p.locator("div.rounded-control", { hasText: "원하는 유형" }).first();
-      for (const t of ["충격형", "반전형", "이득형", "질문형", "공감형"]) await box.locator("button", { hasText: t }).click();
-      await box.locator("button", { hasText: "예시 10개 만들기" }).click();
-      await p.getByText("위에 추가했습니다").first().waitFor({ timeout: 15_000 });
-    },
-    scrollTo: (p) => p.locator("label", { hasText: "Hook (초반 3초)" }).first(),
-    marks: {
-      1: (p) => p.locator("div.rounded-control", { hasText: "원하는 유형" }).first().locator("div.flex-wrap").first(),
-      2: (p) => btn(p, "예시 10개 만들기").first(),
-      3: (p) => p.locator("main button", { hasText: /^추가$/ }).first(),
     },
   },
   {

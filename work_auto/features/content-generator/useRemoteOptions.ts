@@ -62,7 +62,7 @@ const LOADERS: Record<RemoteSource, (param?: string) => Promise<RemoteOption[]>>
       .map((s) => ({
         value: s.id,
         label: `${s.isDefault ? "★ " : ""}${s.name}`,
-        description: [s.tone, s.hooks.length ? `Hook ${s.hooks.length}개` : "", s.ctas.length ? `CTA ${s.ctas.length}개` : ""].filter(Boolean).join(" · "),
+        description: [s.isDefault ? "기본 스타일" : "", s.tone].filter(Boolean).join(" · "),
       })),
 };
 

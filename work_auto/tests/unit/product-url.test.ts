@@ -39,10 +39,16 @@ describe("URL 검사 (외부 호출 0회)", () => {
     expect(a.supported && b.supported && a.canonicalKey === b.canonicalKey).toBe(true);
     expect(a.supported && a.collectionUrl).toBe("https://www.coupang.com/vp/products/9024167492?itemId=111&vendorItemId=222");
   });
+  it("네이버 브랜드스토어 (v0.9.41)", () => {
+    const r = parseSupportedProductUrl("https://brand.naver.com/samsung/products/11223344?NaPm=x");
+    expect(r.supported && r.platform).toBe("naver_smartstore");
+    expect(r.supported && r.canonicalKey).toBe("naver-brand:samsung:11223344");
+    expect(r.supported && r.collectionUrl).toBe("https://brand.naver.com/samsung/products/11223344");
+  });
   it("거부: 다른 쇼핑몰·네이버 다른 주소·상품 아닌 쿠팡 주소·위장 주소·http·javascript", () => {
     for (const u of [
       "https://www.11st.co.kr/products/1",
-      "https://brand.naver.com/x/products/123456",
+      "https://brand.naver.com/x",
       "https://shopping.naver.com/x",
       "https://m.smartstore.naver.com/a/products/123456",
       "https://smartstore.naver.com/dailylife_lab",

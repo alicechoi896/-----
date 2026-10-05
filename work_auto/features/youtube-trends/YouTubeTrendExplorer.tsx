@@ -7,6 +7,7 @@ import { trendScoreLevel } from "@/lib/domain/trend-score";
 import { countryLabel, dateRange, defaultYouTubeQuery, refreshRecentRange } from "@/lib/domain/youtube";
 import type { ContentProfile, SavedFilter, SavedTrend, YouTubeTrendItem } from "@/lib/types";
 import { ProfileBar } from "@/features/content-profile/ProfileBar";
+import { recommendedYoutubeCategory } from "@/lib/domain/content-fields";
 import { pickProfile, useContentProfile } from "@/features/content-profile/useContentProfile";
 import { api } from "@/lib/api-client";
 import { Badge, Button, CopyButton, DataTable, EmptyState, ErrorState, LoadingState, Notice, SectionCard, Tag, type Column } from "@/components/ui";
@@ -110,16 +111,15 @@ export function YouTubeTrendExplorer() {
     }
   }, []);
 
-  // 콘텐츠 프로필: 바꾸면 그 프로필의 국가·분석기간으로 다시 검색, 적용을 끄고 켜면 같은 조건으로 다시 검색
+  // 콘텐츠 프로필: 바꾸면 그 프로필의 국가·추천 카테고리·분석기간으로 조건만 바꾼다 (다시 검색하지 않음)
   const onProfileChange = useCallback(
     (p: ContentProfile | null, scopeParam: string) => {
       profileIdRef.current = scopeParam;
       setActiveFilterId("");
       const next = p && scopeParam !== "none" ? withProfileDefaults(draftRef.current, p) : draftRef.current;
-      setDraft(next);
-      if (searchedRef.current) void runSearch(next); // 이미 검색한 뒤에만 다시
+      setDraft(next); // 조건만 바꾼다 (API 0회, [검색]을 눌러야 부른다)
     },
-    [runSearch],
+    [],
   );
   const profile = useContentProfile(onProfileChange);
 
@@ -388,6 +388,7 @@ export function YouTubeTrendExplorer() {
 
       <TrendFilterPanel
         draft={draft}
+        recommendedCategoryId={profile.selected && profile.applied ? recommendedYoutubeCategory(profile.selected.mainCategory) : undefined}
         resetQuery={() => (profile.selected && profile.applied ? withProfileDefaults(defaultYouTubeQuery(), profile.selected) : defaultYouTubeQuery())}
         onChange={setDraft}
         onSearch={() => {
@@ -555,12 +556,12 @@ function fromSaved(f: SavedFilter): TrendDraft {
 
 /** 콘텐츠 프로필의 기본 분석기간만 넣는다 (기본 저장 조건의 나머지는 유지) */
 function withProfilePeriod(q: TrendDraft, p: ContentProfile): TrendDraft {
-  return { ...q, recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
+  return { ...q, categoryId: q.categoryId ?? recommendedYoutubeCategory(p.mainCategory), recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
 }
 
 /** 콘텐츠 프로필의 국가·기본 분석기간을 검색 조건에 넣는다 (나머지 조건은 유지) */
 function withProfileDefaults(q: TrendDraft, p: ContentProfile): TrendDraft {
-  return { ...q, country: p.country, recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
+  return { ...q, country: p.country, categoryId: recommendedYoutubeCategory(p.mainCategory), recentDays: p.defaultTrendPeriod, ...dateRange(p.defaultTrendPeriod) };
 }
 
 /** 아웃라이어: ×8.0, 3배 이상이면 '터진 영상' */

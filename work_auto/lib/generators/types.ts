@@ -22,6 +22,8 @@ export type FieldType =
   | "textarea" // 여러 줄 입력
   | "select" // 고정 옵션 드롭다운
   | "segmented" // 고정 옵션 2~5개 버튼형
+  | "multi" // 고정 옵션 여러 개 고르기 (칩) → string[] (v0.9.41: 콘텐츠 스타일)
+  | "hidden" // 화면에 보이지 않고 값만 보낸다 (v0.9.41: 트렌드 찾기에서 넘어온 트렌드)
   | "tags" // 쉼표로 구분하는 키워드 입력 → string[]
   | "remote-select" // 서버 데이터 선택 (제품, 트렌드, 영상, 스타일)
   | "images"; // 브라우저에서 처리하는 사진 (서버에는 사진 설명 목록만 간다 → string[])
@@ -41,6 +43,8 @@ export interface FieldDef {
   hideIfSingle?: boolean;
   /** 고르는 칸을 보이지 않고, 다른 화면에서 넘어온 값이 있을 때만 '넘어온 항목 · [빼기]'로 보인다 (v0.9.39: 참고 트렌드) */
   onlyWhenSet?: boolean;
+  /** 다른 화면(트렌드 찾기)에서 값이 넘어왔을 때만 보이는 칸 (v0.9.41: 제품 영상의 '주제') */
+  showIfInitial?: boolean;
   defaultValue?: string;
   /** 2열 그리드에서 차지할 칸 수 (기본 2 = 한 줄 전체) */
   span?: 1 | 2;
