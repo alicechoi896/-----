@@ -207,6 +207,7 @@ TrendItem / Keyword: 외부 Provider 조회 결과 (V1은 저장하지 않고, V
 | hooks[] | 자주 쓰는 Hook (초반 3초 문장). 최대 200개, 생성 때 무작위 10개 |
 | ctas[] | 자주 쓰는 CTA (마지막 행동 유도). 최대 200개, 생성 때 무작위 10개 |
 | titlePatterns[] (`title_patterns`, v0.9.9) | 제목 패턴 (설득 구조 참고용, AI 가 새 제목 후보로 재해석). 최대 200개, 생성 때 무작위 10개. `text[] not null default '{}'` 추가 컬럼 ([STYLE_CONTEXT.md](./STYLE_CONTEXT.md)) |
+| productFormatId / infoFormatId (`product_format_id` / `info_format_id`, v0.9.27) | 이 스타일로 영상·클립을 만들 때 쓸 대본 포맷 (제품 홍보·정보성). 비우면 기본 포맷. `script_formats(id) on delete set null` |
 | preferredTypes (`preferred_types`, v0.9.23) | 원하는 유형 `{ hooks?, ctas?, titlePatterns? }` (유형 id 목록, `lib/style-types.ts`). 생성 후보의 약 70% 를 이 유형으로. `jsonb not null default '{}'` 추가 컬럼 |
 | isDefault | 채널마다 기본 1개. 적용 채널이 겹치는 다른 기본 스타일은 해제 (서비스에서 보장) |
 | createdAt / updatedAt | |

@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { Download, FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, Wand2, X } from "lucide-react";
-import type { ChannelId, UserStyle, UserStyleInput } from "@/lib/types";
+import type { ChannelId, ScriptFormat, UserStyle, UserStyleInput } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { CHANNELS } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -66,6 +66,9 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
   const { data, loading, error, reload, setData } = useAsync(() => api.styles.list(), []);
   const profiles = useAsync(() => api.profiles.list(), []);
   const profileName = (id?: string | null) => (id ? (profiles.data?.find((p) => p.id === id)?.name ?? null) : null);
+  // 대본 포맷 테이블이 아직 없어도(schema.sql 재실행 전) 스타일 화면은 열린다
+  const formats = useAsync(() => api.scriptFormats.list().catch(() => [] as ScriptFormat[]), []);
+  const formatName = (id?: string | null) => (id ? (formats.data?.find((f) => f.id === id)?.name ?? null) : null);
   const [editing, setEditing] = useState<Editing | null>(() =>
     initialReference
       ? {
@@ -165,6 +168,14 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
               <PhraseSummary label="CTA (마지막 행동)" items={s.ctas} />
               <PhraseSummary label="제목 패턴" items={s.titlePatterns ?? []} />
               <PreferredTypesSummary types={s.preferredTypes} />
+              {(formatName(s.productFormatId) || formatName(s.infoFormatId)) && (
+                <p className="text-xs text-fg-subtle">
+                  대본 포맷 ·{" "}
+                  {[formatName(s.productFormatId) && `제품 홍보: ${formatName(s.productFormatId)}`, formatName(s.infoFormatId) && `정보성: ${formatName(s.infoFormatId)}`]
+                    .filter(Boolean)
+                    .join(" / ")}
+                </p>
+              )}
               {s.bannedPhrases.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {s.bannedPhrases.slice(0, 12).map((b) => (
@@ -230,6 +241,8 @@ function toForm(s: UserStyleInput) {
     ctas: s.ctas,
     titlePatterns: s.titlePatterns ?? [],
     preferredTypes: s.preferredTypes ?? {},
+    productFormatId: s.productFormatId ?? "",
+    infoFormatId: s.infoFormatId ?? "",
     profileId: s.profileId ?? "",
     isDefault: s.isDefault,
   };
@@ -252,6 +265,8 @@ function toInput(form: StyleFormState): UserStyleInput {
     ctas: items(form.ctas),
     titlePatterns: items(form.titlePatterns),
     preferredTypes: form.preferredTypes,
+    productFormatId: form.productFormatId || null,
+    infoFormatId: form.infoFormatId || null,
     profileId: form.profileId || null,
     isDefault: form.isDefault,
   };
@@ -283,6 +298,9 @@ function StyleForm({
   const [importNote, setImportNote] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(editing.mode === "create" && Boolean(editing.reference));
   const profiles = useAsync(() => api.profiles.list(), []);
+  const formats = useAsync(() => api.scriptFormats.list().catch(() => [] as ScriptFormat[]), []);
+  const formatOptions = (type: ScriptFormat["contentType"]) =>
+    (formats.data ?? []).filter((f) => f.contentType === type).map((f) => ({ value: f.id, label: `${f.isDefault ? "★ " : ""}${f.name}` }));
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   function toggleType(kind: StyleTypeKind, id: string) {
@@ -499,6 +517,28 @@ function StyleForm({
         <FormField label="금지 표현" htmlFor="style-banned" hint="한 줄에 하나씩 (쉼표로 구분해도 됩니다) · 생성할 때 항상 전부 피합니다" className="md:col-span-2">
           <Textarea id="style-banned" rows={2} placeholder={"예: 무조건 사세요\n역대급"} value={form.banned} onChange={(e) => set("banned", e.target.value)} />
         </FormField>
+        <div className="rounded-control border border-line bg-subtle/60 px-4 py-3.5 md:col-span-2">
+          <p className="text-[13.5px] font-semibold text-fg">
+            대본 포맷 <span className="text-xs font-normal text-fg-subtle">(영상·클립 대본 구조 · 비우면 그 유형의 기본 포맷 ★)</span>
+          </p>
+          <div className="mt-2.5 grid gap-3 md:grid-cols-2">
+            <FormField label="제품 홍보 포맷" htmlFor="style-product-format" hint="제품 홍보 영상·제품 홍보 클립에 적용">
+              <Select
+                id="style-product-format"
+                value={form.productFormatId}
+                options={formatOptions("product")}
+                placeholder="기본 포맷 따라가기"
+                onChange={(e) => set("productFormatId", e.target.value)}
+              />
+            </FormField>
+            <FormField label="정보성 포맷" htmlFor="style-info-format" hint="정보성 영상·정보성 클립에 적용">
+              <Select id="style-info-format" value={form.infoFormatId} options={formatOptions("info")} placeholder="기본 포맷 따라가기" onChange={(e) => set("infoFormatId", e.target.value)} />
+            </FormField>
+          </div>
+          <p className="mt-2 text-xs text-fg-subtle">
+            포맷은 <a href="/ai-learning?tab=formats" className="font-medium text-brand hover:underline">대본 포맷</a> 탭에서 참고 대본으로 만듭니다. 생성 화면에서 포맷을 직접 고르면 그것이 먼저입니다.
+          </p>
+        </div>
       </div>
     </SectionCard>
   );

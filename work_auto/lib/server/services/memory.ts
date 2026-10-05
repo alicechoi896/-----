@@ -51,6 +51,8 @@ export function normalizeStyle(row: UserStyle): UserStyle {
     ctas: rest.ctas ?? [],
     titlePatterns: rest.titlePatterns ?? [],
     preferredTypes: cleanPreferredTypes(rest.preferredTypes),
+    productFormatId: rest.productFormatId ?? null,
+    infoFormatId: rest.infoFormatId ?? null,
     profileId: rest.profileId ?? null,
   };
 }
@@ -70,9 +72,27 @@ function cleanStyleInput(input: UserStyleInput): UserStyleInput {
     ctas: strList(input.ctas, STYLE_LIMITS.ctas.max, STYLE_LIMITS.ctas.len),
     titlePatterns: strList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max, STYLE_LIMITS.titlePatterns.len),
     preferredTypes: cleanPreferredTypes(input.preferredTypes),
+    productFormatId: typeof input.productFormatId === "string" && input.productFormatId ? input.productFormatId : null,
+    infoFormatId: typeof input.infoFormatId === "string" && input.infoFormatId ? input.infoFormatId : null,
     profileId: typeof input.profileId === "string" && input.profileId ? input.profileId : null,
     isDefault: Boolean(input.isDefault),
   };
+}
+
+/** 연결할 대본 포맷이 내 것이고 유형이 맞는지 확인 */
+async function assertOwnFormats(style: { productFormatId?: string | null; infoFormatId?: string | null }) {
+  const pairs = [
+    [style.productFormatId, "product", "제품 홍보"],
+    [style.infoFormatId, "info", "정보성"],
+  ] as const;
+  if (!pairs.some(([id]) => id)) return;
+  const userId = await getCurrentUserId();
+  for (const [id, type, label] of pairs) {
+    if (!id) continue;
+    const f = await getRepositories().scriptFormats.get(id);
+    if (!f || f.userId !== userId) throw new AppError("VALIDATION", `연결할 ${label} 대본 포맷을 찾을 수 없습니다.`);
+    if (f.contentType !== type) throw new AppError("VALIDATION", `'${f.name}'은(는) ${label} 포맷이 아닙니다.`);
+  }
 }
 
 /** 연결할 콘텐츠 프로필이 내 것인지 확인 */
@@ -187,6 +207,7 @@ export const memoryService = {
   async createStyle(input: UserStyleInput): Promise<UserStyle> {
     const clean = cleanStyleInput(input);
     await assertOwnProfile(clean.profileId);
+    await assertOwnFormats(clean);
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const now = nowIso();
@@ -203,6 +224,7 @@ export const memoryService = {
     if (!existing || existing.userId !== userId) notFound("스타일");
     const clean = cleanStyleInput(input);
     await assertOwnProfile(clean.profileId);
+    await assertOwnFormats(clean);
     if (clean.isDefault) await this.clearDefault(clean.channelIds, id);
     return normalizeStyle((await repo.styles.update(id, { ...clean, updatedAt: nowIso() }))!);
   },

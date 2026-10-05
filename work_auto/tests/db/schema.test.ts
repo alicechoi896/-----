@@ -127,6 +127,13 @@ describe("대본 포맷 (script_formats) — 본인 것만", () => {
     await as(PENDING);
     expect((await q(`select count(*)::int n from public.script_formats`)).rows[0].n).toBe(0);
   });
+  it("스타일 → 대본 포맷 연결, 포맷을 지우면 연결만 풀린다", async () => {
+    await as(B);
+    await q(`update public.user_styles set product_format_id='sf1' where id='sty1'`);
+    expect((await q(`select product_format_id, info_format_id from public.user_styles where id='sty1'`)).rows[0]).toEqual({ product_format_id: "sf1", info_format_id: null });
+    await q(`delete from public.script_formats where id='sf1'`);
+    expect((await q(`select product_format_id from public.user_styles where id='sty1'`)).rows[0].product_format_id).toBeNull();
+  });
 });
 
 describe("오류 기록 (error_logs) — 기록은 누구나, 전체 조회·삭제는 관리자", () => {

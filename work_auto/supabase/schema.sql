@@ -439,6 +439,9 @@ create table if not exists public.script_formats (
   updated_at    timestamptz not null default now()
 );
 create index if not exists idx_script_formats_user on public.script_formats (user_id, created_at desc);
+-- v0.9.27: 스타일 → 대본 포맷 연결 (제품 홍보·정보성 각 1개, 선택). 추가만 한다 — 기존 행은 null(기본 포맷 따라감), 포맷을 지우면 연결만 풀린다
+alter table public.user_styles add column if not exists product_format_id text references public.script_formats (id) on delete set null;
+alter table public.user_styles add column if not exists info_format_id text references public.script_formats (id) on delete set null;
 
 -- 찜한 트렌드 영상 (영상 정보 텍스트만 저장, 썸네일은 YouTube 주소만)
 create table if not exists public.saved_trends (

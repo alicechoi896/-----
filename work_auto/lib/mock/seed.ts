@@ -101,6 +101,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
   const styles: UserStyle[] = [
     {
       id: "sty_seed1",
+      productFormatId: "sfm_seed1",
       userId,
       name: "친근한 리뷰어",
       channelIds: ["youtube"],

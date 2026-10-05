@@ -10,7 +10,7 @@ import type { GenerationContext } from "./context-types";
 import { buildStyleContext, styleSnapshot } from "./style-context";
 import { learningConfig } from "@/lib/learning-config";
 import { compressContent, learningService, profileIdForFeature, promptInsights } from "../services/learning";
-import { pickScriptFormat } from "../services/script-formats";
+import { chooseScriptFormat, loadScriptFormats } from "../services/script-formats";
 
 /**
  * ★ ContextBuilder — AI Memory 를 "생성 1회분"의 Context 로 조립한다.
@@ -21,7 +21,7 @@ import { pickScriptFormat } from "../services/script-formats";
  * 조립 순서와 개수 제한 (토큰 예산 관리)
  *   0. Content Profile     — 무엇을 다루는가. 고른 스타일에 연결된 프로필 → 없으면 기본 프로필 (docs/CONTENT_PROFILE.md)
  *   1. Product Memory      — 선택한 제품의 현재 분석 1건
- *   2-1. 대본 포맷      — 영상·클립: 생성 폼에서 고른 포맷 → 이 유형(제품·정보성)·채널의 기본 포맷 (docs/SCRIPT_FORMATS.md)
+ *   2-1. 대본 포맷      — 영상·클립: 생성 폼에서 고른 포맷 → 스타일에 연결된 포맷 → 이 유형(제품·정보성)·채널의 기본 포맷 (docs/SCRIPT_FORMATS.md)
  *   2. Style Memory        — 생성 폼에서 고른 스타일 1건. 고르지 않으면 이 채널의 기본 스타일 (없으면 "모든 채널" 기본 스타일)
  *                            → buildStyleContext(): Hook·CTA·제목 패턴·자주 쓰는 표현은 10개 초과면 무작위 10개, 규칙·금지 표현은 전부 (docs/STYLE_CONTEXT.md)
  *   3. 좋은 예시           — 긍정 결과 무작위 3 + 일반 1 (요약본, 최근에 쓴 예시는 덜 고름) + 팀 공통 학습 프로필 (docs/INCREMENTAL_LEARNING.md)
@@ -53,7 +53,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const pickedProfileId = String(input.profileId ?? "");
   const scriptFormatId = String(input.scriptFormatId ?? "");
 
-  const [productRow, styles, featureContents, featureFeedback, channelContents, performance, trend, referenceVideo, profiles, scriptFormat] = await Promise.all([
+  const [productRow, styles, featureContents, featureFeedback, channelContents, performance, trend, referenceVideo, profiles, scriptFormats] = await Promise.all([
     productId ? repo.products.get(productId) : Promise.resolve(null),
     repo.styles.list((s) => s.userId === userId && (s.isDefault || s.id === styleId)),
     repo.contents.list((c) => c.userId === userId && c.featureId === featureId),
@@ -63,7 +63,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     trendId ? trendService.findOption(trendId) : Promise.resolve(null),
     videoId ? repo.videos.get(videoId) : Promise.resolve(null),
     repo.contentProfiles.list((p) => p.userId === userId && p.isActive),
-    pickScriptFormat(userId, featureId, channelId, scriptFormatId),
+    loadScriptFormats(userId, featureId, scriptFormatId),
   ]);
 
   // 1) Product Memory — 저장된 분석을 그대로 쓴다 (상세페이지 재분석 없음)
@@ -86,6 +86,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
   const styleContext = style ? buildStyleContext({ style, channelId }) : null;
+  const scriptFormat = chooseScriptFormat(scriptFormats, featureId, channelId, scriptFormatId, style);
 
   // 0) Content Profile — 생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필
   if (pickedProfileId && !profiles.some((p) => p.id === pickedProfileId)) {

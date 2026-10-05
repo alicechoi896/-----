@@ -167,10 +167,29 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(list.filter((f) => f.contentType === "product" && f.isDefault).map((f) => f.id)).toEqual([saved.id]); // 유형마다 기본 1개
 
     const products = await j<{ id: string }[]>("/api/products");
+    // 데모 기본 스타일(친근한 리뷰어)은 '후회형 제품 쇼츠'에 연결되어 있어 기본 포맷보다 먼저
     const gen = (await post("/api/contents/generate", { featureId: "yt-product-video", input: { productId: products.data[0].id } })).data as Content;
-    expect((gen.context.scriptFormat as { name: string }).name).toBe("테스트 포맷");
+    expect((gen.context.scriptFormat as { name: string }).name).toBe("후회형 제품 쇼츠");
+    // 생성 화면에서 고른 포맷이 가장 먼저
+    const picked = (await post("/api/contents/generate", { featureId: "yt-product-video", input: { productId: products.data[0].id, scriptFormatId: saved.id } })).data as Content;
+    expect((picked.context.scriptFormat as { name: string }).name).toBe("테스트 포맷");
+    // 연결 없는 채널(클립)의 기본 스타일 → 기본 포맷(★)
+    const clip = (await post("/api/contents/generate", { featureId: "clip-product-content", input: { productId: products.data[0].id } })).data as Content;
+    expect((clip.context.scriptFormat as { name: string }).name).toBe("테스트 포맷");
     const blog = (await post("/api/contents/generate", { featureId: "blog-info-writing", input: { writingType: "일반 정보", topic: "포맷 테스트" } })).data as Content;
     expect(blog.context.scriptFormat ?? null).toBeNull();
+
+    // 스타일에 연결한 포맷이 기본 포맷보다 먼저
+    const other = (await post("/api/script-formats", { name: "스타일 전용 포맷", contentType: "product", examples, guideline: a.guideline })).data as { id: string };
+    expect((await post("/api/styles", { name: "포맷 연결 스타일", channelIds: [], hooks: [], ctas: [], titlePatterns: [], infoFormatId: other.id })).ok).toBe(false); // 유형이 다르면 거부
+    const sty = (await post("/api/styles", { name: "포맷 연결 스타일", channelIds: [], hooks: [], ctas: [], titlePatterns: [], productFormatId: other.id })).data as { id: string };
+    const viaStyle = (await post("/api/contents/generate", { featureId: "yt-product-video", input: { productId: products.data[0].id, styleId: sty.id } })).data as Content;
+    expect((viaStyle.context.scriptFormat as { name: string }).name).toBe("스타일 전용 포맷");
+    // 포맷을 지우면 스타일 연결만 풀린다
+    await j(`/api/script-formats/${other.id}`, { method: "DELETE" });
+    const styles = (await j<{ id: string; productFormatId: string | null }[]>("/api/styles")).data;
+    expect(styles.find((x) => x.id === sty.id)!.productFormatId).toBeNull();
+    await j(`/api/styles/${sty.id}`, { method: "DELETE" });
     await j(`/api/script-formats/${saved.id}`, { method: "DELETE" });
   });
 

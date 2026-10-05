@@ -44,7 +44,7 @@ function fail(table: string, action: string, error: { message: string; code?: st
  * 컬럼이 없으면(PGRST204) 값이 비어 있을 때만 빼고 다시 저장한다. 값이 있으면 조용히 버리지 않고 안내한다.
  */
 const PENDING_COLUMNS: Record<string, string[]> = {
-  user_styles: ["title_patterns", "preferred_types"], // v0.9.9, v0.9.23
+  user_styles: ["title_patterns", "preferred_types", "product_format_id", "info_format_id"], // v0.9.9, v0.9.23, v0.9.27
 };
 
 async function writeWithPendingColumns<R>(

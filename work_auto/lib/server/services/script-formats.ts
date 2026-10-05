@@ -90,8 +90,18 @@ export const scriptFormatService = {
   },
 
   async remove(id: string): Promise<void> {
-    await own(id);
-    await getRepositories().scriptFormats.remove(id);
+    const f = await own(id);
+    const repo = getRepositories();
+    const linked = await repo.styles.list((s) => s.userId === f.userId && (s.productFormatId === id || s.infoFormatId === id));
+    await Promise.all(
+      linked.map((s) =>
+        repo.styles.update(s.id, {
+          ...(s.productFormatId === id ? { productFormatId: null } : {}),
+          ...(s.infoFormatId === id ? { infoFormatId: null } : {}),
+        }),
+      ),
+    );
+    await repo.scriptFormats.remove(id);
   },
 
   /**
@@ -146,24 +156,40 @@ export const scriptFormatService = {
 };
 
 /**
- * 생성할 때 쓸 포맷: 생성 폼에서 고른 것 → 이 유형·채널의 기본 포맷. 영상·클립 기능만.
- * 테이블이 아직 없거나(schema.sql 재실행 전) 읽기에 실패하면 포맷 없이 생성한다 (고른 포맷이 없을 때만 오류).
+ * 생성용 포맷 목록 (영상·클립 기능만). 테이블이 아직 없거나(schema.sql 재실행 전) 읽기에 실패하면
+ * 포맷 없이 생성한다 — 생성 폼에서 포맷을 직접 고른 경우만 오류.
  */
-export async function pickScriptFormat(userId: string, featureId: string, channelId: ChannelId, pickedId: string): Promise<ScriptFormat | null> {
-  const type = scriptFormatTypeOf(featureId);
-  if (!type) return null;
-  let rows: ScriptFormat[];
+export async function loadScriptFormats(userId: string, featureId: string, pickedId: string): Promise<ScriptFormat[]> {
+  if (!scriptFormatTypeOf(featureId)) return [];
   try {
-    rows = (await getRepositories().scriptFormats.list((f) => f.userId === userId)).map(normalize);
+    return (await getRepositories().scriptFormats.list((f) => f.userId === userId)).map(normalize);
   } catch (e) {
     if (pickedId) throw e;
-    return null;
+    return [];
   }
+}
+
+/**
+ * 생성할 때 쓸 포맷: ① 생성 폼에서 고른 것 → ② 스타일에 연결된 이 유형의 포맷 → ③ 이 유형·채널의 기본 포맷(★)
+ * 스타일에 연결된 포맷이 지워졌으면(연결만 남은 예전 데이터) 건너뛴다.
+ */
+export function chooseScriptFormat(
+  rows: ScriptFormat[],
+  featureId: string,
+  channelId: ChannelId,
+  pickedId: string,
+  style: { productFormatId?: string | null; infoFormatId?: string | null } | null,
+): ScriptFormat | null {
+  const type = scriptFormatTypeOf(featureId);
+  if (!type) return null;
   if (pickedId) {
     const picked = rows.find((f) => f.id === pickedId);
     if (!picked) throw new AppError("SCRIPT_FORMAT_NOT_FOUND", "선택한 대본 포맷을 찾을 수 없습니다. 삭제되었을 수 있습니다.", 404);
     return picked;
   }
+  const linkedId = type === "product" ? style?.productFormatId : style?.infoFormatId;
+  const linked = linkedId ? rows.find((f) => f.id === linkedId && f.contentType === type) : undefined;
+  if (linked) return linked;
   const fits = (f: ScriptFormat) => f.contentType === type && f.isDefault && (f.channelIds.length === 0 || f.channelIds.includes(channelId));
   return rows.find(fits) ?? null;
 }
