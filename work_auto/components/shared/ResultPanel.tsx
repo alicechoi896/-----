@@ -479,10 +479,10 @@ function ScriptCards({
                 <div className="space-y-1.5 border-b border-line px-3.5 py-2" data-script-meta>
                   {m.angle && (
                     <p className="text-[12px] text-fg-muted">
-                      앵글 <span className="font-semibold text-fg">{m.angle}</span>
+                      {m.review ? "앵글" : "구조"} <span className="font-semibold text-fg">{m.angle}</span>
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-1">
+                  {m.review && <div className="flex flex-wrap gap-1">
                     {SKELETON_CHECKS.map((c) => (
                       <span
                         key={c.key}
@@ -496,7 +496,7 @@ function ScriptCards({
                         {c.label}
                       </span>
                     ))}
-                  </div>
+                  </div>}
                 </div>
               )}
               <div className="aspect-[4/5] overflow-y-auto bg-subtle/60 px-4 py-4">

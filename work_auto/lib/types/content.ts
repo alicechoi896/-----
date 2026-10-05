@@ -1,4 +1,5 @@
 import type { PreciseQuality } from "@/lib/generators/quality";
+import type { KeywordIntelligence } from "./keyword-intel";
 import type { ChannelId, ID, ISODate } from "./common";
 
 /** 생성 결과의 한 섹션 값: 단일 텍스트 또는 목록 */
@@ -35,6 +36,27 @@ export interface ContextSummary {
   styleSamples?: StyleSampleSnapshot | null;
   /** 정밀 생성 (v0.9.31~): 앵글·추천 제목 TOP 5·대본별 뼈대 체크·검토 메모 */
   quality?: PreciseQuality | null;
+  /**
+   * 2단계 생성 (v0.9.40, 영상·클립). 같은 workflow.id 로 1단계(제목·Hook·CTA 후보)와 2단계(제목별 대본·키워드·태그·설명)를 잇는다.
+   * 예전 결과(한 번에 생성)에는 없다.
+   */
+  workflow?: ContentWorkflow | null;
+  /** 블로그 생성에 쓴 Keyword Intelligence 요약 (v0.9.40) */
+  keywordIntel?: KeywordIntelligence | null;
+}
+
+export interface ContentWorkflow {
+  id: ID;
+  stage: 1 | 2;
+  /** 2단계: 1단계 결과 id */
+  stage1Id?: ID;
+  /** 2단계: 사용자가 고른 제목·Hook·CTA */
+  selected?: { title: string; hook: string; cta: string };
+  /** 1단계: 생성 직전에 모은 Keyword Intelligence (2단계·추가 만들기는 이것을 재사용) */
+  keywordIntelligence?: KeywordIntelligence | null;
+  /** 2단계: 제목에 맞춰 고른 최종 키워드 */
+  primaryKeyword?: string;
+  relatedKeywords?: { keyword: string; intent: string }[];
 }
 
 /** 나의 스타일에서 이번 생성에 보낸 항목. Hook·CTA·제목 패턴·자주 쓰는 표현은 많으면 무작위 표본이다 */

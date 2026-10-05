@@ -4,7 +4,7 @@ import { matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
 import type { TrendScope, YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { seededNumber } from "@/lib/utils";
 import { serverConfig } from "../../config";
-import type { VideoMeta, YouTubeTrendProvider, VideoStats } from "../types";
+import type { KeywordEvidenceVideo, VideoMeta, YouTubeTrendProvider, VideoStats } from "../types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -83,6 +83,18 @@ export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
   }
 
   /** 데모: 영상 ID 와 시간으로 그럴듯한 숫자 (시간이 지나면 늘어난다) */
+  /** 데모: 검색어로 만든 가짜 관련 영상 (외부 호출 없음) */
+  async keywordEvidence(seed: string, max: number): Promise<KeywordEvidenceVideo[]> {
+    const angles = ["후기", "장단점", "구매 전 꼭 볼 것", "비교", "추천", "언박싱", "사용법", "가성비", "자급제", "카메라 테스트", "배터리", "할인"];
+    return Array.from({ length: Math.min(max, 12) }, (_, i) => ({
+      title: `${seed} ${angles[i % angles.length]} | 한 달 써 보니`,
+      description: `${seed} ${angles[(i + 3) % angles.length]} 정리. ${angles[(i + 5) % angles.length]}`,
+      tags: [seed, `${seed} ${angles[i % angles.length]}`, angles[(i + 1) % angles.length]],
+      views: 5000 + ((i * 7919) % 90000),
+      publishedAt: new Date(Date.now() - i * 5 * 86_400_000).toISOString(),
+    }));
+  }
+
   /** 데모: 채널마다 정해진 가짜 영상 ID 15개 */
   async getChannelRecentVideoIds(channelId: string, count: number): Promise<string[]> {
     return Array.from({ length: count }, (_, i) => `${channelId}-recent-${i}`);

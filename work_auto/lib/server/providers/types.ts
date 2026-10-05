@@ -125,6 +125,22 @@ export interface YouTubeTrendProvider extends BaseProvider {
   getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>>;
   /** 채널의 최근 업로드 영상 ID (업로드 재생목록, 1 unit). 아웃라이어 점수용 */
   getChannelRecentVideoIds(channelId: string, count: number): Promise<string[]>;
+  /** Keyword Intelligence: 검색어 1개 → 관련 영상 (search.list 1회 100 units + videos.list 1회 1 unit) */
+  keywordEvidence(seed: string, max: number): Promise<KeywordEvidenceVideo[]>;
+}
+
+export interface KeywordEvidenceVideo {
+  title: string;
+  description: string;
+  tags: string[];
+  views: number | null;
+  publishedAt: string | null;
+}
+
+export interface KeywordEvidencePost {
+  title: string;
+  description: string;
+  postdate: string | null;
 }
 
 export interface VideoStats {
@@ -138,6 +154,10 @@ export interface NaverTrendProvider extends BaseProvider {
   getInsight(query: NaverTrendQuery): Promise<NaverTrendInsight>;
   /** [더보기]: offset 부터 10개 더 (급상승은 그때 다음 후보를 더 계산한다) */
   getMore(query: NaverTrendQuery, section: NaverTrendSection, offset: number): Promise<NaverTrendMore>;
+  /** Keyword Intelligence: 블로그 검색 1회 (최대 100개) */
+  blogEvidence(seed: string, display: number): Promise<KeywordEvidencePost[]>;
+  /** Keyword Intelligence: 데이터랩 1회 (키워드 최대 5개) → 키워드별 최근 12주 상대 관심도 (0~100, 검색량 아님) */
+  relativeInterest(keywords: string[]): Promise<Record<string, { avg: number; recent: number; previous: number }>>;
 }
 
 /** 트렌드 Provider 통칭 */

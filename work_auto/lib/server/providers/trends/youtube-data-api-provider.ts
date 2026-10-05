@@ -3,7 +3,7 @@ import { calcTrendScore } from "@/lib/domain/trend-score";
 import { SHORTS_MAX_SEC, YOUTUBE_COUNTRIES, buildYouTubeSearchQ, categoryLabel, matchesRanges, periodDaysOf } from "@/lib/domain/youtube";
 import type { YouTubeTrendItem, YouTubeTrendPage, YouTubeTrendQuery } from "@/lib/types";
 import { AppError } from "../../http";
-import type { VideoMeta, YouTubeTrendProvider, VideoStats } from "../types";
+import type { VideoMeta, YouTubeTrendProvider, VideoStats, KeywordEvidenceVideo } from "../types";
 
 /**
  * YouTube Data API v3 Provider (실제 연동).
@@ -294,6 +294,33 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     const num = (v?: string) => (v == null ? null : Number(v));
     for (const it of res.items) out[it.id] = { views: num(it.statistics?.viewCount), likes: num(it.statistics?.likeCount), comments: num(it.statistics?.commentCount) };
     return out;
+  }
+
+  /** Keyword Intelligence: search.list 1회(100 units) → videos.list 1회(1 unit). 자동 재시도·다음 페이지 없음 */
+  async keywordEvidence(seed: string, max: number): Promise<KeywordEvidenceVideo[]> {
+    const search = await this.get<{ items?: { id?: { videoId?: string } }[] }>("search", {
+      part: "id",
+      type: "video",
+      q: seed,
+      regionCode: "KR",
+      relevanceLanguage: "ko",
+      maxResults: Math.min(50, Math.max(1, max)),
+      order: "relevance",
+    });
+    const ids = (search.items ?? []).map((i) => i.id?.videoId).filter((x): x is string => Boolean(x));
+    if (!ids.length) return [];
+    const videos = await this.get<{ items?: { snippet?: { title?: string; description?: string; tags?: string[]; publishedAt?: string }; statistics?: { viewCount?: string } }[] }>("videos", {
+      part: "snippet,statistics",
+      id: ids.join(","),
+      maxResults: 50,
+    });
+    return (videos.items ?? []).map((v) => ({
+      title: v.snippet?.title ?? "",
+      description: (v.snippet?.description ?? "").slice(0, 400),
+      tags: (v.snippet?.tags ?? []).slice(0, 30),
+      views: v.statistics?.viewCount != null ? Number(v.statistics.viewCount) : null,
+      publishedAt: v.snippet?.publishedAt ?? null,
+    }));
   }
 
   /** 채널 최근 업로드 (업로드 재생목록 = "UU" + 채널 ID 뒷부분 → channels.list 없이 1 unit) */

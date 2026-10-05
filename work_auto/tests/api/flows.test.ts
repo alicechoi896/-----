@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
  * 실행 중인 서버(데모 모드: Supabase·AI 키 없이)에 실제로 요청해 주요 흐름을 확인한다.
@@ -10,8 +10,15 @@ const BASE = process.env.API_BASE_URL ?? "http://localhost:3000";
 
 async function j<T = unknown>(path: string, init?: RequestInit): Promise<{ ok: boolean; data: T; error?: { code: string; message: string } }> {
   const res = await fetch(BASE + path, { headers: { "content-type": "application/json" }, ...init });
-  return res.json();
+  const body = await res.json();
+  // 1분 AI 호출 한도(20회)에 걸리면 풀릴 때까지 기다렸다 한 번 더
+  if (body?.error?.code === "RATE_LIMIT") {
+    await sleep(61_000);
+    return (await fetch(BASE + path, { headers: { "content-type": "application/json" }, ...init })).json();
+  }
+  return body;
 }
+vi.setConfig({ testTimeout: 150_000 });
 const post = (path: string, body: unknown, method = "POST") => j(path, { method, body: JSON.stringify(body) });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -271,41 +278,61 @@ describe("트렌드·스타일·오류 기록", () => {
     await j(`/api/script-formats/${created.format.id}`, { method: "DELETE" });
   });
 
-  it("정밀 생성(데모): 스트림으로 4단계 → 제목 40개·추천 TOP 5(이유)·앵글별 대본 3편·뼈대 체크·검토 메모", async ({ skip }) => {
+  it("2단계 생성(데모): 1단계 후보(Keyword Intelligence) → 제목 2개 고르기 → 제목마다 대본 3편·키워드·태그·설명 → 같은 제목 안에 대본 추가 → 이력", async ({ skip }) => {
     if (!reachable) skip();
     const products = await j<{ id: string }[]>("/api/products");
-    const call = () =>
-      fetch(BASE + "/api/contents/generate/precise", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ featureId: "yt-product-video", input: { productId: products.data[0].id, length: "15s" } }),
-      });
-    let res = await call();
-    // 앞 테스트들이 1분 AI 호출 한도(20회)를 다 썼으면 풀릴 때까지 기다렸다 한 번 더
-    if (!res.headers.get("content-type")?.includes("ndjson")) {
-      await sleep(61_000);
-      res = await call();
+    const call = () => post("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: products.data[0].id, length: "15s", keywords: ["무선 이어폰"] }, clientRequestId: "test-stage1" });
+    const s1 = await call();
+    expect(s1.ok).toBe(true);
+    const c1 = s1.data as Content & { headline: string };
+    // 1단계: 제목·Hook·CTA 후보만 (대본·설명·태그 없음)
+    expect((c1.output.titles as string[]).length).toBeGreaterThanOrEqual(10);
+    expect(c1.output.hooks).toHaveLength(10);
+    expect(c1.output.ctas).toHaveLength(10);
+    expect(c1.output.script).toBeUndefined();
+    expect(c1.output.description).toBeUndefined();
+    const wf = c1.context.workflow as { id: string; stage: number; keywordIntelligence: { source: string; candidates: { keyword: string; evidence: string }[] } };
+    expect(wf.stage).toBe(1);
+    expect(wf.keywordIntelligence.source).toBe("youtube");
+    expect(wf.keywordIntelligence.candidates.length).toBeGreaterThan(0);
+    expect((c1.context.quality as { titleTop: unknown[] }).titleTop).toHaveLength(5);
+
+    // 2단계: 제목 2개 (같은 Hook·CTA)
+    const picked = (c1.output.titles as string[]).slice(0, 2);
+    const hook = (c1.output.hooks as string[])[0];
+    const cta = (c1.output.ctas as string[])[0];
+    const groups: (Content & { headline: string })[] = [];
+    for (const title of picked) {
+      const r = await post("/api/contents/stage2", { stage1Id: c1.id, title, hook, cta });
+      expect(r.ok).toBe(true);
+      groups.push(r.data as Content & { headline: string });
     }
-    expect(res.headers.get("content-type")).toContain("ndjson");
-    const lines = (await res.text()).trim().split("\n").map((l) => JSON.parse(l) as { type: string; stage?: string; data?: Content & { headline: string; context: Record<string, unknown> } });
-    expect(lines.filter((l) => l.type === "stage").map((l) => l.stage)).toEqual(["angles", "titles", "scripts", "review"]);
-    const done = lines.at(-1)!;
-    expect(done.type).toBe("done");
-    const c = done.data!;
-    const titles = c.output.titles as string[];
-    expect(titles).toHaveLength(40);
-    const q = c.context.quality as { mode: string; angles: { name: string }[]; titleTop: { title: string; reason: string }[]; scripts: { angle: string; checks: Record<string, boolean>; review: string }[] };
-    expect(q.mode).toBe("precise");
-    expect(q.angles).toHaveLength(3);
-    expect(q.titleTop).toHaveLength(5);
-    expect(q.titleTop.every((t) => t.reason)).toBe(true);
-    expect(titles.slice(0, 5)).toEqual(q.titleTop.map((t) => t.title)); // 추천이 맨 앞
-    expect(c.headline).toBe(q.titleTop[0].title);
-    expect(c.output.script).toHaveLength(3);
-    expect(q.scripts.map((s) => s.angle)).toEqual(q.angles.map((a) => a.name));
-    expect(q.scripts.every((s) => s.review && typeof s.checks.openLoop === "boolean")).toBe(true);
-    const blog = (await post("/api/contents/generate/precise", { featureId: "blog-info-writing", input: { topic: "가을 캠핑" } })) as { ok: boolean; error?: { code: string } };
-    expect(blog.ok).toBe(false); // 블로그는 정밀 생성 없음 (또는 호출 한도)
+    for (const [i, g] of groups.entries()) {
+      expect(g.headline).toBe(picked[i]);
+      expect(g.output.titles).toBeUndefined();
+      expect(g.output.script).toHaveLength(3);
+      for (const sc of g.output.script as string[]) {
+        expect(sc.split("\n")[0]).toBe(hook);
+        expect(sc.split("\n").at(-1)).toBe(cta);
+      }
+      expect(g.output.description).toBeTruthy();
+      expect((g.output.tags as string[]).length).toBeGreaterThan(0);
+      const w2 = g.context.workflow as { stage: number; stage1Id: string; selected: { title: string }; primaryKeyword: string; relatedKeywords: unknown[] };
+      expect(w2).toMatchObject({ stage: 2, stage1Id: c1.id, selected: { title: picked[i] } });
+      expect(w2.primaryKeyword).toBeTruthy();
+      expect((g.output.keywords as string[])[0]).toBe(w2.primaryKeyword);
+    }
+    // 같은 제목 안에 대본 추가 (플랫폼 API 0회, 제목은 그대로)
+    const more = await post(`/api/contents/${groups[0].id}/regenerate`, { key: "script" });
+    expect(((more.data as Content).output.script as string[]).length).toBe(6);
+    expect((more.data as Content & { headline: string }).headline).toBe(picked[0]);
+    // 이력: 1단계 1개 + 2단계 2개가 같은 1단계로 이어진다
+    const list = await j<Content[]>("/api/contents?featureId=yt-product-video");
+    const linked = list.data.filter((c) => (c.context.workflow as { stage1Id?: string } | undefined)?.stage1Id === c1.id);
+    expect(linked).toHaveLength(2);
+    // 블로그는 2단계가 아니다, 1단계가 아닌 결과로 2단계를 부를 수 없다
+    expect((await post("/api/contents/stage1", { featureId: "blog-info-writing", input: { topic: "가을 캠핑" }, clientRequestId: "x" })).ok).toBe(false);
+    expect((await post("/api/contents/stage2", { stage1Id: groups[0].id, title: "x", hook: "", cta: "" })).ok).toBe(false);
   }, 120_000);
 
   it("상품 URL 학습(데모 Bright Data): 새 상품 → 상태 확인 → AI 분석 → 저장 → 다시 넣으면 기존 제품 → 다시 학습", async ({ skip }) => {

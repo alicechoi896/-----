@@ -43,9 +43,9 @@ export function PromptStatsCard() {
         <span className="whitespace-nowrap">
           <span className="font-medium text-fg">{PROMPT_NAME[r.promptId] ?? r.promptId}</span>
           <span className="ml-1.5 text-xs text-fg-subtle">v{r.version}</span>
-          {r.mode === "precise" && (
+          {r.mode !== "fast" && (
             <Badge tone="brand" className="ml-1.5">
-              정밀
+              {r.mode === "two-stage" ? "2단계" : "정밀"}
             </Badge>
           )}
         </span>

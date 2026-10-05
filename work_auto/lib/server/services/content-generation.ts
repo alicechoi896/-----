@@ -5,15 +5,13 @@ import { findGeneratorConfig } from "@/lib/generators/configs";
 import { findFeature } from "@/lib/registry";
 import { isListFormat, type OutputSection } from "@/lib/generators/types";
 import {
-  PRECISE_ANGLE_COUNT,
-  PRECISE_TITLE_COUNT,
   TOP_TITLE_COUNT,
   scriptMetaKey,
   supportsPrecise,
   type PreciseQuality,
-  type PreciseStage,
 } from "@/lib/generators/quality";
-import type { ChannelId, ContextSummary, GenerateContentRequest, GeneratedContent, GeneratedValue } from "@/lib/types";
+import type { ChannelId, ContentWorkflow, ContextSummary, GenerateContentRequest, GeneratedContent, GeneratedValue, KeywordIntelligence } from "@/lib/types";
+import { keywordIntelligence, pickSeed } from "./keyword-intelligence";
 import { createId, nowIso } from "@/lib/utils";
 import { buildGenerationContext } from "../ai/context-builder";
 import { renderContentPrompt } from "../ai/prompts/render";
@@ -109,7 +107,7 @@ async function finish(
   p: Prepared,
   output: Record<string, GeneratedValue>,
   ai: { provider: string; model: string },
-  extra: { headline?: string; quality?: PreciseQuality } = {},
+  extra: { headline?: string; quality?: PreciseQuality; workflow?: ContentWorkflow; keywordIntel?: KeywordIntelligence | null } = {},
 ): Promise<GeneratedContent> {
   const { feature, config, featureId, channelId, userId, input, context, template } = p;
   if (context.honestyGuard) {
@@ -118,7 +116,12 @@ async function finish(
   }
   const headlineValue = output[config.headlineKey];
   const headline = extra.headline || (Array.isArray(headlineValue) ? headlineValue[0] : headlineValue) || feature.title;
-  const summary: ContextSummary = extra.quality ? { ...context.summary, quality: extra.quality } : context.summary;
+  const summary: ContextSummary = {
+    ...context.summary,
+    ...(extra.quality ? { quality: extra.quality } : {}),
+    ...(extra.workflow ? { workflow: extra.workflow } : {}),
+    ...(extra.keywordIntel ? { keywordIntel: compactIntel(extra.keywordIntel) } : {}),
+  };
   const content: GeneratedContent = {
     id: createId("cnt"),
     userId,
@@ -145,12 +148,37 @@ async function finish(
 }
 
 const str = (v: unknown, n: number) => (typeof v === "string" ? v.trim().slice(0, n) : "");
+
+/** 1단계에 만드는 항목 (나머지는 2단계) */
+export const STAGE1_KEYS = new Set(["topics", "titles", "hooks", "ctas"]);
+/** 2단계 생성을 쓰는 기능: 영상·클립 (대본·제목·Hook 이 있는 것) */
+export const isTwoStage = (outputs: OutputSection[]) => supportsPrecise(outputs);
+
+/** 저장용 Keyword Intelligence (후보 15개·근거만) */
+function compactIntel(k: KeywordIntelligence): KeywordIntelligence {
+  return { ...k, candidates: k.candidates.slice(0, 15) };
+}
+
+/** 생성 직전 Keyword Intelligence (기능별 Seed 1개, 플랫폼 호출은 여기서만) */
+async function collectIntel(p: Prepared, requestId?: string): Promise<KeywordIntelligence> {
+  const seed = pickSeed(p.featureId, p.input, {
+    productName: p.context.product?.product.name ?? null,
+    trendTitle: p.context.trend?.title ?? null,
+    category: typeof p.input.category === "string" ? p.input.category : null,
+  });
+  return keywordIntelligence.collect({ userId: p.userId, featureId: p.featureId, seed, requestId });
+}
 const listOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 export const contentGenerationService = {
-  /** 빠른 생성: AI 1회 */
-  async generate(req: GenerateContentRequest): Promise<GeneratedContent> {
+  /** 한 번에 생성 (블로그·예전 방식). 블로그는 생성 직전에 NAVER Keyword Intelligence 를 모아 넣는다 */
+  async generate(req: GenerateContentRequest & { clientRequestId?: string }): Promise<GeneratedContent> {
     const p = await prepare(req);
+    const intel = p.featureId.startsWith("blog-") ? await collectIntel(p, req.clientRequestId) : null;
+    if (intel) {
+      p.context.keywordIntel = intel;
+      if (intel.note) p.context.summary.notes.push(intel.note);
+    }
     // 3) Prompt → 4) AI 호출
     const messages = renderContentPrompt(p.template, p.config, p.input, p.context);
     const ai = await getAIProvider();
@@ -161,192 +189,129 @@ export const contentGenerationService = {
       jsonSchema: outputSchema(p.config.outputs),
       variables: { featureId: p.featureId, outputs: p.config.outputs, input: p.input, context: p.context },
     });
-    return finish(p, normalizeOutput(p.config.outputs, result.data), result);
+    return finish(p, normalizeOutput(p.config.outputs, result.data), result, intel ? { keywordIntel: intel } : {});
   },
 
   /**
-   * 정밀 생성 (v0.9.31): AI 4회. 같은 Context·프롬프트 위에 단계 지시만 더한다. docs/QUALITY_MODES.md
-   *  ① 앵글 3개 → ② 제목 40개 + 추천 TOP 5(이유) + Hook → ③ 앵글별 대본 3편 + 나머지 항목 → ④ 이탈 지점 검토·수정 + 뼈대 판정
-   * onStage 로 단계가 시작될 때마다 알린다 (화면 진행 표시). ④가 실패하면 ③ 대본을 그대로 저장한다.
+   * 1단계 (영상·클립): Keyword Intelligence → 제목·Hook·CTA 후보 (+ 정보성은 추천 주제). 대본·설명·태그는 아직 만들지 않는다.
+   * 플랫폼 API 는 여기서만 (YouTube search 1 + videos 1 / NAVER 블로그 검색 1 + 데이터랩 1). docs/TWO_STAGE_CONTENT_GENERATION.md
    */
-  async generatePrecise(req: GenerateContentRequest, onStage: (stage: PreciseStage) => void = () => {}): Promise<GeneratedContent> {
+  async stage1(req: GenerateContentRequest & { clientRequestId?: string }): Promise<GeneratedContent> {
     const p = await prepare(req);
-    if (!supportsPrecise(p.config.outputs)) throw new AppError("VALIDATION", "정밀 생성은 영상·클립 원고에서만 쓸 수 있습니다.");
+    if (!isTwoStage(p.config.outputs)) throw new AppError("VALIDATION", "2단계 생성은 영상·클립 원고에서만 씁니다.");
+    const intel = await collectIntel(p, req.clientRequestId);
+    p.context.keywordIntel = intel;
+    if (intel.note) p.context.summary.notes.push(intel.note);
+    const outputs = p.config.outputs.filter((o) => STAGE1_KEYS.has(o.key));
+    const messages = renderContentPrompt(p.template, { ...p.config, outputs }, p.input, p.context);
+    messages.push({
+      role: "user",
+      content: [
+        "[1단계] 제목 후보·Hook 후보·CTA 후보만 만든다. 대본·설명·키워드·태그는 아직 쓰지 않는다 (사용자가 제목을 고른 뒤 2단계에서 만든다).",
+        "제목은 Keyword Intelligence 의 실제 표현과 제품·주제의 사실을 활용하고, 서로 다른 약속(구매 판단·기능·비교·후회 방지 등)을 하게 만든다.",
+        "제목을 다 쓴 뒤 클릭률이 가장 높을 5개를 골라 title_top 에 1부터 센 번호와 이유를 쓴다.",
+      ].join("\n"),
+    });
     const ai = await getAIProvider();
-    const { config, featureId, input, context, template } = p;
-    const base = (outputs: OutputSection[]) => renderContentPrompt(template, { ...config, outputs }, input, context);
-    const vars = { featureId, input, context };
-
-    // ① 앵글
-    onStage("angles");
-    const scriptSection = config.outputs.find((o) => o.key === "script")!;
-    const angleT = getPromptTemplate("content.precise-angles");
-    const r1 = await ai.generateStructured<{ angles?: unknown }>({
-      task: `content-precise-angles:${featureId}`,
-      messages: [...base([scriptSection]), { role: "user", content: angleT.task }],
-      outputKeys: ["angles"],
-      jsonSchema: {
-        type: "object",
-        additionalProperties: false,
-        required: ["angles"],
-        properties: {
-          angles: {
-            type: "array",
-            description: `서로 다른 앵글 ${PRECISE_ANGLE_COUNT}개`,
-            items: { type: "object", additionalProperties: false, required: ["name", "why"], properties: { name: { type: "string" }, why: { type: "string" } } },
-          },
-        },
-      },
-      variables: { ...vars, step: "angles" },
-      maxTokens: 600,
+    const schema = outputSchema(outputs) as { properties: Record<string, unknown>; required: string[] };
+    schema.properties.title_top = {
+      type: "array",
+      description: "추천 제목 5개 (titles 의 1부터 센 번호)",
+      items: { type: "object", additionalProperties: false, required: ["index", "reason"], properties: { index: { type: "integer" }, reason: { type: "string" } } },
+    };
+    schema.required = [...schema.required, "title_top"];
+    const result = await ai.generateStructured<Record<string, unknown>>({
+      task: `content-stage1:${p.featureId}`,
+      messages,
+      outputKeys: [...outputs.map((o) => o.key), "title_top"],
+      jsonSchema: schema,
+      variables: { featureId: p.featureId, outputs, input: p.input, context: p.context },
     });
-    const angles = listOf(r1.data.angles)
-      .map((a) => ({ name: str((a as { name?: unknown })?.name, 30), why: str((a as { why?: unknown })?.why, 200) }))
-      .filter((a) => a.name)
-      .slice(0, PRECISE_ANGLE_COUNT);
-    if (!angles.length) throw new AppError("AI_BAD_OUTPUT", "앵글을 정하지 못했습니다. 다시 시도해 주세요.", 502);
-    const angleText = angles.map((a, i) => `앵글 ${i + 1}. ${a.name} — ${a.why}`).join("\n");
-
-    // ② 제목 40 + TOP 5 + Hook
-    onStage("titles");
-    const titleT = getPromptTemplate("content.precise-titles");
-    const titleSection: OutputSection = { ...config.outputs.find((o) => o.key === "titles")!, count: PRECISE_TITLE_COUNT };
-    const hookSection = config.outputs.find((o) => o.key === "hooks")!;
-    const r2 = await ai.generateStructured<{ titles?: unknown; hooks?: unknown; title_top?: unknown }>({
-      task: `content-precise-titles:${featureId}`,
-      messages: [...base([titleSection, hookSection]), { role: "user", content: `${titleT.task}\n[앵글]\n${angleText}` }],
-      outputKeys: ["titles", "hooks", "title_top"],
-      jsonSchema: {
-        type: "object",
-        additionalProperties: false,
-        required: ["titles", "hooks", "title_top"],
-        properties: {
-          titles: { type: "array", items: { type: "string" }, description: `제목 후보 ${PRECISE_TITLE_COUNT}개` },
-          hooks: { type: "array", items: { type: "string" }, description: `Hook 후보 ${hookSection.count ?? 10}개 이상` },
-          title_top: {
-            type: "array",
-            description: `추천 제목 ${TOP_TITLE_COUNT}개 (titles 의 1부터 센 번호)`,
-            items: { type: "object", additionalProperties: false, required: ["index", "reason"], properties: { index: { type: "integer" }, reason: { type: "string" } } },
-          },
-        },
-      },
-      variables: { ...vars, step: "titles", outputs: [titleSection, hookSection], angles },
-      maxTokens: 3500,
-    });
-    const titles = [...new Set(listOf(r2.data.titles).map((t) => str(t, 120)).filter(Boolean))];
-    const hooks = [...new Set(listOf(r2.data.hooks).map((t) => str(t, 200)).filter(Boolean))];
-    if (!titles.length) throw new AppError("AI_BAD_OUTPUT", "제목을 만들지 못했습니다. 다시 시도해 주세요.", 502);
-    const seenTop = new Set<string>();
-    const titleTop = listOf(r2.data.title_top)
-      .map((t) => {
-        const i = Number((t as { index?: unknown })?.index) - 1;
-        return { title: titles[i] ?? "", reason: str((t as { reason?: unknown })?.reason, 200) };
-      })
-      .filter((t) => t.title && !seenTop.has(t.title) && seenTop.add(t.title))
+    const output = normalizeOutput(outputs, result.data);
+    const titles = Array.isArray(output.titles) ? output.titles : [];
+    const titleTop = listOf(result.data.title_top)
+      .map((t) => ({ title: titles[Number((t as { index?: unknown })?.index) - 1] ?? "", reason: str((t as { reason?: unknown })?.reason, 200) }))
+      .filter((t, i, arr) => t.title && arr.findIndex((x) => x.title === t.title) === i)
       .slice(0, TOP_TITLE_COUNT);
-    // 추천을 고르지 못했으면 앞에서부터 (이유 없이)
-    for (const t of titles) {
-      if (titleTop.length >= TOP_TITLE_COUNT) break;
-      if (seenTop.has(t)) continue;
-      titleTop.push({ title: t, reason: "" });
-      seenTop.add(t);
-    }
-    // 추천 제목을 목록 맨 앞으로 (대표 제목 = 추천 1위)
-    const orderedTitles = [...titleTop.map((t) => t.title), ...titles.filter((t) => !seenTop.has(t))];
+    const workflow: ContentWorkflow = { id: createId("wf"), stage: 1, keywordIntelligence: compactIntel(intel) };
+    return finish(p, output, result, { quality: { mode: "precise", angles: [], titleTop, scripts: [] }, workflow });
+  },
 
-    // ③ 앵글별 대본 3편 + 나머지 항목
-    onStage("scripts");
-    const rest = config.outputs.filter((o) => o.key !== "titles" && o.key !== "hooks");
-    const r3 = await ai.generateStructured<Record<string, unknown>>({
-      task: `content-precise-scripts:${featureId}`,
-      messages: [
-        ...base(rest),
-        {
-          role: "user",
-          content: [
-            "[정밀 생성 3/4: 대본] script 는 대본 3편이고, 대본 1·2·3 은 아래 앵글 1·2·3 을 각각 따른다. 대본 뼈대 규칙을 반드시 지킨다.",
-            `[앵글]\n${angleText}`,
-            `[추천 제목 — 대본이 이 제목의 약속을 지키게]\n${titleTop.map((t) => `- ${t.title}`).join("\n")}`,
-            `[Hook 후보 — 첫 줄로 골라 쓰거나 다듬어도 된다]\n${hooks.slice(0, 12).map((h) => `- ${h}`).join("\n")}`,
-          ].join("\n"),
-        },
-      ],
-      outputKeys: rest.map((o) => o.key),
-      jsonSchema: outputSchema(rest),
-      variables: { ...vars, step: "scripts", outputs: rest, angles },
+  /**
+   * 2단계: 1단계에서 고른 제목 1개(+ Hook·CTA) → 대본 3편·최종 키워드·태그(해시태그)·설명. 제목마다 1번씩 부른다 (AI 1회).
+   * 플랫폼 API 는 다시 부르지 않고 1단계의 Keyword Intelligence 를 쓴다.
+   */
+  async stage2(input: { stage1Id?: unknown; title?: unknown; hook?: unknown; cta?: unknown }): Promise<GeneratedContent> {
+    const repo = getRepositories();
+    const userId = await getCurrentUserId();
+    const s1 = await repo.contents.get(String(input.stage1Id ?? ""));
+    if (!s1 || s1.userId !== userId || s1.context.workflow?.stage !== 1) throw new AppError("NOT_FOUND", "1단계 결과를 찾을 수 없습니다.", 404);
+    const title = str(input.title, 200);
+    const hook = str(input.hook, 300);
+    const cta = str(input.cta, 300);
+    if (!title) throw new AppError("VALIDATION", "제목을 골라 주세요.");
+    const p = await prepare({ featureId: s1.featureId, input: { ...s1.input } });
+    const intel = s1.context.workflow.keywordIntelligence ?? null;
+    p.context.keywordIntel = intel;
+    const outputs = p.config.outputs.filter((o) => !STAGE1_KEYS.has(o.key));
+    const messages = renderContentPrompt(p.template, { ...p.config, outputs }, p.input, p.context);
+    const tagKey = outputs.some((o) => o.key === "tags") ? "tags" : outputs.some((o) => o.key === "hashtags") ? "hashtags" : null;
+    const isInfo = p.featureId.includes("info");
+    messages.push({
+      role: "user",
+      content: [
+        "[2단계] 사용자가 고른 아래 제목·Hook·CTA 로 만든다. 제목·Hook·CTA 는 바꾸지 않는다 (문장 연결을 위해 아주 조금 다듬는 것만 허용).",
+        `[선택한 제목] ${title}`,
+        `[선택한 Hook] ${hook || "(없음 — 제목에 맞는 Hook 을 첫 줄로)"}`,
+        `[선택한 CTA] ${cta || "(없음 — 자연스러운 마무리)"}`,
+        "규칙:",
+        "1. 대본 3편은 모두 이 제목의 약속을 실제로 전달한다 (예: '3가지'면 대본 안에 실제 3가지, '카메라가 달라진 이유'면 카메라가 중심).",
+        "2. 대본 3편의 첫 줄은 선택한 Hook(또는 그 변형), 마지막은 선택한 CTA 로 끝낸다.",
+        isInfo
+          ? "3. 3편은 설득 구조가 다르다: ① 가장 중요한 정보부터 ② 궁금증·반전형 ③ 체크리스트·정리형. script_structures 에 각 편의 구조 이름을 쓴다."
+          : "3. 3편은 설득 구조가 다르다: ① 문제 해결형 ② 핵심 장점·결론 먼저 ③ 비교·구매 판단형. script_structures 에 각 편의 구조 이름을 쓴다.",
+        "4. primary_keyword 는 이 제목의 검색 의도에 맞는 핵심 키워드 1개, related_keywords 는 제목·대본 방향에 맞는 관련 키워드(검색 의도 intent: purchase·info·compare·review·howto 중 하나). Keyword Intelligence 의 실제 표현을 우선 쓰고, 제목과 관계없는 키워드는 넣지 않는다.",
+        tagKey ? `5. ${tagKey} 는 최종 키워드(primary_keyword + related_keywords)에서 만든다. 중복·의미 없는 일반 단어는 뺀다.` : "",
+        "6. 설명(description)은 이 제목과 대본에 실제로 나온 내용만 쓴다. 제품 스펙은 [제품 정보] 범위 안에서만.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
     });
-    const restOut = normalizeOutput(rest, r3.data);
-    const drafts = (Array.isArray(restOut.script) ? restOut.script : [restOut.script]).filter((s) => s.trim());
-    if (!drafts.length) throw new AppError("AI_BAD_OUTPUT", "대본을 만들지 못했습니다. 다시 시도해 주세요.", 502);
-
-    // ④ 이탈 지점 검토·수정 (실패해도 ③ 대본으로 저장)
-    onStage("review");
-    const reviewT = getPromptTemplate("content.precise-review");
-    let finalScripts = drafts;
-    let reviews: { review: string; checks: PreciseQuality["scripts"][number]["checks"] }[] = drafts.map(() => ({ review: "", checks: { hook: false, openLoop: false, answer: false } }));
-    try {
-      const r4 = await ai.generateStructured<{ scripts?: unknown }>({
-        task: `content-precise-review:${featureId}`,
-        messages: [
-          { role: "system", content: reviewT.system },
-          {
-            role: "user",
-            content: [
-              reviewT.task,
-              `[영상 길이] ${String(input.length ?? "") || "입력 없음"}`,
-              ...drafts.map((d, i) => `### 대본 ${i + 1} (앵글: ${angles[i]?.name ?? "-"})\n${d}`),
-            ].join("\n"),
-          },
-        ],
-        outputKeys: ["scripts"],
-        jsonSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["scripts"],
-          properties: {
-            scripts: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["script", "review", "hook", "open_loop", "answer"],
-                properties: {
-                  script: { type: "string", description: "고친 대본 (고칠 곳이 없으면 원래 대본)" },
-                  review: { type: "string" },
-                  hook: { type: "boolean" },
-                  open_loop: { type: "boolean" },
-                  answer: { type: "boolean" },
-                },
-              },
-            },
-          },
-        },
-        variables: { ...vars, step: "review", drafts },
-        maxTokens: 4000,
-      });
-      const items = listOf(r4.data.scripts);
-      finalScripts = drafts.map((d, i) => {
-        const fixed = str((items[i] as { script?: unknown })?.script, 4000);
-        // 고친 대본이 너무 짧아졌으면(잘림) 원래 대본
-        return fixed && fixed.length >= d.length * 0.5 ? fixed : d;
-      });
-      reviews = drafts.map((_, i) => {
-        const it = (items[i] ?? {}) as Record<string, unknown>;
-        return { review: str(it.review, 300), checks: { hook: it.hook === true, openLoop: it.open_loop === true, answer: it.answer === true } };
-      });
-    } catch {
-      context.summary.notes.push("정밀 생성: 이탈 지점 검토 단계가 실패해 검토 전 대본을 저장했습니다.");
-    }
-
+    const schema = outputSchema(outputs) as { properties: Record<string, unknown>; required: string[] };
+    schema.properties.primary_keyword = { type: "string" };
+    schema.properties.related_keywords = {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["keyword", "intent"], properties: { keyword: { type: "string" }, intent: { type: "string" } } },
+    };
+    schema.properties.script_structures = { type: "array", items: { type: "string" }, description: "대본 3편 각각의 설득 구조 이름" };
+    schema.required = [...schema.required, "primary_keyword", "related_keywords", "script_structures"];
+    const ai = await getAIProvider();
+    const result = await ai.generateStructured<Record<string, unknown>>({
+      task: `content-stage2:${p.featureId}`,
+      messages,
+      outputKeys: [...outputs.map((o) => o.key), "primary_keyword", "related_keywords", "script_structures"],
+      jsonSchema: schema,
+      variables: { featureId: p.featureId, outputs, input: p.input, context: p.context, selected: { title, hook, cta } },
+    });
+    const output = normalizeOutput(outputs, result.data);
+    const primaryKeyword = str(result.data.primary_keyword, 60);
+    const relatedKeywords = listOf(result.data.related_keywords)
+      .map((r) => ({ keyword: str((r as { keyword?: unknown })?.keyword, 60), intent: str((r as { intent?: unknown })?.intent, 20) || "info" }))
+      .filter((r, i, arr) => r.keyword && r.keyword !== primaryKeyword && arr.findIndex((x) => x.keyword === r.keyword) === i)
+      .slice(0, 20);
+    // 키워드 칸 = 최종 키워드 (제목 기준), 태그는 중복 제거
+    if (outputs.some((o) => o.key === "keywords")) output.keywords = [primaryKeyword, ...relatedKeywords.map((r) => r.keyword)].filter(Boolean);
+    if (tagKey && Array.isArray(output[tagKey])) output[tagKey] = [...new Set((output[tagKey] as string[]).map((t) => t.trim()).filter((t) => t.replace(/^#/, "").length >= 2))];
+    const scripts = Array.isArray(output.script) ? output.script : [];
+    const structures = listOf(result.data.script_structures).map((x) => str(x, 30));
     const quality: PreciseQuality = {
       mode: "precise",
-      angles,
-      titleTop,
-      scripts: finalScripts.map((s, i) => ({ key: scriptMetaKey(s), angle: angles[i]?.name ?? "", ...reviews[i] })),
+      angles: [],
+      titleTop: [],
+      scripts: scripts.map((s, i) => ({ key: scriptMetaKey(s), angle: structures[i] ?? "", checks: { hook: true, openLoop: true, answer: true }, review: "" })),
     };
-    const output: Record<string, GeneratedValue> = {};
-    for (const o of config.outputs) output[o.key] = o.key === "titles" ? orderedTitles : o.key === "hooks" ? hooks : o.key === "script" ? finalScripts : restOut[o.key];
-    return finish(p, output, r3, { headline: orderedTitles[0], quality });
+    const workflow: ContentWorkflow = { id: s1.context.workflow.id, stage: 2, stage1Id: s1.id, selected: { title, hook, cta }, primaryKeyword, relatedKeywords };
+    return finish(p, output, result, { headline: title, quality, workflow });
   },
 
   /**
@@ -377,8 +342,26 @@ export const contentGenerationService = {
 
     const input = { ...content.input };
     const context = await buildGenerationContext({ userId, featureId: content.featureId, channelId: content.channelId, config, input });
+    // 2단계 생성 결과: 1단계 Keyword Intelligence 를 그대로 (플랫폼 API 재호출 없음)
+    const wf = content.context.workflow;
+    if (wf?.stage === 1) context.keywordIntel = wf.keywordIntelligence ?? null;
+    if (wf?.stage === 2 && wf.stage1Id) context.keywordIntel = (await repo.contents.get(wf.stage1Id))?.context.workflow?.keywordIntelligence ?? null;
     const template = getPromptTemplate(config.promptId);
     const messages = renderContentPrompt(template, { ...config, outputs: sections }, input, context);
+    if (wf?.stage === 2 && wf.selected) {
+      messages.push({
+        role: "user",
+        content: [
+          "[2단계 · 같은 제목으로] 아래 제목·Hook·CTA 를 그대로 지킨다. 새 제목을 만들거나 방향을 바꾸지 않는다. 대본은 이 제목의 약속을 실제로 전달한다.",
+          `[선택한 제목] ${wf.selected.title}`,
+          `[선택한 Hook] ${wf.selected.hook || "(없음)"}`,
+          `[선택한 CTA] ${wf.selected.cta || "(없음)"}`,
+          wf.primaryKeyword ? `[핵심 키워드] ${wf.primaryKeyword}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+    }
 
     // 지금 결과: 다시 만들 항목은 "겹치지 말 것", 나머지는 "어울리게" 참고용 (길이 제한)
     const clip = (v: GeneratedValue | undefined, n: number) => JSON.stringify(v ?? "").slice(0, n);

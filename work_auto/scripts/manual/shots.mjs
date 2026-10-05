@@ -35,9 +35,19 @@ async function generate(p, label) {
 }
 /** 생성 결과 패널 (오른쪽 열) */
 const resultPanel = (p) => p.getByText("생성 완료").first().locator("xpath=ancestor::div[contains(@class,'space-y-4')][1]");
-async function ytResult(p) {
+/** 영상 원고 2단계: 1단계 후보 → 제목 1개 고르기 → 2단계 결과 */
+async function ytStage1(p) {
   await pickProduct(p);
-  await generate(p, "영상 원고 생성하기");
+  await btn(p, "1단계 · 제목·Hook·CTA 만들기").last().click();
+  await p.locator("[data-title-option]").first().waitFor({ timeout: 30_000 });
+  await p.waitForTimeout(500);
+}
+async function ytResult(p) {
+  await ytStage1(p);
+  await p.locator("[data-title-option] input").first().check();
+  await p.locator("[data-run-stage2]").click();
+  await p.getByText("생성 완료").first().waitFor({ timeout: 30_000 });
+  await p.waitForTimeout(600);
 }
 
 export const SHOTS = [
@@ -321,39 +331,39 @@ export const SHOTS = [
     marks: {
       1: (p) => field(p, "제품 선택"),
       2: (p) => field(p, "영상 길이"),
-      3: (p) => btn(p, "영상 원고 생성하기").last(),
-      4: (p) => p.locator("[data-generation-mode]").first(),
+      3: (p) => btn(p, "1단계 · 제목·Hook·CTA 만들기").last(),
+      4: (p) => p.locator("[data-two-stage-hint]").first(),
     },
   },
   {
-    id: "05-precise-result",
-    clip: resultPanel,
+    id: "05-stage1",
+    clip: (p) => p.locator("[data-two-stage]").first(),
     clipPad: 10,
-    viewport: { width: 1280, height: 2300 },
+    viewport: { width: 1280, height: 1600 },
     url: "/youtube/product-video",
     prepare: async (p) => {
-      await pickProduct(p);
-      await p.getByRole("radio", { name: "정밀 생성" }).click();
-      await generate(p, "정밀 영상 원고 생성하기");
+      await ytStage1(p);
+      await p.locator("[data-title-option] input").nth(0).check();
+      await p.locator("[data-title-option] input").nth(1).check();
     },
-    scrollTo: (p) => p.locator("h3", { hasText: "제목 후보" }).first(),
+    scrollTo: (p) => p.locator("[data-two-stage]").first(),
     marks: {
-      1: (p) => p.locator("[data-title-top] > div").first(),
-      2: (p) => p.locator("[data-title-top] button", { hasText: /나머지 \d+개 보기/ }).first(),
-      3: (p) => p.locator("[data-script-meta]").first(),
-      4: (p) => p.getByText("검토 메모").first().locator("xpath=.."),
+      1: (p) => p.locator("[data-keyword-intel]").first(),
+      2: (p) => p.locator("[data-title-option]").first(),
+      3: (p) => p.getByText(/^Hook 후보/).first(),
+      4: (p) => p.locator("[data-run-stage2]").first(),
     },
   },
   {
     id: "05-yt-result",
-    clip: resultPanel,
     clipPad: 10,
     url: "/youtube/product-video",
-    viewport: { width: 1280, height: 1000 },
+    viewport: { width: 1280, height: 1300 },
     prepare: ytResult,
-    scrollTo: (p) => p.getByText("생성 완료").first(),
+    clip: (p) => p.locator("[data-stage2-groups]").first(),
+    scrollTo: (p) => p.locator("[data-stage2-groups]").first(),
     marks: {
-      1: (p) => p.locator("h3", { hasText: "제목 후보" }).first().locator("xpath=ancestor::section[1]"),
+      1: (p) => p.locator("[data-stage2-groups] [role=tablist]").first().locator("xpath=following-sibling::div[1]"),
       2: (p) => cardWith(p, "이번 생성에 사용된 학습 데이터"),
       3: (p) => p.getByText("미업로드", { exact: true }).first(),
     },
@@ -457,11 +467,11 @@ export const SHOTS = [
     clipPad: 10,
     url: "/youtube/product-video",
     prepare: ytResult,
-    scrollTo: (p) => p.locator("h3", { hasText: "제목 후보" }).first(),
+    scrollTo: (p) => p.locator("[data-stage2-groups] h3", { hasText: "대본" }).first(),
     marks: {
-      1: (p) => btn(p, "직접 수정").first(),
-      2: (p) => btn(p, "추가 만들기").first(),
-      3: (p) => p.locator("main input[type=checkbox]").first(),
+      1: (p) => p.locator("[data-stage2-groups]").getByRole("button", { name: "직접 수정" }).first(),
+      2: (p) => p.locator("[data-stage2-groups]").getByRole("button", { name: "추가 만들기" }).first(),
+      3: (p) => p.locator("[data-stage2-groups] input[type=checkbox]").first(),
     },
   },
   {

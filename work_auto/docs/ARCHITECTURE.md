@@ -345,3 +345,9 @@ URL 쿼리(`?productId=`)로 받는 값은 페이지(Server)에서 `await search
 
 `XiaohongshuSearchProvider` (lib/server/providers/xiaohongshu) → TikHub 구현 / 데모 Mock. 서비스 `xhs-search.ts` 가 기간·페이지·캐시를 맡고,
 가져오기는 기존 `videoService.importMany()` 를 그대로 쓴다. 검색 결과는 저장하지 않는다. 자세한 내용은 [XIAOHONGSHU_SEARCH.md](./XIAOHONGSHU_SEARCH.md).
+
+## 2단계 생성 · Keyword Intelligence (v0.9.40)
+
+- 영상·클립: `/api/contents/stage1` (Keyword Intelligence → 제목·Hook·CTA 후보, 플랫폼 API 는 여기서만) → `/api/contents/stage2` (고른 제목 1개 → 대본·키워드·태그·설명, AI 1회). 두 단계 행은 `context.workflow` 로 이어진다 (DB 변경 없음).
+- Keyword Intelligence: `lib/server/services/keyword-intelligence.ts` → Provider(`keywordEvidence` / `blogEvidence`·`relativeInterest`) → 압축 결과를 GenerationContext.keywordIntel 로 프롬프트에 넣음. 캐시 30분·동시 요청 합침·실패 시 fallback_ai.
+- 자세히: docs/TWO_STAGE_CONTENT_GENERATION.md, docs/KEYWORD_INTELLIGENCE.md

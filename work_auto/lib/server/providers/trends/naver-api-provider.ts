@@ -4,7 +4,7 @@ import { categorySeedKeywords } from "@/lib/mock/naver-trends";
 import { hasExcluded } from "@/lib/types/profile";
 import type { Keyword, NaverKeywordStats, NaverRisingTopic, NaverTrendInsight, NaverTrendMore, NaverTrendQuery, NaverTrendSection } from "@/lib/types";
 import { seededNumber } from "@/lib/utils";
-import type { NaverTrendProvider } from "../types";
+import type { NaverTrendProvider, KeywordEvidencePost } from "../types";
 import { SearchAdError, fetchKeywordTool, type SearchAdCredentials, type SearchAdKeyword } from "./naver-searchad";
 
 /**
@@ -128,6 +128,47 @@ export class NaverApiProvider implements NaverTrendProvider {
       parts.push("검색광고 API 미연결 (검색량·연관 키워드 없이 동작. 'NAVER 검색광고 API' 카드에서 연결)");
     }
     return { ok: true, message: parts.join(" · "), testedAt, mock: false };
+  }
+
+  /* ───────── Keyword Intelligence (자동 재시도 없음) ───────── */
+
+  async blogEvidence(seed: string, display: number): Promise<KeywordEvidencePost[]> {
+    const res = await fetch(`${BLOG_URL}?${new URLSearchParams({ query: seed, display: String(Math.min(100, Math.max(10, display))), sort: "sim" }).toString()}`, {
+      headers: this.headers(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
+      throw new NaverHttpError(describeNaverError(res.status, body, "검색"));
+    }
+    const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;|&gt;/g, "").trim();
+    const data = (await res.json()) as { items?: { title?: string; description?: string; postdate?: string }[] };
+    return (data.items ?? []).map((i) => ({ title: strip(i.title ?? ""), description: strip(i.description ?? "").slice(0, 300), postdate: i.postdate ?? null }));
+  }
+
+  async relativeInterest(keywords: string[]): Promise<Record<string, { avg: number; recent: number; previous: number }>> {
+    const list = [...new Set(keywords.map((k) => k.trim()).filter(Boolean))].slice(0, 5);
+    if (!list.length) return {};
+    const end = new Date(Date.now() - 86_400_000);
+    const start = new Date(end.getTime() - 83 * 86_400_000);
+    const res = await fetch(DATALAB_URL, {
+      method: "POST",
+      headers: this.headers(),
+      cache: "no-store",
+      body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), timeUnit: "week", keywordGroups: list.map((k) => ({ groupName: k, keywords: [k] })) }),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null)) as { errorCode?: string; errorMessage?: string } | null;
+      throw new NaverHttpError(describeNaverError(res.status, err));
+    }
+    const data = (await res.json()) as { results?: { title: string; data?: { ratio: number }[] }[] };
+    const out: Record<string, { avg: number; recent: number; previous: number }> = {};
+    for (const r of data.results ?? []) {
+      const v = (r.data ?? []).map((d) => d.ratio);
+      const mean = (xs: number[]) => (xs.length ? Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10 : 0);
+      out[r.title] = { avg: mean(v), recent: mean(v.slice(-4)), previous: mean(v.slice(-8, -4)) };
+    }
+    return out;
   }
 
   /* ───────── 외부 호출 ───────── */

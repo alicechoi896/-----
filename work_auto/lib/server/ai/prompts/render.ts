@@ -112,6 +112,20 @@ function contextBlocks(ctx: GenerationContext): string[] {
       );
     }
   }
+  // Keyword Intelligence: 실제 플랫폼 데이터의 키워드 후보 (검색량 아님)
+  if (ctx.keywordIntel && ctx.keywordIntel.candidates.length) {
+    const ki = ctx.keywordIntel;
+    const where = ki.source === "youtube" ? `YouTube 관련 영상 ${ki.sampleSize}개` : `NAVER 블로그 글 ${ki.sampleSize}개`;
+    blocks.push(
+      block(`Keyword Intelligence — '${ki.seed}' 실제 ${where}에서 반복된 표현 (근거 있는 키워드 후보)`, [
+        "제목·Hook·키워드는 아래 실제 표현을 우선 활용한다. 목록에 없는 검색량·순위·점수는 만들지 않는다. 제품·주제와 관계없는 표현은 쓰지 않는다.",
+        ...ki.candidates.slice(0, 15).map((c) => `- ${c.keyword} (${c.evidence})`),
+        ...(ki.trendSignals.length
+          ? ["NAVER 데이터랩 상대 관심도 (0~100, 검색량 아님):", ...ki.trendSignals.map((t) => `- ${t.keyword}: ${t.relativeInterest} (${t.direction === "up" ? "최근 상승" : t.direction === "down" ? "최근 하락" : "비슷"})`)]
+          : []),
+      ]),
+    );
+  }
   if (ctx.learning) {
     const LABEL: Record<string, string> = {
       title_insights: "제목",

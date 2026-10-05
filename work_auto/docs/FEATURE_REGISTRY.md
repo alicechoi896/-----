@@ -22,7 +22,7 @@
 | 채널 | ID | 기능 | Route | 종류 | 상태 | 필요 API | 입력 데이터 | 출력 데이터 | 구현 |
 |------|----|------|-------|------|------|----------|-------------|-------------|------|
 | YouTube | `yt-trends` | YouTube 트렌드 찾기 | `/youtube/trends` | trend | ✅ | YouTube Data API | 국가, 카테고리, 키워드, 게시일 범위(최근 N일), 구독자·조회수·댓글 범위, Shorts/롱폼, 저장한 조건 | Shorts/롱폼, 키워드·태그, 정렬(Trend Score·조회수·게시일·일평균·댓글), 추천 키워드, AI 추천 주제, 잘된 이유·추천 제목, 찜, 50개씩 더 불러오기, 아웃라이어 점수(채널 최근 15개 중앙값 대비·터진 영상, docs/OUTLIER_SCORE.md), 제목 대본 포맷에 담기 | `features/youtube-trends` |
-| YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | ✅ | OpenAI | 제품*, 참고 트렌드, 주요 키워드, 영상 길이, 콘텐츠 스타일, 생성 방식(빠른·정밀) | 제목 후보(정밀: 40개·추천 TOP 5), Hook, 대본 3편(정밀: 앵글·뼈대 체크·검토 메모), CTA, 설명글, 주요 키워드, 태그 | ContentGenerator (docs/QUALITY_MODES.md) |
+| YouTube | `yt-product-video` | 제품 홍보 영상 만들기 | `/youtube/product-video` | generator | ✅ | OpenAI | 제품*, 참고 트렌드, 주요 키워드, 영상 길이, 콘텐츠 스타일 | ① 제목·Hook·CTA 후보(★ TOP 5) → ② 고른 제목마다 대본 3편(구조별)·핵심/관련 키워드·태그·설명 | ContentGenerator + TwoStageWorkspace (docs/TWO_STAGE_CONTENT_GENERATION.md, Keyword Intelligence: YouTube) |
 | YouTube | `yt-info-video` | 정보성 영상 만들기 | `/youtube/info-video` | generator | ✅ | OpenAI | 카테고리*, 트렌드, 주제, 주요 키워드, 영상 길이 | 추천 주제, 제목(3), Hook, 대본, 설명글, 키워드 | ContentGenerator |
 | NAVER 클립 | `clip-trends` | 네이버 트렌드 소재 찾기 | `/naver-clip/trends` | trend | ✅ | NAVER API | 카테고리, 검색어, 최근 기간 | 급상승 주제, 급상승 키워드, 시즌 키워드, 관련 키워드 | `features/naver-trends` (clip) |
 | NAVER 클립 | `clip-product-content` | 제품 홍보 클립 만들기 | `/naver-clip/product-content` | generator | ✅ | OpenAI | 제품*, 트렌드, 콘텐츠 스타일, 주요 키워드 | 제목, Hook, 클립 대본, 설명글, 키워드, 해시태그 | ContentGenerator |
@@ -103,3 +103,9 @@
 4. 1장 요약의 숫자
 
 절차는 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)를 본다.
+
+## 2단계 생성 · Keyword Intelligence (v0.9.40)
+
+- 2단계 생성(제목 먼저 → 제목별 대본): `yt-product-video` · `yt-info-video` · `clip-product-content` · `clip-info-content` (docs/TWO_STAGE_CONTENT_GENERATION.md)
+- Keyword Intelligence: YouTube 기능 = YouTube Data API(search 1·videos 1), 클립·블로그 = NAVER(블로그 검색 1·데이터랩 1) (docs/KEYWORD_INTELLIGENCE.md)
+- 블로그 3종은 1회 생성 그대로 + 생성 전 NAVER Keyword Intelligence

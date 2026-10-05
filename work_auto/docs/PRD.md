@@ -253,3 +253,7 @@ AI 학습 관리 → 나의 스타일 → 기본 스타일 등록
 7. **추가 채널**: Instagram Reels, TikTok, Threads (Registry에 채널 1개를 추가)
 
 자세한 순서는 [NEXT_STEPS.md](./NEXT_STEPS.md)를 본다.
+
+## 부록: 2단계 생성 (v0.9.40)
+
+영상·클립 원고는 **제목을 먼저 고르고 그 제목에 맞는 대본**을 만든다. 1단계에서 실제 플랫폼 데이터(Keyword Intelligence)를 참고해 제목·Hook·CTA 후보를 만들고, 사용자가 제목(여러 개)·Hook·CTA 를 고르면 2단계에서 제목마다 대본 3편·핵심 키워드·태그·설명을 만든다. 블로그는 기존 흐름에 NAVER Keyword Intelligence 만 더한다. 자세히: docs/TWO_STAGE_CONTENT_GENERATION.md

@@ -125,7 +125,8 @@
 | GET / POST | `/api/script-formats` | 대본 포맷 목록 / 만들기 | scriptFormatService |
 | PUT / PATCH / DELETE | `/api/script-formats/:id` | 수정 / 기본으로 / 삭제 | scriptFormatService |
 | POST | `/api/script-formats/analyze` { examples, contentType } | 참고 대본 → 포맷 가이드라인 (AI, 저장 안 함) | scriptFormatService.analyze |
-| POST | `/api/contents/generate/precise` { featureId, input } | 정밀 생성 (AI 4회, NDJSON 스트림: stage → done/error, 영상·클립만) | contentGenerationService.generatePrecise |
+| POST | `/api/contents/stage1` { featureId, input, clientRequestId } | 2단계 생성 ① 제목·Hook·CTA 후보 + Keyword Intelligence (영상·클립만) | contentGenerationService.stage1 |
+| POST | `/api/contents/stage2` { stage1Id, title, hook, cta } | 2단계 생성 ② 고른 제목 1개 → 대본 3편·키워드·태그·설명 (플랫폼 API 0회) | contentGenerationService.stage2 |
 | POST | `/api/script-formats/titles` { formatId? \| newFormat, titles } | [대본 포맷에 담기]: 제목칸에만 (기존 포맷에 더하기 / 새 포맷) | scriptFormatService.addTitles |
 | POST | `/api/styles/type-examples` { kind, types, tone?, existing? } | 원하는 유형으로 Hook·CTA·제목 패턴 예시 10개 (AI, 저장 안 함) | styleTypeExamples |
 | GET | `/api/performance` | 성과 데이터 | memoryService.listPerformance |

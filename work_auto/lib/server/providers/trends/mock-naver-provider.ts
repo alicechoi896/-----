@@ -2,7 +2,7 @@ import "server-only";
 import { buildNaverInsight } from "@/lib/mock/naver-trends";
 import type { NaverTrendInsight, NaverTrendMore, NaverTrendQuery, NaverTrendSection } from "@/lib/types";
 import { serverConfig } from "../../config";
-import type { NaverTrendProvider } from "../types";
+import type { KeywordEvidencePost, NaverTrendProvider } from "../types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const PAGE = 10;
@@ -17,6 +17,21 @@ export class MockNaverTrendProvider implements NaverTrendProvider {
   }
 
   /** 실제 Provider 와 같게 급상승·관련·아이디어는 10개씩 (나머지는 [더보기]) */
+  /** 데모: 검색어로 만든 가짜 블로그 글 */
+  async blogEvidence(seed: string, display: number): Promise<KeywordEvidencePost[]> {
+    const angles = ["추천", "후기", "비교", "가성비", "구매 가이드", "장단점", "사용법", "2026", "순위", "할인"];
+    return Array.from({ length: Math.min(display, 30) }, (_, i) => ({
+      title: `${seed} ${angles[i % angles.length]} 총정리`,
+      description: `${seed} ${angles[(i + 2) % angles.length]} ${angles[(i + 4) % angles.length]} 솔직하게 정리했어요`,
+      postdate: new Date(Date.now() - i * 3 * 86_400_000).toISOString().slice(0, 10).replace(/-/g, ""),
+    }));
+  }
+
+  /** 데모: 상대 관심도 (검색량 아님) */
+  async relativeInterest(keywords: string[]): Promise<Record<string, { avg: number; recent: number; previous: number }>> {
+    return Object.fromEntries(keywords.slice(0, 5).map((k, i) => [k, { avg: 80 - i * 12, recent: 85 - i * 10, previous: 70 - i * 12 }]));
+  }
+
   async getInsight(query: NaverTrendQuery): Promise<NaverTrendInsight> {
     await sleep(Math.round(serverConfig.mockLatencyMs * 0.6));
     const full = buildNaverInsight(query, Date.now());

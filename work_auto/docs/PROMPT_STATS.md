@@ -4,7 +4,7 @@
 
 AI 학습 관리 › **성과 데이터** 탭 맨 위에 있습니다. `GET /api/performance/prompts` → `memoryService.promptStats()` → `promptVersionStats()`(`lib/domain/prompt-stats.ts`).
 
-**묶는 기준**: 프롬프트 id + 버전 + 생성 방식(빠른 / 정밀 = `context.quality.mode`)
+**묶는 기준**: 프롬프트 id + 버전 + 생성 방식(빠른 / 정밀 = `context.quality.mode` / 2단계 = `context.workflow` 있음, v0.9.40)
 
 | 값 | 계산 |
 |---|---|

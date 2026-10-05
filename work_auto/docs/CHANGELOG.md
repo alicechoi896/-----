@@ -2,6 +2,22 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.40] - 2026-10-05: 2단계 생성(제목 먼저 → 제목별 대본) · Keyword Intelligence
+
+### 변경
+- **영상·클립 원고 4종 = 2단계 생성** (docs/TWO_STAGE_CONTENT_GENERATION.md)
+  - 1단계 `POST /api/contents/stage1`: 제목·Hook·CTA 후보(+정보성은 추천 주제), ★ 추천 제목 TOP 5·이유
+  - 제목 여러 개(최대 5) + Hook 1 + CTA 1 고르기 → [선택한 제목 N개로 대본 만들기]
+  - 2단계 `POST /api/contents/stage2`: 제목마다 대본 3편(서로 다른 구조, 첫 줄 Hook·끝 CTA)·핵심/관련 키워드·키워드에서 나온 태그·해시태그·설명. 제목별 탭, 같은 제목 안에서 대본 [추가 만들기]
+  - 두 단계 모두 생성 이력에 저장 (context.workflow, DB 변경 없음). 이력에서 1단계를 누르면 제목별 결과가 함께 열림. 예전 결과는 그대로 열림
+- **Keyword Intelligence** (docs/KEYWORD_INTELLIGENCE.md): YouTube search.list 1 + videos.list 1 / NAVER 블로그 검색 1 + 데이터랩 1(상대 관심도, 검색량 아님). 30분 캐시·동시 요청 합침·재시도 없음·실패 시 AI 만으로. 2단계·추가 만들기는 0회
+- 블로그 3종: 흐름은 그대로, 생성 전에 NAVER Keyword Intelligence (입력 추가 없음)
+- 생성 버튼 클릭 즉시 잠금 + clientRequestId
+- 프롬프트 성과: 2단계 결과는 생성 방식 "2단계"로 따로 묶음
+
+### 삭제
+- 정밀 생성(AI 4회, `/api/contents/generate/precise`, content.precise-* 템플릿, 빠른/정밀 토글) — 2단계 생성이 대신함
+
 ## [0.9.39] - 2026-10-05: 화면 정리 — 영상 검색 기간 전체·한국어만 변환, 업로드 캘린더 색, YouTube 트렌드 [급상승 영상], 대본 포맷 여러 개, 생성 폼 드롭다운 정리
 
 ### 변경

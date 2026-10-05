@@ -3,7 +3,7 @@
  * 기존 데이터(생성 이력·피드백·업로드·성과)만으로 계산한다. DB 변경·저장 없음.
  */
 export interface PromptStatsInput {
-  contents: { id: string; featureId: string; promptId: string; promptVersion: string; createdAt: string; context: { userEdits?: Record<string, { ratio: number }>; quality?: { mode?: string } | null } }[];
+  contents: { id: string; featureId: string; promptId: string; promptVersion: string; createdAt: string; context: { userEdits?: Record<string, { ratio: number }>; quality?: { mode?: string } | null; workflow?: { stage?: number } | null } }[];
   feedback: { contentId: string; rating: "up" | "down"; createdAt: string }[];
   publications: { contentId: string | null }[];
   performance: { contentId: string; views: number | null }[];
@@ -12,7 +12,7 @@ export interface PromptStatsInput {
 export interface PromptVersionRow {
   promptId: string;
   version: string;
-  mode: "fast" | "precise";
+  mode: "fast" | "precise" | "two-stage";
   /** 생성 수 */
   count: number;
   /** 👍·👎 를 받은 수, 👍 비율 (0~1, 평가 없으면 null) */
@@ -45,13 +45,14 @@ export function promptVersionStats(input: PromptStatsInput): PromptVersionRow[] 
 
   const groups = new Map<string, PromptStatsInput["contents"]>();
   for (const c of input.contents) {
-    const mode = c.context.quality?.mode === "precise" ? "precise" : "fast";
+    // v0.9.40: 2단계 생성(1단계 후보·2단계 대본)은 따로 묶는다
+    const mode = c.context.workflow?.stage ? "two-stage" : c.context.quality?.mode === "precise" ? "precise" : "fast";
     const key = JSON.stringify([c.promptId, c.promptVersion, mode]);
     groups.set(key, [...(groups.get(key) ?? []), c]);
   }
   const rows: PromptVersionRow[] = [];
   for (const [key, list] of groups) {
-    const [promptId, version, mode] = JSON.parse(key) as [string, string, "fast" | "precise"];
+    const [promptId, version, mode] = JSON.parse(key) as [string, string, "fast" | "precise" | "two-stage"];
     const ratings = list.map((c) => lastRating.get(c.id)?.rating).filter(Boolean);
     const edits = list.map((c) => Object.values(c.context.userEdits ?? {}).map((e) => e.ratio)).filter((r) => r.length);
     const views = list.map((c) => maxViews.get(c.id)).filter((v): v is number => v != null);
