@@ -18,6 +18,7 @@ import type { ProcessedPhoto } from "@/lib/photo-process";
 import { cn } from "@/lib/utils";
 import { BodyWithPhotos } from "./BodyWithPhotos";
 import { UploadStatusBadge, useUploadStatus } from "./UploadStatusBadge";
+import { PublicationForm } from "@/features/uploads/PublicationForm";
 
 /**
  * 생성 결과 패널 — 모든 생성형 기능이 같이 쓴다.
@@ -46,6 +47,9 @@ export function ResultPanel({
 
   // 업로드 상태 (업로드 관리 기록에서 계산)
   const uploads = useUploadStatus([content.id]);
+  // [업로드 예약하기]: 이 화면에서 바로 업로드 관리에 등록 (v0.9.47)
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduled, setScheduled] = useState<{ status: string; at: string | null } | null>(null);
   // 항목별 [다시 만들기]·[추가 만들기]: 한 번에 하나씩 (AI 1회)
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [regenError, setRegenError] = useState<{ key: string; message: string } | null>(null);
@@ -107,14 +111,35 @@ export function ResultPanel({
           {uploads && <UploadStatusBadge state={uploads[content.id]} />}
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/uploads?contentId=${content.id}`}
-            className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-3 text-[13px] text-fg-muted hover:border-brand-line hover:text-brand"
-            title="이 콘텐츠를 실제로 올렸다면 업로드 관리에 기록합니다"
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={CalendarPlus}
+            onClick={() => setScheduleOpen(true)}
+            title="업로드 관리에 바로 예약합니다 (콘텐츠·제목·유형·제품·플랫폼은 채워져 있고 날짜만 정하면 됩니다)"
+            data-schedule-upload
           >
-            <CalendarPlus className="size-3.5" />
-            업로드 등록
-          </Link>
+            업로드 예약하기
+          </Button>
+{scheduleOpen && (
+            <PublicationForm
+              open
+              onClose={() => setScheduleOpen(false)}
+              editing={null}
+              presetContent={content}
+              presetStatus="scheduled"
+              onSaved={(p) => {
+                setScheduleOpen(false);
+                setScheduled({ status: p.status, at: p.scheduledAt ?? p.publishedAt });
+              }}
+            />
+          )}
+          {scheduled && (
+            <Link href="/uploads" className="text-xs font-medium text-brand hover:underline" data-scheduled-note>
+              {scheduled.status === "scheduled" ? "예약됨" : "등록됨"}
+              {scheduled.at ? ` · ${new Date(scheduled.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""} · 업로드 관리 보기
+            </Link>
+          )}
           <CopyButton value={allText} label="전체 복사" />
           <SaveButton
             size="sm"

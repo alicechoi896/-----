@@ -96,6 +96,8 @@ export function PublicationForm({
   onClose,
   editing,
   presetContentId,
+  presetContent,
+  presetStatus,
   defaultDate,
   onSaved,
 }: {
@@ -103,6 +105,10 @@ export function PublicationForm({
   onClose: () => void;
   editing: ContentPublicationView | null;
   presetContentId?: string;
+  /** 생성 결과 화면의 [업로드 예약하기]: 방금 만든 콘텐츠를 바로 채운다 (목록을 기다리지 않음, v0.9.47) */
+  presetContent?: GeneratedContent;
+  /** 처음 상태 (예: 예약) */
+  presetStatus?: PublicationStatus;
   /** 캘린더에서 날짜를 고른 뒤 등록하면 그날로 */
   defaultDate?: string;
   onSaved: (p: ContentPublicationView) => void;
@@ -110,10 +116,13 @@ export function PublicationForm({
   const contents = useAsync(() => api.contents.list(), []);
   const products = useAsync(() => api.products.list(), []);
   const assignees = useAsync(() => api.publications.assignees(), []);
-  const preset = (contents.data ?? []).find((c) => c.id === presetContentId) ?? null;
+  const preset = presetContent ?? (contents.data ?? []).find((c) => c.id === presetContentId) ?? null;
   const [mode, setMode] = useState<Mode>(editing ? (editing.contentId ? "content" : "manual") : "content");
-  const [form, setForm] = useState<FormState>(() => initialState(editing, null, defaultDate));
-  const [presetApplied, setPresetApplied] = useState(false);
+  const [form, setForm] = useState<FormState>(() => {
+    const s = initialState(editing, editing ? null : (presetContent ?? null), defaultDate);
+    return !editing && presetStatus ? { ...s, status: presetStatus } : s;
+  });
+  const [presetApplied, setPresetApplied] = useState(Boolean(presetContent));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));

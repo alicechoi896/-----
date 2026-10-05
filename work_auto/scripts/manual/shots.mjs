@@ -459,7 +459,7 @@ export const SHOTS = [
     prepare: ytResult,
     scrollTo: (p) => p.getByText("생성 완료").first(),
     marks: {
-      1: (p) => p.locator("main a", { hasText: "업로드 등록" }).first(),
+      1: (p) => p.locator("[data-schedule-upload]").first(),
       2: (p) => btn(p, "전체 복사").first(),
       3: (p) => btn(p, "좋은 결과로 저장").first(),
     },
