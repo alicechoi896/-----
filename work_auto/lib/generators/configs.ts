@@ -18,13 +18,12 @@ export const CATEGORY_OPTIONS: FieldOption[] = [
   "자기계발",
 ].map((v) => ({ value: v, label: v }));
 
+/** 영상 길이 (v0.9.28: 5~8분·10분 이상은 뺐다. 예전 결과의 값은 그대로 보인다) */
 const VIDEO_LENGTH_OPTIONS: FieldOption[] = [
   { value: "15s", label: "Shorts 15초" },
   { value: "30s", label: "Shorts 30초" },
   { value: "shorts", label: "Shorts 60초 이내" },
   { value: "3m", label: "3분 내외" },
-  { value: "6m", label: "5~8분" },
-  { value: "10m", label: "10분 이상" },
 ];
 
 /** NAVER 클립 영상 길이 (값은 YouTube 와 같다) */
@@ -33,19 +32,35 @@ const CLIP_LENGTH_OPTIONS: FieldOption[] = [
   { value: "30s", label: "30초" },
   { value: "shorts", label: "60초 이내" },
   { value: "3m", label: "3분 내외" },
-  { value: "6m", label: "5~8분" },
-  { value: "10m", label: "10분 이상" },
 ];
 
-const VIDEO_STYLE_OPTIONS: FieldOption[] = ["리뷰형", "비교형", "문제 해결형", "언박싱형", "스토리텔링형"].map((v) => ({
-  value: v,
-  label: v,
-}));
+/** 제품 홍보 영상·클립 콘텐츠 스타일 (hint 는 AI 에게 같이 보낸다) */
+const PRODUCT_VIDEO_STYLES: FieldOption[] = [
+  { value: "리뷰형", label: "리뷰형", hint: "써 본 사람 시점으로 장단점을 솔직하게 (실제 경험이 없으면 정보 기반)" },
+  { value: "빠른 요약형", label: "빠른 요약형", hint: "핵심 스펙·장점만 빠르게 몰아서" },
+  { value: "비교형", label: "비교형", hint: "다른 모델·이전 모델과 차이를 맞대어" },
+  { value: "문제 해결형", label: "문제 해결형", hint: "흔한 불편을 짚고 이 제품으로 해결" },
+  { value: "구매 전 체크형", label: "구매 전 체크형", hint: "사기 전에 꼭 확인할 점 3가지 위주" },
+  { value: "가성비 추천형", label: "가성비 추천형", hint: "가격 대비 좋은 점, 누구에게 맞는지" },
+  { value: "꿀팁·활용형", label: "꿀팁·활용형", hint: "잘 쓰는 법·숨은 기능을 알려 주며 자연스럽게 홍보" },
+  { value: "Before/After", label: "Before/After", hint: "쓰기 전과 후의 변화를 대비" },
+  { value: "언박싱형", label: "언박싱형", hint: "구성품·첫인상을 순서대로" },
+  { value: "상황극·스토리형", label: "상황극·스토리형", hint: "일상 장면이나 짧은 이야기 속에서 제품 등장" },
+];
 
-const CLIP_STYLE_OPTIONS: FieldOption[] = ["빠른 요약형", "Before/After", "꿀팁형", "상황극형"].map((v) => ({
-  value: v,
-  label: v,
-}));
+/** 정보성 영상·클립 콘텐츠 스타일 */
+const INFO_VIDEO_STYLES: FieldOption[] = [
+  { value: "핵심 요약형", label: "핵심 요약형", hint: "결론부터, 핵심 3가지로 짧게" },
+  { value: "뉴스 브리핑형", label: "뉴스 브리핑형", hint: "무슨 일이 있었는지 사실 위주로 빠르게" },
+  { value: "꿀팁 리스트형", label: "꿀팁 리스트형", hint: "바로 써먹을 팁을 번호로" },
+  { value: "Q&A형", label: "Q&A형", hint: "많이 묻는 질문에 답하는 방식" },
+  { value: "오해 바로잡기형", label: "오해 바로잡기형", hint: "흔한 오해를 짚고 사실을 알려 줌" },
+  { value: "비교 정리형", label: "비교 정리형", hint: "선택지 2~3개를 기준별로 비교" },
+  { value: "순위·TOP형", label: "순위·TOP형", hint: "TOP 3~5 를 순서대로 (근거 있는 기준으로)" },
+  { value: "단계별 방법형", label: "단계별 방법형", hint: "따라 하기 쉬운 순서로 1·2·3단계" },
+  { value: "경고·주의형", label: "경고·주의형", hint: "하면 손해 보는 것·주의할 점 위주" },
+  { value: "사례 스토리형", label: "사례 스토리형", hint: "실제 있을 법한 사례로 이야기하듯" },
+];
 
 const BLOG_STYLE_OPTIONS: FieldOption[] = ["정보 전달형", "친근한 소개형", "전문가 분석형", "비교 정리형"].map((v) => ({
   value: v,
@@ -110,7 +125,7 @@ const F = {
     label: "영상 길이",
     type: "segmented",
     options,
-    defaultValue: "shorts",
+    defaultValue: "15s",
   }),
 };
 
@@ -120,7 +135,8 @@ const O = {
   topics: (): OutputSection => ({ key: "topics", label: "추천 주제", format: "list", count: 3 }),
   hooks: (): OutputSection => ({ key: "hooks", label: "Hook 후보", format: "list", count: 10, description: "첫 3초 안에 시청자를 붙잡는 문장" }),
   ctas: (description = "마지막 행동 유도 문장"): OutputSection => ({ key: "ctas", label: "CTA 후보", format: "list", count: 10, description }),
-  script: (label = "대본"): OutputSection => ({ key: "script", label, format: "longtext", description: "말할 문장만 (장면·컷·시간 표시 없음)" }),
+  // 대본은 3편: 좋은 부분을 골라 섞어 쓸 수 있게 (카드로 넘겨 본다, [추가 만들기]로 3편씩 더)
+  script: (label = "대본"): OutputSection => ({ key: "script", label, format: "cards", count: 3, description: "서로 다른 대본 3편 · 좋은 부분을 골라 섞어 쓰세요" }),
   description: (): OutputSection => ({ key: "description", label: "설명글", format: "longtext" }),
   keywords: (label = "키워드", count = 30): OutputSection => ({ key: "keywords", label, format: "tags", count }),
   hashtags: (count = 8): OutputSection => ({ key: "hashtags", label: "해시태그", format: "tags", count }),
@@ -144,7 +160,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { ...F.youtubeTrend(), span: 2 },
       F.keywords(),
       F.videoLength(),
-      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: VIDEO_STYLE_OPTIONS, defaultValue: "리뷰형" },
+      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: PRODUCT_VIDEO_STYLES, defaultValue: "리뷰형" },
     ],
     outputs: [O.titles(), O.hooks(), O.script(), O.ctas(), O.description(), O.keywords("주요 키워드"), O.tags()],
   },
@@ -161,6 +177,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { name: "topic", label: "주제", type: "text", placeholder: "예: 2026년 달라지는 청년 지원 정책", hint: "비워두면 트렌드와 카테고리를 기준으로 주제를 추천합니다." },
       F.keywords(),
       F.videoLength(),
+      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형" },
     ],
     outputs: [O.topics(), O.titles(), O.hooks(), O.script(), O.ctas(), O.description(), O.keywords(), O.tags()],
   },
@@ -175,7 +192,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     fields: [
       F.product(),
       F.naverTrend(),
-      { name: "style", label: "콘텐츠 스타일", type: "select", options: CLIP_STYLE_OPTIONS, defaultValue: "빠른 요약형", span: 1 },
+      { name: "style", label: "콘텐츠 스타일", type: "select", options: PRODUCT_VIDEO_STYLES, defaultValue: "빠른 요약형", span: 1 },
       F.keywords(),
       F.videoLength(CLIP_LENGTH_OPTIONS),
     ],
@@ -196,7 +213,13 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
     submitLabel: "클립 원고 생성하기",
     trendField: "trendId",
     headlineKey: "titles",
-    fields: [F.category(), F.naverTrend("현재 트렌드"), F.keywords("키워드"), F.videoLength(CLIP_LENGTH_OPTIONS)],
+    fields: [
+      F.category(),
+      F.naverTrend("현재 트렌드"),
+      F.keywords("키워드"),
+      F.videoLength(CLIP_LENGTH_OPTIONS),
+      { name: "style", label: "콘텐츠 스타일", type: "segmented", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형" },
+    ],
     outputs: [O.topics(), O.titles(), O.hooks(), O.script("클립 대본"), O.ctas(), O.description(), O.keywords()],
   },
 

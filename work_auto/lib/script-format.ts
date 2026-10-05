@@ -148,6 +148,23 @@ export function promptExamples(examples: ScriptExample[]): ScriptExample[] {
     .map((e) => ({ ...e, text: e.text.length > SCRIPT_FORMAT_LIMITS.promptExampleChars ? e.text.slice(0, SCRIPT_FORMAT_LIMITS.promptExampleChars) + "…" : e.text }));
 }
 
+/** 제목 패턴 참고용: 조회수 높은 순 제목 최대 5개 */
+export function promptTitles(examples: ScriptExample[]): string[] {
+  return [...examples]
+    .filter((e) => e.title.trim())
+    .sort((a, b) => (b.views ?? -1) - (a.views ?? -1))
+    .slice(0, 5)
+    .map((e) => e.title.trim().slice(0, 80));
+}
+
+/** 블로그 글: 대본은 없지만 대본 포맷의 '잘된 제목'을 제목 패턴으로 쓴다 */
+export function blogTitleFormatTypeOf(featureId: string, input: Record<string, unknown>): ScriptFormatType | null {
+  if (featureId === "blog-product-writing") return "product";
+  if (featureId === "blog-info-writing") return "info";
+  if (featureId === "blog-auto-writing") return input.productId ? "product" : "info";
+  return null;
+}
+
 /** 조회수 표시 (1.8만회) */
 export function formatViews(n: number | null): string {
   if (n == null) return "";

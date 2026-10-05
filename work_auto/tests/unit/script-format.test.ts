@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanScriptExamples, formatViews, parseScriptFile, parseViews, promptExamples, scriptFormatTypeOf } from "@/lib/script-format";
+import { blogTitleFormatTypeOf, cleanScriptExamples, formatViews, parseScriptFile, parseViews, promptExamples, promptTitles, scriptFormatTypeOf } from "@/lib/script-format";
 
 // 실제로 받은 메모장 파일 모양 (제목·썸넬·조회수 줄, 구분선, 빈 줄 여러 개, 음성 인식 잡음)
 const FILE_A = `4.2만회
@@ -88,6 +88,15 @@ describe("대본 포맷: 메모장 파일 나누기", () => {
     const cleaned = cleanScriptExamples([...many, { text: "" }, { text: many[0].text }]);
     expect(cleaned).toHaveLength(30);
     expect(promptExamples(cleaned).map((e) => e.views)).toEqual([29, 28]);
+  });
+
+  it("잘된 제목: 조회수 높은 순 5개, 블로그는 제목 패턴만 (제품 글 → 제품 홍보, 정보 글 → 정보성)", () => {
+    const ex = Array.from({ length: 7 }, (_, i) => ({ title: i === 3 ? "" : `제목 ${i}`, views: i * 10, text: "대본" }));
+    expect(promptTitles(ex)).toEqual(["제목 6", "제목 5", "제목 4", "제목 2", "제목 1"]);
+    expect(blogTitleFormatTypeOf("blog-product-writing", {})).toBe("product");
+    expect(blogTitleFormatTypeOf("blog-auto-writing", { productId: "p" })).toBe("product");
+    expect(blogTitleFormatTypeOf("blog-auto-writing", {})).toBe("info");
+    expect(blogTitleFormatTypeOf("yt-product-video", {})).toBeNull();
   });
 
   it("영상·클립만 포맷 유형이 있다", () => {

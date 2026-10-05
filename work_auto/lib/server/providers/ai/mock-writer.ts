@@ -175,7 +175,15 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
     hooks: (n) => hookPool.slice(0, n),
     ctas: (n) => ctaPool.slice(0, n),
     // 짧은 리듬 대본(제품 영상·클립)은 한 줄씩, 정보성 영상은 문단 사이 줄바꿈
-    script: () => scriptLines.join(p || isClip ? "\n" : "\n\n"),
+    // 대본 n편: 편마다 Hook 과 마무리를 바꾼다 (데모)
+    script: (n) =>
+      Array.from({ length: n }, (_, i) => {
+        const lines = [...scriptLines];
+        lines[0] = hookPool[i] ?? lines[0];
+        if (i > 0 && lines.length > 3) lines.splice(1, 1, ["딱 이것만 보세요", "써 보면 알아요", "핵심만 짚을게요"][i % 3]);
+        lines[lines.length - 1] = ctaPool[i] ?? lines[lines.length - 1];
+        return lines.join(p || isClip ? "\n" : "\n\n");
+      }),
     description: () =>
       [
         p ? `${p.summary.oneLiner}.` : `${topic}에 대해 핵심만 정리했습니다.`,

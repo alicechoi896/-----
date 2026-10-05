@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, Brain, CalendarPlus, Check, ListPlus, Pencil, RefreshCw, ThumbsDown, ThumbsUp, Undo2 } from "lucide-react";
+import { BookmarkPlus, Brain, CalendarPlus, Check, ChevronLeft, ChevronRight, ListPlus, Pencil, RefreshCw, ThumbsDown, ThumbsUp, Undo2 } from "lucide-react";
 import { APPENDABLE_KEYS, candidateKey } from "@/lib/generators/append";
-import type { OutputSection } from "@/lib/generators/types";
+import { CARD_SEPARATOR, isListFormat, splitCards, type OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Badge, Tag } from "@/components/ui/Badge";
@@ -41,7 +41,7 @@ export function ResultPanel({
   headlineKey?: string;
   onChange?: (content: GeneratedContent) => void;
 }) {
-  const allText = outputs.map((o) => `■ ${o.label}\n${toText(content.context.userEdits?.[o.key]?.value ?? content.output[o.key])}`).join("\n\n");
+  const allText = outputs.map((o) => `■ ${o.label}\n${toText(content.context.userEdits?.[o.key]?.value ?? content.output[o.key], o.format === "cards")}`).join("\n\n");
 
   // 업로드 상태 (업로드 관리 기록에서 계산)
   const uploads = useUploadStatus([content.id]);
@@ -154,15 +154,15 @@ export function ResultPanel({
   );
 }
 
-/** 체크해서 "실제로 쓴 것"을 고를 수 있는 후보 (학습 힌트) */
-const PICKABLE = new Set(["titles", "hooks", "ctas"]);
+/** 체크해서 "실제로 쓴 것"을 고를 수 있는 후보 (학습 힌트). 대본은 실제로 쓴(섞어 쓴) 편 */
+const PICKABLE = new Set(["titles", "hooks", "ctas", "script"]);
 
 /** v0.9.13 에서 바뀐 출력 키: 예전 결과는 옛 키로 저장되어 있다 */
 const LEGACY_KEY: Record<string, string> = { hooks: "hook", titles: "title", tags: "hashtags", ctas: "cta" };
 
-function toText(value: GeneratedValue | undefined): string {
+function toText(value: GeneratedValue | undefined, cards = false): string {
   if (!value) return "";
-  return Array.isArray(value) ? value.join("\n") : value;
+  return Array.isArray(value) ? value.join(cards ? CARD_SEPARATOR : "\n") : value;
 }
 
 function OutputBlock({
@@ -198,14 +198,15 @@ function OutputBlock({
 }) {
   const appendable = APPENDABLE_KEYS.has(section.key);
   const list = Array.isArray(value) ? value : value ? [value] : [];
-  const isList = section.format === "list" || section.format === "tags";
+  const isList = isListFormat(section.format);
+  const isCards = section.format === "cards";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
   function startEdit() {
-    setDraft(toText(value));
+    setDraft(toText(value, isCards));
     setEditError(null);
     setEditing(true);
   }
@@ -222,7 +223,7 @@ function OutputBlock({
       setSaving(false);
     }
   }
-  const draftValue = () => (isList ? draft.split("\n").map((l) => l.trim()).filter(Boolean) : draft);
+  const draftValue = () => (isCards ? splitCards(draft) : isList ? draft.split("\n").map((l) => l.trim()).filter(Boolean) : draft);
 
   return (
     <section className={cardClass}>
@@ -248,7 +249,7 @@ function OutputBlock({
               onClick={onRegenerate}
               title={
                 appendable
-                  ? `지금 후보는 그대로 두고 새 후보 ${section.count ?? 10}개를 위에 추가합니다`
+                  ? `지금 후보는 그대로 두고 새 ${isCards ? "대본" : "후보"} ${section.count ?? 10}${isCards ? "편" : "개"}을 앞에 추가합니다`
                   : section.key === "body"
                     ? "본문을 다른 내용으로 다시 만듭니다 (소제목도 본문에 맞게 바뀝니다)"
                     : "이 항목만 다른 것으로 다시 만듭니다"
@@ -257,27 +258,29 @@ function OutputBlock({
               {appendable ? "추가 만들기" : "다시 만들기"}
             </Button>
           )}
-          <CopyButton value={section.format === "tags" ? list.join(" ") : toText(value)} />
+          <CopyButton value={section.format === "tags" ? list.join(" ") : toText(value, isCards)} label={isCards ? "전체 복사" : undefined} />
         </div>
       </header>
       {error && <p className="border-b border-line bg-danger/5 px-5 py-2 text-xs text-danger">{error}</p>}
       {added && added.size > 0 && !editing && (
         <p className="border-b border-line bg-brand-soft/60 px-5 py-1.5 text-[11.5px] text-brand">
-          새 후보 {added.size}개를 위에 추가했습니다 · 모두 {list.length}개
+          {isCards ? `새 대본 ${added.size}편을 앞에 추가했습니다 · 모두 ${list.length}편` : `새 후보 ${added.size}개를 위에 추가했습니다 · 모두 ${list.length}개`}
         </p>
       )}
       {onTogglePick && list.length > 0 && !editing && (
-        <p className="border-b border-line bg-subtle/50 px-5 py-1.5 text-[11.5px] text-fg-subtle">실제로 쓴 것을 체크하면 다음 생성 학습에 힌트가 됩니다.</p>
+        <p className="border-b border-line bg-subtle/50 px-5 py-1.5 text-[11.5px] text-fg-subtle">
+          {isCards ? "옆으로 넘겨 보고, 실제로 쓴(섞어 쓴) 대본을 체크하면 다음 생성 학습에 힌트가 됩니다." : "실제로 쓴 것을 체크하면 다음 생성 학습에 힌트가 됩니다."}
+        </p>
       )}
       <div className={cn("px-5 py-4", regenerating && "opacity-50")}>
         {editing ? (
           <div className="space-y-2">
             <Textarea
-              rows={section.format === "longtext" ? 14 : isList ? Math.min(14, Math.max(4, list.length + 1)) : 3}
+              rows={section.format === "longtext" || isCards ? 16 : isList ? Math.min(14, Math.max(4, list.length + 1)) : 3}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />
-            {isList && <p className="text-xs text-fg-subtle">한 줄에 하나씩</p>}
+            {isCards ? <p className="text-xs text-fg-subtle">대본 사이는 --- 한 줄로 나눕니다</p> : isList && <p className="text-xs text-fg-subtle">한 줄에 하나씩</p>}
             {editError && <p className="text-xs text-danger">{editError}</p>}
             <div className="flex flex-wrap items-center justify-end gap-2">
               {edit && (
@@ -295,6 +298,8 @@ function OutputBlock({
           </div>
         ) : list.length === 0 ? (
           <p className="text-sm text-fg-subtle">결과 없음</p>
+        ) : isCards ? (
+          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} />
         ) : section.format === "tags" ? (
           <div className="flex flex-wrap gap-1.5">
             {list.map((t) => (
@@ -336,6 +341,98 @@ function OutputBlock({
         )}
       </div>
     </section>
+  );
+}
+
+/** 대본 여러 편을 카드뉴스처럼 옆으로 넘겨 본다. 카드마다 복사·사용 체크 */
+function ScriptCards({
+  items,
+  picks,
+  onTogglePick,
+  added,
+}: {
+  items: string[];
+  picks?: string[];
+  onTogglePick?: (item: string) => void;
+  added?: Set<string>;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(0);
+  const go = (i: number) => {
+    const el = scroller.current?.children[Math.max(0, Math.min(items.length - 1, i))] as HTMLElement | undefined;
+    el?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  };
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el || !el.children.length) return;
+    const w = (el.children[0] as HTMLElement).offsetWidth + 12;
+    setIndex(Math.round(el.scrollLeft / w));
+  };
+  // 한국어 숏폼 기준 1초에 약 6~7자
+  const seconds = (text: string) => Math.max(5, Math.round(text.replace(/\s/g, "").length / 6.5));
+
+  return (
+    <div>
+      <div ref={scroller} onScroll={onScroll} className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
+        {items.map((text, i) => {
+          const lines = text.split("\n").filter((l) => l.trim());
+          const on = Boolean(picks?.includes(text));
+          return (
+            <article
+              key={i}
+              className={cn(
+                "flex w-[min(300px,82%)] shrink-0 snap-start flex-col rounded-card border bg-canvas shadow-card",
+                on ? "border-brand ring-2 ring-brand-soft" : "border-line",
+              )}
+            >
+              <header className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-2">
+                <span className="text-[12.5px] font-semibold text-fg">
+                  대본 {i + 1}
+                  <span className="ml-1.5 font-normal text-fg-subtle">
+                    {lines.length}줄 · 약 {seconds(text)}초
+                  </span>
+                  {added?.has(text) && <span className="ml-1.5 rounded bg-brand-soft px-1.5 py-px text-[10.5px] font-semibold text-brand">새로</span>}
+                </span>
+                <CopyButton value={text} iconOnly />
+              </header>
+              <div className="aspect-[4/5] overflow-y-auto bg-subtle/60 px-4 py-4">
+                {lines.map((l, j) => (
+                  <p key={j} className={cn("text-[15px] leading-[1.75] text-fg", j === 0 && "font-semibold text-brand")}>
+                    {l}
+                  </p>
+                ))}
+              </div>
+              {onTogglePick && (
+                <label className="flex cursor-pointer items-center gap-2 border-t border-line px-3.5 py-2 text-[12.5px] text-fg-muted">
+                  <input type="checkbox" checked={on} onChange={() => onTogglePick(text)} className="size-4 accent-[var(--color-brand)]" />이 대본 사용
+                </label>
+              )}
+            </article>
+          );
+        })}
+      </div>
+      {items.length > 1 && (
+        <div className="mt-2 flex items-center justify-center gap-3">
+          <button type="button" aria-label="이전 대본" disabled={index <= 0} onClick={() => go(index - 1)} className="rounded-full p-1 text-fg-subtle hover:text-fg disabled:opacity-30">
+            <ChevronLeft className="size-4" />
+          </button>
+          <div className="flex gap-1.5">
+            {items.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`대본 ${i + 1}`}
+                onClick={() => go(i)}
+                className={cn("size-2 rounded-full transition-colors", i === index ? "bg-brand" : "bg-line-strong")}
+              />
+            ))}
+          </div>
+          <button type="button" aria-label="다음 대본" disabled={index >= items.length - 1} onClick={() => go(index + 1)} className="rounded-full p-1 text-fg-subtle hover:text-fg disabled:opacity-30">
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

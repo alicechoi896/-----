@@ -67,7 +67,9 @@ export function compressContent(c: GeneratedContent, maxChars = 600): string {
   } else {
     const hook = firstOf(o.hooks) || firstOf(o.hook);
     if (hook) lines.push(`Hook: ${cut(hook, 80)}`);
-    const script = String(o.script ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+    const scripts = Array.isArray(o.script) ? o.script : o.script ? [String(o.script)] : [];
+    const pickedScript = c.context.picks?.script?.values?.[0];
+    const script = String(pickedScript ?? scripts[0] ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
     if (script.length) lines.push(`대본 흐름(${script.length}줄): ${cut(script.slice(0, 6).join(" / "), 220)}`);
     const cta = firstOf(o.ctas) || firstOf(o.cta);
     if (cta) lines.push(`CTA: ${cut(cta, 80)}`);
@@ -94,7 +96,18 @@ async function collectSignals(userId: string, profileId: string, since: string |
     const at = p.publishedAt ?? p.updatedAt;
     if (after(p.updatedAt)) signals.push({ contentId: p.contentId!, kind: "published", at, detail: platformLabel(p.platform) });
   }
-  for (const m of performance) if (after(m.measuredAt)) signals.push({ contentId: m.contentId, kind: "performance", at: m.measuredAt, detail: [m.views != null && `조회 ${m.views}`, m.ctr != null && `CTR ${m.ctr}%`, m.conversions != null && `전환 ${m.conversions}`].filter(Boolean).join(" ") });
+  // 조회수는 같은 유형 콘텐츠끼리 비교한다 (콘텐츠별 최고 조회수의 중앙값 기준)
+  const tier = performanceTiers(performance);
+  for (const m of performance)
+    if (after(m.measuredAt))
+      signals.push({
+        contentId: m.contentId,
+        kind: "performance",
+        at: m.measuredAt,
+        detail: [m.views != null && `조회 ${m.views}`, tier.get(m.contentId), m.ctr != null && `CTR ${m.ctr}%`, m.conversions != null && `전환 ${m.conversions}`, m.source === "manual" && "직접 입력"]
+          .filter(Boolean)
+          .join(" "),
+      });
   for (const c of contents) {
     for (const [k, e] of Object.entries(c.context.userEdits ?? {})) if (after(e.at)) signals.push({ contentId: c.id, kind: "edit", at: e.at, detail: `${k} ${Math.round(e.ratio * 100)}% 수정` });
     for (const [k, p] of Object.entries(c.context.picks ?? {})) if (after(p.at)) signals.push({ contentId: c.id, kind: "pick", at: p.at, detail: `${k}: ${p.values.join(" / ")}` });
@@ -223,10 +236,25 @@ const LEARNING_SYSTEM = [
   "2. 기존 Insight 와 비슷한 것은 새로 추가하지 말고 합친다 (support_count·positive_count·negative_count 를 더하고 confidence 를 조정, updated=true). 새 신호와 관계없는 기존 Insight 는 그대로 두고 updated=false.",
   "3. 콘텐츠 1개에서만 보인 패턴은 confidence 0.4 이하. 여러 콘텐츠에서 반복될수록 confidence 를 높인다 (0~1).",
   "4. 신호의 강도: 직접 수정본 > 선택한 후보 > 👍·★·업로드 완료 > 성과 수치. 👎 와 그 사유는 negative_traits 로. 수정량이 적을수록 원래 결과가 잘 맞았다는 뜻이다.",
-  "5. 성과(조회수 등)는 제품·시즌 영향이 있으니 한 콘텐츠의 수치만으로 강한 결론을 내리지 않는다.",
+  "5. 성과(조회수 등)는 제품·시즌 영향이 있으니 한 콘텐츠의 수치만으로 강한 결론을 내리지 않는다. 다만 '잘된 영상'(같은 유형 중앙값의 2배 이상)으로 표시된 콘텐츠의 제목·Hook·대본 구조·CTA 는 강한 긍정 근거로, '반응 낮음'은 약한 부정 근거로 본다. 잘된 영상과 반응 낮은 영상의 차이를 positive_traits / negative_traits 에 적는다.",
   "6. 특정 제품명·수치 같은 사실은 넣지 않는다. 다른 콘텐츠에도 적용할 수 있는 일반적인 경향만 쓴다.",
   "7. 오래되고 근거가 약한 Insight 부터 지워 개수 제한을 지킨다. 응답은 지정된 JSON 형식으로만 한다.",
 ].join("\n");
+
+/** 콘텐츠별 최고 조회수 → 같은 묶음 안의 상대 위치 (콘텐츠 2개 이상일 때만) */
+export function performanceTiers(rows: { contentId: string; views: number | null }[]): Map<string, string> {
+  const best = new Map<string, number>();
+  for (const r of rows) if (r.views != null) best.set(r.contentId, Math.max(best.get(r.contentId) ?? 0, r.views));
+  const out = new Map<string, string>();
+  if (best.size < 2) return out;
+  const sorted = [...best.values()].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] || 1;
+  for (const [id, v] of best) {
+    const ratio = v / median;
+    out.set(id, ratio >= 2 ? `(잘된 영상 · 중앙값의 ${ratio.toFixed(1)}배)` : ratio <= 0.5 ? `(반응 낮음 · 중앙값의 ${ratio.toFixed(1)}배)` : "(보통)");
+  }
+  return out;
+}
 
 /**
  * 학습 신호가 생긴 뒤(피드백·★·직접 수정·선택·업로드 완료) 응답을 보낸 다음에 학습 여부를 확인한다.

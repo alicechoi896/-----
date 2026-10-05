@@ -220,7 +220,7 @@ export const api = {
     assignees: () => request<{ id: string; name: string }[]>("/api/publications/assignees"),
     /** YouTube 업로드의 현재 숫자 (+ 1일·7일 기록) */
     stats: (ids: string[]) =>
-      request<Record<string, { views: number | null; likes: number | null; comments: number | null; d1?: number | null; d7?: number | null }>>(
+      request<Record<string, { views?: number | null; likes?: number | null; comments?: number | null; d1?: number | null; d7?: number | null; manual?: { views: number; at: string } | null }>>(
         `/api/publications/stats${qs({ ids: ids.join(",") })}`,
       ),
   },
@@ -249,6 +249,12 @@ export const api = {
       return request<StyleImportPreview>("/api/styles/import", { method: "POST", body });
     },
     remove: (id: string) => request<{ id: string }>(`/api/styles/${id}`, { method: "DELETE" }),
+  },
+
+  publicationViews: {
+    /** 업로드한 콘텐츠의 조회수를 직접 넣는다 (성과 데이터 → 학습) */
+    record: (publicationId: string, body: { views: number; likes?: number | null; comments?: number | null }) =>
+      request<PerformanceMetric>(`/api/publications/${publicationId}/views`, { method: "POST", body: json(body) }),
   },
 
   scriptFormats: {
@@ -313,12 +319,6 @@ export const api = {
         durationSec: number;
         streams: { codec: string; width: number; height: number; size: number | null; url: string; backupUrls: string[] }[];
       }>("/api/videos/resolve", { method: "POST", body: json({ url }) }),
-    /** 영상 화면들에서 덧씌운 글자 위치 (AI Vision). 0~1000 정규화 */
-    detectText: (frames: { t: number; data: string }[]) =>
-      request<{ frames: { t: number; boxes: { x: number; y: number; w: number; h: number }[] }[]; provider: string }>(
-        "/api/videos/detect-text",
-        { method: "POST", body: json({ frames }) },
-      ),
     /** 여러 URL 한 번에 (최대 20개). URL 별 성공·실패를 돌려준다 */
     importMany: (items: { url: string; titleHint?: string }[], note?: string, productId?: string | null) =>
       request<{ url: string; ok: boolean; video?: ReferenceVideo; error?: string }[]>("/api/videos/batch", {

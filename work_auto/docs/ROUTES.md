@@ -61,7 +61,6 @@
 | `/tools/video-import` | 영상 URL 가져오기 | URL 여러 개 저장 + 소리 없는 영상 다운로드 명령 | VideoImport | Dynamic |
 | POST | `/api/memory/delete` { kind, ids[] } | AI 학습 관리 체크 삭제 (contents·products·feedback·performance) | memoryService.deleteMany |
 | PATCH | `/api/videos/:id` { productId } | 영상의 연관 제품 바꾸기 | videoService.setProduct |
-| POST | `/api/videos/detect-text` { frames[{t,data}] } | 영상 화면에서 덧씌운 글자 위치 (AI Vision, 0~1000 좌표, 저장 안 함) | videoTextDetector |
 | POST | `/api/videos/resolve` { url } | 샤오홍슈 노트의 영상 주소 (주소만, 파일은 브라우저가 직접 받음) | resolveXiaohongshu |
 | POST | `/api/videos/batch` { urls[], note? } | 여러 영상 한 번에 가져오기 (최대 20개, URL 별 결과) | videoService.importMany |
 | `/ai-learning` | AI 학습 관리 | 5개 Memory 탭 | AiLearningCenter | Dynamic |
@@ -141,6 +140,7 @@
 | GET | `/api/admin/audit-logs` | 활동 기록 (관리자) | adminService.listAuditLogs |
 | GET / DELETE | `/api/admin/errors?days` | 오류 기록 조회 / 삭제 `{ids: [...] | "all"}` (관리자) | errorLogService |
 | POST | `/api/errors` | 화면 오류 보고 (로그인 사용자, 1분 20회) | errorLogService.capture |
+| POST | `/api/publications/:id/views` { views, likes?, comments? } | 업로드의 조회수 직접 입력 → 성과 데이터 (생성 콘텐츠와 연결된 내 업로드만, 학습 신호) | youtubeStatsService.recordManual |
 | GET | `/api/publications/stats?ids=` | YouTube 업로드 조회수·좋아요·댓글 (지금 + 1일·7일 후) | youtubeStatsService.stats |
 | GET / PATCH | `/api/account` | 내 프로필 / 이름 변경 (승인 전에도 가능) | accountService |
 | POST | `/api/account/password` | 비밀번호 변경 `{currentPassword, newPassword}` | accountService.changePassword |

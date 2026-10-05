@@ -7,6 +7,8 @@
 export interface FieldOption {
   value: string;
   label: string;
+  /** AI 에게 같이 보내는 설명 (예: 콘텐츠 스타일이 무엇인지). 화면에는 툴팁 */
+  hint?: string;
 }
 
 /**
@@ -46,7 +48,14 @@ export type OutputFormat =
   | "text" // 짧은 단일 텍스트 (Hook, CTA)
   | "longtext" // 긴 본문 (대본, 설명글, 블로그 본문)
   | "list" // 번호 목록 (제목 후보, 소제목)
-  | "tags"; // 칩 목록 (키워드, 해시태그)
+  | "tags" // 칩 목록 (키워드, 해시태그)
+  | "cards"; // 긴 글 여러 편 — 카드로 넘겨 본다 (대본 3편, v0.9.28)
+
+/** 배열로 저장하는 형식 (list·tags·cards) */
+export const isListFormat = (f: OutputFormat) => f === "list" || f === "tags" || f === "cards";
+/** 카드 직접 수정 때 대본 사이 구분선 */
+export const CARD_SEPARATOR = "\n\n---\n\n";
+export const splitCards = (text: string) => text.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
 
 export interface OutputSection {
   key: string;

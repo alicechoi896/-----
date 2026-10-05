@@ -3,7 +3,7 @@ import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
 import { findFeature } from "@/lib/registry";
-import type { OutputSection } from "@/lib/generators/types";
+import { isListFormat, type OutputSection } from "@/lib/generators/types";
 import type { ChannelId, GenerateContentRequest, GeneratedContent, GeneratedValue } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { buildGenerationContext } from "../ai/context-builder";
@@ -35,7 +35,7 @@ function outputSchema(outputs: OutputSection[]) {
     properties: Object.fromEntries(
       outputs.map((o) => [
         o.key,
-        o.format === "list" || o.format === "tags"
+        isListFormat(o.format)
           ? { type: "array", items: { type: "string" }, description: `${o.label}${o.count ? ` (${o.count}개)` : ""}` }
           : { type: "string", description: o.label },
       ]),
@@ -48,7 +48,7 @@ function normalizeOutput(outputs: OutputSection[], data: Record<string, unknown>
   const output: Record<string, GeneratedValue> = {};
   for (const section of outputs) {
     const raw = data[section.key];
-    const isList = section.format === "list" || section.format === "tags";
+    const isList = isListFormat(section.format);
     output[section.key] = isList
       ? Array.isArray(raw)
         ? raw.map(String)

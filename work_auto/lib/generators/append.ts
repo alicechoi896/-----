@@ -3,7 +3,7 @@
  * 새 후보를 지금 목록 위에 더한다. 대본·설명글·본문 같은 글은 [다시 만들기] 그대로.
  * 서버(content-generation)와 화면(ResultPanel)이 같이 쓴다.
  */
-export const APPENDABLE_KEYS = new Set(["titles", "hooks", "ctas", "keywords", "tags", "hashtags"]);
+export const APPENDABLE_KEYS = new Set(["titles", "hooks", "ctas", "keywords", "tags", "hashtags", "script"]);
 
 /** 한 목록에 쌓을 수 있는 최대 개수 (너무 길어지면 프롬프트·화면이 무거워진다) */
 export const APPEND_MAX_ITEMS = 200;

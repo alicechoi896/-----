@@ -37,6 +37,8 @@ describe("생성 → 다시 만들기 → 직접 수정 → 학습", () => {
     expect(c.output.hooks).toHaveLength(10);
     expect(c.output.ctas).toHaveLength(10);
     expect(String(c.output.script)).not.toMatch(/\[컷|0~5초|^##/m);
+    expect(c.output.script).toHaveLength(3); // 대본 3편
+    expect(new Set(c.output.script as string[]).size).toBe(3);
 
     // 후보 목록은 [추가 만들기]: 새 후보 10개가 위에, 기존 후보는 아래에 그대로
     const added = await post(`/api/contents/${c.id}/regenerate`, { key: "hooks" });
@@ -46,9 +48,11 @@ describe("생성 → 다시 만들기 → 직접 수정 → 학습", () => {
     expect(hooks.slice(10)).toEqual(c.output.hooks);
     expect((added.data as Content).output.titles).toEqual(c.output.titles); // 다른 칸은 그대로
 
-    // 대본은 [다시 만들기]: 바뀐다
+    // 대본도 [추가 만들기]: 3편이 앞에 더해진다
     const regen = await post(`/api/contents/${c.id}/regenerate`, { key: "script" });
-    expect((regen.data as Content).output.script).not.toBe(c.output.script);
+    const scripts = (regen.data as Content).output.script as string[];
+    expect(scripts).toHaveLength(6);
+    expect(scripts.slice(3)).toEqual(c.output.script);
 
     const edited = await post(`/api/contents/${c.id}/annotations`, { edit: { key: "script", value: "고친 대본이에요\n짧게요" } }, "PATCH");
     expect(((edited.data as Content).context.userEdits as Record<string, unknown>).script).toBeTruthy();
@@ -104,8 +108,15 @@ describe("업로드 관리", () => {
     const to = new Date(Date.now() + 40 * 864e5).toISOString();
     await j(`/api/publications?from=${from}&to=${to}`); // 응답 뒤 성과 수집
     await sleep(1500);
+    // 직접 넣은 조회수 → 성과 데이터 + 날짜 패널 표시
+    const pubId = (pub.data as { id: string }).id;
+    expect((await post(`/api/publications/${pubId}/views`, { views: "18,000" })).ok).toBe(true);
+    const st = (await j<Record<string, { manual?: { views: number } }>>(`/api/publications/stats?ids=${pubId}`)).data;
+    expect(st[pubId].manual?.views).toBe(18000);
+    const direct = (await post("/api/publications", { platform: "youtube", title: "직접 등록", status: "published" })).data as { id: string };
+    expect((await post(`/api/publications/${direct.id}/views`, { views: 100 })).ok).toBe(false); // 콘텐츠 연결 없으면 학습에 못 씀
     const perf = await j<{ contentId: string; source: string }[]>("/api/performance");
-    expect(perf.data.filter((m) => m.contentId === gen.id).map((m) => m.source).sort()).toEqual(["youtube-d1", "youtube-d7"]);
+    expect(perf.data.filter((m) => m.contentId === gen.id).map((m) => m.source).sort()).toEqual(["manual", "youtube-d1", "youtube-d7"]);
   });
 
   it("입력 검사: 제목 없음·예약일 없음·위험한 URL 거부", async ({ skip }) => {

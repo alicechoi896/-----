@@ -51,7 +51,7 @@ export function Combobox({
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // 목록은 화면 맨 위(body)에 띄운다: 표처럼 스크롤 영역 안에 있어도 잘리지 않게
-  const [pos, setPos] = useState<CSSProperties>({});
+  const [pos, setPos] = useState<CSSProperties>({ position: "fixed", visibility: "hidden" }); // 위치를 잡기 전에는 숨긴다
   const listId = useId();
   const selected = options.find((o) => o.value === value);
 
@@ -102,7 +102,8 @@ export function Combobox({
       ),
     );
     setOpen(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    // 목록 위치를 잡기 전에 포커스가 가면 페이지가 아래로 튄다 → 스크롤 없이 포커스
+    setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0);
   }
 
   function choose(v: string) {

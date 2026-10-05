@@ -272,7 +272,7 @@ export const SHOTS = [
   },
   {
     id: "05-yt-info",
-    viewport: { width: 1280, height: 1000 },
+    viewport: { width: 1280, height: 1180 },
     url: "/youtube/info-video",
     marks: {
       1: (p) => field(p, "카테고리"),

@@ -1,5 +1,5 @@
 import "server-only";
-import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, formatViews, scriptFormatTypeOf } from "@/lib/script-format";
+import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, formatViews } from "@/lib/script-format";
 import type { ChannelId, ScriptFormat, ScriptFormatInput, ScriptFormatType } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { getPromptTemplate } from "../ai/prompts/templates";
@@ -159,8 +159,8 @@ export const scriptFormatService = {
  * 생성용 포맷 목록 (영상·클립 기능만). 테이블이 아직 없거나(schema.sql 재실행 전) 읽기에 실패하면
  * 포맷 없이 생성한다 — 생성 폼에서 포맷을 직접 고른 경우만 오류.
  */
-export async function loadScriptFormats(userId: string, featureId: string, pickedId: string): Promise<ScriptFormat[]> {
-  if (!scriptFormatTypeOf(featureId)) return [];
+export async function loadScriptFormats(userId: string, type: ScriptFormatType | null, pickedId: string): Promise<ScriptFormat[]> {
+  if (!type) return [];
   try {
     return (await getRepositories().scriptFormats.list((f) => f.userId === userId)).map(normalize);
   } catch (e) {
@@ -175,12 +175,11 @@ export async function loadScriptFormats(userId: string, featureId: string, picke
  */
 export function chooseScriptFormat(
   rows: ScriptFormat[],
-  featureId: string,
+  type: ScriptFormatType | null,
   channelId: ChannelId,
   pickedId: string,
   style: { productFormatId?: string | null; infoFormatId?: string | null } | null,
 ): ScriptFormat | null {
-  const type = scriptFormatTypeOf(featureId);
   if (!type) return null;
   if (pickedId) {
     const picked = rows.find((f) => f.id === pickedId);

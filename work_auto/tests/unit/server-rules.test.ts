@@ -3,7 +3,7 @@ import { assertPublicUrl } from "@/lib/server/security/safe-url";
 import { previewStyleImport } from "@/lib/server/services/style-import";
 import { scrubSecrets } from "@/lib/server/services/error-log";
 import { editRatio } from "@/lib/server/services/memory";
-import { compressContent, promptInsights, sanitizeSummary } from "@/lib/server/services/learning";
+import { compressContent, performanceTiers, promptInsights, sanitizeSummary } from "@/lib/server/services/learning";
 import { isYouTubePublication } from "@/lib/server/services/youtube-stats";
 import type { GeneratedContent, LearningProfile } from "@/lib/types";
 
@@ -98,6 +98,31 @@ describe("학습 프로필 규칙", () => {
     expect(text).toContain("제목: 다른 제목");
     expect(text).toContain("Hook: 고친 훅");
     expect(text.length).toBeLessThanOrEqual(601);
+  });
+});
+
+describe("성과 비교 (학습 신호)", () => {
+  it("같은 묶음의 중앙값 기준으로 잘된 영상·반응 낮음", () => {
+    const t = performanceTiers([
+      { contentId: "a", views: 1000 },
+      { contentId: "a", views: 30000 },
+      { contentId: "b", views: 10000 },
+      { contentId: "c", views: 3000 },
+    ]);
+    expect(t.get("a")).toMatch(/^\(잘된 영상/);
+    expect(t.get("b")).toBe("(보통)");
+    expect(t.get("c")).toMatch(/^\(반응 낮음/);
+    expect(performanceTiers([{ contentId: "x", views: 5 }]).size).toBe(0); // 비교 대상이 없으면 표시 안 함
+  });
+
+  it("대본이 여러 편이면 학습 요약은 고른 대본(없으면 첫 편)", () => {
+    const c = {
+      channelId: "youtube",
+      headline: "제목",
+      output: { titles: ["제목"], script: ["첫 편\n둘째 줄", "고른 편\n좋은 줄"] },
+      context: { picks: { script: { values: ["고른 편\n좋은 줄"], at: "" } } },
+    } as unknown as GeneratedContent;
+    expect(compressContent(c, 600)).toContain("고른 편 / 좋은 줄");
   });
 });
 

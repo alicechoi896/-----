@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2, Wand2 } from "lucide-react";
+import { Check, Copy, Download, FolderDown, ListPlus, ShieldCheck, Terminal, Trash2 } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -49,6 +49,8 @@ export function VideoImport() {
   const [results, setResults] = useState<ImportResult[] | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // 체크해서 고른 영상 (전체 선택은 표 머리의 체크 상자)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const xhs = useXhsDownloads();
   const { jobs, bulk, busy } = xhs;
 
@@ -63,6 +65,20 @@ export function VideoImport() {
   const productName = new Map((products.data ?? []).map((p) => [p.id, p.name]));
   const xhsVideos = videos.filter((v) => v.platform === "xiaohongshu");
   const otherVideos = videos.filter((v) => v.platform !== "xiaohongshu");
+  const picked = videos.filter((v) => selected.has(v.id));
+  const pickedXhs = picked.filter((v) => v.platform === "xiaohongshu");
+  const pickedOther = picked.filter((v) => v.platform !== "xiaohongshu");
+
+  /** 고른 영상 한 번에: 샤오홍슈는 ZIP 으로 받고, YouTube 는 내 PC 에서 받는 명령 하나로 복사 */
+  async function downloadPicked() {
+    if (pickedOther.length) {
+      await navigator.clipboard.writeText(downloadCommand(pickedOther.map((v) => v.url))).catch(() => undefined);
+      setCopiedId("__picked");
+      setGuideOpen(true);
+      setTimeout(() => setCopiedId((id) => (id === "__picked" ? null : id)), 2500);
+    }
+    if (pickedXhs.length) await xhs.runAll(pickedXhs);
+  }
 
   async function handleImport() {
     if (!urls.length) return;
@@ -151,16 +167,6 @@ export function VideoImport() {
           <div className="flex items-center justify-end gap-1">
             {v.platform === "xiaohongshu" ? (
               <>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={Wand2}
-                  disabled={running || Boolean(bulk)}
-                  onClick={() => xhs.runOne(v, "blur")}
-                  title="AI 가 자막·작성자 이름·글자 로고를 찾아 흐리게 하고 소리를 빼서 저장합니다 (원작자 허락 필요)"
-                >
-                  글자 흐리게
-                </Button>
                 <Button size="sm" variant="primary" icon={Download} loading={running} disabled={Boolean(bulk)} onClick={() => xhs.runOne(v)} title="워터마크 없는 원본, 소리 없이 바로 저장합니다">
                   다운로드
                 </Button>
@@ -249,7 +255,7 @@ export function VideoImport() {
 
       <SectionCard
         title="저장된 참고 영상"
-        description="샤오홍슈 [다운로드] = 워터마크 없는 원본을 소리 없이 저장 · [글자 흐리게] = AI 가 자막·작성자 이름·글자 로고를 찾아 흐리게 처리. 영상은 우리 서버에 저장되지 않습니다."
+        description="샤오홍슈 [다운로드] = 워터마크 없는 원본을 소리 없이 저장. 체크해서 여러 개를 고르면(맨 위 체크 = 전체 선택) 한 번에 받습니다. 영상은 우리 서버에 저장되지 않습니다."
         flush
         actions={
           <div className="flex items-center gap-2">
@@ -264,15 +270,23 @@ export function VideoImport() {
               />
             )}
             {bulk && <span className="text-xs text-fg-subtle">{bulk}</span>}
-            {xhsVideos.length > 1 && (
+            {picked.length > 0 ? (
               <>
-                <Button size="sm" icon={Wand2} disabled={busy || Boolean(bulk)} onClick={() => void xhs.runAll(xhsVideos, "blur")}>
-                  {xhsVideos.length}개 글자 흐리게 (ZIP)
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                  선택 해제
                 </Button>
-                <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(bulk)} disabled={busy} onClick={() => void xhs.runAll(xhsVideos)}>
-                  샤오홍슈 {xhsVideos.length}개 한 번에 받기 (ZIP)
+                <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(bulk)} disabled={busy} onClick={() => void downloadPicked()}>
+                  {copiedId === "__picked"
+                    ? "YouTube 명령 복사됨"
+                    : `선택한 ${picked.length}개 받기${pickedXhs.length > 1 ? " (ZIP)" : ""}`}
                 </Button>
               </>
+            ) : (
+              xhsVideos.length > 1 && (
+                <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(bulk)} disabled={busy} onClick={() => void xhs.runAll(xhsVideos)}>
+                  샤오홍슈 전체 {xhsVideos.length}개 받기 (ZIP)
+                </Button>
+              )
             )}
           </div>
         }
@@ -282,7 +296,7 @@ export function VideoImport() {
         ) : list.error ? (
           <ErrorState message={list.error} onRetry={list.reload} />
         ) : (
-          <DataTable columns={columns} rows={videos} rowKey={(v) => v.id} empty={<EmptyState compact title={productFilter ? `'${productFilter === "none" ? "제품 연결 안 됨" : (productName.get(productFilter) ?? "")}' 영상이 없습니다` : "가져온 영상이 없습니다"} />} />
+          <DataTable columns={columns} rows={videos} rowKey={(v) => v.id} selection={{ selected, onChange: setSelected }} empty={<EmptyState compact title={productFilter ? `'${productFilter === "none" ? "제품 연결 안 됨" : (productName.get(productFilter) ?? "")}' 영상이 없습니다` : "가져온 영상이 없습니다"} />} />
         )}
       </SectionCard>
 

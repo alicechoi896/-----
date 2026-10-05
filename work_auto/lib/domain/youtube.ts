@@ -84,11 +84,11 @@ export function dateRange(days: number, now = Date.now()): { publishedFrom: stri
   return { publishedFrom: ymd(new Date(now - days * 86_400_000)), publishedTo: ymd(new Date(now)) };
 }
 
-/** 기본 조회 조건: 한국, 최근 7일, 전체, 구독자 0~5만, 조회수 1만 이상 (작은 채널의 잘된 영상 찾기) */
-export const DEFAULT_RANGES = { minSubscribers: 0, maxSubscribers: 50_000, minViews: 10_000 } as const;
+/** 기본 조회 조건: 한국, 최근 7일, Shorts, 구독자·조회수 제한 없음 (자주 쓰는 조건은 사용자가 저장해 쓴다) */
+export const DEFAULT_RANGES = { minSubscribers: 0, minViews: 0 } as const;
 
 export function defaultYouTubeQuery(now = Date.now()): YouTubeTrendQuery {
-  return { country: "KR", format: "all", recentDays: 7, ...dateRange(7, now), ...DEFAULT_RANGES };
+  return { country: "KR", format: "shorts", recentDays: 7, ...dateRange(7, now), ...DEFAULT_RANGES };
 }
 
 /** "최근 N일" 조건이면 오늘 기준으로 날짜를 다시 계산한다 */

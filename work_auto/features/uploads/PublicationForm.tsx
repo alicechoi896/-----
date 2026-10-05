@@ -34,6 +34,8 @@ interface FormState {
   platformUrl: string;
   assigneeId: string;
   note: string;
+  /** 직접 넣는 조회수 (저장하면 성과 데이터로) */
+  views: string;
 }
 
 function initialState(editing: ContentPublicationView | null, presetContent: GeneratedContent | null, defaultDate?: string): FormState {
@@ -51,6 +53,7 @@ function initialState(editing: ContentPublicationView | null, presetContent: Gen
       platformUrl: editing.platformUrl ?? "",
       assigneeId: editing.assigneeId ?? "",
       note: editing.note ?? "",
+      views: "",
     };
   }
   const base: FormState = {
@@ -67,6 +70,7 @@ function initialState(editing: ContentPublicationView | null, presetContent: Gen
     platformUrl: "",
     assigneeId: "",
     note: "",
+    views: "",
   };
   return presetContent ? { ...base, ...fromContent(presetContent) } : base;
 }
@@ -147,6 +151,9 @@ export function PublicationForm({
         note: form.note || null,
       };
       const saved = editing ? await api.publications.update(editing.id, input) : await api.publications.create(input);
+      // 조회수를 넣었으면 성과 데이터로 (생성 콘텐츠와 연결된 업로드만)
+      const views = Number(form.views.replace(/[,\s]/g, ""));
+      if (form.views.trim() && Number.isFinite(views) && saved.contentId) await api.publicationViews.record(saved.id, { views });
       onSaved(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장하지 못했습니다.");
@@ -248,6 +255,17 @@ export function PublicationForm({
               options={(assignees.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
               onChange={(e) => set("assigneeId", e.target.value)}
             />
+          </FormField>
+          <FormField
+            label="조회수 (직접 입력)"
+            optional
+            hint={
+              mode === "content"
+                ? "넣으면 성과 데이터로 저장되어 다음 생성의 학습에 반영됩니다. YouTube 주소가 있으면 업로드일(없으면 예약일) 1일·7일 뒤에도 자동으로 기록합니다."
+                : "직접 등록은 생성 콘텐츠와 연결되지 않아 학습에 쓰지 않습니다. [기존 콘텐츠 선택]으로 등록하면 반영됩니다."
+            }
+          >
+            <Input inputMode="numeric" placeholder="예: 18000" value={form.views} disabled={mode !== "content"} onChange={(e) => set("views", e.target.value.replace(/[^\d,]/g, ""))} />
           </FormField>
           <FormField label="메모" optional>
             <Textarea rows={2} value={form.note} maxLength={1000} onChange={(e) => set("note", e.target.value)} />

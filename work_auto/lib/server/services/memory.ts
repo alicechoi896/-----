@@ -9,6 +9,7 @@ import type {
   UserStyleInput,
 } from "@/lib/types";
 import { findGeneratorConfig } from "@/lib/generators/configs";
+import { isListFormat, splitCards } from "@/lib/generators/types";
 import { STYLE_LIMITS, cleanStyleText, styleItemKey } from "@/lib/style-limits";
 import { cleanPreferredTypes } from "@/lib/style-types";
 import { createId, nowIso } from "@/lib/utils";
@@ -143,11 +144,15 @@ export const memoryService = {
     if (body.edit) {
       const section = config?.outputs.find((o) => o.key === body.edit!.key);
       if (!section) throw new AppError("VALIDATION", "수정할 수 없는 항목입니다.");
-      const isList = section.format === "list" || section.format === "tags";
+      const isList = isListFormat(section.format);
       const raw = body.edit.value;
-      const value = isList
-        ? (Array.isArray(raw) ? raw : String(raw ?? "").split("\n")).map((x) => String(x).trim().slice(0, 1000)).filter(Boolean).slice(0, 60)
-        : String(raw ?? "").slice(0, 20_000);
+      // 카드(대본 여러 편)는 '---' 줄로 나눈다
+      const value =
+        section.format === "cards"
+          ? (Array.isArray(raw) ? raw.map(String) : splitCards(String(raw ?? ""))).map((x) => x.trim().slice(0, 5000)).filter(Boolean).slice(0, 30)
+          : isList
+            ? (Array.isArray(raw) ? raw : String(raw ?? "").split("\n")).map((x) => String(x).trim().slice(0, 1000)).filter(Boolean).slice(0, 60)
+            : String(raw ?? "").slice(0, 20_000);
       const original = content.output[section.key];
       const toText = (v: unknown) => (Array.isArray(v) ? v.join("\n") : String(v ?? ""));
       const edits = { ...(context.userEdits ?? {}) };

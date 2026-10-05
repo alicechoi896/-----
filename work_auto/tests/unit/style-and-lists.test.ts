@@ -4,6 +4,7 @@ import { NAVER_LIST_COUNTS, buildTrendIdeas, relatedFirst, seasonOf, seasonalCan
 import { dayKey, publicationDate, platformForChannel } from "@/lib/publish-platforms";
 import { escapeCsvCell, styleToCsv } from "@/lib/style-csv";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
+import { isListFormat, splitCards } from "@/lib/generators/types";
 import { STYLE_TYPES, STYLE_TYPE_KINDS, cleanPreferredTypes } from "@/lib/style-types";
 import type { UserStyle } from "@/lib/types";
 
@@ -140,8 +141,12 @@ describe("결과 항목 [추가 만들기]", () => {
     expect(r.added).toHaveLength(3);
     expect(r.list).toHaveLength(APPEND_MAX_ITEMS);
   });
-  it("후보 목록만 추가 만들기 (글은 다시 만들기)", () => {
-    expect(["titles", "hooks", "ctas", "keywords", "tags", "hashtags"].every((k) => APPENDABLE_KEYS.has(k))).toBe(true);
-    expect(["script", "description", "body", "headings"].some((k) => APPENDABLE_KEYS.has(k))).toBe(false);
+  it("후보 목록·대본(3편씩)은 추가 만들기, 설명글·본문은 다시 만들기", () => {
+    expect(["titles", "hooks", "ctas", "keywords", "tags", "hashtags", "script"].every((k) => APPENDABLE_KEYS.has(k))).toBe(true);
+    expect(["description", "body", "headings"].some((k) => APPENDABLE_KEYS.has(k))).toBe(false);
+  });
+  it("대본 카드 직접 수정: --- 줄로 나눈다", () => {
+    expect(splitCards("대본 1\n줄2\n\n---\n\n대본 2\n  ---  \n대본 3")).toEqual(["대본 1\n줄2", "대본 2", "대본 3"]);
+    expect(isListFormat("cards")).toBe(true);
   });
 });

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, Download, ExternalLink, Film, FolderDown, ListPlus, Unlink, Wand2 } from "lucide-react";
+import { ArrowRight, Download, ExternalLink, Film, FolderDown, ListPlus, Unlink } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -17,7 +17,7 @@ const MAX_BATCH = 20;
 /**
  * 제품 상세 > 연결된 영상.
  * 이 제품에 연결한 참고 영상(주로 샤오홍슈)을 보여 주고, 필요할 때 바로 다시 받을 수 있게 한다.
- * - 샤오홍슈: [다운로드] 워터마크 없는 원본·소리 없음 / [글자 흐리게] 원작자 허락 후 (영상 URL 가져오기와 같은 기능)
+ * - 샤오홍슈: [다운로드] 워터마크 없는 원본·소리 없음 (영상 URL 가져오기와 같은 기능)
  * - 링크를 넣으면 이 제품에 연결된 채로 가져온다
  */
 export function ProductVideos({ productId }: { productId: string }) {
@@ -71,10 +71,7 @@ export function ProductVideos({ productId }: { productId: string }) {
           {xhs.bulk && <span className="text-xs text-fg-subtle">{xhs.bulk}</span>}
           {xhsVideos.length > 1 && (
             <>
-              <Button size="sm" icon={Wand2} disabled={xhs.busy || Boolean(xhs.bulk)} onClick={() => void xhs.runAll(xhsVideos, "blur", "제품영상")}>
-                전체 글자 흐리게 (ZIP)
-              </Button>
-              <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(xhs.bulk)} disabled={xhs.busy} onClick={() => void xhs.runAll(xhsVideos, "plain", "제품영상")}>
+              <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(xhs.bulk)} disabled={xhs.busy} onClick={() => void xhs.runAll(xhsVideos, "제품영상")}>
                 전체 다운로드 (ZIP)
               </Button>
             </>
@@ -138,16 +135,6 @@ export function ProductVideos({ productId }: { productId: string }) {
                 <div className="flex shrink-0 items-center gap-1">
                   {v.platform === "xiaohongshu" ? (
                     <>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        icon={Wand2}
-                        disabled={running || Boolean(xhs.bulk)}
-                        onClick={() => xhs.runOne(v, "blur")}
-                        title="AI 가 자막·작성자 이름·글자 로고를 찾아 흐리게 하고 소리를 빼서 저장합니다 (원작자 허락 필요)"
-                      >
-                        글자 흐리게
-                      </Button>
                       <Button
                         size="sm"
                         variant="primary"

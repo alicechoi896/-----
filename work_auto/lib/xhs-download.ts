@@ -11,15 +11,9 @@
  * → 기본은 H.265 를 먼저 받는다. H.265 가 없으면 H.264.
  */
 import { api } from "@/lib/api-client";
-import { blurAndMute, sampleFrames, toBlurBoxes } from "@/lib/video-edit";
 import { removeAudio } from "@/lib/video-mute";
 
-/** 글자 위치 찾기 한 번에 보낼 화면 수 */
-const DETECT_CHUNK = 10;
-/** 글자 흐리게는 화면을 다시 만들어 오래 걸리므로 길이를 제한한다 (29초 ≈ 3분) */
-export const MAX_BLUR_SECONDS = 180;
-
-export type XhsStage = "resolve" | "download" | "mute" | "analyze" | "blur" | "done";
+export type XhsStage = "resolve" | "download" | "mute" | "done";
 
 const safeName = (s: string) => (s.replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim() || "샤오홍슈 영상").slice(0, 60);
 const isHevc = (codec: string) => /hevc|h265|hvc/i.test(codec);
@@ -87,30 +81,3 @@ export async function downloadXhsMuted(
   return { blob: muted, name: mutedName(src.title), title: src.title, clean: src.clean };
 }
 
-/**
- * 글자 자동 흐리게: 워터마크 없는 원본 받기 → 화면 뽑기 → AI 가 덧씌운 글자 위치 찾기 → 그 구간만 흐리게 + 소리 제거 → H.264
- * 원작자에게 사용과 로고·자막 제거 허락을 받은 영상에만 쓴다 (화면에서 확인).
- */
-export async function downloadXhsBlurred(
-  url: string,
-  onStage: (stage: XhsStage, progress?: number) => void,
-): Promise<{ blob: Blob; name: string; title: string; found: number }> {
-  const src = await fetchXhsSource(url, onStage);
-  onStage("analyze");
-  const sampled = await sampleFrames(src.blob);
-  if (sampled.duration > MAX_BLUR_SECONDS) {
-    throw new Error(`글자 흐리게는 ${MAX_BLUR_SECONDS / 60}분 이하 영상만 할 수 있습니다 (이 영상 ${Math.round(sampled.duration)}초). 브라우저에서 화면을 다시 만들어 오래 걸리기 때문입니다. [다운로드] 는 길이와 상관없이 됩니다.`);
-  }
-  // 10장씩 나눠 동시에 묻는다 (한 번에 30장보다 빠르고, 일시적인 실패는 그 묶음만 한 번 더)
-  const chunks: (typeof sampled.frames)[] = [];
-  for (let i = 0; i < sampled.frames.length; i += DETECT_CHUNK) chunks.push(sampled.frames.slice(i, i + DETECT_CHUNK));
-  const results = await Promise.all(
-    chunks.map((c) => api.videos.detectText(c).catch(() => api.videos.detectText(c))),
-  );
-  const perFrame = results.flatMap((r) => r.frames);
-  const boxes = toBlurBoxes(perFrame, sampled.width, sampled.height, sampled.duration);
-  onStage("blur", 0);
-  const blob = await blurAndMute(src.blob, boxes, sampled, (p) => onStage("blur", p));
-  onStage("done");
-  return { blob, name: mutedName(src.title, "글자흐리게"), title: src.title, found: boxes.length };
-}

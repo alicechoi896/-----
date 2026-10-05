@@ -11,6 +11,7 @@ import { buildStyleContext, styleSnapshot } from "./style-context";
 import { learningConfig } from "@/lib/learning-config";
 import { compressContent, learningService, profileIdForFeature, promptInsights } from "../services/learning";
 import { chooseScriptFormat, loadScriptFormats } from "../services/script-formats";
+import { blogTitleFormatTypeOf, scriptFormatTypeOf } from "@/lib/script-format";
 
 /**
  * ★ ContextBuilder — AI Memory 를 "생성 1회분"의 Context 로 조립한다.
@@ -52,6 +53,9 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const styleId = String(input.styleId ?? "");
   const pickedProfileId = String(input.profileId ?? "");
   const scriptFormatId = String(input.scriptFormatId ?? "");
+  // 영상·클립은 대본 구조까지, 블로그는 대본 포맷의 '잘된 제목'만 제목 패턴으로
+  const fullFormatType = scriptFormatTypeOf(featureId);
+  const formatType = fullFormatType ?? blogTitleFormatTypeOf(featureId, input);
 
   const [productRow, styles, featureContents, featureFeedback, channelContents, performance, trend, referenceVideo, profiles, scriptFormats] = await Promise.all([
     productId ? repo.products.get(productId) : Promise.resolve(null),
@@ -63,7 +67,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     trendId ? trendService.findOption(trendId) : Promise.resolve(null),
     videoId ? repo.videos.get(videoId) : Promise.resolve(null),
     repo.contentProfiles.list((p) => p.userId === userId && p.isActive),
-    loadScriptFormats(userId, featureId, scriptFormatId),
+    loadScriptFormats(userId, formatType, scriptFormatId),
   ]);
 
   // 1) Product Memory — 저장된 분석을 그대로 쓴다 (상세페이지 재분석 없음)
@@ -86,7 +90,8 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
   const styleContext = style ? buildStyleContext({ style, channelId }) : null;
-  const scriptFormat = chooseScriptFormat(scriptFormats, featureId, channelId, scriptFormatId, style);
+  const scriptFormat = chooseScriptFormat(scriptFormats, formatType, channelId, scriptFormatId, style);
+  const scriptFormatUse: GenerationContext["scriptFormatUse"] = fullFormatType ? "full" : "titles";
 
   // 0) Content Profile — 생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필
   if (pickedProfileId && !profiles.some((p) => p.id === pickedProfileId)) {
@@ -109,12 +114,19 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   );
   const ordered = [...featureContents].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const recentlyUsed = new Set(ordered.slice(0, learningConfig.examples.recentWindow).flatMap((c) => c.context.goodExampleIds ?? []));
+  // 성과: 이 기능에서 만든 콘텐츠의 최고 조회수 (자동 1·7일 기록 + 직접 입력). 중앙값 이상이면 긍정, 높을수록 더 자주 고른다
+  const bestViews = new Map<string, number>();
+  for (const m of performance) if (featureIds.has(m.contentId) && m.views != null) bestViews.set(m.contentId, Math.max(bestViews.get(m.contentId) ?? 0, m.views));
+  const viewList = [...bestViews.values()].sort((a, b) => a - b);
+  const medianViews = viewList.length ? viewList[Math.floor(viewList.length / 2)] : 0;
+  const performedWell = (id: string) => (bestViews.get(id) ?? -1) >= Math.max(1, medianViews) && (viewList.length >= 2 || (bestViews.get(id) ?? 0) > 0);
+  const viewBoost = (id: string) => (bestViews.has(id) && medianViews > 0 ? Math.min(3, Math.max(0.6, bestViews.get(id)! / medianViews)) : 1);
   const isPositive = (c: (typeof featureContents)[number]) =>
     !down.has(c.id) &&
-    (c.isExemplar || up.has(c.id) || published.has(c.id) || Boolean(c.context.picks && Object.keys(c.context.picks).length) ||
+    (c.isExemplar || up.has(c.id) || published.has(c.id) || performedWell(c.id) || Boolean(c.context.picks && Object.keys(c.context.picks).length) ||
       Object.values(c.context.userEdits ?? {}).some((e) => e.ratio < 0.3));
   const weightOf = (c: (typeof featureContents)[number]) =>
-    (c.isExemplar ? 1.5 : up.has(c.id) ? 1.3 : 1) * (recentlyUsed.has(c.id) ? learningConfig.examples.recentPenalty : 1);
+    (c.isExemplar ? 1.5 : up.has(c.id) ? 1.3 : 1) * viewBoost(c.id) * (recentlyUsed.has(c.id) ? learningConfig.examples.recentPenalty : 1);
   const positivePool = featureContents.filter(isPositive);
   const generalPool = featureContents.filter((c) => !isPositive(c) && !down.has(c.id));
   const positivePicks = weightedSample(positivePool, learningConfig.examples.positive, weightOf);
@@ -171,7 +183,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     goodExampleIds: examples.map((e) => e.id),
   };
 
-  return { contentProfile, product, style, styleContext, exemplars, examples, learning, avoid, performanceHints, trend, referenceVideo, scriptFormat, honestyGuard, summary };
+  return { contentProfile, product, style, styleContext, exemplars, examples, learning, avoid, performanceHints, trend, referenceVideo, scriptFormat, scriptFormatUse, honestyGuard, summary };
 }
 
 /** 가중치 무작위 뽑기 (중복 없이 n개) */

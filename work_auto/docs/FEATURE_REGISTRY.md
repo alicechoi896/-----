@@ -32,8 +32,8 @@
 | NAVER 블로그 | `blog-info-writing` | 정보·트렌드 글 만들기 | `/naver-blog/info-writing` | generator | ✅ | OpenAI | 글 유형*(일반 정보/트렌드/IT/AI/생활정보), 주제*, 참고 트렌드, 메인 키워드, 글 길이 | 제목 후보 5, 전체 본문, 소제목, 키워드, 해시태그 | ContentGenerator |
 | NAVER 블로그 | `blog-auto-writing` | 자동 글쓰기 | `/naver-blog/auto-writing` | generator | ✅ | OpenAI | 주제*, 글 유형, 제품(선택) | 제목 후보 3, 전체 본문, 키워드, 해시태그 | ContentGenerator (Memory 최대 활용) |
 | 공통 도구 | `product-learning` | 제품 상세페이지 학습 | `/tools/product-learning` | tool | ✅ | OpenAI (+수집처) | URL / 상세 이미지 / 텍스트 | 기본 정보, AI 제품 요약, 콘텐츠 제작용 데이터 → 라이브러리 저장 | `features/product-learning` |
-| 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | ✅ | - | 검색어, 카테고리 | 제품 카드/목록, 상세(연결된 영상: 샤오홍슈 다시 받기·글자 흐리게·링크 추가·연결 해제), 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
-| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL 여러 개(줄바꿈, 최대 20), 메모 | 영상 메타데이터, 참고 영상 목록, 샤오홍슈: 워터마크 없는 원본(H.265)을 소리 없이 바로 저장·ZIP, [글자 흐리게] AI 가 덧씌운 글자 위치를 찾아 자동 흐리게 → H.264 (원작자 허락 확인) / YouTube: 다운로드 명령(yt-dlp, 내 PC) | `features/video-import`, `lib/video-download.ts`, `lib/video-links.ts` |
+| 공통 도구 | `product-library` | 제품 라이브러리 | `/tools/product-library` (+ `/[productId]`) | tool | ✅ | - | 검색어, 카테고리 | 제품 카드/목록, 상세(연결된 영상: 샤오홍슈 다시 받기·링크 추가·연결 해제), 수정, 삭제, 콘텐츠 만들기 | `features/product-library` |
+| 공통 도구 | `video-import` | 영상 URL 가져오기 | `/tools/video-import` | tool | ✅ | YouTube Data API | 영상 URL 여러 개(줄바꿈, 최대 20), 메모 | 영상 메타데이터, 참고 영상 목록, 샤오홍슈: 워터마크 없는 원본(H.265)을 소리 없이 바로 저장·ZIP, 체크해서 고른 영상 한 번에 받기 (YouTube 는 내 PC 명령) | `features/video-import`, `lib/video-download.ts`, `lib/video-links.ts` |
 | 설정 | `api-center` | API 연결 센터 | `/settings/api` | settings | ✅ | - | API Key, Client ID/Secret | 연결 상태, 테스트 결과 | `features/api-center` |
 | 사이트 관리 | `admin-approvals` | 가입 승인 | `/admin/approvals` | admin | ✅ | - | 승인 등급, 거절 사유 | 승인 대기 목록 | `features/admin` (관리자 전용) |
 | 사이트 관리 | `admin-users` | 사용자 관리 | `/admin/users` | admin | ✅ | - | 역할 | 승인된 사용자 목록, 역할 변경 | `features/admin` (관리자 전용) |

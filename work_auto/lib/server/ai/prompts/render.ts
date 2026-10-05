@@ -5,7 +5,8 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { formatViews, promptExamples } from "@/lib/script-format";
+import { formatViews, promptExamples, promptTitles } from "@/lib/script-format";
+import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
 /**
@@ -23,7 +24,11 @@ function outputFormat(outputs: OutputSection[]): string {
   const shape = Object.fromEntries(
     outputs.map((o) => [
       o.key,
-      o.format === "list" || o.format === "tags" ? `string[] (${o.label}${o.count ? `, ${o.count}개` : ""})` : `string (${o.label})`,
+      o.format === "cards"
+        ? `string[] (${o.label} ${o.count ?? 3}편 — 배열 원소 하나가 대본 한 편 전체, 줄바꿈 포함)`
+        : isListFormat(o.format)
+          ? `string[] (${o.label}${o.count ? `, ${o.count}개` : ""})`
+          : `string (${o.label})`,
     ]),
   );
   return `다음 JSON 형식으로만 응답한다:\n${JSON.stringify(shape, null, 2)}`;
@@ -67,14 +72,15 @@ function contextBlocks(ctx: GenerationContext): string[] {
     for (const b of renderStyleBlocks(ctx.styleContext)) blocks.push(block(b.title, b.lines));
   }
   // 대본 포맷: 대본 구조를 정한다 (말투는 스타일, 구조는 포맷). 참고 대본은 조회수 높은 2개만 짧게
-  if (ctx.scriptFormat) {
+  if (ctx.scriptFormat && ctx.scriptFormatUse === "full") {
     const f = ctx.scriptFormat;
     const ex = promptExamples(f.examples);
     blocks.push(
-      block(`대본 포맷: ${f.name} (대본 구조는 이 포맷을 우선 따른다)`, [
-        "대본(script)의 단계 순서·줄 수·리듬은 아래 가이드라인을 따른다. 영상 길이와 말투 규칙('~니다.' 금지, 짧은 리듬)은 그대로 지킨다.",
-        "가격·할인·배송·순위 같은 주장은 [제품 정보]에 근거가 있을 때만 쓴다. 없으면 그 단계는 '링크에서 확인' 식으로 바꾼다.",
-        ...(f.guideline ? f.guideline.split("\n") : ["(가이드라인 없음 — 아래 참고 대본의 구조를 따른다)"]),
+      block(`대본 포맷: ${f.name} (구조 참고 — 그대로 복제하지 않는다)`, [
+        "아래 가이드라인은 잘된 대본들의 공통 구조다. 큰 흐름(Hook → 핵심 → CTA)은 살리되, 단계 일부를 합치거나 순서·강조점·표현을 바꿔 이 제품·주제에 맞게 더 설득력 있게 다시 짠다.",
+        "대본 3편은 같은 포맷에서 출발하되 편마다 Hook 방식·전개·강조 포인트·CTA 를 다르게 해서, 사용자가 좋은 부분을 골라 섞을 수 있게 한다.",
+        "영상 길이와 말투 규칙('~니다.' 금지, 짧은 리듬)은 그대로 지킨다. 가격·할인·배송·순위 주장은 [제품 정보]에 근거가 있을 때만 쓰고, 없으면 '링크에서 확인' 식으로 바꾼다.",
+        ...(f.guideline ? f.guideline.split("\n") : ["(가이드라인 없음 — 아래 참고 대본의 구조를 참고한다)"]),
       ]),
     );
     if (ex.length) {
@@ -83,6 +89,19 @@ function contextBlocks(ctx: GenerationContext): string[] {
           "대본 포맷 > 참고 대본 (구조·리듬만 참고. 문장·제품명·숫자를 그대로 쓰지 않고, 받아 적은 오타는 따라 하지 않는다)",
           ex.map((e, i) => `(${i + 1}${e.views != null ? ` · ${formatViews(e.views)}` : ""}) ${e.text.replace(/\n/g, " / ")}`),
         ),
+      );
+    }
+  }
+  // 대본 포맷의 참고 대본 제목 → 영상 제목·블로그 글 제목의 패턴 참고 (복사 금지)
+  if (ctx.scriptFormat) {
+    const titles = promptTitles(ctx.scriptFormat.examples);
+    if (titles.length) {
+      blocks.push(
+        block(`대본 포맷 > 잘된 제목 (${ctx.scriptFormatUse === "titles" ? "블로그 글 제목" : "영상 제목"} 패턴 참고 — 그대로 쓰지 않는다)`, [
+          "아래 제목들의 설득 구조(후회·손해 회피, 반문, 숫자, 대상 지정, 비교 등)만 뽑아 지금 주제·제품·키워드에 맞는 새 제목으로 더 설득력 있게 바꾼다. 문장·제품명을 복사하지 않는다.",
+          ctx.scriptFormatUse === "titles" ? "블로그는 검색형 제목이다: 핵심 키워드를 앞쪽에 두고 영상식 과장 표현은 줄인다." : "",
+          ...titles.map((t) => `잘된 제목: ${t}`),
+        ].filter(Boolean)),
       );
     }
   }
@@ -137,8 +156,10 @@ export function renderContentPrompt(
 ): ChatMessage[] {
   const labels = Object.fromEntries(config.fields.map((f) => [f.name, f.label]));
   // 선택형 항목은 값("15s") 대신 화면 이름("Shorts 15초")으로 보낸다
-  const optionLabel = (key: string, v: unknown) =>
-    config.fields.find((f) => f.name === key)?.options?.find((o) => o.value === v)?.label ?? String(v);
+  const optionLabel = (key: string, v: unknown) => {
+    const o = config.fields.find((f) => f.name === key)?.options?.find((x) => x.value === v);
+    return o ? (o.hint ? `${o.label} (${o.hint})` : o.label) : String(v);
+  };
   const userInput = Object.entries(input)
     .filter(([key, v]) => v !== "" && v != null && !(Array.isArray(v) && v.length === 0) && key !== "productId" && key !== "trendId" && key !== "referenceVideoId" && key !== "styleId" && key !== "profileId" && key !== "scriptFormatId")
     .map(([key, v]) => `${labels[key] ?? key}: ${Array.isArray(v) ? v.join(", ") : optionLabel(key, v)}`);
