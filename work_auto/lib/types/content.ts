@@ -1,3 +1,4 @@
+import type { PreciseQuality } from "@/lib/generators/quality";
 import type { ChannelId, ID, ISODate } from "./common";
 
 /** 생성 결과의 한 섹션 값: 단일 텍스트 또는 목록 */
@@ -32,6 +33,8 @@ export interface ContextSummary {
   regenerated?: { key: string; at: ISODate; provider: string; mode?: "append" }[];
   /** 이번 생성에 실제로 보낸 스타일 표본 (v0.9.9~, 예전 결과에는 없다) */
   styleSamples?: StyleSampleSnapshot | null;
+  /** 정밀 생성 (v0.9.31~): 앵글·추천 제목 TOP 5·대본별 뼈대 체크·검토 메모 */
+  quality?: PreciseQuality | null;
 }
 
 /** 나의 스타일에서 이번 생성에 보낸 항목. Hook·CTA·제목 패턴·자주 쓰는 표현은 많으면 무작위 표본이다 */

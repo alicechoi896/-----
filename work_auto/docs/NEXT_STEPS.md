@@ -40,7 +40,9 @@
 - 실제 TikHub 키로 샤오홍슈·도우인 첫 검색 → 응답 구조 확인 후 `xiaohongshu/parse.ts`·`douyin/parse.ts` 보정
 - 도우인 영상·썸네일 CDN 이 브라우저를 막으면(CORS·핫링크) 서버 프록시 검토 (지금은 [새 탭에서 열기])
 - 영상이 많아지면 `GET /api/videos?productId=` 를 SQL where 전용 메서드로
-- 품질 1단계: 대본 뼈대 규칙, 정밀 생성(제목 40→TOP5, 앵글·훅 3버전·자기 비평)
+- (완료 v0.9.31) 품질 1단계: 대본 뼈대 규칙, 정밀 생성 — docs/QUALITY_MODES.md
+- 품질 2단계: 아웃라이어 점수(조회수 ÷ 채널 최근 15개 중앙값) + [대본 포맷에 추가], 학습 상위 3·하위 3 비교, 프롬프트 버전별 성과표
+- 품질 3단계(DB 승인 필요): content_profiles.audience, script_formats.bad_examples
 
 ### 학습 루프 후속 (v0.9.18 이후)
 - 학습 프로필 버전별 👍 비율·수정량·업로드율 집계 화면 (기존 데이터로 계산)

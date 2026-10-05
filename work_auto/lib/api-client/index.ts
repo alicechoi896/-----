@@ -1,6 +1,7 @@
 import type { PermissionRow } from "@/lib/permissions";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
+import type { PreciseStage } from "@/lib/generators/quality";
 import type {
   XhsNote,
   ScriptExample,
@@ -119,6 +120,42 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
 
 const json = (data: unknown) => JSON.stringify(data);
 
+/** 정밀 생성 스트림 읽기: {"type":"stage"} 줄마다 onStage, 마지막 {"type":"done"|"error"} */
+async function streamPrecise(req: GenerateContentRequest, onStage: (stage: PreciseStage) => void): Promise<GeneratedContent> {
+  let res: Response;
+  try {
+    res = await fetch("/api/contents/generate/precise", { method: "POST", headers: { "Content-Type": "application/json" }, body: json(req), cache: "no-store" });
+  } catch {
+    throw new ApiError("NETWORK", "서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.");
+  }
+  // 스트림을 열기 전 오류(권한·호출 한도)는 일반 JSON
+  if (!res.headers.get("content-type")?.includes("ndjson") || !res.body) {
+    const body = (await res.json().catch(() => null)) as ApiResult<GeneratedContent> | null;
+    if (body && !body.ok) throw new ApiError(body.error.code, body.error.message);
+    throw new ApiError("BAD_RESPONSE", "서버 응답을 해석할 수 없습니다.");
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (value) buf += value;
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const msg = JSON.parse(line) as { type: "stage"; stage: PreciseStage } | { type: "done"; data: GeneratedContent } | { type: "error"; error: { code: string; message: string } };
+      if (msg.type === "stage") onStage(msg.stage);
+      else if (msg.type === "done") {
+        clearApiCache();
+        return msg.data;
+      } else throw new ApiError(msg.error.code, msg.error.message);
+    }
+    if (done) break;
+  }
+  throw new ApiError("BAD_RESPONSE", "생성이 중간에 끊겼습니다. 다시 시도해 주세요.");
+}
+
 function qs(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") search.set(k, String(v));
@@ -189,6 +226,8 @@ export const api = {
       request<GeneratedContent[]>(`/api/contents${qs(filter)}`),
     generate: (req: GenerateContentRequest) =>
       request<GeneratedContent>("/api/contents/generate", { method: "POST", body: json(req) }),
+    /** 정밀 생성 (AI 4회): 단계가 시작될 때마다 onStage. 응답은 NDJSON 스트림 */
+    generatePrecise: (req: GenerateContentRequest, onStage: (stage: PreciseStage) => void) => streamPrecise(req, onStage),
     /** 직접 수정 · 후보 선택 (학습 신호) */
     annotate: (id: string, body: { edit?: { key: string; value: string | string[] }; pick?: { key: string; values: string[] } }) =>
       request<GeneratedContent>(`/api/contents/${id}/annotations`, { method: "PATCH", body: json(body) }),

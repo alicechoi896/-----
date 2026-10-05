@@ -285,6 +285,43 @@ describe("트렌드·스타일·오류 기록", () => {
     await j(`/api/script-formats/${created.format.id}`, { method: "DELETE" });
   });
 
+  it("정밀 생성(데모): 스트림으로 4단계 → 제목 40개·추천 TOP 5(이유)·앵글별 대본 3편·뼈대 체크·검토 메모", async ({ skip }) => {
+    if (!reachable) skip();
+    const products = await j<{ id: string }[]>("/api/products");
+    const call = () =>
+      fetch(BASE + "/api/contents/generate/precise", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ featureId: "yt-product-video", input: { productId: products.data[0].id, length: "15s" } }),
+      });
+    let res = await call();
+    // 앞 테스트들이 1분 AI 호출 한도(20회)를 다 썼으면 풀릴 때까지 기다렸다 한 번 더
+    if (!res.headers.get("content-type")?.includes("ndjson")) {
+      await sleep(61_000);
+      res = await call();
+    }
+    expect(res.headers.get("content-type")).toContain("ndjson");
+    const lines = (await res.text()).trim().split("\n").map((l) => JSON.parse(l) as { type: string; stage?: string; data?: Content & { headline: string; context: Record<string, unknown> } });
+    expect(lines.filter((l) => l.type === "stage").map((l) => l.stage)).toEqual(["angles", "titles", "scripts", "review"]);
+    const done = lines.at(-1)!;
+    expect(done.type).toBe("done");
+    const c = done.data!;
+    const titles = c.output.titles as string[];
+    expect(titles).toHaveLength(40);
+    const q = c.context.quality as { mode: string; angles: { name: string }[]; titleTop: { title: string; reason: string }[]; scripts: { angle: string; checks: Record<string, boolean>; review: string }[] };
+    expect(q.mode).toBe("precise");
+    expect(q.angles).toHaveLength(3);
+    expect(q.titleTop).toHaveLength(5);
+    expect(q.titleTop.every((t) => t.reason)).toBe(true);
+    expect(titles.slice(0, 5)).toEqual(q.titleTop.map((t) => t.title)); // 추천이 맨 앞
+    expect(c.headline).toBe(q.titleTop[0].title);
+    expect(c.output.script).toHaveLength(3);
+    expect(q.scripts.map((s) => s.angle)).toEqual(q.angles.map((a) => a.name));
+    expect(q.scripts.every((s) => s.review && typeof s.checks.openLoop === "boolean")).toBe(true);
+    const blog = (await post("/api/contents/generate/precise", { featureId: "blog-info-writing", input: { topic: "가을 캠핑" } })) as { ok: boolean; error?: { code: string } };
+    expect(blog.ok).toBe(false); // 블로그는 정밀 생성 없음 (또는 호출 한도)
+  }, 120_000);
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

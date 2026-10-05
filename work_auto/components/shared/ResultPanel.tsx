@@ -2,9 +2,10 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, Brain, CalendarPlus, Check, ChevronLeft, ChevronRight, ListPlus, Pencil, RefreshCw, ThumbsDown, ThumbsUp, Undo2 } from "lucide-react";
+import { BookmarkPlus, Brain, CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, ListPlus, Pencil, RefreshCw, Star, ThumbsDown, ThumbsUp, Undo2, X } from "lucide-react";
 import { APPENDABLE_KEYS, candidateKey } from "@/lib/generators/append";
 import { CARD_SEPARATOR, isListFormat, splitCards, type OutputSection } from "@/lib/generators/types";
+import { SKELETON_CHECKS, scriptMetaKey, type PreciseQuality } from "@/lib/generators/quality";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Badge, Tag } from "@/components/ui/Badge";
@@ -146,6 +147,7 @@ export function ResultPanel({
           busy={Boolean(regenerating)}
           error={regenError?.key === section.key ? regenError.message : null}
           added={added?.key === section.key ? added.items : undefined}
+          quality={content.context.quality ?? null}
         />
       ))}
 
@@ -179,6 +181,7 @@ function OutputBlock({
   busy,
   error,
   added,
+  quality,
 }: {
   section: OutputSection;
   value: GeneratedValue | undefined;
@@ -195,7 +198,10 @@ function OutputBlock({
   error?: string | null;
   /** 방금 [추가 만들기]로 더해진 후보 */
   added?: Set<string>;
+  /** 정밀 생성 메타 (추천 제목 TOP 5, 대본별 앵글·뼈대 체크·검토 메모) */
+  quality?: PreciseQuality | null;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const appendable = APPENDABLE_KEYS.has(section.key);
   const list = Array.isArray(value) ? value : value ? [value] : [];
   const isList = isListFormat(section.format);
@@ -299,7 +305,7 @@ function OutputBlock({
         ) : list.length === 0 ? (
           <p className="text-sm text-fg-subtle">결과 없음</p>
         ) : isCards ? (
-          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} />
+          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} meta={section.key === "script" ? quality?.scripts : undefined} />
         ) : section.format === "tags" ? (
           <div className="flex flex-wrap gap-1.5">
             {list.map((t) => (
@@ -308,6 +314,8 @@ function OutputBlock({
               </Tag>
             ))}
           </div>
+        ) : section.format === "list" && section.key === "titles" && quality?.titleTop.length ? (
+          <TopTitles list={list} top={quality.titleTop} showAll={showAll} onToggleAll={() => setShowAll((v) => !v)} picks={picks} onTogglePick={onTogglePick} added={added} />
         ) : section.format === "list" ? (
           <ol className="space-y-2">
             {list.map((item, i) => (
@@ -344,18 +352,89 @@ function OutputBlock({
   );
 }
 
+/** 정밀 생성 제목: ★ 추천 TOP 5(이유)를 먼저, 나머지는 접어 둔다 */
+function TopTitles({
+  list,
+  top,
+  showAll,
+  onToggleAll,
+  picks,
+  onTogglePick,
+  added,
+}: {
+  list: string[];
+  top: PreciseQuality["titleTop"];
+  showAll: boolean;
+  onToggleAll: () => void;
+  picks?: string[];
+  onTogglePick?: (item: string) => void;
+  added?: Set<string>;
+}) {
+  // 직접 수정·추가 만들기로 목록이 바뀌어도 지금 목록에 있는 추천만
+  const shownTop = top.filter((t) => list.includes(t.title));
+  const topSet = new Set(shownTop.map((t) => t.title));
+  const rest = list.filter((t) => !topSet.has(t));
+  const row = (item: string, i: number, reason?: string) => (
+    <li key={item} className={cn("group flex items-start gap-3 text-sm leading-relaxed text-fg", picks?.includes(item) && "font-medium text-brand")}>
+      {onTogglePick && (
+        <input
+          type="checkbox"
+          checked={Boolean(picks?.includes(item))}
+          onChange={() => onTogglePick(item)}
+          aria-label={`'${item}' 사용함`}
+          className="mt-1 size-4 shrink-0 accent-[var(--color-brand)]"
+        />
+      )}
+      <span className="tabular mt-px w-5 shrink-0 text-right text-xs font-semibold text-fg-subtle">{i + 1}</span>
+      <span className="flex-1">
+        {added?.has(item) && <span className="mr-1.5 rounded bg-brand-soft px-1.5 py-px text-[10.5px] font-semibold text-brand">새로</span>}
+        {item}
+        {reason && <span className="mt-0.5 block text-xs font-normal text-fg-subtle">{reason}</span>}
+      </span>
+      <CopyButton value={item} iconOnly className="opacity-0 group-hover:opacity-100 focus:opacity-100" />
+    </li>
+  );
+  return (
+    <div className="space-y-3" data-title-top>
+      {shownTop.length > 0 && (
+        <div className="rounded-control border border-brand-line bg-brand-soft/40 px-3.5 py-3">
+          <p className="mb-2 flex items-center gap-1 text-[12.5px] font-semibold text-brand">
+            <Star className="size-3.5 fill-current" />
+            추천 TOP {shownTop.length}
+            <span className="font-normal text-fg-subtle">· AI 가 {list.length}개를 직접 비교해 고른 제목과 이유</span>
+          </p>
+          <ol className="space-y-2">{shownTop.map((t, i) => row(t.title, i, t.reason))}</ol>
+        </div>
+      )}
+      {rest.length > 0 && (
+        <div>
+          <button type="button" onClick={onToggleAll} className="inline-flex items-center gap-1 text-xs font-medium text-fg-muted hover:text-brand">
+            <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
+            {showAll ? "나머지 접기" : `나머지 ${rest.length}개 보기`}
+          </button>
+          {showAll && <ol className="mt-2 space-y-2">{rest.map((t, i) => row(t, shownTop.length + i))}</ol>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 대본 여러 편을 카드뉴스처럼 옆으로 넘겨 본다. 카드마다 복사·사용 체크 */
 function ScriptCards({
   items,
   picks,
   onTogglePick,
   added,
+  meta,
 }: {
   items: string[];
   picks?: string[];
   onTogglePick?: (item: string) => void;
   added?: Set<string>;
+  /** 정밀 생성: 대본별 앵글·뼈대 체크·검토 메모 (대본 내용으로 맞춰 찾는다) */
+  meta?: PreciseQuality["scripts"];
 }) {
+  const metaOf = (text: string) => meta?.find((m) => m.key === scriptMetaKey(text));
   const scroller = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const go = (i: number) => {
@@ -377,6 +456,7 @@ function ScriptCards({
         {items.map((text, i) => {
           const lines = text.split("\n").filter((l) => l.trim());
           const on = Boolean(picks?.includes(text));
+          const m = metaOf(text);
           return (
             <article
               key={i}
@@ -395,6 +475,30 @@ function ScriptCards({
                 </span>
                 <CopyButton value={text} iconOnly />
               </header>
+              {m && (
+                <div className="space-y-1.5 border-b border-line px-3.5 py-2" data-script-meta>
+                  {m.angle && (
+                    <p className="text-[12px] text-fg-muted">
+                      앵글 <span className="font-semibold text-fg">{m.angle}</span>
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {SKELETON_CHECKS.map((c) => (
+                      <span
+                        key={c.key}
+                        title={c.description}
+                        className={cn(
+                          "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          m.checks[c.key] ? "bg-success-soft text-success" : "bg-warning-soft text-warning",
+                        )}
+                      >
+                        {m.checks[c.key] ? <Check className="size-3" /> : <X className="size-3" />}
+                        {c.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="aspect-[4/5] overflow-y-auto bg-subtle/60 px-4 py-4">
                 {lines.map((l, j) => (
                   <p key={j} className={cn("text-[15px] leading-[1.75] text-fg", j === 0 && "font-semibold text-brand")}>
@@ -402,6 +506,11 @@ function ScriptCards({
                   </p>
                 ))}
               </div>
+              {m?.review && (
+                <p className="border-t border-line bg-canvas px-3.5 py-2 text-[12px] leading-relaxed text-fg-muted">
+                  <span className="font-semibold text-fg">검토 메모</span> {m.review}
+                </p>
+              )}
               {onTogglePick && (
                 <label className="flex cursor-pointer items-center gap-2 border-t border-line px-3.5 py-2 text-[12.5px] text-fg-muted">
                   <input type="checkbox" checked={on} onChange={() => onTogglePick(text)} className="size-4 accent-[var(--color-brand)]" />이 대본 사용

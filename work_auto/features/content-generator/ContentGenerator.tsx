@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { History, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
+import { Check, History, Loader2, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
 import { getGeneratorConfig } from "@/lib/generators/configs";
+import { GENERATION_MODES, PRECISE_STAGES, supportsPrecise, type GenerationMode, type PreciseStage } from "@/lib/generators/quality";
 import type { GeneratorConfig } from "@/lib/generators/types";
 import type { GeneratedContent } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { Button } from "@/components/ui/Button";
 import { SectionCard } from "@/components/ui/SectionCard";
+import { SegmentedControl } from "@/components/ui/Tabs";
 import { EmptyState, ErrorState, LoadingState, Notice } from "@/components/ui/States";
 import { ResultPanel } from "@/components/shared/ResultPanel";
 import { UploadStatusBadge, useUploadStatus } from "@/components/shared/UploadStatusBadge";
@@ -35,14 +37,20 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
   const history = useAsync(() => api.contents.list({ featureId }), [featureId]);
   const uploads = useUploadStatus((history.data ?? []).slice(0, 6).map((c) => c.id));
 
+  // 생성 방식: 영상·클립(대본·제목·Hook)만 정밀 생성을 고를 수 있다 (docs/QUALITY_MODES.md)
+  const canPrecise = supportsPrecise(config.outputs);
+  const [mode, setMode] = useState<GenerationMode>("fast");
+  const [stage, setStage] = useState<PreciseStage | null>(null);
   const missing = config.fields.filter((f) => f.required && !values[f.name]?.trim());
   const showHonesty = Boolean(config.experienceField);
 
   async function generate() {
     setGenerating(true);
     setError(null);
+    setStage(null);
     try {
-      const content = await api.contents.generate({ featureId, input: toInput(config, values, photos) });
+      const req = { featureId, input: toInput(config, values, photos) };
+      const content = canPrecise && mode === "precise" ? await api.contents.generatePrecise(req, setStage) : await api.contents.generate(req);
       setResult(content);
       setResultPhotos(photos);
       history.setData((prev) => [content, ...(prev ?? [])]);
@@ -50,6 +58,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
       setError(e instanceof Error ? e.message : "생성에 실패했습니다.");
     } finally {
       setGenerating(false);
+      setStage(null);
     }
   }
 
@@ -67,13 +76,24 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
           description="필수 항목(*)만 채워도 생성할 수 있습니다."
           className="xl:sticky xl:top-6"
           footer={
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-fg-subtle">
-                {missing.length > 0 ? `필수 항목 ${missing.length}개 남음` : "생성할 준비가 되었습니다"}
-              </span>
-              <Button variant="primary" icon={Sparkles} loading={generating} disabled={missing.length > 0} onClick={generate}>
-                {config.submitLabel}
-              </Button>
+            <div className="space-y-3">
+              {canPrecise && (
+                <div data-generation-mode>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] font-medium text-fg">생성 방식</span>
+                    <SegmentedControl size="sm" options={GENERATION_MODES.map((m) => ({ value: m.value, label: m.label }))} value={mode} onChange={setMode} />
+                  </div>
+                  <p className="mt-1 text-right text-xs text-fg-subtle">{GENERATION_MODES.find((m) => m.value === mode)?.hint}</p>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-fg-subtle">
+                  {missing.length > 0 ? `필수 항목 ${missing.length}개 남음` : "생성할 준비가 되었습니다"}
+                </span>
+                <Button variant="primary" icon={Sparkles} loading={generating} disabled={missing.length > 0} onClick={generate}>
+                  {canPrecise && mode === "precise" ? `정밀 ${config.submitLabel}` : config.submitLabel}
+                </Button>
+              </div>
             </div>
           }
         >
@@ -112,7 +132,11 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
 
         {/* 결과 */}
         <div className="min-w-0">
-          {generating ? (
+          {generating && canPrecise && mode === "precise" ? (
+            <SectionCard>
+              <PreciseProgress stage={stage} />
+            </SectionCard>
+          ) : generating ? (
             <SectionCard>
               <LoadingState label="저장된 학습 데이터를 불러와 생성하는 중입니다…" className="py-24" />
             </SectionCard>
@@ -179,6 +203,31 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
           </ul>
         )}
       </SectionCard>
+    </div>
+  );
+}
+
+/** 정밀 생성 진행 (서버가 단계를 시작할 때마다 알려 준다) */
+function PreciseProgress({ stage }: { stage: PreciseStage | null }) {
+  const current = stage ? PRECISE_STAGES.findIndex((s) => s.stage === stage) : -1;
+  return (
+    <div className="mx-auto max-w-sm py-16" data-precise-progress>
+      <p className="text-center text-[15px] font-semibold text-fg">정밀 생성 중입니다</p>
+      <p className="mt-1 text-center text-xs text-fg-subtle">AI 를 4번 불러 단계별로 다듬습니다. 1분 정도 걸릴 수 있습니다.</p>
+      <ol className="mt-6 space-y-2.5">
+        {PRECISE_STAGES.map((s, i) => {
+          const done = i < current;
+          const now = i === current || (current < 0 && i === 0);
+          return (
+            <li key={s.stage} className={cn("flex items-center gap-3 rounded-control border px-3.5 py-2.5 text-[13.5px]", now ? "border-brand-line bg-brand-soft text-brand" : done ? "border-line text-fg-muted" : "border-line text-fg-subtle")}>
+              <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold", done ? "bg-success text-white" : now ? "bg-brand text-white" : "bg-muted text-fg-subtle")}>
+                {done ? <Check className="size-3.5" /> : now ? <Loader2 className="size-3.5 animate-spin" /> : i + 1}
+              </span>
+              {s.label}
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

@@ -297,6 +297,26 @@ export const SHOTS = [
       1: (p) => field(p, "제품 선택"),
       2: (p) => field(p, "영상 길이"),
       3: (p) => btn(p, "영상 원고 생성하기").last(),
+      4: (p) => p.locator("[data-generation-mode]").first(),
+    },
+  },
+  {
+    id: "05-precise-result",
+    clip: resultPanel,
+    clipPad: 10,
+    viewport: { width: 1280, height: 2300 },
+    url: "/youtube/product-video",
+    prepare: async (p) => {
+      await pickProduct(p);
+      await p.getByRole("radio", { name: "정밀 생성" }).click();
+      await generate(p, "정밀 영상 원고 생성하기");
+    },
+    scrollTo: (p) => p.locator("h3", { hasText: "제목 후보" }).first(),
+    marks: {
+      1: (p) => p.locator("[data-title-top] > div").first(),
+      2: (p) => p.locator("[data-title-top] button", { hasText: /나머지 \d+개 보기/ }).first(),
+      3: (p) => p.locator("[data-script-meta]").first(),
+      4: (p) => p.getByText("검토 메모").first().locator("xpath=.."),
     },
   },
   {

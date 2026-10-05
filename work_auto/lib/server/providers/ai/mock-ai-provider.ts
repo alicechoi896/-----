@@ -98,6 +98,58 @@ export class MockAIProvider implements AIProvider {
       return { data: remixed as unknown as T, provider: this.id, model: this.model };
     }
 
+    // 정밀 생성 4단계 (데모): 실제 AI 가 하는 일을 흉내만 낸다
+    if (request.task.startsWith("content-precise-angles:")) {
+      const angles = [
+        { name: "후회 방지", why: "사기 전에 놓치기 쉬운 점을 짚으면 저장·끝까지 보기가 늘어난다" },
+        { name: "상황 공감", why: "쓰는 장면을 먼저 보여 주면 '내 얘기'라고 느껴 멈춘다" },
+        { name: "숫자 충격", why: "구체적인 숫자 하나가 첫 3초 이탈을 줄인다" },
+      ];
+      return { data: { angles } as unknown as T, provider: this.id, model: this.model };
+    }
+    if (request.task.startsWith("content-precise-titles:")) {
+      const base = writeMockContent({ featureId: v.featureId as string, outputs: v.outputs as OutputSection[], input: v.input as Record<string, unknown>, context: v.context as GenerationContext });
+      const seed = (base.titles as string[]) ?? [];
+      const angles = (v.angles as { name: string }[]) ?? [];
+      const n = Math.max(1, seed.length);
+      const titles = Array.from({ length: 40 }, (_, i) =>
+        i < seed.length ? seed[i] : `${seed[i % n] ?? "제목"} · ${angles[i % Math.max(1, angles.length)]?.name ?? "앵글"} ${Math.floor(i / n) + 1}`,
+      );
+      const hooks = [...((base.hooks as string[]) ?? []), "이거 모르고 사면 손해예요", "다들 반대로 쓰고 있어요", "3초만요, 이거 진짜예요"];
+      const reasons = ["숫자로 구체적인 약속을 한다", "대상이 분명해 클릭 이유가 있다", "궁금증을 남긴다", "핵심 단어가 앞에 있다", "과장 없이 손해를 짚는다"];
+      const title_top = [3, 1, 12, 7, 25].map((index, k) => ({ index, reason: reasons[k] }));
+      return { data: { titles, hooks, title_top } as unknown as T, provider: this.id, model: this.model };
+    }
+    if (request.task.startsWith("content-precise-scripts:")) {
+      const data = writeMockContent({ featureId: v.featureId as string, outputs: v.outputs as OutputSection[], input: v.input as Record<string, unknown>, context: v.context as GenerationContext });
+      const loop = ["근데 진짜 중요한 건 마지막에 있어요", "마지막 하나가 제일 커요", "끝까지 보면 이유 나와요"];
+      if (Array.isArray(data.script)) {
+        data.script = data.script.map((sc, i) => {
+          const lines = sc.split("\n");
+          lines.splice(Math.max(1, Math.floor(lines.length / 2)), 0, loop[i % loop.length]);
+          return lines.join("\n");
+        });
+      }
+      return { data: data as unknown as T, provider: this.id, model: this.model };
+    }
+    if (request.task.startsWith("content-precise-review:")) {
+      const drafts = (v.drafts as string[]) ?? [];
+      const scripts = drafts.map((d, i) => {
+        const lines = d.split("\n");
+        const first = lines[0] ?? "";
+        const fixedFirst = /[?？]|손해|후회|반대/.test(first) ? first : `${first.replace(/[.!]$/, "")}, 진짜 그럴까요?`;
+        const script = [fixedFirst, ...lines.slice(1)].join("\n");
+        return {
+          script,
+          review: fixedFirst === first ? "첫 줄이 이미 질문·경고로 열려 있어 그대로 두었습니다 (데모)." : "첫 줄을 질문으로 바꿔 3초 안에 붙잡게 했습니다 (데모).",
+          hook: true,
+          open_loop: /근데|마지막|끝까지/.test(script),
+          answer: i !== 2 || lines.length > 4,
+        };
+      });
+      return { data: { scripts } as unknown as T, provider: this.id, model: this.model };
+    }
+
     if (request.task.startsWith("content:")) {
       const data = writeMockContent({
         featureId: v.featureId as string,
