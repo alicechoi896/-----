@@ -60,6 +60,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
     blocks.push(
       block("콘텐츠 프로필 (이 사용자가 다루는 분야)", [
         `프로필: ${p.name}${p.description ? ` — ${p.description}` : ""}`,
+        p.audience ? `타깃 시청자: ${p.audience} — 이 사람이 '내 얘기다' 하고 멈추도록, 이 사람의 상황·불편·말투로 Hook 과 장면을 구체적으로 쓴다` : "",
         `대표 카테고리: ${p.mainCategory}`,
         p.subCategories.length ? `세부 관심분야: ${p.subCategories.join(", ")}` : "",
         p.seedKeywords.length ? `관심 키워드 (자연스럽게 맞으면 활용): ${p.seedKeywords.join(", ")}` : "",
@@ -91,6 +92,12 @@ function contextBlocks(ctx: GenerationContext): string[] {
         ),
       );
     }
+  }
+  // 피해야 할 대본 (3단계): 반응이 낮았던 대본의 패턴을 피한다 (짧게)
+  if (ctx.scriptFormat && ctx.scriptFormatUse === "full" && ctx.scriptFormat.badExamples?.length) {
+    blocks.push(
+      block("대본 포맷 > 피해야 할 대본 (이렇게 쓰지 않는다 — 시작 방식·전개·표현을 반복하지 않는다)", ctx.scriptFormat.badExamples.slice(0, 2).map((e, i) => `(${i + 1}) ${e.text.slice(0, 300).replace(/\n/g, " / ")}`)),
+    );
   }
   // 대본 포맷의 참고 대본 제목 → 영상 제목·블로그 글 제목의 패턴 참고 (복사 금지)
   if (ctx.scriptFormat) {

@@ -46,6 +46,8 @@ function fail(table: string, action: string, error: { message: string; code?: st
  */
 const PENDING_COLUMNS: Record<string, string[]> = {
   user_styles: ["title_patterns", "preferred_types", "product_format_id", "info_format_id"], // v0.9.9, v0.9.23, v0.9.27
+  script_formats: ["hooks", "ctas", "title_patterns", "preferred_types", "bad_examples"], // v0.9.37
+  content_profiles: ["audience"], // v0.9.37
 };
 
 async function writeWithPendingColumns<R>(
@@ -53,18 +55,23 @@ async function writeWithPendingColumns<R>(
   row: Record<string, unknown>,
   run: (row: Record<string, unknown>) => PromiseLike<{ data: R; error: { message: string; code?: string } | null }>,
 ): Promise<{ data: R; error: { message: string; code?: string } | null }> {
-  const first = await run(row);
-  const missing = first.error?.code === "PGRST204" ? (PENDING_COLUMNS[table] ?? []).find((c) => first.error!.message.includes(`'${c}'`)) : undefined;
-  if (!missing) return first;
-  const value = row[missing];
-  const empty = value == null || (Array.isArray(value) ? value.length === 0 : typeof value === "object" && Object.keys(value).length === 0);
-  if (!empty) {
-    throw new AppError("SCHEMA_OUTDATED", "DB 업데이트가 필요합니다. Supabase SQL Editor 에서 supabase/schema.sql 을 다시 실행한 뒤 저장해 주세요.", 409);
+  // 아직 없는 새 컬럼이 여러 개일 수 있다 → 빈 값이면 하나씩 빼고 다시 (최대 컬럼 수만큼)
+  let current = row;
+  for (let i = 0; i <= (PENDING_COLUMNS[table] ?? []).length; i++) {
+    const res = await run(current);
+    const missing = res.error?.code === "PGRST204" ? (PENDING_COLUMNS[table] ?? []).find((c) => res.error!.message.includes(`'${c}'`)) : undefined;
+    if (!missing || !(missing in current)) return res;
+    const value = current[missing];
+    const empty = value == null || value === "" || (Array.isArray(value) ? value.length === 0 : typeof value === "object" && Object.keys(value).length === 0);
+    if (!empty) {
+      throw new AppError("SCHEMA_OUTDATED", "DB 업데이트가 필요합니다. Supabase SQL Editor 에서 supabase/schema.sql 을 다시 실행한 뒤 저장해 주세요.", 409);
+    }
+    console.warn(`[supabase] ${table}.${missing} 컬럼이 아직 없습니다 (schema.sql 재실행 필요). 빈 값이라 빼고 저장합니다.`);
+    const { [missing]: _drop, ...rest } = current;
+    void _drop;
+    current = rest;
   }
-  console.warn(`[supabase] ${table}.${missing} 컬럼이 아직 없습니다 (schema.sql 재실행 필요). 빈 값이라 빼고 저장합니다.`);
-  const { [missing]: _drop, ...rest } = row;
-  void _drop;
-  return run(rest);
+  return run(current);
 }
 
 function createTable<T extends { id: string }>(table: string): Repository<T> {

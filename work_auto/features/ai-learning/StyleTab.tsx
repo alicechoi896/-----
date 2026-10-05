@@ -6,6 +6,7 @@ import type { ChannelId, ScriptFormat, UserStyle, UserStyleInput } from "@/lib/t
 import { api } from "@/lib/api-client";
 import { CHANNELS } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
+import { CopyToFormatButton } from "./CopyToFormatButton";
 import {
   Badge,
   Button,
@@ -187,6 +188,9 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
                 </div>
               )}
               <div className="flex-1" />
+              <div className="mt-3">
+                <CopyToFormatButton style={s} />
+              </div>
               {!s.isDefault && (
                 <Button size="sm" className="mt-4 self-start" icon={Star} onClick={() => setDefault(s)}>
                   기본 스타일로 지정
@@ -480,6 +484,9 @@ function StyleForm({
         <FormField label="설명" htmlFor="style-desc">
           <Input id="style-desc" placeholder="예: 첫 문장에서 불편을 짚는다" value={form.description} onChange={(e) => set("description", e.target.value)} />
         </FormField>
+        <Notice tone="info" className="md:col-span-2">
+          Hook·CTA·제목 패턴은 <b>대본 포맷</b>에서 관리하는 것을 권장합니다 (제품 홍보·정보성·블로그마다 따로). 포맷에 있으면 포맷 것을 먼저 쓰고, 없으면 여기 값을 씁니다. 스타일 카드의 [대본 포맷으로 복사]로 옮길 수 있습니다.
+        </Notice>
         <PhraseListField
           label="Hook (초반 3초)"
           hint="영상·글의 첫 문장 패턴. 생성할 때 주제에 맞게 응용합니다."
@@ -548,7 +555,7 @@ function StyleForm({
  * 원하는 유형 (여러 개 선택). 저장하면 생성할 때 후보의 약 70% 를 이 유형으로, 나머지는 AI 가 다른 유형도 섞어 추천한다.
  * [고른 유형으로 예시 만들기]: AI 가 예시 10개를 목록 위에 채운다 (저장은 [저장]).
  */
-function TypePicker({
+export function TypePicker({
   kind,
   selected,
   onToggle,
@@ -620,7 +627,7 @@ function TypePicker({
 /** 처음에 보여 주는 줄 수. 파일로 많이 넣으면 접어 둔다 */
 const VISIBLE_ROWS = 8;
 
-function PhraseListField({
+export function PhraseListField({
   label,
   hint,
   placeholder,

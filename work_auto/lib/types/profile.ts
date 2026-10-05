@@ -13,6 +13,8 @@ export interface ContentProfile {
   /** 예: 가전 콘텐츠 */
   name: string;
   description: string;
+  /** 타깃 시청자 한 줄 (v0.9.37, 3단계). 예: 30대 자취 직장인, 퇴근 후 청소가 귀찮음. 모든 생성에 넣는다 */
+  audience?: string;
   /** 대표 카테고리. 예: 가전 */
   mainCategory: string;
   /** 세부 관심분야. 예: 주방가전, 생활가전 */

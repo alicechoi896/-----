@@ -170,6 +170,7 @@ function ProfileCard({
             </Badge>
           </div>
           {p.description && <p className="mt-1 text-[13px] text-fg-subtle">{p.description}</p>}
+          {p.audience && <p className="mt-1 text-[13px] text-fg-muted">타깃 시청자 · {p.audience}</p>}
         </div>
         <IconButton icon={Trash2} label="삭제" size="sm" onClick={onRemove} className="hover:text-danger" />
       </div>
@@ -240,6 +241,7 @@ function ProfileForm({ editing, onCancel, onSaved }: { editing: Editing; onCance
   const [form, setForm] = useState<ContentProfileInput>(() => ({
     name: initial.name,
     description: initial.description,
+    audience: initial.audience ?? "",
     mainCategory: initial.mainCategory,
     subCategories: initial.subCategories,
     seedKeywords: initial.seedKeywords,
@@ -300,6 +302,9 @@ function ProfileForm({ editing, onCancel, onSaved }: { editing: Editing; onCance
         </FormField>
         <FormField label="설명" htmlFor="pf-desc" className="md:col-span-2">
           <Input id="pf-desc" placeholder="예: 주방·생활·계절 가전 추천과 살림 노하우" value={form.description} onChange={(e) => set("description", e.target.value)} />
+        </FormField>
+        <FormField label="타깃 시청자" htmlFor="pf-audience" optional hint="누구에게 말하는지 한 줄로. 모든 생성에 넣어 Hook·장면이 그 사람 상황에 맞게 바뀝니다." className="md:col-span-2">
+          <Input id="pf-audience" maxLength={200} placeholder="예: 30대 자취 직장인, 퇴근 후 청소가 귀찮음" value={form.audience ?? ""} onChange={(e) => set("audience", e.target.value)} />
         </FormField>
         <ChipInput label="세부 관심분야" placeholder="예: 주방가전 (Enter 로 추가)" items={form.subCategories} onChange={(v) => set("subCategories", v)} />
         <ChipInput label="기본 관심 키워드" placeholder="예: 가성비가전 (Enter 로 추가)" items={form.seedKeywords} onChange={(v) => set("seedKeywords", v)} />

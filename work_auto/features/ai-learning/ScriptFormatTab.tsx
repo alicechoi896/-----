@@ -8,10 +8,24 @@ import { useAsync } from "@/lib/hooks/useAsync";
 import { SCRIPT_FORMAT_LIMITS, SCRIPT_FORMAT_TYPES, formatViews, parseScriptFile, scriptKey } from "@/lib/script-format";
 import { Badge, Button, Checkbox, EmptyState, ErrorState, FormField, IconButton, Input, LoadingState, Notice, SectionCard, SegmentedControl, Textarea, cardClass } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { STYLE_LIMITS } from "@/lib/style-limits";
+import type { StyleTypeKind } from "@/lib/style-types";
+import { PhraseListField, TypePicker } from "./StyleTab";
+
+/** 피해야 할 대본: --- 줄로 나눈 텍스트 ↔ 목록 */
+const badToText = (list: ScriptExample[] | undefined) => (list ?? []).map((e) => e.text).join("\n---\n");
+const textToBad = (t: string): ScriptExample[] =>
+  t
+    .split(/^\s*-{3,}\s*$/m)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+    .map((text) => ({ title: "", views: null, text }));
 
 const FORMAT_CHANNELS: { id: ChannelId; name: string }[] = [
   { id: "youtube", name: "YouTube" },
   { id: "naver-clip", name: "NAVER 클립" },
+  { id: "naver-blog", name: "NAVER 블로그" },
 ];
 const typeLabel = (t: ScriptFormatType) => SCRIPT_FORMAT_TYPES.find((x) => x.value === t)?.label ?? t;
 
@@ -105,7 +119,7 @@ export function ScriptFormatTab() {
                           )}
                         </p>
                         <p className="mt-1 text-xs text-fg-subtle">
-                          {f.channelIds.length ? f.channelIds.map((c) => FORMAT_CHANNELS.find((x) => x.id === c)?.name ?? c).join(" · ") : "YouTube · NAVER 클립"} · 참고 대본 {f.examples.length}개
+                          {f.channelIds.length ? f.channelIds.map((c) => FORMAT_CHANNELS.find((x) => x.id === c)?.name ?? c).join(" · ") : "모든 채널"} · 참고 대본 {f.examples.length}개{(f.hooks?.length ?? 0) + (f.ctas?.length ?? 0) + (f.titlePatterns?.length ?? 0) > 0 ? ` · Hook ${f.hooks?.length ?? 0} · CTA ${f.ctas?.length ?? 0} · 제목 패턴 ${f.titlePatterns?.length ?? 0}` : ""}{f.badExamples?.length ? ` · 피할 대본 ${f.badExamples.length}` : ""}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-0.5">
@@ -145,8 +159,20 @@ const VISIBLE_EXAMPLES = 3;
 function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel: () => void; onSaved: () => void }) {
   const initial: ScriptFormatInput =
     editing.mode === "edit"
-      ? { name: editing.format.name, contentType: editing.format.contentType, channelIds: editing.format.channelIds, examples: editing.format.examples, guideline: editing.format.guideline, isDefault: editing.format.isDefault }
-      : { name: "", contentType: editing.contentType, channelIds: [], examples: [], guideline: "", isDefault: false };
+      ? {
+          name: editing.format.name,
+          contentType: editing.format.contentType,
+          channelIds: editing.format.channelIds,
+          examples: editing.format.examples,
+          guideline: editing.format.guideline,
+          isDefault: editing.format.isDefault,
+          hooks: editing.format.hooks ?? [],
+          ctas: editing.format.ctas ?? [],
+          titlePatterns: editing.format.titlePatterns ?? [],
+          preferredTypes: editing.format.preferredTypes ?? {},
+          badExamples: editing.format.badExamples ?? [],
+        }
+      : { name: "", contentType: editing.contentType, channelIds: [], examples: [], guideline: "", isDefault: false, hooks: [], ctas: [], titlePatterns: [], preferredTypes: {}, badExamples: [] };
   const [form, setForm] = useState<ScriptFormatInput>(initial);
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -155,6 +181,26 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
   const [note, setNote] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const set = <K extends keyof ScriptFormatInput>(k: K, v: ScriptFormatInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const [badText, setBadText] = useState(() => badToText(initial.badExamples));
+  /** 원하는 유형 고르기 · 고른 유형으로 예시 만들기 (나의 스타일과 같은 부품) */
+  const typePicker = (kind: StyleTypeKind) => (
+    <TypePicker
+      kind={kind}
+      selected={form.preferredTypes?.[kind] ?? []}
+      onToggle={(id) => {
+        const cur = form.preferredTypes?.[kind] ?? [];
+        set("preferredTypes", { ...(form.preferredTypes ?? {}), [kind]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+      }}
+      tone=""
+      existing={form[kind] ?? []}
+      onExamples={(items) => {
+        const cur = form[kind] ?? [];
+        const fresh = items.filter((x) => !cur.includes(x)).slice(0, Math.max(0, STYLE_LIMITS[kind].max - cur.length));
+        set(kind, [...fresh, ...cur]);
+        return fresh.length;
+      }}
+    />
+  );
   const setExample = (i: number, patch: Partial<ScriptExample>) => set("examples", form.examples.map((e, j) => (j === i ? { ...e, ...patch } : e)));
   // 저장할 참고 (제목만 담은 것 포함) / AI 구조 분석에 쓸 대본
   const filled = form.examples.filter((e) => e.text.trim() || e.title.trim());
@@ -216,7 +262,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
     setSaving(true);
     setError(null);
     try {
-      const input = { ...form, examples: filled };
+      const input = { ...form, examples: filled, badExamples: textToBad(badText) };
       if (editing.mode === "edit") await api.scriptFormats.update(editing.format.id, input);
       else await api.scriptFormats.create(input);
       onSaved();
@@ -243,7 +289,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           <Button size="sm" variant="ghost" onClick={onCancel}>
             취소
           </Button>
-          <Button size="sm" variant="primary" loading={saving} disabled={!form.name.trim() || (!form.guideline.trim() && !filled.length)} onClick={save}>
+          <Button size="sm" variant="primary" loading={saving} disabled={!form.name.trim() || (!form.guideline.trim() && !filled.length && !form.hooks?.length && !form.ctas?.length && !form.titlePatterns?.length)} onClick={save}>
             저장
           </Button>
         </div>
@@ -256,7 +302,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         <FormField label="유형">
           <SegmentedControl options={SCRIPT_FORMAT_TYPES.map((t) => ({ value: t.value, label: t.label }))} value={form.contentType} onChange={(v) => set("contentType", v)} />
         </FormField>
-        <FormField label="적용 채널" hint={form.channelIds.length === 0 ? "선택하지 않으면 YouTube·NAVER 클립 모두" : undefined}>
+        <FormField label="적용 채널" hint={form.channelIds.length === 0 ? "선택하지 않으면 모든 채널 (블로그는 Hook·CTA·제목 패턴과 잘된 제목만 씁니다)" : form.channelIds.includes("naver-blog") ? "블로그는 대본 대신 Hook(도입)·CTA(마무리)·제목 패턴과 잘된 제목만 씁니다" : undefined}>
           <div className="flex flex-wrap gap-1.5">
             {FORMAT_CHANNELS.map((c) => {
               const on = form.channelIds.includes(c.id);
@@ -372,6 +418,35 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           value={form.guideline}
           onChange={(e) => set("guideline", e.target.value)}
         />
+      </div>
+
+      {/* ④ 설득 구조 (나의 스타일에서 옮겨 옴) */}
+      <div className="mt-6" data-format-persuasion>
+        <p className="text-[13.5px] font-semibold text-fg">④ Hook · CTA · 제목 패턴</p>
+        <p className="mt-1 text-xs text-fg-subtle">
+          이 포맷으로 만들 때 쓰는 설득 구조입니다. 여기 넣은 항목은 나의 스타일의 같은 항목보다 먼저 쓰고, 비워 둔 항목은 스타일 것을 그대로 씁니다. 나의 스타일의 [대본 포맷으로 복사]로 옮겨 올 수 있습니다.
+        </p>
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          <PhraseListField label="Hook (초반 3초)" hint="첫 문장 패턴 (블로그는 도입 문장으로)" placeholder="예: 아직도 이렇게 하세요?" items={form.hooks ?? []} max={STYLE_LIMITS.hooks.max} onChange={(v) => set("hooks", v)} extra={typePicker("hooks")} />
+          <PhraseListField label="CTA (마지막 행동 유도)" hint="마무리 문장 (블로그는 자연스러운 마무리로)" placeholder="예: 더 자세한 정보는 고정 댓글에 있어요" items={form.ctas ?? []} max={STYLE_LIMITS.ctas.max} onChange={(v) => set("ctas", v)} extra={typePicker("ctas")} />
+          <PhraseListField
+            label="제목 패턴"
+            hint="설득 구조 참고용. 바뀌는 부분은 [제품] [숫자] [대상] 처럼"
+            placeholder="예: [제품] 사기 전에 꼭 알아야 하는 [숫자]가지"
+            items={form.titlePatterns ?? []}
+            max={STYLE_LIMITS.titlePatterns.max}
+            onChange={(v) => set("titlePatterns", v)}
+            extra={typePicker("titlePatterns")}
+            className="md:col-span-2"
+          />
+        </div>
+      </div>
+
+      {/* ⑤ 피해야 할 대본 (3단계) */}
+      <div className="mt-6">
+        <p className="text-[13.5px] font-semibold text-fg">⑤ 피해야 할 대본 <span className="text-xs font-normal text-fg-subtle">(선택 · 최대 10개)</span></p>
+        <p className="mt-1 text-xs text-fg-subtle">반응이 낮았던 대본을 넣어 두면, 생성할 때 그 시작 방식·전개·표현을 피합니다 (짧게 2개만 보냅니다). 여러 개는 --- 줄로 나눕니다.</p>
+        <Textarea className="mt-2 text-[13px]" rows={5} placeholder={"오늘은 ○○를 소개해 드리겠습니다\n이 제품은 정말 좋은데요\n---\n(다른 대본)"} value={badText} onChange={(e) => setBadText(e.target.value)} data-bad-examples />
       </div>
     </SectionCard>
   );

@@ -8,6 +8,8 @@ import { normalizeStyle } from "../services/memory";
 import { trendService } from "../services/trends";
 import type { GenerationContext } from "./context-types";
 import { buildStyleContext, styleSnapshot } from "./style-context";
+import { cleanPreferredTypes } from "@/lib/style-types";
+import type { ScriptFormat, UserStyle } from "@/lib/types";
 import { learningConfig } from "@/lib/learning-config";
 import { compressContent, learningService, profileIdForFeature, promptInsights } from "../services/learning";
 import { chooseScriptFormat, loadScriptFormats } from "../services/script-formats";
@@ -89,9 +91,12 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     userStyles.find((s) => s.isDefault && s.channelIds.length === 0) ??
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
-  const styleContext = style ? buildStyleContext({ style, channelId }) : null;
   const scriptFormat = chooseScriptFormat(scriptFormats, formatType, channelId, scriptFormatId, style);
   const scriptFormatUse: GenerationContext["scriptFormatUse"] = fullFormatType ? "full" : "titles";
+  // Hook·CTA·제목 패턴·원하는 유형: 대본 포맷에 있으면 포맷 것, 없으면 예전처럼 스타일 것 (v0.9.37, docs/SCRIPT_FORMATS.md)
+  const effectiveStyle = mergeFormatPersuasion(style, scriptFormat);
+  if (effectiveStyle !== style && scriptFormat) notes.push(`Hook·CTA·제목 패턴: 대본 포맷 '${scriptFormat.name}'의 것을 사용`);
+  const styleContext = effectiveStyle ? buildStyleContext({ style: effectiveStyle, channelId }) : null;
 
   // 0) Content Profile — 생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필
   if (pickedProfileId && !profiles.some((p) => p.id === pickedProfileId)) {
@@ -197,4 +202,50 @@ function weightedSample<T>(items: T[], n: number, weight: (x: T) => number): T[]
     out.push(pool.splice(i < 0 ? pool.length - 1 : i, 1)[0].x);
   }
   return out;
+}
+
+/**
+ * 대본 포맷의 설득 구조(Hook·CTA·제목 패턴·원하는 유형)를 스타일 위에 덮는다. 포맷에 없는 항목은 스타일 것 그대로.
+ * 스타일이 없어도 포맷에 있으면 그 항목만 담은 빈 스타일로 보낸다. 아무것도 없으면 원래 스타일(같은 객체)을 돌려준다.
+ */
+export function mergeFormatPersuasion(style: UserStyle | null, f: ScriptFormat | null): UserStyle | null {
+  if (!f) return style;
+  const hooks = f.hooks ?? [];
+  const ctas = f.ctas ?? [];
+  const titlePatterns = f.titlePatterns ?? [];
+  const types = cleanPreferredTypes(f.preferredTypes);
+  const hasTypes = Object.values(types).some((v) => v?.length);
+  if (!hooks.length && !ctas.length && !titlePatterns.length && !hasTypes) return style;
+  const base: UserStyle =
+    style ??
+    ({
+      id: `format:${f.id}`,
+      userId: f.userId,
+      name: f.name,
+      channelIds: [],
+      tone: "",
+      description: "",
+      rules: [],
+      examplePhrases: [],
+      bannedPhrases: [],
+      hooks: [],
+      ctas: [],
+      titlePatterns: [],
+      preferredTypes: {},
+      isDefault: false,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt,
+    } as unknown as UserStyle);
+  const baseTypes = cleanPreferredTypes(base.preferredTypes);
+  return {
+    ...base,
+    hooks: hooks.length ? hooks : base.hooks,
+    ctas: ctas.length ? ctas : base.ctas,
+    titlePatterns: titlePatterns.length ? titlePatterns : (base.titlePatterns ?? []),
+    preferredTypes: {
+      hooks: types.hooks?.length ? types.hooks : baseTypes.hooks,
+      ctas: types.ctas?.length ? types.ctas : baseTypes.ctas,
+      titlePatterns: types.titlePatterns?.length ? types.titlePatterns : baseTypes.titlePatterns,
+    },
+  };
 }

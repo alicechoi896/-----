@@ -1,5 +1,7 @@
 import "server-only";
 import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, exampleKey, formatViews } from "@/lib/script-format";
+import { STYLE_LIMITS } from "@/lib/style-limits";
+import { cleanPreferredTypes } from "@/lib/style-types";
 import type { ChannelId, ScriptFormat, ScriptFormatInput, ScriptFormatType } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { getPromptTemplate } from "../ai/prompts/templates";
@@ -8,7 +10,23 @@ import { getAIProvider } from "../providers/registry";
 import { getCurrentUserId, getRepositories } from "../repositories";
 
 /** 대본 포맷을 쓰는 채널 (영상) */
-const FORMAT_CHANNELS: ChannelId[] = ["youtube", "naver-clip"];
+/** 대본 포맷을 쓰는 채널. naver-blog = 블로그 포맷 (v0.9.37: 블로그는 Hook·CTA·제목 패턴과 잘된 제목만 쓴다) */
+const FORMAT_CHANNELS: ChannelId[] = ["youtube", "naver-clip", "naver-blog"];
+
+/** Hook·CTA·제목 패턴 목록 정리 (나의 스타일과 같은 한도) */
+function phraseList(v: unknown, max: number): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of Array.isArray(v) ? v : []) {
+    const t = String(x ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+    if (out.length >= max) break;
+  }
+  return out;
+}
 const TYPES: ScriptFormatType[] = ["product", "info"];
 
 function clean(input: Partial<ScriptFormatInput>): ScriptFormatInput {
@@ -18,8 +36,19 @@ function clean(input: Partial<ScriptFormatInput>): ScriptFormatInput {
   if (!contentType) throw new AppError("VALIDATION", "유형(제품 홍보·정보성)을 골라 주세요.");
   const examples = cleanScriptExamples(input.examples);
   const guideline = String(input.guideline ?? "").replace(/\r\n?/g, "\n").trim().slice(0, SCRIPT_FORMAT_LIMITS.guidelineChars);
-  if (!guideline && !examples.length) throw new AppError("VALIDATION", "참고 대본을 넣거나 포맷 가이드라인을 적어 주세요.");
+  const hooks = phraseList(input.hooks, STYLE_LIMITS.hooks.max);
+  const ctas = phraseList(input.ctas, STYLE_LIMITS.ctas.max);
+  const titlePatterns = phraseList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max);
+  if (!guideline && !examples.length && !hooks.length && !ctas.length && !titlePatterns.length) {
+    throw new AppError("VALIDATION", "참고 대본·가이드라인·Hook·CTA·제목 패턴 중 하나는 넣어 주세요.");
+  }
   return {
+    hooks,
+    ctas,
+    titlePatterns,
+    preferredTypes: cleanPreferredTypes(input.preferredTypes),
+    // 피해야 할 대본: 대본이 있는 것만 최대 10개
+    badExamples: cleanScriptExamples(input.badExamples).filter((e) => e.text.trim()).slice(0, 10),
     name,
     contentType,
     channelIds: (Array.isArray(input.channelIds) ? input.channelIds : []).filter((c): c is ChannelId => FORMAT_CHANNELS.includes(c)),
@@ -38,7 +67,18 @@ async function own(id: string): Promise<ScriptFormat> {
 
 /** 예전·빈 값 정리 */
 function normalize(f: ScriptFormat): ScriptFormat {
-  return { ...f, channelIds: f.channelIds ?? [], examples: Array.isArray(f.examples) ? f.examples : [], guideline: f.guideline ?? "" };
+  const arr = <T,>(v: T[] | undefined | null) => (Array.isArray(v) ? v : []);
+  return {
+    ...f,
+    channelIds: f.channelIds ?? [],
+    examples: arr(f.examples),
+    guideline: f.guideline ?? "",
+    hooks: arr(f.hooks),
+    ctas: arr(f.ctas),
+    titlePatterns: arr(f.titlePatterns),
+    preferredTypes: f.preferredTypes && typeof f.preferredTypes === "object" ? f.preferredTypes : {},
+    badExamples: arr(f.badExamples),
+  };
 }
 
 /** 같은 유형의 다른 기본 포맷 해제 (유형마다 기본 1개) */
@@ -227,6 +267,7 @@ export function chooseScriptFormat(
   const linked = linkedId ? rows.find((f) => f.id === linkedId && f.contentType === type) : undefined;
   if (linked) return linked;
   const fits = (f: ScriptFormat) => f.contentType === type && f.isDefault && (f.channelIds.length === 0 || f.channelIds.includes(channelId));
-  return rows.find(fits) ?? null;
+  // 이 채널을 직접 고른 포맷(예: 블로그 포맷)을 '모든 채널' 포맷보다 먼저
+  return rows.find((f) => fits(f) && f.channelIds.includes(channelId)) ?? rows.find(fits) ?? null;
 }
 

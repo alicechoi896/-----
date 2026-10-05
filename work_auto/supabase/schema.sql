@@ -439,6 +439,14 @@ create table if not exists public.script_formats (
   updated_at    timestamptz not null default now()
 );
 create index if not exists idx_script_formats_user on public.script_formats (user_id, created_at desc);
+-- v0.9.37: 나의 스타일의 Hook·CTA·제목 패턴·원하는 유형을 대본 포맷에서도 관리 + 피해야 할 대본 (추가만, 비어 있으면 예전과 같다)
+alter table public.script_formats add column if not exists hooks           jsonb not null default '[]'::jsonb;
+alter table public.script_formats add column if not exists ctas            jsonb not null default '[]'::jsonb;
+alter table public.script_formats add column if not exists title_patterns  jsonb not null default '[]'::jsonb;
+alter table public.script_formats add column if not exists preferred_types jsonb not null default '{}'::jsonb;
+alter table public.script_formats add column if not exists bad_examples    jsonb not null default '[]'::jsonb;
+-- v0.9.37: 콘텐츠 프로필 타깃 시청자 (추가만)
+alter table public.content_profiles add column if not exists audience text not null default '';
 -- v0.9.27: 스타일 → 대본 포맷 연결 (제품 홍보·정보성 각 1개, 선택). 추가만 한다 — 기존 행은 null(기본 포맷 따라감), 포맷을 지우면 연결만 풀린다
 alter table public.user_styles add column if not exists product_format_id text references public.script_formats (id) on delete set null;
 alter table public.user_styles add column if not exists info_format_id text references public.script_formats (id) on delete set null;

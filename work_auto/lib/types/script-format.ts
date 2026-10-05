@@ -1,4 +1,5 @@
 import type { ChannelId, ID, ISODate } from "./common";
+import type { PreferredTypes } from "@/lib/style-types";
 
 /**
  * 대본 포맷 (script_formats, v0.9.26) — "영상 대본을 어떤 구조로 쓸 것인가". docs/SCRIPT_FORMATS.md
@@ -28,8 +29,18 @@ export interface ScriptFormat {
   guideline: string;
   /** 유형마다 1개: 생성 화면에서 고르지 않으면 자동 적용 */
   isDefault: boolean;
+  /**
+   * 설득 구조 (v0.9.37, 나의 스타일에서 옮겨 옴): Hook·CTA·제목 패턴·원하는 유형.
+   * 비어 있으면 생성할 때 예전처럼 스타일의 것을 쓴다 (포맷 → 스타일 순서)
+   */
+  hooks?: string[];
+  ctas?: string[];
+  titlePatterns?: string[];
+  preferredTypes?: PreferredTypes;
+  /** 피해야 할 대본 (반응이 낮았던 대본 등, 3단계). 생성할 때 '이렇게 쓰지 않는다'로 짧게 */
+  badExamples?: ScriptExample[];
   createdAt: ISODate;
   updatedAt: ISODate;
 }
 
-export type ScriptFormatInput = Pick<ScriptFormat, "name" | "contentType" | "channelIds" | "examples" | "guideline" | "isDefault">;
+export type ScriptFormatInput = Pick<ScriptFormat, "name" | "contentType" | "channelIds" | "examples" | "guideline" | "isDefault" | "hooks" | "ctas" | "titlePatterns" | "preferredTypes" | "badExamples">;

@@ -46,7 +46,8 @@
 - 영상이 많아지면 `GET /api/videos?productId=` 를 SQL where 전용 메서드로
 - (완료 v0.9.31) 품질 1단계: 대본 뼈대 규칙, 정밀 생성 — docs/QUALITY_MODES.md
 - (완료 v0.9.34) 품질 2단계: 아웃라이어 점수, 학습 상위 3·하위 3 비교, 프롬프트 버전별 성과표 — docs/OUTLIER_SCORE.md, docs/PROMPT_STATS.md
-- 품질 3단계(DB 승인 필요): content_profiles.audience, script_formats.bad_examples
+- (완료 v0.9.37) 품질 3단계: content_profiles.audience, script_formats.bad_examples + Hook·CTA·제목 패턴을 대본 포맷으로 (Supabase 에서 schema.sql 재실행 필요)
+- 품질 4단계: YouTube Analytics OAuth (클라이언트 ID·보안 비밀번호, 동의 화면 테스트 사용자) → 시청 지속률·이탈 지점
 
 ### 학습 루프 후속 (v0.9.18 이후)
 - 학습 프로필 버전별 👍 비율·수정량·업로드율 집계 화면 (기존 데이터로 계산)

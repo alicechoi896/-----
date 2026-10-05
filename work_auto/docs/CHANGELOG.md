@@ -2,6 +2,31 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.37] - 2026-10-05: Hook·CTA·제목 패턴을 대본 포맷으로, 블로그 포맷, 품질 3단계 (타깃 시청자·피해야 할 대본)
+
+### 변경
+- **역할 정리**: 콘텐츠 프로필 = 무엇을·누구에게 / 나의 스타일 = 어떤 말투로 / 대본 포맷 = 어떤 구조·설득 방식으로
+- **대본 포맷에 Hook·CTA·제목 패턴·원하는 유형** (나의 스타일과 같은 입력·예시 만들기). 생성할 때 **포맷 것 → 없으면 스타일 것** (`mergeFormatPersuasion`, 결과 메모에 표시). 포맷이 비어 있으면 예전과 똑같이 동작
+- 나의 스타일 카드 **[대본 포맷으로 복사]**: 누를 때만, 고른 포맷에 더하기 (같은 문장 한 번만, 스타일 값은 지우지 않음). 자동 이동 없음
+- **블로그 포맷**: 적용 채널에 NAVER 블로그 → 블로그 생성은 블로그 포맷의 Hook(도입)·CTA(마무리)·제목 패턴·잘된 제목을 먼저 (채널을 직접 고른 기본 포맷이 '모든 채널' 포맷보다 먼저)
+- 콘텐츠 프롬프트 **1.13.0**
+
+### 추가 (품질 3단계)
+- 콘텐츠 프로필 **타깃 시청자** 한 줄 → 모든 생성의 [콘텐츠 프로필] 블록
+- 대본 포맷 **피해야 할 대본** (최대 10개, 생성할 때 2개만 짧게) → [대본 포맷 > 피해야 할 대본] 블록
+- 사용 매뉴얼 08장 "포맷의 Hook·CTA·제목 패턴 · 피해야 할 대본", 스타일·포맷·프로필 안내 (화면·PDF 다시 만듦)
+
+### DB (추가만 — Supabase SQL Editor 에서 supabase/schema.sql 을 다시 실행)
+```sql
+alter table public.script_formats add column if not exists hooks           jsonb not null default '[]'::jsonb;
+alter table public.script_formats add column if not exists ctas            jsonb not null default '[]'::jsonb;
+alter table public.script_formats add column if not exists title_patterns  jsonb not null default '[]'::jsonb;
+alter table public.script_formats add column if not exists preferred_types jsonb not null default '{}'::jsonb;
+alter table public.script_formats add column if not exists bad_examples    jsonb not null default '[]'::jsonb;
+alter table public.content_profiles add column if not exists audience text not null default '';
+```
+실행 전에도 새 항목을 비워 두면 저장·생성이 그대로 된다 (빈 새 컬럼은 빼고 저장, 여러 개도). 값을 넣고 저장하면 "DB 업데이트가 필요합니다" 안내.
+
 ## [0.9.36] - 2026-10-05: 쿠팡·스마트스토어 상품 URL 학습 (Bright Data)
 
 자세한 내용은 docs/PRODUCT_DATA_COLLECTION.md

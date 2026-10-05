@@ -21,6 +21,7 @@ function clean(input: Partial<ContentProfileInput>): ContentProfileInput {
   return {
     name,
     description: String(input.description ?? "").trim().slice(0, 300),
+    audience: String(input.audience ?? "").replace(/\s+/g, " ").trim().slice(0, 200),
     mainCategory,
     subCategories: strList(input.subCategories, 12),
     seedKeywords: strList(input.seedKeywords, 20),

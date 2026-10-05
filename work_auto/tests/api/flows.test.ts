@@ -346,6 +346,36 @@ describe("트렌드·스타일·오류 기록", () => {
     await j(`/api/products/${saved.id}`, { method: "DELETE" });
   });
 
+  it("대본 포맷 Hook·CTA·제목·피할 대본 → 생성에 포맷 것 먼저, 블로그 포맷, 프로필 타깃 시청자", async ({ skip }) => {
+    if (!reachable) skip();
+    type F = { id: string; hooks: string[]; badExamples: { text: string }[]; channelIds: string[] };
+    const f = (await post("/api/script-formats", {
+      name: "블로그 제품 포맷",
+      contentType: "product",
+      channelIds: ["naver-blog"],
+      examples: [],
+      guideline: "",
+      isDefault: true,
+      hooks: ["이거 모르고 사면 후회해요"],
+      ctas: ["아래 링크에서 가격 확인해 보세요"],
+      titlePatterns: ["[제품] 사기 전 꼭 볼 [숫자]가지"],
+      preferredTypes: { hooks: ["question"] },
+      badExamples: [{ title: "", views: null, text: "오늘은 제품을 소개해 드리겠습니다" }],
+    })).data as F;
+    expect(f).toMatchObject({ channelIds: ["naver-blog"], hooks: ["이거 모르고 사면 후회해요"] });
+    expect(f.badExamples).toHaveLength(1);
+    const products = await j<{ id: string }[]>("/api/products");
+    const gen = (await post("/api/contents/generate", { featureId: "blog-product-writing", input: { productId: products.data[0].id, mainKeyword: "무선청소기" } })).data as Content & { context: { notes: string[]; scriptFormat: { name: string } } };
+    expect(gen.context.scriptFormat?.name).toBe("블로그 제품 포맷");
+    expect(gen.context.notes.join(" ")).toContain("대본 포맷 '블로그 제품 포맷'의 것을 사용");
+    await j(`/api/script-formats/${f.id}`, { method: "DELETE" });
+    // 콘텐츠 프로필 타깃 시청자
+    const profiles = (await j<{ id: string; name: string; mainCategory: string }[]>("/api/profiles")).data;
+    const p = profiles[0];
+    const upd = (await post(`/api/profiles/${p.id}`, { ...p, audience: "30대 자취 직장인, 퇴근 후 청소가 귀찮음" }, "PUT")).data as { audience: string };
+    expect(upd.audience).toBe("30대 자취 직장인, 퇴근 후 청소가 귀찮음");
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

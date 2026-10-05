@@ -10,7 +10,7 @@ describe("생성 품질 1단계: 대본 뼈대·정밀 생성 (v0.9.31)", () => 
       expect(t.task).toContain("대본 뼈대");
       expect(t.task).toContain("오픈 루프");
       expect(t.task).toContain("답은 끝부분");
-      expect(t.version).toBe("1.12.0");
+      expect(t.version).toBe("1.13.0");
     }
     // 블로그에는 넣지 않는다
     expect(getPromptTemplate("naver-blog.info-writing").task).not.toContain("대본 뼈대");

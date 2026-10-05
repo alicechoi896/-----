@@ -555,6 +555,22 @@ export const SHOTS = [
     },
   },
   {
+    id: "08-format-persuasion",
+    url: "/ai-learning?tab=formats",
+    viewport: { width: 1280, height: 1300 },
+    prepare: async (p) => {
+      await p.locator("main button[aria-label='수정']").first().click();
+      await p.locator("[data-format-persuasion]").first().waitFor();
+      await p.waitForTimeout(300);
+    },
+    scrollTo: (p) => p.locator("[data-format-persuasion]").first(),
+    marks: {
+      1: (p) => p.locator("[data-format-persuasion] > p").first(),
+      2: (p) => p.locator("[data-format-persuasion]").getByText("원하는 유형").first().locator("xpath=.."),
+      3: (p) => p.locator("[data-bad-examples]").first(),
+    },
+  },
+  {
     id: "08-format-form",
     url: "/ai-learning?tab=formats",
     viewport: { width: 1280, height: 1400 },
