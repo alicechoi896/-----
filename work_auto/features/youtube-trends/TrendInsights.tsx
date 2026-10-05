@@ -113,8 +113,8 @@ export function TrendInsights({
                   </div>
                   <MakeMenu
                     items={[
-                      { label: "제품 홍보 영상 만들기", href: productVideoHref({ trendTitle: t.title, topic: t.title, keywords: t.keywords }) },
-                      { label: "정보성 영상 만들기", href: infoVideoHref({ trendTitle: t.title, topic: t.title, keywords: t.keywords }) },
+                      { label: "제품 홍보 영상 만들기", href: productVideoHref({ trendTitle: t.title, keywords: t.keywords }) },
+                      { label: "정보성 영상 만들기", href: infoVideoHref({ trendTitle: t.title, keywords: t.keywords }) },
                     ]}
                   />
                 </li>

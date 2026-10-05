@@ -392,7 +392,6 @@ function clipParams(t: NaverRisingTopic, insight: NaverTrendInsight): string {
   return new URLSearchParams({
     trendId: t.id,
     trendTitle: t.title,
-    topic: t.title,
     keywords,
     category: insight.query.category ?? insight.query.profileScope?.mainCategory ?? t.category ?? "",
   }).toString();

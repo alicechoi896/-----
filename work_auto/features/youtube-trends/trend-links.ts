@@ -15,7 +15,8 @@ export function productVideoHref(input: TrendLinkInput): string {
 /** 영상 → 생성 화면 초기값. AI 분석이 있으면 추천 제목·키워드를 우선 쓴다 */
 export function trendPrefill(item: YouTubeTrendItem, analysis?: YouTubeVideoAnalysis | null) {
   const keywords = (analysis?.keywords.length ? analysis.keywords : item.tags.length ? item.tags : item.keywords.length ? item.keywords : [item.title]).slice(0, 6);
-  return { trendId: item.id, trendTitle: item.title, topic: analysis?.titleSuggestions[0] ?? item.title, keywords, category: item.category };
+  // 주제는 넘기지 않는다: 참고 트렌드(영상 제목)와 같아서 (v0.9.45)
+  return { trendId: item.id, trendTitle: item.title, keywords, category: item.category };
 }
 
 type TrendLinkInput = { trendId?: string; trendTitle?: string; topic?: string; keywords?: string[]; category?: string };
