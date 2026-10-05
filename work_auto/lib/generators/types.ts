@@ -39,6 +39,8 @@ export interface FieldDef {
   sourceParam?: string;
   /** 고를 것이 1개 이하이면 필드를 숨긴다 (예: 콘텐츠 프로필이 1개면 자동 적용이라 묻지 않는다) */
   hideIfSingle?: boolean;
+  /** 고르는 칸을 보이지 않고, 다른 화면에서 넘어온 값이 있을 때만 '넘어온 항목 · [빼기]'로 보인다 (v0.9.39: 참고 트렌드) */
+  onlyWhenSet?: boolean;
   defaultValue?: string;
   /** 2열 그리드에서 차지할 칸 수 (기본 2 = 한 줄 전체) */
   span?: 1 | 2;

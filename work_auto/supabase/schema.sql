@@ -445,6 +445,9 @@ alter table public.script_formats add column if not exists ctas            jsonb
 alter table public.script_formats add column if not exists title_patterns  jsonb not null default '[]'::jsonb;
 alter table public.script_formats add column if not exists preferred_types jsonb not null default '{}'::jsonb;
 alter table public.script_formats add column if not exists bad_examples    jsonb not null default '[]'::jsonb;
+-- v0.9.39: 스타일에서 대본 포맷 여러 개 고르기 (추가만. 첫 번째는 product_format_id·info_format_id 에도 같이 저장)
+alter table public.user_styles add column if not exists product_format_ids jsonb not null default '[]'::jsonb;
+alter table public.user_styles add column if not exists info_format_ids    jsonb not null default '[]'::jsonb;
 -- v0.9.37: 콘텐츠 프로필 타깃 시청자 (추가만)
 alter table public.content_profiles add column if not exists audience text not null default '';
 -- v0.9.27: 스타일 → 대본 포맷 연결 (제품 홍보·정보성 각 1개, 선택). 추가만 한다 — 기존 행은 null(기본 포맷 따라감), 포맷을 지우면 연결만 풀린다

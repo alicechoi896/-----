@@ -15,7 +15,7 @@ export interface PublishPlatform {
 
 export const PUBLISH_PLATFORMS: PublishPlatform[] = [
   { id: "youtube", label: "YouTube", dot: "bg-red-500", channelId: "youtube" },
-  { id: "naver-clip", label: "NAVER 클립", dot: "bg-emerald-500", channelId: "naver-clip" },
+  { id: "naver-clip", label: "NAVER 클립", dot: "bg-blue-500", channelId: "naver-clip" },
   { id: "naver-blog", label: "NAVER 블로그", dot: "bg-green-600", channelId: "naver-blog" },
   { id: "other", label: "기타", dot: "bg-slate-400" },
 ];

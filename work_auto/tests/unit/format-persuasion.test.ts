@@ -33,3 +33,20 @@ describe("대본 포맷의 설득 구조가 먼저", () => {
     expect(chooseScriptFormat([all, blog], "product", "naver-clip", "", null)?.id).toBe("all");
   });
 });
+
+describe("대본 포맷 여러 개 (v0.9.39)", async () => {
+  const { chooseScriptFormats } = await import("@/lib/server/services/script-formats");
+  it("스타일에 고른 포맷 2개 → 하나로 합친 가상 포맷 (가이드라인 번호, Hook 합치기)", () => {
+    const a = fmt({ id: "a", name: "후회형", guideline: "A 구조", hooks: ["h1"], isDefault: false });
+    const b = fmt({ id: "b", name: "비교형", guideline: "B 구조", hooks: ["h1", "h2"], isDefault: false });
+    const m = chooseScriptFormats([a, b], "product", "youtube", "", { productFormatIds: ["a", "b"] })!;
+    expect(m.name).toBe("후회형 · 비교형");
+    expect(m.guideline).toContain("돌아가며 따른다");
+    expect(m.guideline).toContain("[포맷 1: 후회형]");
+    expect(m.hooks).toEqual(["h1", "h2"]);
+    // 하나면 그대로, 없으면 기본 포맷
+    expect(chooseScriptFormats([a, b], "product", "youtube", "", { productFormatIds: ["b"] })?.id).toBe("b");
+    const def = fmt({ id: "d", isDefault: true });
+    expect(chooseScriptFormats([a, def], "product", "youtube", "", { productFormatIds: [] })?.id).toBe("d");
+  });
+});

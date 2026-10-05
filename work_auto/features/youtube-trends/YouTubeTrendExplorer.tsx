@@ -36,7 +36,9 @@ export function YouTubeTrendExplorer() {
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [fetched, setFetched] = useState(0);
   const [provider, setProvider] = useState("");
-  const [loading, setLoading] = useState(true);
+  // 처음 열 때는 불러오지 않는다 ([급상승 영상] 또는 [검색]을 누를 때만 — YouTube 할당량 절약)
+  const [loading, setLoading] = useState(false);
+  const searchedRef = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export function YouTubeTrendExplorer() {
   });
 
   const runSearch = useCallback(async (draftQuery: TrendDraft) => {
+    searchedRef.current = true;
     const id = ++requestId.current;
     const query = { ...draftQuery, profileId: profileIdRef.current || undefined };
     setApplied(query);
@@ -114,7 +117,7 @@ export function YouTubeTrendExplorer() {
       setActiveFilterId("");
       const next = p && scopeParam !== "none" ? withProfileDefaults(draftRef.current, p) : draftRef.current;
       setDraft(next);
-      void runSearch(next);
+      if (searchedRef.current) void runSearch(next); // 이미 검색한 뒤에만 다시
     },
     [runSearch],
   );
@@ -146,13 +149,20 @@ export function YouTubeTrendExplorer() {
             : defaultYouTubeQuery();
         setDraft(query);
         setActiveFilterId(def?.id ?? "");
-        void runSearch(query);
       },
     );
     return () => {
       active = false;
     };
   }, [runSearch]);
+
+  /** [급상승 영상]: 고른 콘텐츠 프로필 범위에서 최근 1개월 안에 급상승한 영상 (Trend Score 순) */
+  function loadRising() {
+    const q: TrendDraft = { ...draftRef.current, recentDays: 30, ...dateRange(30) };
+    setDraft(q);
+    setActiveFilterId("");
+    void runSearch(q);
+  }
 
   async function loadMore() {
     if (!applied || !nextPageToken) return;
@@ -484,7 +494,18 @@ export function YouTubeTrendExplorer() {
           ) : undefined
         }
       >
-        {loading ? (
+        {!applied && !loading ? (
+          <EmptyState
+            icon={Flame}
+            title="급상승 영상을 불러오세요"
+            description="처음에는 불러오지 않습니다. [급상승 영상]을 누르면 지금 고른 콘텐츠 프로필 분야에서 최근 1개월 안에 급상승한 영상을 보여 줍니다. 위 조건으로 직접 [검색]해도 됩니다."
+            action={
+              <Button variant="primary" icon={Flame} onClick={loadRising} data-rising>
+                급상승 영상 (최근 1개월)
+              </Button>
+            }
+          />
+        ) : loading ? (
           <LoadingState variant="skeleton" rows={6} className="p-5" />
         ) : error ? (
           <ErrorState message={error} onRetry={() => applied && void runSearch(applied)} />

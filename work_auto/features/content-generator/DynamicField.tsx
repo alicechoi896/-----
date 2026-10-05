@@ -74,6 +74,34 @@ function RemoteSelectField({
   onChange: (value: string) => void;
   className?: string;
 }) {
+  // 참고 트렌드처럼 '넘어온 값만' 보이는 칸: 값이 없으면 숨기고, 있으면 목록을 부르지 않고 넘어온 항목만 보여 준다
+  if (field.onlyWhenSet) {
+    if (!value) return null;
+    return (
+      <FormField label={field.label} className={className}>
+        <div className="flex items-center justify-between gap-2 rounded-control border border-brand-line bg-brand-soft/50 px-3 py-2 text-[13px] text-fg" data-carried-trend>
+          <span className="truncate">트렌드 찾기에서 고른 항목을 참고합니다</span>
+          <button type="button" onClick={() => onChange("")} className="shrink-0 text-xs text-fg-subtle hover:text-danger">
+            빼기
+          </button>
+        </div>
+      </FormField>
+    );
+  }
+  return <RemoteSelectInner field={field} value={value} onChange={onChange} className={className} />;
+}
+
+function RemoteSelectInner({
+  field,
+  value,
+  onChange,
+  className,
+}: {
+  field: FieldDef;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
   const { data, loading, error } = useRemoteOptions(field.source!, field.sourceParam);
   const loaded = data ?? [];
   // 고를 것이 1개 이하면 묻지 않는다 (자동 적용)

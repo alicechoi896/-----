@@ -12,7 +12,7 @@ import { cleanPreferredTypes } from "@/lib/style-types";
 import type { ScriptFormat, UserStyle } from "@/lib/types";
 import { learningConfig } from "@/lib/learning-config";
 import { compressContent, learningService, profileIdForFeature, promptInsights } from "../services/learning";
-import { chooseScriptFormat, loadScriptFormats } from "../services/script-formats";
+import { chooseScriptFormats, loadScriptFormats } from "../services/script-formats";
 import { blogTitleFormatTypeOf, scriptFormatTypeOf } from "@/lib/script-format";
 
 /**
@@ -91,7 +91,7 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
     userStyles.find((s) => s.isDefault && s.channelIds.length === 0) ??
     null;
   if (!style) notes.push("기본 스타일 없음 → AI 학습 관리 > 나의 스타일에서 등록하면 결과가 일정해집니다.");
-  const scriptFormat = chooseScriptFormat(scriptFormats, formatType, channelId, scriptFormatId, style);
+  const scriptFormat = chooseScriptFormats(scriptFormats, formatType, channelId, scriptFormatId, style);
   const scriptFormatUse: GenerationContext["scriptFormatUse"] = fullFormatType ? "full" : "titles";
   // Hook·CTA·제목 패턴·원하는 유형: 대본 포맷에 있으면 포맷 것, 없으면 예전처럼 스타일 것 (v0.9.37, docs/SCRIPT_FORMATS.md)
   const effectiveStyle = mergeFormatPersuasion(style, scriptFormat);

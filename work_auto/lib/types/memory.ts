@@ -27,6 +27,9 @@ export interface UserStyle {
   /** 이 스타일로 영상·클립을 만들 때 쓸 대본 포맷 (v0.9.27). 비우면 그 유형의 기본 포맷(★) */
   productFormatId?: ID | null;
   infoFormatId?: ID | null;
+  /** 여러 개 고른 대본 포맷 (v0.9.39). 첫 번째는 위 단일 칸에도 같이 저장한다 (예전 화면·데이터 호환) */
+  productFormatIds?: ID[];
+  infoFormatIds?: ID[];
   /** 기본 스타일: 적용 채널에서 스타일을 고르지 않고 생성하면 자동 적용 (채널마다 1개) */
   isDefault: boolean;
   createdAt: ISODate;

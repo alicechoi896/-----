@@ -205,7 +205,7 @@ export function UploadCalendar({ presetContentId }: { presetContentId?: string }
                     <span key={p.id} className={cn("flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11.5px] leading-tight", p.status === "published" ? "text-fg" : "text-fg-subtle")} title={`${platformLabel(p.platform)} · ${p.title}`}>
                       <span className={cn("size-1.5 shrink-0 rounded-full", platformDot(p.platform))} />
                       <span className="truncate">
-                        {platformLabel(p.platform)} · {p.productName || p.title}
+                        {p.productName || p.title}
                         {p.status === "scheduled" ? " (예약)" : ""}
                       </span>
                     </span>

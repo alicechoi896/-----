@@ -163,6 +163,13 @@ describe("비용 정책: 검색 1번 = TikHub 1회", () => {
     await expect(socialSearchService.search({ keyword: "x", platform: "douyin" })).rejects.toMatchObject({ code: "TIKHUB_PAYMENT", status: 402 });
   });
 
+  it("한국어만 바꾸고 영어·숫자(모델명)는 그대로 — AI 가 빠뜨려도 붙인다", async () => {
+    xhsReturns(2);
+    ai.generateStructured.mockResolvedValue({ data: { primary_zh: "盖乐世" }, provider: "mock", model: "m" });
+    const r = await socialSearchService.search({ keyword: "갤럭시 s26", platform: "xiaohongshu" });
+    expect(r.translation.query).toBe("盖乐世 s26");
+  });
+
   it("CASE 2·4 동시에 같은 요청이 여러 번 와도 (더블클릭) AI 1회·TikHub 1회", async () => {
     xhsReturns(6);
     douyinReturns(5);

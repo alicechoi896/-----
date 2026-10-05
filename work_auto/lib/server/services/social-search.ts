@@ -96,8 +96,13 @@ async function translateNow(key: string, original: string, requestId: string): P
     variables: { keyword: original },
     maxTokens: 120,
   });
-  const zh = cleanQuery(result.data.primary_zh);
+  let zh = cleanQuery(result.data.primary_zh);
   if (!zh) throw new AppError("AI_BAD_OUTPUT", "검색어 자동 변환에 실패했습니다.", 502);
+  // 영어·숫자 부분(모델명 등)은 그대로 남아야 한다 — AI 가 빠뜨리거나 바꿨으면 원문 그대로 붙인다
+  for (const token of original.match(/[A-Za-z0-9][A-Za-z0-9+\-.]*/g) ?? []) {
+    if (!zh.toLowerCase().includes(token.toLowerCase())) zh = `${zh} ${token}`;
+  }
+  zh = zh.slice(0, 60);
   translationCache.set(key, { at: Date.now(), value: zh });
   if (translationCache.size > 500) translationCache.delete(translationCache.keys().next().value!);
   return zh;

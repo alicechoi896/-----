@@ -126,7 +126,7 @@ export function SocialSearchPanel({
   const [platform, setPlatform] = useState<SocialPlatform>("xiaohongshu");
   const [autoTranslate, setAutoTranslate] = useState(true);
   const [sort, setSort] = useState<SocialSortOption>("general");
-  const [period, setPeriod] = useState<SocialPeriodOption>("21");
+  const [period, setPeriod] = useState<SocialPeriodOption>("all");
   const [view, setView] = useState<(CachedSearch & { key: string; platform: SocialPlatform; fromCache: boolean }) | null>(null);
   const [searching, setSearching] = useState<"search" | "more" | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);

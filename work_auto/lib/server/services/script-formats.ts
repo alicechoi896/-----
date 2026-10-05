@@ -132,14 +132,20 @@ export const scriptFormatService = {
   async remove(id: string): Promise<void> {
     const f = await own(id);
     const repo = getRepositories();
-    const linked = await repo.styles.list((s) => s.userId === f.userId && (s.productFormatId === id || s.infoFormatId === id));
+    const linked = await repo.styles.list(
+      (s) => s.userId === f.userId && (s.productFormatId === id || s.infoFormatId === id || Boolean(s.productFormatIds?.includes(id)) || Boolean(s.infoFormatIds?.includes(id))),
+    );
     await Promise.all(
-      linked.map((s) =>
-        repo.styles.update(s.id, {
-          ...(s.productFormatId === id ? { productFormatId: null } : {}),
-          ...(s.infoFormatId === id ? { infoFormatId: null } : {}),
-        }),
-      ),
+      linked.map((s) => {
+        const p = (s.productFormatIds ?? []).filter((x) => x !== id);
+        const i = (s.infoFormatIds ?? []).filter((x) => x !== id);
+        return repo.styles.update(s.id, {
+          ...(s.productFormatId === id ? { productFormatId: p[0] ?? null } : {}),
+          ...(s.infoFormatId === id ? { infoFormatId: i[0] ?? null } : {}),
+          ...(s.productFormatIds?.includes(id) ? { productFormatIds: p } : {}),
+          ...(s.infoFormatIds?.includes(id) ? { infoFormatIds: i } : {}),
+        });
+      }),
     );
     await repo.scriptFormats.remove(id);
   },
@@ -244,6 +250,51 @@ export async function loadScriptFormats(userId: string, type: ScriptFormatType |
     if (pickedId) throw e;
     return [];
   }
+}
+
+/**
+ * 여러 포맷 (v0.9.39): ① 생성 요청에 포맷 id 가 있으면 그것 → ② 스타일에 고른 이 유형의 포맷들(최대 3) → ③ 기본 포맷(★)
+ * 여러 개면 하나로 합친 '가상 포맷'을 돌려준다 (가이드라인은 번호를 붙여 나열하고, 대본 3편이 하나씩 돌아가며 따르게)
+ */
+export function chooseScriptFormats(
+  rows: ScriptFormat[],
+  type: ScriptFormatType | null,
+  channelId: ChannelId,
+  pickedId: string,
+  style: { productFormatIds?: string[]; infoFormatIds?: string[]; productFormatId?: string | null; infoFormatId?: string | null } | null,
+): ScriptFormat | null {
+  if (!type || pickedId) return chooseScriptFormat(rows, type, channelId, pickedId, style);
+  const ids = (type === "product" ? style?.productFormatIds : style?.infoFormatIds) ?? [];
+  const linked = ids
+    .map((id) => rows.find((f) => f.id === id && f.contentType === type))
+    .filter((f): f is ScriptFormat => Boolean(f))
+    .slice(0, 3);
+  if (linked.length <= 1) return linked[0] ?? chooseScriptFormat(rows, type, channelId, "", style);
+  return mergeFormats(linked);
+}
+
+export function mergeFormats(list: ScriptFormat[]): ScriptFormat {
+  const uniq = (xs: string[]) => [...new Set(xs)];
+  const first = list[0];
+  return {
+    ...first,
+    id: list.map((f) => f.id).join("+"),
+    name: list.map((f) => f.name).join(" · "),
+    guideline: [
+      `(대본 포맷 ${list.length}개: 대본 1·2·3 은 아래 포맷을 하나씩 돌아가며 따른다)`,
+      ...list.map((f, i) => `[포맷 ${i + 1}: ${f.name}]\n${f.guideline || "(가이드라인 없음 — 이 포맷의 참고 대본 구조를 따른다)"}`),
+    ].join("\n\n"),
+    examples: list.flatMap((f) => f.examples ?? []),
+    badExamples: list.flatMap((f) => f.badExamples ?? []),
+    hooks: uniq(list.flatMap((f) => f.hooks ?? [])),
+    ctas: uniq(list.flatMap((f) => f.ctas ?? [])),
+    titlePatterns: uniq(list.flatMap((f) => f.titlePatterns ?? [])),
+    preferredTypes: {
+      hooks: uniq(list.flatMap((f) => f.preferredTypes?.hooks ?? [])),
+      ctas: uniq(list.flatMap((f) => f.preferredTypes?.ctas ?? [])),
+      titlePatterns: uniq(list.flatMap((f) => f.preferredTypes?.titlePatterns ?? [])),
+    },
+  };
 }
 
 /**

@@ -2,6 +2,22 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.39] - 2026-10-05: 화면 정리 — 영상 검색 기간 전체·한국어만 변환, 업로드 캘린더 색, YouTube 트렌드 [급상승 영상], 대본 포맷 여러 개, 생성 폼 드롭다운 정리
+
+### 변경
+- 영상 URL 가져오기 › 영상 검색: 기간 기본 **전체**. 자동 변환은 **한국어 부분만** 중국어로, 영어·숫자·모델명은 그대로 (예: 갤럭시 s26 → 盖乐世 s26). AI 가 빠뜨리면 서버가 원문 그대로 붙임 (프롬프트 social.query-translate 1.2.0)
+- 업로드 관리 캘린더: 칸 안의 플랫폼 이름 삭제, 점 색만 — YouTube 빨강 · NAVER 클립 **파랑** · NAVER 블로그 초록
+- YouTube 트렌드 찾기: 처음 열 때 불러오지 않음 → **[급상승 영상 (최근 1개월)]** = 고른 콘텐츠 프로필 분야에서 최근 30일 (YouTube 할당량 절약)
+- **나의 스타일 › 대본 포맷 여러 개** (유형별 최대 5개 저장·3개 사용): 여러 개면 하나로 합쳐 대본 3편이 하나씩 돌아가며 따름. Hook·CTA·제목 패턴도 합침
+- 생성 화면 7곳: **참고 트렌드 드롭다운 삭제** (트렌드 찾기에서 넘어올 때만 "트렌드 찾기에서 고른 항목 · [빼기]"), **대본 포맷 드롭다운 삭제** (스타일에서 고름)
+
+### DB (추가만 — schema.sql 재실행)
+```sql
+alter table public.user_styles add column if not exists product_format_ids jsonb not null default '[]'::jsonb;
+alter table public.user_styles add column if not exists info_format_ids    jsonb not null default '[]'::jsonb;
+```
+실행 전에는 포맷을 1개만 고르면 그대로 저장된다 (예전 단일 칸), 2개 이상은 "DB 업데이트가 필요합니다" 안내.
+
 ## [0.9.38] - 2026-10-05: 상세페이지 학습 범위 확대 · 제품 사진 (라이브러리·블로그 자동 불러오기)
 
 ### 변경

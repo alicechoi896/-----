@@ -169,10 +169,13 @@ export function StyleTab({ initialReference, initialChannel }: { initialReferenc
               <PhraseSummary label="CTA (마지막 행동)" items={s.ctas} />
               <PhraseSummary label="제목 패턴" items={s.titlePatterns ?? []} />
               <PreferredTypesSummary types={s.preferredTypes} />
-              {(formatName(s.productFormatId) || formatName(s.infoFormatId)) && (
+              {((s.productFormatIds?.length ?? 0) > 0 || (s.infoFormatIds?.length ?? 0) > 0) && (
                 <p className="text-xs text-fg-subtle">
                   대본 포맷 ·{" "}
-                  {[formatName(s.productFormatId) && `제품 홍보: ${formatName(s.productFormatId)}`, formatName(s.infoFormatId) && `정보성: ${formatName(s.infoFormatId)}`]
+                  {[
+                    s.productFormatIds?.length ? `제품 홍보: ${s.productFormatIds.map((id) => formatName(id)).filter(Boolean).join(", ")}` : "",
+                    s.infoFormatIds?.length ? `정보성: ${s.infoFormatIds.map((id) => formatName(id)).filter(Boolean).join(", ")}` : "",
+                  ]
                     .filter(Boolean)
                     .join(" / ")}
                 </p>
@@ -245,8 +248,8 @@ function toForm(s: UserStyleInput) {
     ctas: s.ctas,
     titlePatterns: s.titlePatterns ?? [],
     preferredTypes: s.preferredTypes ?? {},
-    productFormatId: s.productFormatId ?? "",
-    infoFormatId: s.infoFormatId ?? "",
+    productFormatIds: s.productFormatIds?.length ? s.productFormatIds : s.productFormatId ? [s.productFormatId] : [],
+    infoFormatIds: s.infoFormatIds?.length ? s.infoFormatIds : s.infoFormatId ? [s.infoFormatId] : [],
     profileId: s.profileId ?? "",
     isDefault: s.isDefault,
   };
@@ -269,8 +272,10 @@ function toInput(form: StyleFormState): UserStyleInput {
     ctas: items(form.ctas),
     titlePatterns: items(form.titlePatterns),
     preferredTypes: form.preferredTypes,
-    productFormatId: form.productFormatId || null,
-    infoFormatId: form.infoFormatId || null,
+    productFormatIds: form.productFormatIds,
+    infoFormatIds: form.infoFormatIds,
+    productFormatId: form.productFormatIds[0] ?? null,
+    infoFormatId: form.infoFormatIds[0] ?? null,
     profileId: form.profileId || null,
     isDefault: form.isDefault,
   };
@@ -529,18 +534,8 @@ function StyleForm({
             대본 포맷 <span className="text-xs font-normal text-fg-subtle">(영상·클립 대본 구조 · 비우면 그 유형의 기본 포맷 ★)</span>
           </p>
           <div className="mt-2.5 grid gap-3 md:grid-cols-2">
-            <FormField label="제품 홍보 포맷" htmlFor="style-product-format" hint="제품 홍보 영상·제품 홍보 클립에 적용">
-              <Select
-                id="style-product-format"
-                value={form.productFormatId}
-                options={formatOptions("product")}
-                placeholder="기본 포맷 따라가기"
-                onChange={(e) => set("productFormatId", e.target.value)}
-              />
-            </FormField>
-            <FormField label="정보성 포맷" htmlFor="style-info-format" hint="정보성 영상·정보성 클립에 적용">
-              <Select id="style-info-format" value={form.infoFormatId} options={formatOptions("info")} placeholder="기본 포맷 따라가기" onChange={(e) => set("infoFormatId", e.target.value)} />
-            </FormField>
+            <FormatChips label="제품 홍보 포맷" hint="제품 홍보 영상·클립·블로그에 적용 · 여러 개 고르면 대본 3편이 하나씩 돌아가며 따릅니다 (최대 3개 사용)" options={formatOptions("product")} value={form.productFormatIds} onChange={(v) => set("productFormatIds", v)} />
+            <FormatChips label="정보성 포맷" hint="정보성 영상·클립·블로그에 적용" options={formatOptions("info")} value={form.infoFormatIds} onChange={(v) => set("infoFormatIds", v)} />
           </div>
           <p className="mt-2 text-xs text-fg-subtle">
             포맷은 <a href="/ai-learning?tab=formats" className="font-medium text-brand hover:underline">대본 포맷</a> 탭에서 참고 대본으로 만듭니다. 생성 화면에서 포맷을 직접 고르면 그것이 먼저입니다.
@@ -548,6 +543,35 @@ function StyleForm({
         </div>
       </div>
     </SectionCard>
+  );
+}
+
+/** 대본 포맷 여러 개 고르기 (비우면 그 유형의 기본 포맷 ★) */
+function FormatChips({ label, hint, options, value, onChange }: { label: string; hint: string; options: { value: string; label: string }[]; value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <FormField label={`${label}${value.length ? ` · ${value.length}개` : ""}`} hint={options.length ? hint : "아직 이 유형의 대본 포맷이 없습니다"}>
+      <div className="flex flex-wrap gap-1.5" data-format-chips>
+        {options.map((o) => {
+          const on = value.includes(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(on ? value.filter((x) => x !== o.value) : [...value, o.value].slice(0, 5))}
+              className={cn(
+                "h-8 rounded-full border px-3 text-[12.5px] transition-colors",
+                on ? "border-brand bg-brand-soft font-medium text-brand" : "border-line-strong bg-canvas text-fg-muted hover:border-brand-line hover:text-brand",
+              )}
+            >
+              {on ? `${value.indexOf(o.value) + 1}. ` : ""}
+              {o.label}
+            </button>
+          );
+        })}
+        {!value.length && options.length > 0 && <span className="self-center text-xs text-fg-subtle">고르지 않으면 기본 포맷(★)</span>}
+      </div>
+    </FormField>
   );
 }
 

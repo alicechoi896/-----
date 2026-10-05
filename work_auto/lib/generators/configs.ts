@@ -95,6 +95,8 @@ const F = {
     source: "youtube-trends",
     placeholder: "YouTube 트렌드에서 선택 (선택 사항)",
     span: 1,
+    // 트렌드 찾기 화면에서 [만들기]로 넘어올 때만 보인다 (드롭다운 없음)
+    onlyWhenSet: true,
   }),
   naverTrend: (label = "트렌드 선택"): FieldDef => ({
     name: "trendId",
@@ -103,6 +105,7 @@ const F = {
     source: "naver-trends",
     placeholder: "네이버 트렌드에서 선택 (선택 사항)",
     span: 1,
+    onlyWhenSet: true,
   }),
   keywords: (label = "주요 키워드", required = false): FieldDef => ({
     name: "keywords",
@@ -300,6 +303,9 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
   },
 };
 
+/** 생성 폼의 '대본 포맷' 드롭다운 (꺼 둠: 스타일에서 고른다) */
+const SHOW_FORMAT_PICKER = false;
+
 /** 기능 ID → 스타일을 고를 채널 */
 function styleChannelOf(featureId: string): string {
   return featureId.startsWith("yt-") ? "youtube" : featureId.startsWith("clip-") ? "naver-clip" : "naver-blog";
@@ -319,8 +325,8 @@ for (const config of Object.values(GENERATOR_CONFIGS)) {
       hideIfSingle: true,
     });
   }
-  // 대본 포맷: 영상·클립만. 비우면 이 유형(제품 홍보·정보성)의 기본 포맷 자동 적용
-  const formatType = scriptFormatTypeOf(config.featureId);
+  // 대본 포맷: 생성 폼에서는 고르지 않는다 (v0.9.39 — 나의 스타일에서 고른 포맷 → 없으면 기본 포맷 ★)
+  const formatType = SHOW_FORMAT_PICKER ? scriptFormatTypeOf(config.featureId) : null;
   if (formatType && !config.fields.some((f) => f.name === "scriptFormatId")) {
     config.fields.push({
       name: "scriptFormatId",

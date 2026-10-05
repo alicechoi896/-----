@@ -190,8 +190,14 @@ export class MockAIProvider implements AIProvider {
         마사지건: ["筋膜枪", "按摩枪", "massage gun"],
         가습기: ["加湿器", "家用加湿器", "humidifier"],
       };
-      const hit = Object.entries(dict).find(([ko]) => k.includes(ko))?.[1] ?? [`${k.replace(/적음/g, "").trim() || "好物"}`, `${k.replace(/적음/g, "").trim() || "好物"}推荐`, "recommended"];
-      return { data: { primary_zh: hit[0] } as unknown as T, provider: this.id, model: this.model };
+      // 한국어 부분만 바꾸고 영어·숫자는 그대로 (데모)
+      const words: Record<string, string> = { 갤럭시: "盖乐世", 아이폰: "iPhone", 다이슨: "戴森", 무선청소기: "无线吸尘器", 에어프라이어: "空气炸锅", 마사지건: "筋膜枪", 가습기: "加湿器", 리뷰: "测评", 추천: "推荐" };
+      const zh = k
+        .split(/\s+/)
+        .map((w) => (/[가-힣]/.test(w) ? (Object.entries(words).find(([ko]) => w.includes(ko))?.[1] ?? Object.values(dict).find(() => false) ?? "好物") : w))
+        .join(" ")
+        .trim();
+      return { data: { primary_zh: zh } as unknown as T, provider: this.id, model: this.model };
     }
 
     if (request.task === "script-format-extract") {

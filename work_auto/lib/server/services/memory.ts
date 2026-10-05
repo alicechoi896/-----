@@ -55,6 +55,8 @@ export function normalizeStyle(row: UserStyle): UserStyle {
     preferredTypes: cleanPreferredTypes(rest.preferredTypes),
     productFormatId: rest.productFormatId ?? null,
     infoFormatId: rest.infoFormatId ?? null,
+    productFormatIds: Array.isArray(rest.productFormatIds) && rest.productFormatIds.length ? rest.productFormatIds : rest.productFormatId ? [rest.productFormatId] : [],
+    infoFormatIds: Array.isArray(rest.infoFormatIds) && rest.infoFormatIds.length ? rest.infoFormatIds : rest.infoFormatId ? [rest.infoFormatId] : [],
     profileId: rest.profileId ?? null,
   };
 }
@@ -74,20 +76,30 @@ function cleanStyleInput(input: UserStyleInput): UserStyleInput {
     ctas: strList(input.ctas, STYLE_LIMITS.ctas.max, STYLE_LIMITS.ctas.len),
     titlePatterns: strList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max, STYLE_LIMITS.titlePatterns.len),
     preferredTypes: cleanPreferredTypes(input.preferredTypes),
-    productFormatId: typeof input.productFormatId === "string" && input.productFormatId ? input.productFormatId : null,
-    infoFormatId: typeof input.infoFormatId === "string" && input.infoFormatId ? input.infoFormatId : null,
+    ...formatIdsOf(input),
     profileId: typeof input.profileId === "string" && input.profileId ? input.profileId : null,
     isDefault: Boolean(input.isDefault),
   };
 }
 
 /** 연결할 대본 포맷이 내 것이고 유형이 맞는지 확인 */
-async function assertOwnFormats(style: { productFormatId?: string | null; infoFormatId?: string | null }) {
+/** 대본 포맷 연결: 여러 개(최대 5) — 첫 번째는 예전 단일 칸에도 */
+function formatIdsOf(input: UserStyleInput) {
+  const ids = (list: unknown, single: unknown) => {
+    const arr = Array.isArray(list) ? list : single ? [single] : [];
+    return [...new Set(arr.filter((x): x is string => typeof x === "string" && /^[\w-]{1,60}$/.test(x)))].slice(0, 5);
+  };
+  const productFormatIds = ids(input.productFormatIds, input.productFormatId);
+  const infoFormatIds = ids(input.infoFormatIds, input.infoFormatId);
+  return { productFormatIds, infoFormatIds, productFormatId: productFormatIds[0] ?? null, infoFormatId: infoFormatIds[0] ?? null };
+}
+
+async function assertOwnFormats(style: { productFormatIds?: string[]; infoFormatIds?: string[] }) {
   const pairs = [
-    [style.productFormatId, "product", "제품 홍보"],
-    [style.infoFormatId, "info", "정보성"],
-  ] as const;
-  if (!pairs.some(([id]) => id)) return;
+    ...(style.productFormatIds ?? []).map((id) => [id, "product", "제품 홍보"] as const),
+    ...(style.infoFormatIds ?? []).map((id) => [id, "info", "정보성"] as const),
+  ];
+  if (!pairs.length) return;
   const userId = await getCurrentUserId();
   for (const [id, type, label] of pairs) {
     if (!id) continue;

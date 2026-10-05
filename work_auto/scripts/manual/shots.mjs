@@ -229,16 +229,19 @@ export const SHOTS = [
   {
     id: "04-yt-search",
     url: "/youtube/trends",
+    viewport: { width: 1280, height: 1300 },
     marks: {
       1: (p) => cardWith(p, "현재 분석 기준"),
       2: (p) => cardWith(p, "구독자 수"),
-      3: (p) => p.locator("main button", { hasText: /^검색$/ }).first(),
+      3: (p) => p.locator("[data-rising]").first(),
     },
   },
   {
     id: "04-yt-result",
     url: "/youtube/trends",
     prepare: async (p) => {
+      await p.locator("[data-rising]").first().click();
+      await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       await btn(p, "AI 주제 추천").first().click();
       await p.waitForTimeout(2000);
     },
@@ -253,6 +256,8 @@ export const SHOTS = [
     id: "04-yt-outlier",
     url: "/youtube/trends",
     prepare: async (p) => {
+      await p.locator("[data-rising]").first().click();
+      await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       await p.locator("[data-outlier-button]").first().click();
       await p.getByText(/채널 \d+개 비교/).first().waitFor({ timeout: 15_000 });
       await p.waitForTimeout(300);
@@ -289,6 +294,8 @@ export const SHOTS = [
     url: "/youtube/trends",
     viewport: { width: 1280, height: 1000 },
     prepare: async (p) => {
+      await p.locator("[data-rising]").first().click();
+      await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       await p.locator("main table tbody tr").first().waitFor({ timeout: 15_000 });
       const boxes = p.locator("main table tbody [role=checkbox]");
       await boxes.nth(0).click();
