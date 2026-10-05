@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ImagePlus, Sparkles, Trash2, Undo2, Wand2 } from "lucide-react";
 import type { FieldDef } from "@/lib/generators/types";
 import {
@@ -45,12 +45,15 @@ export function PhotoField({
   photos,
   onChange,
   baseName,
+  incoming,
 }: {
   field: FieldDef;
   photos: PhotoItem[];
   onChange: (next: PhotoItem[]) => void;
   /** 파일 이름 앞부분 (메인 키워드) */
   baseName: string;
+  /** 제품을 고르면 그 제품 사진을 넣는다 (key 가 바뀔 때 한 번, 같은 출처의 예전 사진은 바꾼다) */
+  incoming?: { key: string; files: File[] } | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [ratio, setRatio] = useState<PhotoRatio>("original");
@@ -64,10 +67,19 @@ export function PhotoField({
 
   const rename = (list: PhotoItem[]) => list.map((p, i) => ({ ...p, name: photoFileName(baseName, i) }));
 
-  async function addFiles(files: FileList | null) {
+  const lastIncoming = useRef<string | null>(null);
+  useEffect(() => {
+    if (!incoming || incoming.key === lastIncoming.current) return;
+    lastIncoming.current = incoming.key;
+    // 예전에 자동으로 넣은 제품 사진은 빼고 새 제품 사진으로
+    void addFiles(incoming.files, photos.filter((p) => !p.originalName.startsWith("product-photo-")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- incoming 이 바뀔 때만
+  }, [incoming]);
+
+  async function addFiles(files: FileList | File[] | null, base: PhotoItem[] = photos) {
     if (!files?.length) return;
     setError(null);
-    const room = MAX_PHOTOS - photos.length;
+    const room = MAX_PHOTOS - base.length;
     const picked = Array.from(files).filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name));
     if (room <= 0) {
       setError(`사진은 ${MAX_PHOTOS}장까지 넣을 수 있습니다.`);
@@ -100,7 +112,7 @@ export function PhotoField({
     if (picked.length > room) errors.push(`${MAX_PHOTOS}장을 넘는 사진은 빼고 넣었습니다.`);
     setBusy(null);
     setError(errors.length ? errors.join(" ") : null);
-    onChange(rename([...photos, ...added]));
+    onChange(rename([...base, ...added]));
     if (inputRef.current) inputRef.current.value = "";
   }
 

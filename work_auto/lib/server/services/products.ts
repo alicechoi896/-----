@@ -24,6 +24,13 @@ import { findLearnedProduct } from "./product-url-learning";
  *  save():     Draft → Product + ProductSource + ProductAnalysis 저장
  *  콘텐츠 생성: ContextBuilder 가 저장된 ProductAnalysis 를 읽는다 (재분석 없음)
  */
+/** 저장용 수집 데이터: 상세 이미지 주소는 버리고(분석에만 사용) 제품 사진은 5개까지 */
+function compactRaw(raw: RawProductData): RawProductData {
+  const { detailImageUrls: _detail, ...rest } = raw;
+  void _detail;
+  return { ...rest, imageUrls: (raw.imageUrls ?? []).slice(0, 5) };
+}
+
 export const productService = {
   async analyze(source: ProductSourceInput): Promise<ProductAnalysisDraft> {
     const collector = getProductCollector(source);
@@ -66,7 +73,7 @@ export const productService = {
       lastUsedAt: null,
     };
     await repo.products.insert(product);
-    await repo.productSources.insert({ id: createId("psrc"), productId, type: draft.raw.sourceType, raw: draft.raw, createdAt: now });
+    await repo.productSources.insert({ id: createId("psrc"), productId, type: draft.raw.sourceType, raw: compactRaw(draft.raw), createdAt: now });
     await repo.productAnalyses.insert({ id: analysisId, productId, version: 1, ...a, meta: draft.meta, createdAt: now });
     return product;
   },
@@ -88,7 +95,7 @@ export const productService = {
     const analysisId = createId("pan");
     await repo.productAnalyses.insert({ id: analysisId, productId, version: Math.max(0, ...versions.map((v) => v.version)) + 1, ...a, meta: draft.meta, createdAt: now });
     for (const s of await repo.productSources.list((x) => x.productId === productId)) await repo.productSources.remove(s.id);
-    await repo.productSources.insert({ id: createId("psrc"), productId, type: draft.raw.sourceType, raw: draft.raw, createdAt: now });
+    await repo.productSources.insert({ id: createId("psrc"), productId, type: draft.raw.sourceType, raw: compactRaw(draft.raw), createdAt: now });
     await repo.products.update(productId, {
       name: a.basicInfo.name,
       brand: a.basicInfo.brand,

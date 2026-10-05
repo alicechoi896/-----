@@ -60,6 +60,12 @@ export function ProductCard({ product, onDelete }: { product: Product; onDelete:
   const detailHref = `/tools/product-library/${product.id}`;
   return (
     <article className={`${cardClass} flex flex-col overflow-hidden`}>
+      {product.imageUrl && (
+        <Link href={detailHref} className="block aspect-[4/3] w-full overflow-hidden bg-subtle" tabIndex={-1} aria-hidden>
+          {/* eslint-disable-next-line @next/next/no-img-element -- 쇼핑몰 이미지 서버 주소 그대로 (저장하지 않음) */}
+          <img src={product.imageUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className="size-full object-cover" />
+        </Link>
+      )}
       <div className="flex flex-1 flex-col p-4">
         <p className="text-xs text-fg-subtle">
           {product.brand} · {product.category}

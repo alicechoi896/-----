@@ -78,6 +78,22 @@ WHATWG URL 파서로 hostname과 pathname을 정확히 비교합니다. 문자�
 - 최대 6장, 장당 3.5MB 이하만 AI Vision으로 1회 읽습니다.
 - 이미지는 저장하지 않고, 읽은 글만 설명에 더합니다.
 
+## 4-1. 상세페이지 학습 범위 (v0.9.38)
+
+| 확보 | 방법 |
+|---|---|
+| 기본 정보 | 상품명·브랜드·판매가·정가·할인율·카테고리·판매자 |
+| 스펙 | specifications·product_details·attributes·product_info 등 들어 있는 항목을 모두 (최대 40) |
+| 옵션 | options·variations·product_options → "이름: 값" |
+| 상세 본문 | description·detail_content·product_description·features·specification_text·seller_description |
+| 제품 사진 | main_image + images·thumbnails → 최대 5장 **주소만 저장** (라이브러리·블로그 사진) |
+| 상세 설명 이미지 | detail_images·description_images·content_images → 최대 15장, **AI Vision 으로 12장까지 읽고 버림** |
+
+**AI에 넘기는 순서**: 기본 정보 → 가격·옵션 → 설명 → 스펙 → 상세 이미지에서 읽은 내용 → 리뷰 발췌. Bright Data 원본 응답은 그대로 보내지 않습니다.
+분석 결과에는 기존 항목에 주요 스펙(keySpecs)과 사용 상황(useCases)을 더했습니다.
+
+> 실제 토큰으로 확인 전: 위 이름은 문서·일반 관례 기준입니다. 쿠팡·스마트스토어 응답에 상세 이미지나 상세 본문이 없으면 "상품명·가격 정도만 수집됨"이 될 수 있습니다. 실제 응답을 보고 판단해, 부족하면 추가 방법을 먼저 보고합니다(자동으로 두 번째 수집을 하지 않음).
+
 ## 5. 저장하는 것 / 하지 않는 것 (DB 변경 없음)
 
 | 저장 | 테이블 | 크기 |

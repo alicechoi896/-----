@@ -29,10 +29,12 @@ const ANALYSIS_SCHEMA = {
     summary: {
       type: "object",
       additionalProperties: false,
-      required: ["oneLiner", "keyFeatures", "keyBenefits", "differentiators", "targetAudience", "buyingPoints", "cautions"],
+      required: ["oneLiner", "keyFeatures", "keySpecs", "keyBenefits", "differentiators", "targetAudience", "useCases", "buyingPoints", "cautions"],
       properties: {
         oneLiner: { type: "string" },
         keyFeatures: stringArray,
+        keySpecs: stringArray,
+        useCases: stringArray,
         keyBenefits: stringArray,
         differentiators: stringArray,
         targetAudience: stringArray,
@@ -137,6 +139,8 @@ function normalizeAnalysis(data: Record<string, unknown>, raw: RawProductData): 
     summary: {
       oneLiner: String(d.summary.oneLiner ?? ""),
       keyFeatures: list(d.summary.keyFeatures),
+      keySpecs: list(d.summary.keySpecs),
+      useCases: list(d.summary.useCases),
       keyBenefits: list(d.summary.keyBenefits),
       differentiators: list(d.summary.differentiators),
       targetAudience: list(d.summary.targetAudience),

@@ -74,6 +74,17 @@ export function ProductDetailView({ productId, initialMode }: { productId: strin
         </div>
       </div>
 
+      {(source?.raw.imageUrls?.length ?? 0) > 0 && (
+        <div className="flex gap-2 overflow-x-auto" data-product-images>
+          {source!.raw.imageUrls.slice(0, 5).map((u, i) => (
+            <a key={u} href={u} target="_blank" rel="noreferrer noopener" className="block size-28 shrink-0 overflow-hidden rounded-control border border-line bg-subtle" title={`제품 사진 ${i + 1}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- 쇼핑몰 이미지 서버 주소 그대로 (저장하지 않음) */}
+              <img src={u} alt={`제품 사진 ${i + 1}`} referrerPolicy="no-referrer" loading="lazy" className="size-full object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
+
       {editing && (
         <EditForm
           detail={detail.data}

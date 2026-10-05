@@ -21,7 +21,10 @@ export const brightDataConfig = {
   timeoutMs: 30_000,
   /** AI 에 보낼 상세 설명 최대 글자 · 이미지 수 (DB·토큰 절약) */
   maxDescriptionChars: 8000,
-  maxImageUrls: 10,
+  /** 제품 사진(대표·썸네일) — 제품 라이브러리·블로그 사진에 쓴다 (주소만 저장) */
+  maxImageUrls: 5,
+  /** 상세페이지 설명 이미지 — AI Vision 분석에만 쓰고 저장하지 않는다 */
+  maxDetailImageUrls: 15,
 } as const;
 
 export type CollectJob = { status: "ready"; record: unknown } | { status: "pending"; snapshotId: string };
@@ -154,19 +157,27 @@ export function normalizeBrightDataRecord(
   const title = text(pick(record, "title", "product_name", "name"), 200);
   if (!title) throw new AppError("BRIGHTDATA_EMPTY", "상세페이지에서 상품명을 찾지 못했습니다.", 502);
   const category = pick(record, "category", "categories", "breadcrumbs", "category_path");
-  const description = [pick(record, "description", "product_description", "details", "detail"), pick(record, "features", "highlights")]
+  const description = [
+    pick(record, "description", "product_description", "description_text", "detail_content", "detailContent", "details", "detail"),
+    pick(record, "features", "highlights", "feature_text", "key_features"),
+    pick(record, "specification_text", "spec_text"),
+    pick(record, "seller_description", "seller_notice"),
+  ]
     .map((d) => (Array.isArray(d) ? d.map((x) => text(x, 500)).join("\n") : typeof d === "string" ? d.trim() : ""))
     .filter(Boolean)
     .join("\n")
     .slice(0, brightDataConfig.maxDescriptionChars);
-  const options = pick(record, "options", "variations", "variants");
-  const optionText = Array.isArray(options) ? options.map((o) => (isObj(o) ? text(pick(o, "name", "title", "value"), 80) : text(o, 80))).filter(Boolean).slice(0, 20) : [];
+  const options = pick(record, "options", "variations", "variants", "product_options", "option_list");
+  const optionText = Array.isArray(options)
+    ? options.map((o) => (isObj(o) ? [text(pick(o, "name", "title", "option_name"), 60), text(pick(o, "value", "values", "option_value"), 80)].filter(Boolean).join(": ") : text(o, 80))).filter(Boolean).slice(0, 20)
+    : [];
   const reviews = pick(record, "top_reviews", "reviews_list", "review_snippets");
   const price = num(pick(record, "final_price", "price", "sale_price", "discount_price"));
   const originalPrice = num(pick(record, "initial_price", "original_price", "list_price"));
-  const specs = specsOf(pick(record, "specifications", "specs", "product_details", "attributes"));
-  if (optionText.length) specs["옵션"] = optionText.join(", ").slice(0, 300);
+  // 스펙: 상품마다 항목이 달라서 고정 필드가 아니라 들어 있는 항목을 모두 (최대 40개)
+  const specs = { ...specsOf(pick(record, "specifications", "specs", "product_details", "attributes", "product_specifications", "item_specifics")), ...specsOf(pick(record, "product_info", "essential_info")) };
   if (originalPrice && price && originalPrice > price) specs["정가"] = `${originalPrice.toLocaleString("ko-KR")}원`;
+  const discount = num(pick(record, "discount_rate", "discount", "discount_percent")) ?? (originalPrice && price && originalPrice > price ? Math.round((1 - price / originalPrice) * 100) : undefined);
   const rating = num(pick(record, "rating", "review_score", "average_rating"));
   const reviewCount = num(pick(record, "reviews_count", "review_count", "reviews", "ratings_count"));
   if (rating) specs["평점"] = String(rating);
@@ -182,7 +193,12 @@ export function normalizeBrightDataRecord(
     brand: text(pick(record, "brand", "brand_name", "manufacturer"), 80) || undefined,
     price,
     category: Array.isArray(category) ? category.map((c) => text(isObj(c) ? pick(c, "name", "title") : c, 40)).filter(Boolean).join(" > ").slice(0, 200) : text(category, 200) || undefined,
-    imageUrls: [...new Set(urlsOf(pick(record, "images", "image_urls", "image", "main_image", "product_images", "detail_images")))].slice(0, brightDataConfig.maxImageUrls),
+    originalPrice,
+    discountRate: discount && discount > 0 && discount < 100 ? Math.round(discount) : undefined,
+    options: optionText.length ? optionText : undefined,
+    // 제품 사진(대표·썸네일)과 상세 설명 이미지를 나눠 담는다
+    imageUrls: [...new Set([...urlsOf(pick(record, "main_image", "image")), ...urlsOf(pick(record, "images", "image_urls", "product_images", "thumbnails"))])].slice(0, brightDataConfig.maxImageUrls),
+    detailImageUrls: [...new Set(urlsOf(pick(record, "detail_images", "description_images", "content_images", "detail_image_urls", "product_description_images", "detail_page_images")))].slice(0, brightDataConfig.maxDetailImageUrls),
     descriptionText: description,
     specs,
     reviewSnippets: (Array.isArray(reviews) ? reviews : []).map((r) => text(isObj(r) ? pick(r, "review", "text", "content") : r, 200)).filter(Boolean).slice(0, 5),

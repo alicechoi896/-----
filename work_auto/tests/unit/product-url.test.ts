@@ -123,6 +123,33 @@ describe("Bright Data 호출 횟수", () => {
   });
 });
 
+describe("상세페이지 학습 범위 (v0.9.38)", () => {
+  it("제품 사진(최대 5)과 상세 설명 이미지를 나누고, 스펙·옵션·정가·할인·상세 본문을 모은다", () => {
+    const raw = normalizeBrightDataRecord(
+      {
+        title: "T",
+        main_image: "https://thumbnail.coupangcdn.com/main.jpg",
+        images: Array.from({ length: 8 }, (_, i) => `https://thumbnail.coupangcdn.com/${i}.jpg`),
+        detail_images: Array.from({ length: 20 }, (_, i) => `https://image.coupangcdn.com/detail${i}.jpg`),
+        final_price: 9000,
+        initial_price: 12000,
+        options: [{ name: "색상", value: "블랙" }, "용량 500ml"],
+        specifications: { 무게: "1.3kg", 소재: "ABS" },
+        detail_content: "상세 본문",
+        seller_description: "판매자 안내",
+      },
+      { platform: "coupang", url: "https://www.coupang.com/vp/products/1234", canonicalKey: "coupang:1234", productId: "1234" },
+    );
+    expect(raw.imageUrls).toHaveLength(5);
+    expect(raw.imageUrls[0]).toBe("https://thumbnail.coupangcdn.com/main.jpg");
+    expect(raw.detailImageUrls).toHaveLength(15);
+    expect(raw).toMatchObject({ price: 9000, originalPrice: 12000, discountRate: 25, options: ["색상: 블랙", "용량 500ml"] });
+    expect(raw.specs).toMatchObject({ 무게: "1.3kg", 소재: "ABS" });
+    expect(raw.descriptionText).toContain("상세 본문");
+    expect(raw.descriptionText).toContain("판매자 안내");
+  });
+});
+
 describe("CASE 5·11·12 콘텐츠 생성·제품 열기는 수집기를 부르지 않는다", () => {
   it("수집기를 쓰는 곳은 상품 URL 학습 서비스뿐", () => {
     const root = path.resolve(__dirname, "../..");

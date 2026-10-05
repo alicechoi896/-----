@@ -31,6 +31,14 @@ export interface RawProductData {
   canonicalKey?: string;
   platform?: "coupang" | "naver_smartstore";
   externalProductId?: string;
+  /** 정가·할인율·옵션 (v0.9.38, 수집한 그대로) */
+  originalPrice?: number;
+  discountRate?: number;
+  options?: string[];
+  /** 상세페이지 설명 이미지 주소 — 분석할 때만 쓰고 저장하지 않는다 (저장 전 제거) */
+  detailImageUrls?: string[];
+  /** 상세 이미지에서 AI 가 읽은 내용 (제품 특징·기능·스펙·사용법·강조 메시지) */
+  detailImageInsights?: string;
 }
 
 /** AI Analyzer 의 출력. 콘텐츠 생성 시 Product Memory 로 재사용된다. */
@@ -45,11 +53,15 @@ export interface ProductAnalysisContent {
   summary: {
     oneLiner: string;
     keyFeatures: string[];
+    /** 주요 스펙 (v0.9.38, 예전 분석에는 없다) */
+    keySpecs?: string[];
     keyBenefits: string[];
     differentiators: string[];
     targetAudience: string[];
     buyingPoints: string[];
     cautions: string[];
+    /** 사용 상황 (v0.9.38) */
+    useCases?: string[];
   };
   contentData: {
     videoPoints: string[];

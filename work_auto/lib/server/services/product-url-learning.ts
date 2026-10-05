@@ -19,9 +19,10 @@ import { MAX_IMAGES_PER_EXTRACT, productAnalyzer } from "./product-analyzer";
 export const productLearnConfig = {
   /** 같은 상품의 진행 중 작업을 기억하는 시간 (다시 눌러도 새 Trigger 를 만들지 않는다) */
   jobMemoryMs: 15 * 60 * 1000,
-  /** 설명이 이보다 짧고 이미지가 있으면 상세 이미지 일부를 AI 가 읽는다 */
+  /** 상세 설명 이미지를 AI Vision 으로 읽는 최대 장수 (8장씩 나눠 읽는다 — 비용·토큰 조절은 이 값만) */
+  maxDetailImagesForAnalysis: 12,
+  /** 상세 이미지가 없을 때는 설명 글이 이보다 짧으면 제품 사진이라도 읽는다 */
   visionWhenDescShorterThan: 400,
-  maxDetailImagesForAnalysis: Math.min(6, MAX_IMAGES_PER_EXTRACT),
   maxImageBytes: 3_500_000,
   /** 상세 이미지를 받아도 되는 쇼핑몰 이미지 서버 */
   imageHosts: [/\.coupangcdn\.com$/i, /\.pstatic\.net$/i, /\.naver\.net$/i],
@@ -141,7 +142,11 @@ function cleanCollected(v: unknown): RawProductData {
     brand: str(r.brand, 80),
     price: typeof r.price === "number" && Number.isFinite(r.price) ? r.price : undefined,
     category: str(r.category, 200),
-    imageUrls: (Array.isArray(r.imageUrls) ? r.imageUrls : []).filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)).slice(0, brightDataConfig.maxImageUrls),
+    imageUrls: httpsList(r.imageUrls, brightDataConfig.maxImageUrls),
+    detailImageUrls: httpsList(r.detailImageUrls, brightDataConfig.maxDetailImageUrls),
+    originalPrice: typeof r.originalPrice === "number" && Number.isFinite(r.originalPrice) ? r.originalPrice : undefined,
+    discountRate: typeof r.discountRate === "number" && Number.isFinite(r.discountRate) ? r.discountRate : undefined,
+    options: Array.isArray(r.options) ? r.options.map((o) => String(o).slice(0, 140)).slice(0, 20) : undefined,
     descriptionText: (str(r.descriptionText, brightDataConfig.maxDescriptionChars) ?? "").trim(),
     specs,
     reviewSnippets: (Array.isArray(r.reviewSnippets) ? r.reviewSnippets : []).map((x) => String(x).slice(0, 200)).slice(0, 5),
@@ -150,16 +155,21 @@ function cleanCollected(v: unknown): RawProductData {
   };
 }
 
+const httpsList = (v: unknown, max: number) => (Array.isArray(v) ? v : []).filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)).slice(0, max);
+
 /**
- * 설명 글이 거의 없고(상세가 이미지뿐) 실제 AI 가 이미지를 읽을 수 있으면, 상세 이미지 몇 장만 이 자리에서 읽는다.
- * 이미지는 저장하지 않고, 읽은 글만 설명에 더한다. 실패하면 조용히 건너뛴다.
+ * 상세페이지 설명 이미지 → AI Vision (기본 AI: Claude 또는 OpenAI). 쿠팡·스마트스토어는 설명이 이미지 안에 있는 경우가 많다.
+ * 상세 이미지가 있으면 최대 12장(8장씩 나눠)을, 없으면 설명이 짧을 때만 제품 사진을 읽는다.
+ * 이미지는 저장하지 않고, 읽은 내용만 detailImageInsights 로 분석에 넘긴다. 실패한 이미지는 건너뛴다.
  */
 async function withDetailImageText(raw: RawProductData): Promise<RawProductData> {
-  if (raw.descriptionText.length >= productLearnConfig.visionWhenDescShorterThan || !raw.imageUrls.length) return raw;
+  const detail = raw.detailImageUrls ?? [];
+  const targets = detail.length ? detail : raw.descriptionText.length < productLearnConfig.visionWhenDescShorterThan ? raw.imageUrls : [];
+  if (!targets.length) return raw;
   const ai = await getAIProvider();
   if (!ai.supportsVision) return raw;
   const images: { mediaType: string; data: string }[] = [];
-  for (const u of raw.imageUrls.slice(0, productLearnConfig.maxDetailImagesForAnalysis)) {
+  for (const u of targets.slice(0, productLearnConfig.maxDetailImagesForAnalysis)) {
     try {
       const host = new URL(u).hostname;
       if (!productLearnConfig.imageHosts.some((re) => re.test(host))) continue;
@@ -175,10 +185,14 @@ async function withDetailImageText(raw: RawProductData): Promise<RawProductData>
     }
   }
   if (!images.length) return raw;
-  try {
-    const { text } = await productAnalyzer.extractFromImages(images, "상세 이미지");
-    return { ...raw, descriptionText: `${raw.descriptionText}\n${text}`.trim().slice(0, brightDataConfig.maxDescriptionChars) };
-  } catch {
-    return raw;
+  const texts: string[] = [];
+  for (let i = 0; i < images.length; i += MAX_IMAGES_PER_EXTRACT) {
+    try {
+      const { text } = await productAnalyzer.extractFromImages(images.slice(i, i + MAX_IMAGES_PER_EXTRACT), `상세 이미지 ${i + 1}~${Math.min(images.length, i + MAX_IMAGES_PER_EXTRACT)}`);
+      if (text.trim()) texts.push(text.trim());
+    } catch {
+      /* 이 묶음은 건너뛴다 */
+    }
   }
+  return texts.length ? { ...raw, detailImageInsights: texts.join("\n").slice(0, 8000) } : raw;
 }

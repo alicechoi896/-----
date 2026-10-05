@@ -13,6 +13,7 @@ import { getCurrentUserId } from "./repositories";
  * 사용자가 많아지면 DB·Redis 기반으로 바꾼다 (docs/OPERATIONS.md).
  */
 export const LIMITS = {
+  "product-photo-proxy": 60, // 제품 사진 전달 (블로그 사진 자동 불러오기, 저장 없음)
   "brightdata-status": 40, // Bright Data 수집 상태 확인 (같은 작업, 3초 간격 · 새 Trigger 아님)
   "youtube-outlier": 10, // 아웃라이어 점수 (사용자 YouTube 키 할당량: 채널당 1 unit + 영상 50개당 1 unit)
   "xhs-resolve": 20, // 샤오홍슈 영상 주소 찾기 (서버 IP 공유 → 가장 보수적으로)

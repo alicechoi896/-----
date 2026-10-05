@@ -33,6 +33,8 @@ export function ProductAnalysisView({ analysis }: { analysis: ProductAnalysisCon
         <p className="rounded-control bg-subtle px-4 py-3 text-[15px] font-medium text-fg">{s.oneLiner}</p>
         <div className="mt-5 grid gap-x-8 gap-y-6 md:grid-cols-2">
           <Group title="핵심 특징" items={s.keyFeatures} />
+          {Boolean(s.keySpecs?.length) && <Group title="주요 스펙" items={s.keySpecs ?? []} />}
+          {Boolean(s.useCases?.length) && <Group title="사용 상황" items={s.useCases ?? []} />}
           <Group title="핵심 장점" items={s.keyBenefits} />
           <Group title="차별점" items={s.differentiators} />
           <Group title="추천 대상" items={s.targetAudience} />

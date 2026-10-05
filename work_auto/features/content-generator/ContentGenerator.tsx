@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, History, Loader2, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
 import { getGeneratorConfig } from "@/lib/generators/configs";
 import { GENERATION_MODES, PRECISE_STAGES, supportsPrecise, type GenerationMode, type PreciseStage } from "@/lib/generators/quality";
@@ -32,6 +32,38 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
   const [error, setError] = useState<string | null>(null);
   // 사진(브라우저에서만 처리, 서버에 올리지 않음). 결과 미리보기와 ZIP 다운로드에 쓴다
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // 제품 사진 자동 불러오기 (사진 칸이 있는 기능 + 제품 선택): 제품을 바꿀 때만
+  const photoField = config.fields.find((f) => f.type === "images");
+  const pickedProductId = config.productField ? (values[config.productField] ?? "") : "";
+  const [incomingPhotos, setIncomingPhotos] = useState<{ key: string; files: File[] } | null>(null);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!photoField || !pickedProductId) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const d = await api.products.get(pickedProductId);
+        const n = Math.min(5, d.source?.raw.imageUrls?.length ?? 0);
+        if (!n) return;
+        setPhotoNote(`제품 사진 ${n}장을 불러오는 중…`);
+        const files: File[] = [];
+        for (let i = 0; i < n; i++) {
+          const res = await fetch(`/api/products/${pickedProductId}/images/${i}`, { cache: "no-store" }).catch(() => null);
+          if (!res?.ok) continue;
+          const blob = await res.blob();
+          files.push(new File([blob], `product-photo-${i + 1}.${(blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg")}`, { type: blob.type }));
+        }
+        if (!alive) return;
+        setPhotoNote(files.length ? `제품 라이브러리의 제품 사진 ${files.length}장을 불러왔습니다.` : null);
+        if (files.length) setIncomingPhotos({ key: `${pickedProductId}:${Date.now()}`, files });
+      } catch {
+        if (alive) setPhotoNote(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [photoField, pickedProductId]);
   // 이 결과를 만들 때 쓴 사진 (생성 후 사진을 바꿔도 결과 미리보기는 그대로)
   const [resultPhotos, setResultPhotos] = useState<PhotoItem[]>([]);
   const history = useAsync(() => api.contents.list({ featureId }), [featureId]);
@@ -111,6 +143,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
                   field={field}
                   photos={photos}
                   onChange={setPhotos}
+                  incoming={incomingPhotos}
                   baseName={values.mainKeyword || values.topic || "제품사진"}
                 />
               ) : (
@@ -123,6 +156,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               ),
             )}
           </form>
+          {photoNote && <p className="mt-3 text-xs text-fg-subtle" data-photo-note>{photoNote} 필요 없는 사진은 빼고, 직접 올린 사진과 함께 쓸 수 있습니다.</p>}
           {showHonesty && (
             <Notice tone="neutral" icon={ShieldCheck} className="mt-5">
               실제 경험을 입력하지 않으면 &lsquo;직접 사용했다&rsquo;는 표현 없이 제품 정보 기반의 소개 글로 작성합니다.
