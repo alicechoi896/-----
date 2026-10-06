@@ -79,3 +79,10 @@
 | POST | `/api/script-formats` | 만들기 (`ai-learning` 권한) |
 | PUT / PATCH / DELETE | `/api/script-formats/:id` | 수정 / 기본으로 / 삭제 |
 | POST | `/api/script-formats/analyze` | 참고 대본 → 가이드라인 (AI 1회, 저장 안 함, 1분 20회 한도 공유) |
+
+## v0.9.50: 제목만 300개 · 제목 후보 구성 · 썸네일 문구
+
+- 제목만 담은 참고(트렌드·영상 검색에서 담은 제목, 썸네일 문구)는 포맷당 최대 300개, 대본이 있는 참고는 30개 (`SCRIPT_FORMAT_LIMITS.titleOnly` / `examples`).
+- 생성 프롬프트의 [잘된 제목]은 매번 무작위 20개(포맷 제목 100개 초과면 30개) — `promptTitles()`.
+- 제목 후보 구성 `titleMix()` (10개 기준): 포맷 제목 ≤100 → AI 4 · 포맷 패턴 4 · 플랫폼 트렌드 2, >100 → 2 · 7 · 1. 트렌드 제목은 Keyword Intelligence `topTitles`(이미 받은 데이터, 추가 호출 0). 없는 몫은 AI 로.
+- YouTube 트렌드 [대본 포맷에 담기] → 썸네일 문구도 함께 (`/api/trends/youtube/thumbnail-text`, AI Vision, 최대 10개). 남의 영상 자막은 YouTube API 로 받을 수 없어 Hook·CTA 는 담지 않는다.

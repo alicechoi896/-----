@@ -126,7 +126,8 @@ async function fromYouTube(seed: string, requestId: string): Promise<KeywordInte
   console.info("[KeywordIntel]", JSON.stringify({ requestId, platform: "youtube", calls: "search.list+videos.list", seed }));
   const videos: KeywordEvidenceVideo[] = await yt.keywordEvidence(seed, keywordIntelConfig.youtubeVideos);
   const docs = videos.map((v) => ({ title: v.title, body: v.description, tags: v.tags, weight: recency(v.publishedAt) * (1 + Math.log10((v.views ?? 0) + 10) / 6) }));
-  return { seed, source: "youtube", sampleSize: videos.length, candidates: extract(seed, docs, "youtube", `관련 영상 ${videos.length}개`), trendSignals: [], fetchedAt: new Date().toISOString() };
+  const topTitles = [...videos].sort((a, b) => (b.views ?? 0) * recency(b.publishedAt) - (a.views ?? 0) * recency(a.publishedAt)).map((v) => v.title.trim()).filter(Boolean).slice(0, 10);
+  return { seed, source: "youtube", sampleSize: videos.length, candidates: extract(seed, docs, "youtube", `관련 영상 ${videos.length}개`), trendSignals: [], fetchedAt: new Date().toISOString(), topTitles };
 }
 
 async function fromNaver(seed: string, requestId: string): Promise<KeywordIntelligence> {
@@ -148,7 +149,8 @@ async function fromNaver(seed: string, requestId: string): Promise<KeywordIntell
   } catch {
     /* 데이터랩 실패는 후보만으로 */
   }
-  return { seed, source: "naver", sampleSize: posts.length, candidates, trendSignals, fetchedAt: new Date().toISOString() };
+  const topTitles = [...posts].sort((a, b) => recency(b.postdate) - recency(a.postdate)).map((p) => p.title.trim()).filter(Boolean).slice(0, 10);
+  return { seed, source: "naver", sampleSize: posts.length, candidates, trendSignals, fetchedAt: new Date().toISOString(), topTitles };
 }
 
 export const keywordIntelligence = {

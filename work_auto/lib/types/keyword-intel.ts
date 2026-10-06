@@ -31,4 +31,6 @@ export interface KeywordIntelligence {
   fetchedAt: string;
   /** 실패·대체 사유 등 */
   note?: string;
+  /** 실제 플랫폼에서 잘된 제목 (조회수·최근성 순, 최대 10개 — 제목 후보 '트렌드' 몫에 참고, v0.9.50) */
+  topTitles?: string[];
 }

@@ -235,7 +235,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         added.push(ex);
       }
     }
-    const room = Math.max(0, SCRIPT_FORMAT_LIMITS.examples - form.examples.length);
+    const room = Math.max(0, SCRIPT_FORMAT_LIMITS.examples - form.examples.filter((e) => e.text.trim()).length);
     const kept = added.slice(0, room);
     set("examples", [...kept, ...form.examples]);
     setNote({
@@ -330,18 +330,18 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[13.5px] font-semibold text-fg">
             ① 참고 대본 · {filled.length}개{titleOnly > 0 && <span className="text-xs font-normal text-fg-muted"> (제목만 {titleOnly}개)</span>}{" "}
-            <span className="text-xs font-normal text-fg-subtle">(최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 잘된 영상의 대본일수록 좋습니다)</span>
+            <span className="text-xs font-normal text-fg-subtle">(대본 최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 제목만 최대 {SCRIPT_FORMAT_LIMITS.titleOnly}개 · 잘된 영상의 대본일수록 좋습니다)</span>
           </p>
           <div className="flex flex-wrap gap-2">
             <input ref={fileRef} type="file" accept=".txt,.md,.srt,.vtt,text/plain" multiple hidden onChange={(e) => void importFiles(e.target.files)} />
-            <Button size="sm" variant="secondary" icon={FileUp} disabled={form.examples.length >= SCRIPT_FORMAT_LIMITS.examples} onClick={() => fileRef.current?.click()}>
+            <Button size="sm" variant="secondary" icon={FileUp} disabled={form.examples.filter((e) => e.text.trim()).length >= SCRIPT_FORMAT_LIMITS.examples} onClick={() => fileRef.current?.click()}>
               메모장 파일 불러오기 (.txt)
             </Button>
             <Button
               size="sm"
               variant="ghost"
               icon={Plus}
-              disabled={form.examples.length >= SCRIPT_FORMAT_LIMITS.examples}
+              disabled={form.examples.length >= SCRIPT_FORMAT_LIMITS.examples + SCRIPT_FORMAT_LIMITS.titleOnly}
               onClick={() => {
                 set("examples", [{ title: "", views: null, text: "" }, ...form.examples]);
                 setExpanded(true);

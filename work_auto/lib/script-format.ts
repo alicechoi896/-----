@@ -5,8 +5,10 @@
 import type { ScriptExample, ScriptFormatType } from "@/lib/types/script-format";
 
 export const SCRIPT_FORMAT_LIMITS = {
-  /** 포맷 하나에 넣는 참고 대본 수 */
+  /** 포맷 하나에 넣는 참고 대본 수 (대본 내용이 있는 것) */
   examples: 30,
+  /** 제목만 담은 참고 (트렌드·영상 검색에서 담은 제목·썸네일 문구, v0.9.50) */
+  titleOnly: 300,
   exampleChars: 2000,
   titleChars: 200,
   guidelineChars: 3000,
@@ -141,10 +143,15 @@ export function cleanScriptExamples(value: unknown): ScriptExample[] {
       views: views != null && Number.isFinite(views) && views >= 0 ? Math.round(views) : null,
       text,
     });
-    if (out.length >= SCRIPT_FORMAT_LIMITS.examples) break;
   }
-  return out;
+  // 대본 있는 참고 30개 + 제목만 300개 (순서 유지)
+  let scripts = 0;
+  let titles = 0;
+  return out.filter((e) => (e.text ? ++scripts <= SCRIPT_FORMAT_LIMITS.examples : ++titles <= SCRIPT_FORMAT_LIMITS.titleOnly));
 }
+
+/** 제목만 담은 참고 개수 */
+export const titleOnlyCount = (examples: ScriptExample[]) => examples.filter((e) => !e.text.trim() && e.title.trim()).length;
 
 /** 생성할 때 같이 보낼 예시: 조회수가 높은 순, 짧게 */
 export function promptExamples(examples: ScriptExample[]): ScriptExample[] {
@@ -156,12 +163,27 @@ export function promptExamples(examples: ScriptExample[]): ScriptExample[] {
 }
 
 /** 제목 패턴 참고용: 조회수 높은 순 제목 최대 5개 */
-export function promptTitles(examples: ScriptExample[]): string[] {
-  return [...examples]
-    .filter((e) => e.title.trim())
-    .sort((a, b) => (b.views ?? -1) - (a.views ?? -1))
-    .slice(0, 5)
-    .map((e) => e.title.trim().slice(0, 80));
+export function promptTitles(examples: ScriptExample[], max = 20): string[] {
+  // v0.9.50: 매번 같은 제목만 보내 같은 제목이 반복되던 문제 → 생성할 때마다 무작위로 고른다 (조회수 높은 제목은 조금 더 자주)
+  const pool = examples.filter((e) => e.title.trim()).map((e) => ({ t: e.title.trim().slice(0, 80), w: Math.random() * (1 + Math.log10((e.views ?? 0) + 10) / 4) }));
+  return pool.sort((a, b) => b.w - a.w).slice(0, max).map((x) => x.t);
+}
+
+/** 포맷의 제목 수 (제목 구성 비율을 정하는 기준) */
+export const formatTitleCount = (examples: ScriptExample[]) => examples.filter((e) => e.title.trim()).length;
+
+/**
+ * 제목 후보 구성 (v0.9.50, 10개 기준). 포맷 제목이 100개 이하면 AI 4 · 포맷 4 · 트렌드 2, 넘으면 AI 2 · 포맷 7 · 트렌드 1.
+ * 포맷·트렌드 제목이 없으면 그 몫은 AI 추천으로 돌린다. 다른 개수(예: 20개)는 비율대로 늘린다.
+ */
+export function titleMix(total: number, formatTitles: number, trendTitles: number): { ai: number; format: number; trend: number } {
+  const base = formatTitles > 100 ? { ai: 2, format: 7, trend: 1 } : { ai: 4, format: 4, trend: 2 };
+  const scale = total / 10;
+  let format = formatTitles ? Math.round(base.format * scale) : 0;
+  let trend = trendTitles ? Math.round(base.trend * scale) : 0;
+  format = Math.min(format, total);
+  trend = Math.min(trend, total - format);
+  return { ai: total - format - trend, format, trend };
 }
 
 /** 블로그 글: 대본은 없지만 대본 포맷의 '잘된 제목'을 제목 패턴으로 쓴다 */

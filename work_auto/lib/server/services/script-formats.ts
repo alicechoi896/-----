@@ -167,14 +167,14 @@ export const scriptFormatService = {
     const formatId = typeof input.formatId === "string" ? input.formatId : "";
     if (!formatId) {
       const name = String(input.newFormat?.name ?? "").trim();
-      const kept = incoming.slice(0, SCRIPT_FORMAT_LIMITS.examples);
+      const kept = incoming.slice(0, SCRIPT_FORMAT_LIMITS.titleOnly);
       const format = await this.create({ name, contentType: input.newFormat?.contentType as ScriptFormatType, channelIds: [], examples: kept, guideline: "", isDefault: false });
       return { format, added: kept.length, duplicated: 0, overLimit: incoming.length - kept.length };
     }
     const current = await own(formatId);
     const seen = new Set(current.examples.map(exampleKey));
     const fresh = incoming.filter((e) => !seen.has(exampleKey(e)));
-    const room = Math.max(0, SCRIPT_FORMAT_LIMITS.examples - current.examples.length);
+    const room = Math.max(0, SCRIPT_FORMAT_LIMITS.titleOnly - current.examples.filter((e) => !e.text.trim()).length);
     const kept = fresh.slice(0, room);
     let format = current;
     if (kept.length) {

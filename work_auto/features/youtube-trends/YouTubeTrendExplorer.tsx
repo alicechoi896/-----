@@ -363,7 +363,7 @@ export function YouTubeTrendExplorer() {
           >
             <PanelRightOpen className="size-4" />
           </button>
-          <SaveTitlesToFormat titles={[{ title: r.title, views: r.views }]} source="YouTube 트렌드" buttonLabel="제목 대본 포맷에 담기" variant="ghost" iconOnly />
+          <SaveTitlesToFormat titles={[{ title: r.title, views: r.views, videoId: r.videoId }]} source="YouTube 트렌드" buttonLabel="제목·썸네일 문구 대본 포맷에 담기" variant="ghost" iconOnly />
           <MakeMenu
             iconOnly
             label="이 트렌드로 영상 만들기"
@@ -460,7 +460,7 @@ export function YouTubeTrendExplorer() {
                     선택 해제
                   </Button>
                   <SaveTitlesToFormat
-                    titles={items.filter((r) => picked.has(r.id)).map((r) => ({ title: r.title, views: r.views }))}
+                    titles={items.filter((r) => picked.has(r.id)).map((r) => ({ title: r.title, views: r.views, videoId: r.videoId }))}
                     source="YouTube 트렌드"
                     buttonLabel={`제목 ${picked.size}개 대본 포맷에 담기`}
                   />

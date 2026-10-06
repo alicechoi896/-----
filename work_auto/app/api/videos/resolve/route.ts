@@ -1,13 +1,14 @@
 import { requireAccess } from "@/lib/server/auth";
 import { handle, readJson } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/rate-limit";
-import { resolveXiaohongshu } from "@/lib/server/providers/video/xiaohongshu-resolver";
+import { resolveXiaohongshuWithFallback } from "@/lib/server/providers/video/xhs-fallback";
 import { resolveDouyin } from "@/lib/server/providers/douyin/douyin-resolver";
 import { AppError } from "@/lib/server/http";
 import { detectPlatform } from "@/lib/video-links";
 
 /**
  * POST /api/videos/resolve { url } — 샤오홍슈 노트·도우인 영상의 재생 주소 찾기 (도우인은 TikHub, 응답에 있는 주소만).
+ * 샤오홍슈 페이지가 막히면 TikHub 노트 상세 1회로 대신 찾는다 (lib/server/providers/video/xhs-fallback.ts).
  * 서버는 주소만 돌려주고, 영상 파일은 사용자 브라우저가 샤오홍슈 영상 서버에서 직접 받는다 (저장·트래픽 비용 0).
  */
 export async function POST(request: Request) {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
         streams: [{ codec: "h264", width: 0, height: 0, size: null, url: v.playUrls[0], backupUrls: v.playUrls.slice(1) }],
       };
     }
-    return resolveXiaohongshu(target);
+    // 페이지가 막히면 TikHub 노트 상세로 한 번 더 (v0.9.50)
+    return resolveXiaohongshuWithFallback(target);
   });
 }

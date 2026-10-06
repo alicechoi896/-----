@@ -74,3 +74,10 @@
 ## 8. 아직 확인하지 못한 것
 
 - TikHub 문서에 검색 **응답 본문 구조**가 없다. `parse.ts` 가 `data.data.items[].note` 등 여러 위치를 읽도록 만들었지만, 실제 키로 처음 검색할 때 결과가 비어 있으면 응답 구조를 확인해 `parse.ts` 만 고친다
+
+## v0.9.50: 다운로드 대체 경로
+
+영상 검색으로 담은 노트가 샤오홍슈 페이지에서 막히면(XHS_BLOCKED·XHS_PARSE) `resolveXiaohongshuWithFallback()`:
+1. xsec_source 를 app_share → pc_search → pc_feed 로 바꿔 다시 (샤오홍슈 페이지, 비용 0)
+2. 그래도 막히면 TikHub `get_video_note_detail` 1회($0.01)로 재생 주소(H.264)를 받는다. 같은 노트 10분 기억·동시 요청 1번. 로그 `[XhsResolve]`.
+영상 파일은 여전히 사용자 브라우저가 xhscdn 에서 직접 받는다.

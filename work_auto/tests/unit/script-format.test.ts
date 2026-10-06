@@ -90,9 +90,10 @@ describe("대본 포맷: 메모장 파일 나누기", () => {
     expect(promptExamples(cleaned).map((e) => e.views)).toEqual([29, 28]);
   });
 
-  it("잘된 제목: 조회수 높은 순 5개, 블로그는 제목 패턴만 (제품 글 → 제품 홍보, 정보 글 → 정보성)", () => {
+  it("잘된 제목: 빈 제목은 빼고 무작위 (v0.9.50), 블로그는 제목 패턴만 (제품 글 → 제품 홍보, 정보 글 → 정보성)", () => {
     const ex = Array.from({ length: 7 }, (_, i) => ({ title: i === 3 ? "" : `제목 ${i}`, views: i * 10, text: "대본" }));
-    expect(promptTitles(ex)).toEqual(["제목 6", "제목 5", "제목 4", "제목 2", "제목 1"]);
+    expect(promptTitles(ex).sort()).toEqual(["제목 0", "제목 1", "제목 2", "제목 4", "제목 5", "제목 6"]);
+    expect(promptTitles(ex, 3)).toHaveLength(3);
     expect(blogTitleFormatTypeOf("blog-product-writing", {})).toBe("product");
     expect(blogTitleFormatTypeOf("blog-auto-writing", { productId: "p" })).toBe("product");
     expect(blogTitleFormatTypeOf("blog-auto-writing", {})).toBe("info");
@@ -122,6 +123,6 @@ describe("대본 포맷에 담기: 제목칸에만 (v0.9.30)", () => {
       { title: "대본 있음", views: 10, text: "아무거나 사면 후회합니다. 이 세 가지만 보세요." },
     ];
     expect(promptExamples(ex).map((e) => e.title)).toEqual(["대본 있음"]);
-    expect(promptTitles(ex)).toEqual(["제목만", "대본 있음"]);
+    expect(promptTitles(ex).sort()).toEqual(["대본 있음", "제목만"]);
   });
 });

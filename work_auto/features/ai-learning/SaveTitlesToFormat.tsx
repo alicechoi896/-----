@@ -8,7 +8,8 @@ import { api } from "@/lib/api-client";
 import { SCRIPT_FORMAT_LIMITS, SCRIPT_FORMAT_TYPES, formatViews } from "@/lib/script-format";
 import { Button, Combobox, FormField, Input, Modal, Notice, SegmentedControl, type ButtonSize, type ButtonVariant } from "@/components/ui";
 
-type TitleItem = { title: string; views: number | null };
+/** videoId 가 있으면(YouTube) '썸네일 문구도 함께 담기'를 고를 수 있다 */
+type TitleItem = { title: string; views: number | null; videoId?: string };
 
 /**
  * [대본 포맷에 담기] — 트렌드 찾기(YouTube·NAVER)·영상 검색에서 마음에 든 제목·키워드를
@@ -42,6 +43,9 @@ export function SaveTitlesToFormat({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // 썸네일 문구 (AI 가 썸네일 이미지를 읽음, 최대 10개)
+  const withVideo = titles.filter((t) => t.videoId);
+  const [withThumb, setWithThumb] = useState(true);
 
   const list = titles.filter((t) => t.title.trim());
 
@@ -66,15 +70,27 @@ export function SaveTitlesToFormat({
     setSaving(true);
     setError(null);
     try {
+      let all: TitleItem[] = list.map(({ title, views }) => ({ title, views }));
+      let thumbNote = "";
+      if (withThumb && withVideo.length) {
+        try {
+          const { texts } = await api.trends.thumbnailText(withVideo.slice(0, 10).map((t) => t.videoId!));
+          const thumbs = withVideo.map((t) => (texts[t.videoId!] ? { title: texts[t.videoId!], views: t.views } : null)).filter((x): x is TitleItem => Boolean(x));
+          all = [...all, ...thumbs];
+          thumbNote = ` · 썸네일 문구 ${thumbs.length}개`;
+        } catch (e) {
+          thumbNote = ` · 썸네일 문구는 읽지 못했습니다 (${e instanceof Error ? e.message : "오류"})`;
+        }
+      }
       const r = await api.scriptFormats.addTitles(
-        mode === "existing" ? { formatId, titles: list } : { newFormat: { name: name.trim(), contentType }, titles: list },
+        mode === "existing" ? { formatId, titles: all } : { newFormat: { name: name.trim(), contentType }, titles: all },
       );
       setFormats((prev) => (prev ? [r.format, ...prev.filter((f) => f.id !== r.format.id)] : [r.format]));
       setFormatId(r.format.id);
       setMode("existing");
       setName("");
       setDone(
-        `'${r.format.name}'에 제목 ${r.added}개를 담았습니다${r.duplicated ? ` · 이미 있는 제목 ${r.duplicated}개 제외` : ""}${r.overLimit ? ` · 한도(${SCRIPT_FORMAT_LIMITS.examples}개)로 ${r.overLimit}개 제외` : ""}.`,
+        `'${r.format.name}'에 제목 ${r.added}개를 담았습니다${thumbNote}${r.duplicated ? ` · 이미 있는 제목 ${r.duplicated}개 제외` : ""}${r.overLimit ? ` · 한도(제목만 ${SCRIPT_FORMAT_LIMITS.titleOnly}개)로 ${r.overLimit}개 제외` : ""}.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "담지 못했습니다.");
@@ -86,7 +102,7 @@ export function SaveTitlesToFormat({
   const options = (formats ?? []).map((f) => ({
     value: f.id,
     label: `${f.isDefault ? "★ " : ""}${f.name}`,
-    description: `${SCRIPT_FORMAT_TYPES.find((t) => t.value === f.contentType)?.label ?? ""} · 참고 ${f.examples.length}/${SCRIPT_FORMAT_LIMITS.examples}`,
+    description: `${SCRIPT_FORMAT_TYPES.find((t) => t.value === f.contentType)?.label ?? ""} · 제목 ${f.examples.filter((e) => !e.text.trim()).length}/${SCRIPT_FORMAT_LIMITS.titleOnly} · 대본 ${f.examples.filter((e) => e.text.trim()).length}/${SCRIPT_FORMAT_LIMITS.examples}`,
   }));
   const canSave = list.length > 0 && (mode === "existing" ? Boolean(formatId) : Boolean(name.trim()));
 
@@ -129,6 +145,17 @@ export function SaveTitlesToFormat({
               </li>
             ))}
           </ul>
+          {withVideo.length > 0 && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-control border border-line px-3 py-2 text-[13px] text-fg" data-with-thumb>
+              <input type="checkbox" checked={withThumb} onChange={(e) => setWithThumb(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-brand)]" />
+              <span>
+                썸네일 문구도 함께 담기
+                <span className="block text-xs text-fg-subtle">
+                  AI 가 썸네일 이미지의 큰 글자를 읽어 제목처럼 담습니다 (최대 10개 · AI {Math.ceil(Math.min(10, withVideo.length) / 8)}회, YouTube API 0회). 영상 대본(Hook·CTA)은 YouTube 가 남의 영상 자막을 주지 않아 담지 않습니다.
+                </span>
+              </span>
+            </label>
+          )}
           <SegmentedControl
             size="sm"
             options={[

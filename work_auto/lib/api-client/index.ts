@@ -131,6 +131,8 @@ function qs(params: Record<string, string | number | undefined>) {
 
 export const api = {
   trends: {
+    /** 썸네일 큰 글자 읽기 (AI Vision, 최대 10개) */
+    thumbnailText: (videoIds: string[]) => request<{ texts: Record<string, string>; aiCalls: number }>("/api/trends/youtube/thumbnail-text", { method: "POST", body: json({ videoIds }) }),
     /** 한 페이지(최대 50개 조회). 이어서 부를 때는 q.pageToken 에 nextPageToken 을 넣는다 */
     /** fill: 걸러져 남는 영상이 적으면 서버가 다음 페이지를 이어서 받는다 (첫 검색용) */
     youtube: ({ scope: _scope, ...q }: YouTubeTrendQuery, opts: { fill?: boolean } = {}) => {

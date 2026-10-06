@@ -5,7 +5,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { formatViews, promptExamples, promptTitles } from "@/lib/script-format";
+import { formatTitleCount, formatViews, promptExamples, promptTitles, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -101,7 +101,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
   }
   // 대본 포맷의 참고 대본 제목 → 영상 제목·블로그 글 제목의 패턴 참고 (복사 금지)
   if (ctx.scriptFormat) {
-    const titles = promptTitles(ctx.scriptFormat.examples);
+    const titles = promptTitles(ctx.scriptFormat.examples, formatTitleCount(ctx.scriptFormat.examples) > 100 ? 30 : 20);
     if (titles.length) {
       blocks.push(
         block(`대본 포맷 > 잘된 제목 (${ctx.scriptFormatUse === "titles" ? "블로그 글 제목" : "영상 제목"} 패턴 참고 — 그대로 쓰지 않는다)`, [
@@ -191,6 +191,27 @@ export function renderContentPrompt(
   // 콘텐츠 스타일을 여러 개 고르면 후보·대본을 그 유형들로 섞는다 (v0.9.41)
   if (Array.isArray(input.style) && input.style.length > 1)
     userInput.push(`스타일 섞기: 고른 스타일 ${input.style.length}가지(${input.style.map((x) => optionLabel("style", x)).join(" / ")})를 골고루 섞는다 — 제목·Hook·CTA 후보는 유형별로 나눠 만들고, 대본(또는 본문)도 편마다 다른 유형을 따른다.`);
+
+  // 제목 후보 구성: AI 추천 · 내 대본 포맷 패턴 · 실제 플랫폼 트렌드 (v0.9.50)
+  const titleSec = config.outputs.find((o) => o.key === "titles");
+  if (titleSec) {
+    const total = titleSec.count ?? 10;
+    const fCount = ctx.scriptFormat ? formatTitleCount(ctx.scriptFormat.examples) : 0;
+    const trendTitles = ctx.keywordIntel?.topTitles ?? [];
+    const mix = titleMix(total, fCount, trendTitles.length);
+    userInput.push(
+      [
+        `제목 구성(titles ${total}개): AI 가 지금 뜰 만한 제목 ${mix.ai}개`,
+        mix.format ? `+ [대본 포맷 > 잘된 제목]의 패턴을 바꿔 쓴 제목 ${mix.format}개` : "",
+        mix.trend ? `+ [실제 플랫폼에서 잘된 제목]을 참고해 지금 주제로 바꿔 쓴 제목 ${mix.trend}개` : "",
+        "— 섞어서 배열하고, 같은 구조·같은 첫 단어가 반복되지 않게 한다. 어느 경우에도 원문 제목을 그대로 쓰지 않는다.",
+      ].filter(Boolean).join(" "),
+    );
+    if (mix.trend) userInput.push(`실제 플랫폼에서 잘된 제목: ${trendTitles.slice(0, 6).join(" / ")}`);
+  }
+  // 설명글: 설명란에 그대로 붙여 넣을 글만 (v0.9.50)
+  if (config.outputs.some((o) => o.key === "description"))
+    userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. '이 설명은 ~입니다', '설명글:', '핵심 요약:', '추천 대상:' 같은 안내·항목 이름·괄호 메모를 쓰지 않는다. 시청자에게 바로 말하듯 제품(주제) 소개 → 장점·확인할 점 순서로 3~6문단, 문단 사이는 빈 줄, 마지막 문단은 CTA(행동 유도)로 끝낸다.");
 
   const user = [
     block("작업", template.task),

@@ -122,6 +122,12 @@ const obj = (v: unknown): Json => (v && typeof v === "object" ? (v as Json) : {}
 const RESOLVE_TTL_MS = 10 * 60 * 1000;
 const resolved = new Map<string, { at: number; value: Promise<XhsVideo> }>();
 
+/** 링크 → 노트 ID·토큰 (TikHub 대체 경로용) */
+export async function xhsNoteOf(input: string): Promise<{ noteId: string; token: string | null }> {
+  const n = await normalize(input);
+  return { noteId: n.noteId, token: n.token };
+}
+
 export async function resolveXiaohongshu(input: string): Promise<XhsVideo> {
   const norm = await normalize(input);
   const key = `${norm.noteId}:${norm.token ?? ""}`;
@@ -135,8 +141,15 @@ export async function resolveXiaohongshu(input: string): Promise<XhsVideo> {
 }
 
 async function resolveNote({ noteId, token, source }: { noteId: string; token: string | null; source: string }): Promise<XhsVideo> {
-  const qs = new URLSearchParams({ ...(token ? { xsec_token: token } : {}), xsec_source: source });
-  const { text, finalUrl } = await fetchText(`https://www.xiaohongshu.com/explore/${noteId}?${qs.toString()}`);
+  // v0.9.50: 영상 검색(TikHub)으로 받은 토큰은 app_share 로 안 열리는 경우가 있어 pc_search·pc_feed 로 한 번씩 더 (샤오홍슈 페이지 요청, 비용 0)
+  const sources = [...new Set([source, "pc_search", "pc_feed"])];
+  let text = "";
+  let finalUrl = "";
+  for (const src of token ? sources : [source]) {
+    const qs = new URLSearchParams({ ...(token ? { xsec_token: token } : {}), xsec_source: src });
+    ({ text, finalUrl } = await fetchText(`https://www.xiaohongshu.com/explore/${noteId}?${qs.toString()}`));
+    if (!/\/login|\/404/.test(finalUrl)) break;
+  }
   if (/\/login|\/404/.test(finalUrl)) {
     throw new AppError(
       "XHS_BLOCKED",

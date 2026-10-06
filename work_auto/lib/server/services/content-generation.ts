@@ -121,6 +121,18 @@ function dedupeKeywords(list: string[]): string[] {
   return out;
 }
 /** 키워드 30개·태그·해시태그에 주요 키워드를 모두 포함 (v0.9.46: 여러 개 넣어도 하나만 반영되던 문제) */
+/** 설명글에서 '이 설명은 ~입니다', '핵심 요약:' 같은 안내·항목 이름을 지운다 (설명란에 바로 붙여 넣게, v0.9.50) */
+export function cleanDescription(text: string): string {
+  const LABEL = /^\s*(?:[#*■▶●\-•]+\s*)?(?:\[?(?:설명글|영상 설명|핵심 요약|요약|주요 내용|추천 대상|확인할 점|마무리 안내|마무리|CTA|행동 유도)\]?)\s*[:：]\s*/;
+  return text
+    .split("\n")
+    .filter((l) => !/^\s*\(?\s*(?:이|본|아래)\s*(?:설명|설명글|글)(?:은|는|란은)\s.*(?:입니다|이에요|예요)[.\s)]*$/.test(l))
+    .map((l) => l.replace(LABEL, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function mergeUserKeywords(config: Prepared["config"], input: Record<string, unknown>, output: Record<string, GeneratedValue>) {
   const mine = userKeywords(input);
   for (const sec of config.outputs) {
@@ -140,6 +152,7 @@ async function finish(
 ): Promise<GeneratedContent> {
   const { feature, config, featureId, channelId, userId, input, context, template } = p;
   mergeUserKeywords(config, input, output);
+  if (typeof output.description === "string") output.description = cleanDescription(output.description);
   if (context.honestyGuard) {
     const violations = findHonestyViolations(JSON.stringify(output));
     if (violations.length) context.summary.notes.push(`정직성 검사 경고: "${violations.join('", "')}" 표현 확인 필요`);
