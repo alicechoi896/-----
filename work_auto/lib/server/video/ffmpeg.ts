@@ -1,7 +1,10 @@
 import "server-only";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { chmod, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 
 /**
  * FFmpeg 실행 (v0.9.51). ffmpeg-static 의 실행 파일을 쓴다 (Vercel: 리눅스 바이너리를 함수에 포함, next.config outputFileTracingIncludes).
@@ -28,14 +31,46 @@ export function ffmpegPath(): string {
   return found;
 }
 
+/**
+ * 안전장치: 배포 때 ffmpeg-static 설치 스크립트가 막혀 실행 파일이 없으면(리눅스),
+ * 같은 버전 바이너리를 /tmp 에 한 번 받아 쓴다 (함수 인스턴스마다 1번, 약 30MB).
+ */
+const FALLBACK_URL = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz";
+let downloading: Promise<string> | null = null;
+
+export async function ensureFfmpeg(): Promise<string> {
+  try {
+    return ffmpegPath();
+  } catch {
+    if (process.platform !== "linux" || process.arch !== "x64") throw new Error("FFMPEG_MISSING");
+  }
+  const target = path.join(os.tmpdir(), "ffmpeg-b6.1.1");
+  if (existsSync(target)) return (cached = target);
+  downloading ??= (async () => {
+    console.info("[VideoJob] ffmpeg 실행 파일이 없어 /tmp 에 받는 중");
+    const res = await fetch(FALLBACK_URL, { signal: AbortSignal.timeout(90_000) });
+    if (!res.ok) throw new Error("FFMPEG_MISSING");
+    const bin = gunzipSync(Buffer.from(await res.arrayBuffer()));
+    await writeFile(target, bin);
+    await chmod(target, 0o755);
+    cached = target;
+    return target;
+  })().catch((e) => {
+    downloading = null;
+    throw e;
+  });
+  return downloading;
+}
+
 export interface FfmpegResult {
   stderr: string;
 }
 
 /** ffmpeg 실행. timeoutMs 를 넘기면 중단 */
-export function runFfmpeg(args: string[], timeoutMs = 120_000, cwd?: string): Promise<FfmpegResult> {
+export async function runFfmpeg(args: string[], timeoutMs = 120_000, cwd?: string): Promise<FfmpegResult> {
+  const bin = await ensureFfmpeg();
   return new Promise((resolve, reject) => {
-    const proc = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", "-y", ...args], { stdio: ["ignore", "ignore", "pipe"], cwd });
+    const proc = spawn(bin, ["-hide_banner", "-nostdin", "-y", ...args], { stdio: ["ignore", "ignore", "pipe"], cwd });
     let stderr = "";
     proc.stderr.on("data", (d: Buffer) => {
       stderr += d.toString();

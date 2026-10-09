@@ -41,5 +41,9 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "ffmpeg-static": true,
+    "unrs-resolver": true
   }
 }
