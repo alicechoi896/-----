@@ -102,10 +102,13 @@ export interface SavedFilter {
 }
 
 /** 찜한 트렌드 영상 (생성 화면 "참고 트렌드"에 먼저 나온다) */
+/** 트렌드 스크랩 (v0.9.54): YouTube 찜 + NAVER 트렌드 주제 + 인스타그램 릴스. saved_trends 테이블 */
+export type ScrapSource = "youtube" | "naver" | "instagram";
+
 export interface SavedTrend {
   id: ID;
   userId: ID;
-  source: "youtube";
+  source: ScrapSource;
   /** 트렌드 항목 ID (yt_{videoId}) — 생성 화면 "참고 트렌드" 값 */
   trendId: ID;
   videoId: string;
@@ -117,9 +120,13 @@ export interface SavedTrend {
   keywords: string[];
   tags: string[];
   views: number;
-  publishedAt: ISODate;
+  publishedAt: ISODate | null;
   /** AI 분석 결과 등 부가 정보 */
   analysis: YouTubeVideoAnalysis | null;
+  /** 스크랩 분류 (폴더 이름, '' = 분류 없음) */
+  folder?: string;
+  /** 출처별 부가 정보 (좋아요·댓글·캡션·작성자·NAVER 범위 등) */
+  meta?: Record<string, unknown>;
   createdAt: ISODate;
 }
 

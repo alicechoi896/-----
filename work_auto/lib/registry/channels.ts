@@ -1,4 +1,4 @@
-import { BookOpen, Brain, CalendarCheck, Camera, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
+import { BookOpen, Bookmark, Brain, CalendarCheck, Camera, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -95,6 +95,14 @@ export const STANDALONE_PAGES: StandalonePageDef[] = [
     description: "제품, 스타일, 히스토리, 피드백, 성과 데이터를 관리합니다. 생성할 때마다 이 데이터가 Context로 쓰입니다.",
     href: "/ai-learning",
     icon: Brain,
+    defaultTiers: ["silver", "gold", "vip"],
+  },
+  {
+    id: "scraps",
+    title: "트렌드 스크랩",
+    description: "YouTube·NAVER·Instagram 트렌드 찾기에서 스크랩한 영상·주제를 분류별로 모아 봅니다. 나중에 그 소재로 바로 원고를 만듭니다.",
+    href: "/scraps",
+    icon: Bookmark,
     defaultTiers: ["silver", "gold", "vip"],
   },
   {

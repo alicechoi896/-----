@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { MakeMenu } from "@/components/shared/MakeMenu";
+import { ScrapButton } from "@/components/shared/ScrapButton";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 import { useState } from "react";
 import { ArrowUpRight, CalendarRange, Info, Lightbulb, Link2, Search, TrendingUp, X, Zap } from "lucide-react";
@@ -454,6 +455,7 @@ function RisingTopicsCard({
                   )}
                 </div>
                 <span className="flex shrink-0 items-center gap-1">
+                  <ScrapButton item={{ source: "naver", itemId: t.id, title: t.title, url: `https://search.naver.com/search.naver?query=${encodeURIComponent(t.title)}`, keywords: t.keywords, meta: { growthRate: t.growthRate, description: t.description, category: t.category } }} />
                   <SaveTitlesToFormat titles={[{ title: t.title, views: null }]} source="NAVER 트렌드 급상승 주제" buttonLabel="대본 포맷에 담기" variant="ghost" iconOnly />
                   {makeChoices ? (
                     <MakeMenu label={makeLabel} items={makeChoices(t)} />

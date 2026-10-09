@@ -447,6 +447,29 @@ describe("트렌드·스타일·오류 기록", () => {
     for (const x of imp) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
   }, 200_000);
 
+  it("트렌드 스크랩: YouTube·NAVER·Instagram 저장 → 분류 → 옮기기 → 분류 이름 바꾸기 → 삭제, 같은 항목은 분류만 바뀜", async ({ skip }) => {
+    if (!reachable) skip();
+    type S = { id: string; source: string; folder: string; url: string };
+    const ig = (await post("/api/scraps", { source: "instagram", itemId: "DAbc123xyz", title: "청소기 릴스", keywords: ["청소기"], views: 1000, folder: "가전" })).data as S;
+    expect(ig).toMatchObject({ source: "instagram", folder: "가전", url: "https://www.instagram.com/reel/DAbc123xyz/" });
+    const nv = (await post("/api/scraps", { source: "naver", itemId: "nv_topic1", title: "겨울 난방비", url: "https://evil.com/x", folder: "" })).data as S;
+    expect(nv.url.startsWith("https://search.naver.com/")).toBe(true); // 다른 사이트 주소는 저장하지 않는다
+    const again = (await post("/api/scraps", { source: "instagram", itemId: "DAbc123xyz", title: "청소기 릴스", folder: "생활" })).data as S;
+    expect(again.id).toBe(ig.id);
+    expect(again.folder).toBe("생활");
+    expect((await post("/api/scraps", { source: "youtube", itemId: "../x", title: "x", folder: "" })).ok).toBe(false);
+    const list = (await j<{ items: S[]; folders: { name: string; count: number }[] }>("/api/scraps")).data;
+    expect(list.folders.find((x) => x.name === "생활")?.count).toBe(1);
+    await post(`/api/scraps/${nv.id}`, { folder: "생활" }, "PATCH");
+    expect(((await post("/api/scraps/folders", { from: "생활", to: "겨울 소재" }, "PATCH")).data as { moved: number }).moved).toBe(2);
+    const after = (await j<{ items: S[]; folders: { name: string }[] }>("/api/scraps")).data;
+    expect(after.folders.map((x) => x.name)).toContain("겨울 소재");
+    // YouTube 찜 목록에는 NAVER·Instagram 스크랩이 섞이지 않는다
+    const yt = (await j<{ source: string }[]>("/api/trends/youtube/saved")).data;
+    expect(yt.every((x) => x.source === "youtube")).toBe(true);
+    for (const x of [ig, nv]) await j(`/api/scraps/${x.id}`, { method: "DELETE" });
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

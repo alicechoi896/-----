@@ -17,6 +17,7 @@ import { TrendInsights } from "./TrendInsights";
 import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
 import { infoVideoHref, productVideoHref, trendPrefill } from "./trend-links";
 import { MakeMenu } from "@/components/shared/MakeMenu";
+import { ScrapButton } from "@/components/shared/ScrapButton";
 import { isOutlierHit, type OutlierScore } from "@/lib/domain/outlier";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
 
@@ -363,6 +364,7 @@ export function YouTubeTrendExplorer() {
           >
             <PanelRightOpen className="size-4" />
           </button>
+          <ScrapButton item={{ source: "youtube", itemId: r.videoId, title: r.title, url: r.url, channelName: r.channelName, thumbnailUrl: r.thumbnailUrl ?? null, keywords: r.keywords, tags: r.tags, views: r.views, publishedAt: r.publishedAt, format: r.format }} />
           <SaveTitlesToFormat titles={[{ title: r.title, views: r.views, videoId: r.videoId }]} source="YouTube 트렌드" buttonLabel="제목·썸네일 문구 대본 포맷에 담기" variant="ghost" iconOnly />
           <MakeMenu
             iconOnly

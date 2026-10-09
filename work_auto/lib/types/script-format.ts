@@ -39,8 +39,10 @@ export interface ScriptFormat {
   preferredTypes?: PreferredTypes;
   /** 피해야 할 대본 (반응이 낮았던 대본 등, 3단계). 생성할 때 '이렇게 쓰지 않는다'로 짧게 */
   badExamples?: ScriptExample[];
+  /** 캡션 (v0.9.54, 인스타그램 트렌드 등에서 담은 잘된 캡션) — 설명글·캡션 참고 */
+  captions?: string[];
   createdAt: ISODate;
   updatedAt: ISODate;
 }
 
-export type ScriptFormatInput = Pick<ScriptFormat, "name" | "contentType" | "channelIds" | "examples" | "guideline" | "isDefault" | "hooks" | "ctas" | "titlePatterns" | "preferredTypes" | "badExamples">;
+export type ScriptFormatInput = Pick<ScriptFormat, "name" | "contentType" | "channelIds" | "examples" | "guideline" | "isDefault" | "hooks" | "ctas" | "titlePatterns" | "preferredTypes" | "badExamples" | "captions">;

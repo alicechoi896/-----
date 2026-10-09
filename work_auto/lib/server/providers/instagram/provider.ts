@@ -1,7 +1,7 @@
 import "server-only";
 import type { IgReel } from "@/lib/types/instagram";
 import { tikhubRequest } from "../tikhub/client";
-import { parseReelSearch } from "./parse";
+import { parseReelSearch, shapeOf } from "./parse";
 
 /**
  * 인스타그램 릴스 검색 Provider (v0.9.53). 화면·서비스는 이 interface 만 쓴다.
@@ -10,7 +10,9 @@ import { parseReelSearch } from "./parse";
  */
 export interface InstagramProvider {
   readonly id: string;
-  searchReels(keyword: string, next?: string | null): Promise<{ items: IgReel[]; next: string | null }>;
+  searchReels(keyword: string, next?: string | null): Promise<{ items: IgReel[]; next: string | null; shape?: string }>;
+  /** 릴스 1개 (재생 주소가 검색 결과에 없을 때만) — GET /api/v1/instagram/v2/fetch_post_info?code_or_url= */
+  fetchReel(code: string): Promise<IgReel | null>;
 }
 
 export class TikHubInstagramProvider implements InstagramProvider {
@@ -18,7 +20,11 @@ export class TikHubInstagramProvider implements InstagramProvider {
   constructor(private readonly apiKey: string) {}
   async searchReels(keyword: string, next?: string | null) {
     const body = await tikhubRequest(this.apiKey, "GET", "/api/v1/instagram/v2/search_reels", { keyword, pagination_token: next ?? undefined });
-    return parseReelSearch(body);
+    return { ...parseReelSearch(body), shape: shapeOf(body) };
+  }
+  async fetchReel(code: string) {
+    const body = await tikhubRequest(this.apiKey, "GET", "/api/v1/instagram/v2/fetch_post_info", { code_or_url: code });
+    return parseReelSearch(body).items.find((r) => r.code === code) ?? parseReelSearch({ data: { items: [body.data] } }).items[0] ?? null;
   }
 }
 
@@ -47,5 +53,8 @@ export class MockInstagramProvider implements InstagramProvider {
       };
     });
     return { items, next: page < 2 ? String(page + 1) : null };
+  }
+  async fetchReel() {
+    return null; // 데모: 재생 주소 없음
   }
 }

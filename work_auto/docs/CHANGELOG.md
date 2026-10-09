@@ -2,6 +2,26 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.54] - 2026-10-09: 트렌드 스크랩 · 인스타그램 재생·해시태그 검색·캡션 담기 · 더 보기 고침
+
+### 추가
+- **트렌드 스크랩** (`/scraps`, docs/SCRAPS.md): YouTube·NAVER·Instagram 트렌드를 분류(폴더 이름)를 골라 저장 → 분류별로 모아 보기·옮기기·이름 바꾸기·삭제·[만들기]. 각 트렌드 화면에 [스크랩] 버튼. 외부 호출 0
+- 대본 포맷 **⑥ 캡션**: 인스타그램 [대본 포맷에 담기] = 캡션은 '캡션'에, 제목(캡션 첫 문장)은 '제목 패턴'에. 생성할 때 설명글·캡션 참고로 무작위 3개 (프롬프트 1.16.0)
+
+### 변경 (인스타그램 트렌드)
+- 카드 그리드 + **이 화면에서 재생** (재생 주소가 검색 결과에 없을 때만 ▶ 1번 = TikHub 1회, 20분 기억)
+- **해시태그를 누르면 그 해시태그로 다시 검색**
+- [더 보기]: 다음 페이지 토큰을 응답 어디에 있든 찾도록 (예전엔 못 찾아 더 보기가 안 나옴)
+- 기다리는 시간 표시, 진단 로그(걸린 시간·받은 수·다음 페이지·응답 키 이름만)
+
+### DB (추가만 — schema.sql 재실행)
+```sql
+alter table public.saved_trends add column if not exists folder text not null default '';
+alter table public.saved_trends add column if not exists meta   jsonb not null default '{}'::jsonb;
+alter table public.script_formats add column if not exists captions jsonb not null default '[]'::jsonb;
+```
+실행 전: 분류 없는 스크랩·캡션 없는 포맷은 그대로 저장되고, 분류·캡션을 쓰면 "DB 업데이트가 필요합니다" 안내.
+
 ## [0.9.53] - 2026-10-09: Instagram 메뉴 · 인스타그램 트렌드 찾기
 
 ### 추가

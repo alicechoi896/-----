@@ -24,8 +24,11 @@ export function SaveTitlesToFormat({
   variant = "secondary",
   disabled,
   iconOnly,
+  captions,
 }: {
   titles: TitleItem[];
+  /** 인스타그램 (v0.9.54): 있으면 캡션은 '캡션'에, 제목은 '제목 패턴'에 담는다 */
+  captions?: string[];
   /** 안내용 (예: YouTube 트렌드) */
   source: string;
   buttonLabel?: string;
@@ -66,10 +69,23 @@ export function SaveTitlesToFormat({
     }
   }
 
+  const captionMode = Boolean(captions);
   async function save() {
     setSaving(true);
     setError(null);
     try {
+      if (captionMode) {
+        const titlesOnly = list.map((t) => t.title);
+        const r = await api.scriptFormats.addCaptions(
+          mode === "existing" ? { formatId, captions: captions ?? [], titles: titlesOnly } : { newFormat: { name: name.trim(), contentType }, captions: captions ?? [], titles: titlesOnly },
+        );
+        setFormats((prev) => (prev ? [r.format, ...prev.filter((f) => f.id !== r.format.id)] : [r.format]));
+        setFormatId(r.format.id);
+        setMode("existing");
+        setName("");
+        setDone(`'${r.format.name}'에 캡션 ${r.captions}개 · 제목 패턴 ${r.titles}개를 담았습니다 (이미 있는 것은 제외).`);
+        return;
+      }
       let all: TitleItem[] = list.map(({ title, views }) => ({ title, views }));
       let thumbNote = "";
       if (withThumb && withVideo.length) {
@@ -114,7 +130,7 @@ export function SaveTitlesToFormat({
         icon={BookmarkPlus}
         disabled={disabled || !list.length}
         onClick={() => void show()}
-        title={`${buttonLabel} — 제목칸에만 담습니다 (대본은 비워 둡니다)`}
+        title={captionMode ? `${buttonLabel} — 캡션은 '캡션'에, 제목은 '제목 패턴'에` : `${buttonLabel} — 제목칸에만 담습니다 (대본은 비워 둡니다)`}
         aria-label={iconOnly ? buttonLabel : undefined}
         data-save-format
       >
@@ -124,7 +140,11 @@ export function SaveTitlesToFormat({
         open={open}
         onClose={() => setOpen(false)}
         title="대본 포맷에 담기"
-        description={`${source}의 제목 ${list.length}개를 대본 포맷의 '제목칸'에만 담습니다. 대본은 비워 두고, 생성할 때 제목 패턴으로 참고합니다.`}
+        description={
+          captionMode
+            ? `${source}의 캡션 ${captions?.length ?? 0}개는 대본 포맷의 '캡션'에, 제목(캡션 첫 문장) ${list.length}개는 '제목 패턴'에 담습니다. 생성할 때 설명글·캡션과 제목의 참고로 씁니다.`
+            : `${source}의 제목 ${list.length}개를 대본 포맷의 '제목칸'에만 담습니다. 대본은 비워 두고, 생성할 때 제목 패턴으로 참고합니다.`
+        }
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -145,7 +165,7 @@ export function SaveTitlesToFormat({
               </li>
             ))}
           </ul>
-          {withVideo.length > 0 && (
+          {withVideo.length > 0 && !captionMode && (
             <label className="flex cursor-pointer items-start gap-2 rounded-control border border-line px-3 py-2 text-[13px] text-fg" data-with-thumb>
               <input type="checkbox" checked={withThumb} onChange={(e) => setWithThumb(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-brand)]" />
               <span>

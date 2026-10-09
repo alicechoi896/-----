@@ -75,9 +75,10 @@ export const savedTrendService = {
 
   /* ───────── 찜한 영상 ───────── */
 
+  /** YouTube 찜만 (NAVER·Instagram 스크랩은 트렌드 스크랩 화면에서) */
   async list(): Promise<SavedTrend[]> {
     const userId = await getCurrentUserId();
-    return (await getRepositories().savedTrends.list((t) => t.userId === userId)).sort(byNewest);
+    return (await getRepositories().savedTrends.list((t) => t.userId === userId && (t.source ?? "youtube") === "youtube")).sort(byNewest);
   },
 
   async add(item: Partial<YouTubeTrendItem>): Promise<SavedTrend> {

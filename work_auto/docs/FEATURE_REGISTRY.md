@@ -104,6 +104,10 @@
 
 절차는 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)를 본다.
 
+## 트렌드 스크랩 (v0.9.54)
+
+- 단독 페이지 `scraps` (/scraps) — YouTube·NAVER·Instagram 트렌드 스크랩, 분류별 모아 보기 (docs/SCRAPS.md)
+
 ## Instagram (v0.9.53)
 
 - `ig-trends` (/instagram/trends) — trend, TikHub(Instagram V2 search_reels), docs/INSTAGRAM_TRENDS.md

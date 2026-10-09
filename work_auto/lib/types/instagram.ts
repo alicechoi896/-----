@@ -14,6 +14,8 @@ export interface IgReel {
   postedAt: string | null;
   thumbnailUrl: string | null;
   durationSec: number | null;
+  /** 재생 주소 (검색 응답에 있을 때만, 만료됨 — 저장하지 않는다) */
+  videoUrl?: string | null;
 }
 
 export interface IgSearchResult {

@@ -28,6 +28,21 @@ function phraseList(v: unknown, max: number): string[] {
   return out;
 }
 const TYPES: ScriptFormatType[] = ["product", "info"];
+/** 캡션 (v0.9.54): 최대 100개 · 1개 600자 */
+export const CAPTION_LIMITS = { max: 100, chars: 600 } as const;
+function captionList(v: unknown): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of Array.isArray(v) ? v : []) {
+    const t = String(x ?? "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, CAPTION_LIMITS.chars);
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+    if (out.length >= CAPTION_LIMITS.max) break;
+  }
+  return out;
+}
 
 function clean(input: Partial<ScriptFormatInput>): ScriptFormatInput {
   const name = String(input?.name ?? "").trim().slice(0, SCRIPT_FORMAT_LIMITS.nameChars);
@@ -39,10 +54,12 @@ function clean(input: Partial<ScriptFormatInput>): ScriptFormatInput {
   const hooks = phraseList(input.hooks, STYLE_LIMITS.hooks.max);
   const ctas = phraseList(input.ctas, STYLE_LIMITS.ctas.max);
   const titlePatterns = phraseList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max);
-  if (!guideline && !examples.length && !hooks.length && !ctas.length && !titlePatterns.length) {
-    throw new AppError("VALIDATION", "참고 대본·가이드라인·Hook·CTA·제목 패턴 중 하나는 넣어 주세요.");
+  const captions = captionList(input.captions);
+  if (!guideline && !examples.length && !hooks.length && !ctas.length && !titlePatterns.length && !captions.length) {
+    throw new AppError("VALIDATION", "참고 대본·가이드라인·Hook·CTA·제목 패턴·캡션 중 하나는 넣어 주세요.");
   }
   return {
+    captions,
     hooks,
     ctas,
     titlePatterns,
@@ -78,6 +95,7 @@ function normalize(f: ScriptFormat): ScriptFormat {
     titlePatterns: arr(f.titlePatterns),
     preferredTypes: f.preferredTypes && typeof f.preferredTypes === "object" ? f.preferredTypes : {},
     badExamples: arr(f.badExamples),
+    captions: arr(f.captions),
   };
 }
 
@@ -155,6 +173,29 @@ export const scriptFormatService = {
    * - formatId 가 있으면 그 포맷에 더하고, 없으면 newFormat(이름·유형)으로 새로 만든다
    * - 같은 제목은 다시 넣지 않고, 포맷 한도(참고 30개)를 넘는 것은 빼고 알려 준다
    */
+  /**
+   * [대본 포맷에 담기] — 인스타그램 트렌드 (v0.9.54): 캡션은 '캡션'에, 제목(캡션 첫 문장)은 '제목 패턴'에 더한다.
+   * 같은 것은 다시 넣지 않는다. formatId 가 없으면 newFormat 으로 새로 만든다.
+   */
+  async addCaptions(input: { formatId?: unknown; newFormat?: { name?: unknown; contentType?: unknown } | null; captions?: unknown; titles?: unknown }): Promise<{ format: ScriptFormat; captions: number; titles: number }> {
+    const caps = captionList(input.captions);
+    const titles = phraseList(input.titles, STYLE_LIMITS.titlePatterns.max);
+    if (!caps.length && !titles.length) throw new AppError("VALIDATION", "담을 캡션이 없습니다.");
+    const formatId = typeof input.formatId === "string" ? input.formatId : "";
+    if (!formatId) {
+      const format = await this.create({ name: String(input.newFormat?.name ?? "").trim(), contentType: input.newFormat?.contentType as ScriptFormatType, channelIds: [], examples: [], guideline: "", isDefault: false, captions: caps, titlePatterns: titles });
+      return { format, captions: caps.length, titles: titles.length };
+    }
+    const current = await own(formatId);
+    const nextCaps = captionList([...caps, ...(current.captions ?? [])]);
+    const nextTitles = phraseList([...titles, ...(current.titlePatterns ?? [])], STYLE_LIMITS.titlePatterns.max);
+    const addedCaps = nextCaps.length - (current.captions ?? []).length;
+    const addedTitles = nextTitles.length - (current.titlePatterns ?? []).length;
+    const updated = await getRepositories().scriptFormats.update(formatId, { captions: nextCaps, titlePatterns: nextTitles, updatedAt: nowIso() });
+    if (!updated) notFound("대본 포맷");
+    return { format: normalize(updated), captions: Math.max(0, addedCaps), titles: Math.max(0, addedTitles) };
+  },
+
   async addTitles(input: {
     formatId?: unknown;
     newFormat?: { name?: unknown; contentType?: unknown } | null;
@@ -289,6 +330,7 @@ export function mergeFormats(list: ScriptFormat[]): ScriptFormat {
     hooks: uniq(list.flatMap((f) => f.hooks ?? [])),
     ctas: uniq(list.flatMap((f) => f.ctas ?? [])),
     titlePatterns: uniq(list.flatMap((f) => f.titlePatterns ?? [])),
+    captions: uniq(list.flatMap((f) => f.captions ?? [])),
     preferredTypes: {
       hooks: uniq(list.flatMap((f) => f.preferredTypes?.hooks ?? [])),
       ctas: uniq(list.flatMap((f) => f.preferredTypes?.ctas ?? [])),

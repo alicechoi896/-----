@@ -319,6 +319,25 @@ export const SHOTS = [
     },
   },
   {
+    id: "04-scraps",
+    url: "/scraps",
+    viewport: { width: 1280, height: 900 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const add = (body) => p.request.post(abs("/api/scraps"), { data: body });
+      await add({ source: "instagram", itemId: "DEMO0001x", title: "무선청소기 사기 전에 꼭 볼 3가지", keywords: ["무선청소기", "자취템"], views: 1333333, folder: "가전 소재" });
+      await add({ source: "youtube", itemId: "abcdEFGhijk", title: "자취방 청소 10분 루틴, 무선청소기 하나로 끝", channelName: "혼살림 연구소", views: 612000, folder: "가전 소재", format: "shorts" });
+      await add({ source: "naver", itemId: "nv_demo_heating", title: "겨울 난방비 줄이는 법", keywords: ["난방비", "절약"], folder: "겨울 시즌" });
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-scrap-item]").first().waitFor({ timeout: 10_000 });
+    },
+    marks: {
+      1: (p) => p.locator("[data-scraps] section").first(),
+      2: (p) => p.locator("[data-scraps] [role=radiogroup]").first(),
+      3: (p) => p.locator("[data-scrap-item]").first(),
+    },
+  },
+  {
     id: "04-save-titles",
     url: "/youtube/trends",
     viewport: { width: 1280, height: 1000 },

@@ -171,8 +171,9 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           titlePatterns: editing.format.titlePatterns ?? [],
           preferredTypes: editing.format.preferredTypes ?? {},
           badExamples: editing.format.badExamples ?? [],
+          captions: editing.format.captions ?? [],
         }
-      : { name: "", contentType: editing.contentType, channelIds: [], examples: [], guideline: "", isDefault: false, hooks: [], ctas: [], titlePatterns: [], preferredTypes: {}, badExamples: [] };
+      : { name: "", contentType: editing.contentType, channelIds: [], examples: [], guideline: "", isDefault: false, hooks: [], ctas: [], titlePatterns: [], preferredTypes: {}, badExamples: [], captions: [] };
   const [form, setForm] = useState<ScriptFormatInput>(initial);
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -289,7 +290,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           <Button size="sm" variant="ghost" onClick={onCancel}>
             취소
           </Button>
-          <Button size="sm" variant="primary" loading={saving} disabled={!form.name.trim() || (!form.guideline.trim() && !filled.length && !form.hooks?.length && !form.ctas?.length && !form.titlePatterns?.length)} onClick={save}>
+          <Button size="sm" variant="primary" loading={saving} disabled={!form.name.trim() || (!form.guideline.trim() && !filled.length && !form.hooks?.length && !form.ctas?.length && !form.titlePatterns?.length && !form.captions?.length)} onClick={save}>
             저장
           </Button>
         </div>
@@ -439,6 +440,18 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         <p className="text-[13.5px] font-semibold text-fg">⑤ 피해야 할 대본 <span className="text-xs font-normal text-fg-subtle">(선택 · 최대 10개)</span></p>
         <p className="mt-1 text-xs text-fg-subtle">반응이 낮았던 대본을 넣어 두면, 생성할 때 그 시작 방식·전개·표현을 피합니다 (짧게 2개만 보냅니다). 여러 개는 --- 줄로 나눕니다.</p>
         <Textarea className="mt-2 text-[13px]" rows={5} placeholder={"오늘은 ○○를 소개해 드리겠습니다\n이 제품은 정말 좋은데요\n---\n(다른 대본)"} value={badText} onChange={(e) => setBadText(e.target.value)} data-bad-examples />
+      </div>
+
+      {/* ⑥ 캡션 (v0.9.54) */}
+      <div className="mt-6" data-format-captions>
+        <PhraseListField
+          label="⑥ 캡션"
+          hint="잘된 릴스·영상의 캡션(본문). 인스타그램 트렌드 찾기의 [대본 포맷에 담기]로 모입니다. 생성할 때 설명글·캡션의 말투·구성 참고로 3개씩 씁니다 (그대로 베끼지 않음)."
+          placeholder="예: 자취방 청소 10분이면 끝나요 #자취템 #무선청소기"
+          items={form.captions ?? []}
+          max={100}
+          onChange={(v) => set("captions", v)}
+        />
       </div>
     </SectionCard>
   );

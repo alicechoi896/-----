@@ -37,6 +37,10 @@ describe("인스타그램 트렌드", () => {
     expect(r.items[0].postedAt).toBe(new Date(1759900000 * 1000).toISOString());
     expect(r.next).toBe("next1");
     expect(parseReelSearch({ data: { items: [], has_more: false, pagination_token: "x" } }).next).toBeNull();
+    // 다음 페이지 토큰이 깊은 곳·다른 이름이어도 찾는다, 재생 주소
+    const deep = parseReelSearch({ data: { data: { reels: [{ code: "Zz12345", product_type: "clips", video_versions: [{ url: "https://scontent.cdninstagram.com/v.mp4" }] }], paging_info: { next_max_id: "QVF123", more_available: true } } } });
+    expect(deep.next).toBe("QVF123");
+    expect(deep.items[0].videoUrl).toBe("https://scontent.cdninstagram.com/v.mp4");
   });
 
   it("[검색] 1번 = 1회, 같은 검색어 30분 0회, 동시 요청 1번, [더 보기] 1회", async () => {

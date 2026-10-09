@@ -1,5 +1,6 @@
 import type { PermissionRow } from "@/lib/permissions";
 import type { IgSearchResult } from "@/lib/types/instagram";
+import type { ScrapSource } from "@/lib/types/trend";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
@@ -135,6 +136,7 @@ export const api = {
   trends: {
     /** 인스타그램 릴스 검색 ([검색]·[더 보기] 1번 = TikHub 1회) */
     instagram: (body: { keyword: string; next: string | null; clientRequestId: string }) => request<IgSearchResult>("/api/trends/instagram", { method: "POST", body: json(body) }),
+    instagramMedia: (code: string) => request<{ videoUrl: string | null; calls: number }>("/api/trends/instagram/media", { method: "POST", body: json({ code }) }),
     /** 썸네일 큰 글자 읽기 (AI Vision, 최대 10개) */
     thumbnailText: (videoIds: string[]) => request<{ texts: Record<string, string>; aiCalls: number }>("/api/trends/youtube/thumbnail-text", { method: "POST", body: json({ videoIds }) }),
     /** 한 페이지(최대 50개 조회). 이어서 부를 때는 q.pageToken 에 nextPageToken 을 넣는다 */
@@ -245,6 +247,14 @@ export const api = {
   },
 
   /** 업로드 관리 (팀 공용 캘린더) */
+  /** 트렌드 스크랩 (v0.9.54, YouTube·NAVER·Instagram) */
+  scraps: {
+    list: () => request<{ items: SavedTrend[]; folders: { name: string; count: number }[] }>("/api/scraps"),
+    add: (item: ScrapItem) => request<SavedTrend>("/api/scraps", { method: "POST", body: json(item) }),
+    move: (id: string, folder: string) => request<SavedTrend>(`/api/scraps/${id}`, { method: "PATCH", body: json({ folder }) }),
+    remove: (id: string) => request<{ id: string }>(`/api/scraps/${id}`, { method: "DELETE" }),
+    renameFolder: (from: string, to: string) => request<{ moved: number }>("/api/scraps/folders", { method: "PATCH", body: json({ from, to }) }),
+  },
   /** 영상 자동 제작 (v0.9.51) */
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
@@ -311,6 +321,9 @@ export const api = {
     update: (id: string, input: ScriptFormatInput) => request<ScriptFormat>(`/api/script-formats/${id}`, { method: "PUT", body: json(input) }),
     setDefault: (id: string) => request<ScriptFormat>(`/api/script-formats/${id}`, { method: "PATCH" }),
     remove: (id: string) => request<{ id: string }>(`/api/script-formats/${id}`, { method: "DELETE" }),
+    /** 인스타그램 [대본 포맷에 담기]: 캡션 → 캡션, 제목 → 제목 패턴 */
+    addCaptions: (body: { formatId?: string; newFormat?: { name: string; contentType: ScriptFormatType }; captions: string[]; titles: string[] }) =>
+      request<{ format: ScriptFormat; captions: number; titles: number }>("/api/script-formats/captions", { method: "POST", body: json(body) }),
     /** [대본 포맷에 담기]: 제목만 기존 포맷에 더하거나 새 포맷으로 */
     addTitles: (body: { formatId?: string; newFormat?: { name: string; contentType: ScriptFormatType }; titles: { title: string; views: number | null }[] }) =>
       request<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }>("/api/script-formats/titles", { method: "POST", body: json(body) }),
@@ -437,4 +450,21 @@ export interface VideoProductionOptions {
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string };
   voices: readonly { value: string; label: string }[];
+}
+
+/** 스크랩할 트렌드 (화면에 있는 정보만, 외부 호출 없음) */
+export interface ScrapItem {
+  source: ScrapSource;
+  itemId: string;
+  title: string;
+  url?: string;
+  channelName?: string;
+  thumbnailUrl?: string | null;
+  keywords?: string[];
+  tags?: string[];
+  views?: number | null;
+  publishedAt?: string | null;
+  format?: "shorts" | "long";
+  folder: string;
+  meta?: Record<string, unknown>;
 }

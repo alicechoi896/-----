@@ -112,6 +112,12 @@ function contextBlocks(ctx: GenerationContext): string[] {
       );
     }
   }
+  // 대본 포맷 캡션 (v0.9.54): 설명글·캡션의 말투·구성 참고 (무작위 3개, 그대로 쓰지 않는다)
+  const caps = ctx.scriptFormat?.captions ?? [];
+  if (caps.length) {
+    const picked = [...caps].sort(() => Math.random() - 0.5).slice(0, 3);
+    blocks.push(block("대본 포맷 > 잘된 캡션 (설명글·캡션의 말투·길이·해시태그 구성만 참고 — 문장·제품명을 그대로 쓰지 않는다)", picked.map((c, i) => `(${i + 1}) ${c.slice(0, 300).replace(/\n/g, " / ")}`)));
+  }
   // Keyword Intelligence: 실제 플랫폼 데이터의 키워드 후보 (검색량 아님)
   if (ctx.keywordIntel && ctx.keywordIntel.candidates.length) {
     const ki = ctx.keywordIntel;

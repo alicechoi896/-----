@@ -176,3 +176,13 @@
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | POST | `/api/trends/instagram` { keyword, next?, clientRequestId } | 인스타그램 릴스 검색 ([검색]·[더 보기] 1번 = TikHub 1회) |
+
+## 트렌드 스크랩 · 인스타그램 재생 (v0.9.54)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET/POST | `/api/scraps` | 내 스크랩·분류 / 스크랩 (같은 항목이면 분류만 바꿈) |
+| PATCH/DELETE | `/api/scraps/:id` | 분류 옮기기 / 삭제 |
+| PATCH | `/api/scraps/folders` { from, to } | 분류 이름 바꾸기 |
+| POST | `/api/trends/instagram/media` { code } | 릴스 재생 주소 (검색 결과에 없을 때만, TikHub 1회) |
+| POST | `/api/script-formats/captions` | 캡션 → 대본 포맷 '캡션', 제목 → '제목 패턴' |

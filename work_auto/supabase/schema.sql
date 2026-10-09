@@ -475,6 +475,12 @@ create table if not exists public.saved_trends (
   unique (user_id, trend_id)
 );
 
+-- v0.9.54: 트렌드 스크랩 (YouTube·NAVER·Instagram 공용) — 스크랩 분류(폴더 이름)와 부가 정보. 추가만, 기존 찜은 분류 없음('')으로 그대로
+alter table public.saved_trends add column if not exists folder text not null default '';
+alter table public.saved_trends add column if not exists meta   jsonb not null default '{}'::jsonb;
+-- v0.9.54: 대본 포맷 캡션 (인스타그램 트렌드에서 담은 캡션 — 설명글·캡션 참고). 추가만
+alter table public.script_formats add column if not exists captions jsonb not null default '[]'::jsonb;
+
 -- 자주 쓰는 조회용 인덱스
 create index if not exists idx_saved_filters_user on public.saved_filters (user_id, created_at desc);
 create index if not exists idx_contents_user_feature on public.generated_contents (user_id, feature_id, created_at desc);
