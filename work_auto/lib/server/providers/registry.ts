@@ -1,4 +1,5 @@
 import "server-only";
+import { OpenAITTSProvider, type TTSProvider } from "./tts/openai-tts";
 import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/lib/types";
 import { serverConfig } from "../config";
 import { AppError } from "../http";
@@ -98,6 +99,13 @@ export async function getXiaohongshuSearchProvider(): Promise<XiaohongshuSearchP
   const cred = await loadCredentials("tikhub");
   if (!cred) throw new XhsSearchError("NOT_CONNECTED", "TikHub API 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 TikHub 키를 연결해 주세요.");
   return new TikHubXiaohongshuProvider(cred.apiKey);
+}
+
+/** AI 음성 (영상 자동 제작): OpenAI 키가 연결되어 있을 때만. 데모·미연결이면 null → 음성 없이 자막 시간으로 만든다 */
+export async function getTTSProvider(): Promise<TTSProvider | null> {
+  if (serverConfig.providerMode !== "live") return null;
+  const openai = await loadCredentials("openai");
+  return openai ? new OpenAITTSProvider(openai.apiKey) : null;
 }
 
 /** 도우인 (검색·공유 링크): TikHub 키 필요 (샤오홍슈와 같은 키). 데모 모드는 가짜 결과 */

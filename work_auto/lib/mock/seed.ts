@@ -21,6 +21,7 @@ import type {
   UserStyle,
 } from "@/lib/types";
 import { EXAMPLE_PROFILE } from "@/lib/types/profile";
+import type { VideoJob } from "@/lib/types/video-production";
 import { PRODUCT_CATALOG } from "./product-catalog";
 
 export const DEMO_USER_ID = "demo-user";
@@ -47,6 +48,7 @@ export interface StoreState {
   learningProfiles: LearningProfile[];
   errorLogs: ErrorLog[];
   scriptFormats: ScriptFormat[];
+  videoJobs: VideoJob[];
 }
 
 const DAY = 86_400_000;
@@ -315,6 +317,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
     publications: demoPublications(now, userId, contents, products),
     learningProfiles: [],
     errorLogs: [],
+    videoJobs: [],
     // 데모 대본 포맷 (제품 홍보 기본 1개). 참고 대본은 예시로 쓴 가상의 문장
     scriptFormats: [
       {

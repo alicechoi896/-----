@@ -45,6 +45,8 @@
 - 도우인 영상·썸네일 CDN 이 브라우저를 막으면(CORS·핫링크) 서버 프록시 검토 (지금은 [새 탭에서 열기])
 - 영상이 많아지면 `GET /api/videos?productId=` 를 SQL where 전용 메서드로
 - (완료 v0.9.31) 품질 1단계: 대본 뼈대 규칙, 정밀 생성 — docs/QUALITY_MODES.md
+- (완료 v0.9.51) 영상 자동 제작 V1 (샤오홍슈 소재) — docs/VIDEO_PRODUCTION.md
+  - 다음: AI 영상 생성 업체 선정·연결, 움직이는 글자 추적, 제품 중심 리프레이밍, 장면 의미 매칭, 최종 영상 글자 재검사, Giphy 짤(선택), 구글 드라이브 보내기
 - (완료 v0.9.40) 2단계 생성(제목 먼저 → 제목별 대본) · Keyword Intelligence — docs/TWO_STAGE_CONTENT_GENERATION.md, docs/KEYWORD_INTELLIGENCE.md
   - 다음: 실제 YouTube·NAVER 키로 후보 품질 확인, 데이터랩 키워드 그룹 확장 여부 검토
 - (완료 v0.9.34) 품질 2단계: 아웃라이어 점수, 학습 상위 3·하위 3 비교, 프롬프트 버전별 성과표 — docs/OUTLIER_SCORE.md, docs/PROMPT_STATS.md

@@ -85,4 +85,5 @@ export const memoryRepositories: Repositories = {
   learningProfiles: createCollection("learningProfiles"),
   errorLogs: createCollection("errorLogs"),
   scriptFormats: createCollection("scriptFormats"),
+  videoJobs: createCollection("videoJobs"),
 };

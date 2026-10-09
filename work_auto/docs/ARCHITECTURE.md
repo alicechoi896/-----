@@ -351,3 +351,9 @@ URL 쿼리(`?productId=`)로 받는 값은 페이지(Server)에서 `await search
 - 영상·클립: `/api/contents/stage1` (Keyword Intelligence → 제목·Hook·CTA 후보, 플랫폼 API 는 여기서만) → `/api/contents/stage2` (고른 제목 1개 → 대본·키워드·태그·설명, AI 1회). 두 단계 행은 `context.workflow` 로 이어진다 (DB 변경 없음).
 - Keyword Intelligence: `lib/server/services/keyword-intelligence.ts` → Provider(`keywordEvidence` / `blogEvidence`·`relativeInterest`) → 압축 결과를 GenerationContext.keywordIntel 로 프롬프트에 넣음. 캐시 30분·동시 요청 합침·실패 시 fallback_ai.
 - 자세히: docs/TWO_STAGE_CONTENT_GENERATION.md, docs/KEYWORD_INTELLIGENCE.md
+
+## 영상 자동 제작 (v0.9.51)
+
+- 화면 → `/api/video-production/plan`(컷 계획, AI 1회) → `/api/video-jobs`(작업 생성 + after() 렌더, maxDuration 300) → 상태 폴링.
+- 엔진 `lib/server/video`: source(샤오홍슈 임시 다운로드) → text-scan(AI 이미지 읽기) → TTS(`providers/tts/openai-tts`) → render(ffmpeg-static, next.config outputFileTracingIncludes 로 바이너리·assets/video 포함) → storage(Supabase Storage `videos`).
+- 설정·템플릿 `lib/video-production/config.ts`. 자세히: docs/VIDEO_PRODUCTION.md

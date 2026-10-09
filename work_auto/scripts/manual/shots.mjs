@@ -388,6 +388,31 @@ export const SHOTS = [
     },
   },
   {
+    id: "05-video-production",
+    url: "/youtube/video-production",
+    viewport: { width: 1440, height: 1500 },
+    prepare: async (p) => {
+      // 데모 데이터: 샤오홍슈 영상 3개 담기 → 2단계 대본 만들기 → 화면 다시 열기 → [컷 계획 만들기]
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (path, body) => p.request.post(abs(path), { data: body }).then((r) => r.json());
+      const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
+      const xhs = (await api("/api/videos/social-search", { keyword: "청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data;
+      await api("/api/videos/batch", { items: xhs.items.slice(0, 3).map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec } })), productId: pid });
+      const s1 = (await api("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: "manual" })).data;
+      await api("/api/contents/stage2", { stage1Id: s1.id, title: s1.output.titles[0], hook: s1.output.hooks[0], cta: s1.output.ctas[0] });
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-make-plan]").click();
+      await p.locator("[data-plan-scene]").first().waitFor({ timeout: 20_000 });
+      await p.waitForTimeout(500);
+    },
+    marks: {
+      1: (p) => p.locator("[data-script-picker]").first(),
+      2: (p) => p.locator("[data-source-videos]").first(),
+      3: (p) => p.locator("[data-plan-scene]").first(),
+      4: (p) => p.locator("[data-render]").first(),
+    },
+  },
+  {
     id: "05-clip-form",
     viewport: { width: 1280, height: 1130 },
     url: "/naver-clip/product-content",

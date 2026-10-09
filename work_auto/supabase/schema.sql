@@ -616,6 +616,51 @@ drop policy if exists "error_logs_delete_admin" on public.error_logs;
 create policy "error_logs_delete_admin" on public.error_logs for delete to authenticated
   using ((select public.is_admin()));
 
+-- v0.9.51: 영상 자동 제작 작업 (docs/VIDEO_PRODUCTION.md). 추가만 한다 — 기존 테이블·데이터·정책은 그대로.
+-- 직원은 자기 작업만, 관리자(렌더러 계정 포함)는 전체를 본다. 원본 영상 프레임·FFmpeg 로그는 저장하지 않는다.
+create table if not exists public.video_jobs (
+  id            text primary key,
+  user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  content_id    text references public.generated_contents (id) on delete set null,
+  channel_id    text not null,
+  source_mode   text not null default 'xhs' check (source_mode in ('ai', 'xhs', 'mixed')),
+  status        text not null default 'queued' check (status in
+                ('queued', 'analyzing', 'editing', 'rendering', 'quality_check', 'completed', 'needs_review', 'failed', 'approved')),
+  plan          jsonb not null default '{}',
+  qa            jsonb not null default '{}',
+  progress      int  not null default 0,
+  output_path   text,
+  error         text,
+  claimed_by    text,
+  claimed_at    timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists idx_video_jobs_status on public.video_jobs (status, created_at);
+create index if not exists idx_video_jobs_user on public.video_jobs (user_id, created_at desc);
+alter table public.video_jobs enable row level security;
+drop policy if exists "video_jobs_own" on public.video_jobs;
+create policy "video_jobs_own" on public.video_jobs for all to authenticated
+  using ((select public.is_active()) and (user_id = (select auth.uid()) or (select public.is_admin())))
+  with check ((select public.is_active()) and (user_id = (select auth.uid()) or (select public.is_admin())));
+
+-- v0.9.51: 완성 영상 저장소 (비공개 버킷 'videos', 경로 {user_id}/{job_id}.mp4). 본인 폴더 + 관리자만.
+-- Supabase 에만 storage 스키마가 있으므로 없으면 건너뛴다 (테스트용 DB 등)
+do $$
+begin
+  if exists (select 1 from information_schema.schemata where schema_name = 'storage') then
+    insert into storage.buckets (id, name, public) values ('videos', 'videos', false) on conflict (id) do nothing;
+    execute 'drop policy if exists "videos_read" on storage.objects';
+    execute 'create policy "videos_read" on storage.objects for select to authenticated using (bucket_id = ''videos'' and (select public.is_active()) and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin())))';
+    execute 'drop policy if exists "videos_write" on storage.objects';
+    execute 'create policy "videos_write" on storage.objects for insert to authenticated with check (bucket_id = ''videos'' and (select public.is_active()) and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin())))';
+    execute 'drop policy if exists "videos_update" on storage.objects';
+    execute 'create policy "videos_update" on storage.objects for update to authenticated using (bucket_id = ''videos'' and (select public.is_active()) and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin())))';
+    execute 'drop policy if exists "videos_delete" on storage.objects';
+    execute 'create policy "videos_delete" on storage.objects for delete to authenticated using (bucket_id = ''videos'' and (select public.is_active()) and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin())))';
+  end if;
+end $$;
+
 -- 통계 갱신: 쿼리 계획이 새 인덱스를 바로 활용하도록
 analyze public.profiles, public.role_permissions, public.audit_logs, public.products, public.generated_contents,
         public.user_feedback, public.user_styles, public.performance_metrics, public.reference_videos;

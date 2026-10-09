@@ -19,6 +19,12 @@ const nextConfig: NextConfig = {
   // 개발 표시(N 배지)가 사이드바 하단을 가리지 않도록 오른쪽 아래로 옮긴다
   devIndicators: { position: "bottom-right" },
   poweredByHeader: false,
+  // 영상 자동 제작 (v0.9.51): FFmpeg 실행 파일·영상 자료·기본 글꼴을 렌더 함수에 함께 올린다
+  serverExternalPackages: ["ffmpeg-static"],
+  outputFileTracingIncludes: {
+    "/api/video-jobs": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
+    "/api/video-jobs/*/rerender": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Clapperboard,
+  Film,
   KeyRound,
   Library,
   Lightbulb,
@@ -85,6 +86,21 @@ export const FEATURES: FeatureDef[] = [
     inputs: ["카테고리", "주제", "트렌드", "주요 키워드", "영상 길이"],
     outputs: ["추천 주제", "제목", "Hook", "대본", "설명글", "키워드"],
   },
+  {
+    id: "yt-video-production",
+    channelId: "youtube",
+    order: 4,
+    title: "영상 자동 제작",
+    description: "2단계에서 만든 대본으로 YouTube Shorts 영상을 자동으로 만듭니다. 샤오홍슈 영상을 대본에 맞게 배치하고, AI 음성·상단 제목·자막·화살표·효과음·배경음악을 넣은 9:16 mp4 를 만듭니다.",
+    href: "/youtube/video-production",
+    icon: Film,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["openai"],
+    inputs: ["2단계 대본 (제목·Hook·CTA·대본 1편)", "영상 소재 (샤오홍슈 / AI / 섞기)", "음성"],
+    outputs: ["9:16 mp4 (1080×1920)", "컷 계획", "자동 품질 검사"],
+  },
 
   // ───────── NAVER 클립 ─────────
   {
@@ -133,6 +149,21 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: ["openai"],
     inputs: ["카테고리", "현재 트렌드", "키워드"],
     outputs: ["추천 주제", "제목", "대본", "설명글", "키워드"],
+  },
+  {
+    id: "clip-video-production",
+    channelId: "naver-clip",
+    order: 4,
+    title: "영상 자동 제작",
+    description: "2단계에서 만든 대본으로 NAVER 클립 영상을 자동으로 만듭니다. 샤오홍슈 영상을 대본에 맞게 배치하고, AI 음성·상단 제목·자막·화살표·효과음·배경음악을 넣은 9:16 mp4 를 만듭니다.",
+    href: "/naver-clip/video-production",
+    icon: Film,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["openai"],
+    inputs: ["2단계 대본 (제목·Hook·CTA·대본 1편)", "영상 소재 (샤오홍슈 / AI / 섞기)", "음성"],
+    outputs: ["9:16 mp4 (1080×1920)", "컷 계획", "자동 품질 검사"],
   },
 
   // ───────── NAVER 블로그 ─────────

@@ -1,4 +1,5 @@
 import "server-only";
+import type { VideoJob } from "@/lib/types/video-production";
 import type {
   ScriptFormat,
   ErrorLog,
@@ -75,4 +76,6 @@ export interface Repositories {
   errorLogs: Repository<ErrorLog>;
   /** 대본 포맷 (v0.9.26, 본인 것만) */
   scriptFormats: Repository<ScriptFormat>;
+  /** 영상 자동 제작 작업 (v0.9.51, 본인 + 관리자) */
+  videoJobs: Repository<VideoJob>;
 }

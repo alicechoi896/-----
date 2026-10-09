@@ -1,4 +1,5 @@
 import type { PermissionRow } from "@/lib/permissions";
+import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type { OutlierScore } from "@/lib/domain/outlier";
@@ -241,6 +242,18 @@ export const api = {
   },
 
   /** 업로드 관리 (팀 공용 캘린더) */
+  /** 영상 자동 제작 (v0.9.51) */
+  videoProduction: {
+    options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
+    plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string }) =>
+      request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
+    jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),
+    create: (plan: VideoPlan) => request<VideoJob>("/api/video-jobs", { method: "POST", body: json({ plan }) }),
+    get: (id: string) => request<VideoJob & { fileUrl: string | null }>(`/api/video-jobs/${id}`),
+    approve: (id: string) => request<VideoJob>(`/api/video-jobs/${id}/approve`, { method: "POST" }),
+    rerender: (id: string, plan?: VideoPlan) => request<VideoJob>(`/api/video-jobs/${id}/rerender`, { method: "POST", body: json({ plan }) }),
+    download: (id: string) => request<{ url: string }>(`/api/video-jobs/${id}/download`, { method: "POST" }),
+  },
   publications: {
     list: (from: string, to: string) => request<ContentPublicationView[]>(`/api/publications${qs({ from, to })}`),
     create: (input: Partial<ContentPublicationInput>) => request<ContentPublicationView>("/api/publications", { method: "POST", body: json(input) }),
@@ -413,3 +426,12 @@ export const api = {
     withdraw: (password: string) => request<{ ok: true }>("/api/account/withdraw", { method: "POST", body: json({ password }) }),
   },
 };
+
+/** 영상 자동 제작 화면 준비 데이터 */
+export interface VideoProductionOptions {
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string }[];
+  videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
+  assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
+  ready: { voice: boolean; vision: boolean; ai: string };
+  voices: readonly { value: string; label: string }[];
+}

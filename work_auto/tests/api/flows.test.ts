@@ -403,6 +403,50 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(upd.audience).toBe("30대 자취 직장인, 퇴근 후 청소가 귀찮음");
   });
 
+  it("영상 자동 제작(데모): 2단계 대본 → 컷 계획(한 줄 = 한 컷·효과음 2컷당 1회·화살표) → 렌더 → 9:16 mp4 → 검수 필요(데모는 글자 검사·음성 없음) → 1회 다운로드 → 승인", async ({ skip }) => {
+    if (!reachable) skip();
+    const pid = (await j<{ id: string }[]>("/api/products")).data[0].id;
+    type R = { items: { originalUrl: string; title: string; authorName: string; durationSec: number }[] };
+    const xhs = (await post("/api/videos/social-search", { keyword: "청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data as R;
+    const imp = (await post("/api/videos/batch", { items: xhs.items.slice(0, 3).map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec } })), productId: pid })).data as { ok: boolean; video?: { id: string } }[];
+    expect(imp.every((x) => x.ok)).toBe(true);
+    const s1 = (await post("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: "vp-test" })).data as Content;
+    const s2 = (await post("/api/contents/stage2", { stage1Id: s1.id, title: (s1.output.titles as string[])[0], hook: (s1.output.hooks as string[])[0], cta: (s1.output.ctas as string[])[0] })).data as Content;
+    const opts = (await j<{ contents: { id: string }[]; videos: unknown[] }>("/api/video-production/options?channelId=youtube")).data;
+    expect(opts.contents.some((c) => c.id === s2.id)).toBe(true);
+    // 블로그 원고·다른 채널 원고는 쓸 수 없다
+    expect((await post("/api/video-production/plan", { contentId: s2.id, channelId: "naver-clip", sourceMode: "xhs" })).ok).toBe(false);
+    expect((await post("/api/video-production/plan", { contentId: s2.id, channelId: "youtube", sourceMode: "ai" })).error?.code).toBe("NOT_READY");
+    type Plan = { scenes: { narration: string; sfx: string | null; arrow: boolean; sourceVideoId: string | null }[]; topLine1: string; topLine2: string; selectedTitle: string };
+    const plan = (await post("/api/video-production/plan", { contentId: s2.id, scriptIndex: 0, channelId: "youtube", sourceMode: "xhs", videoIds: imp.map((x) => x.video!.id), voice: "onyx" })).data as { plan: Plan };
+    const scenes = plan.plan.scenes;
+    expect(scenes.length).toBeGreaterThanOrEqual(5);
+    expect(plan.plan.selectedTitle).toBe((s1.output.titles as string[])[0]); // 선택한 제목은 그대로
+    expect(scenes.every((x) => x.sourceVideoId)).toBe(true);
+    for (let i = 1; i < scenes.length; i++) expect(scenes[i].sourceVideoId === scenes[i - 1].sourceVideoId && new Set(scenes.map((x) => x.sourceVideoId)).size > 1).toBe(false);
+    expect(scenes.some((x) => x.arrow)).toBe(true);
+    type Job = { id: string; status: string; progress: number; fileUrl?: string | null; qa: { durationSec?: number; expectedDurationSec?: number; issues: string[] }; plan: { scenes: { start?: number; textTreatment?: string }[] } };
+    let job = (await post("/api/video-jobs", { plan: plan.plan })).data as Job;
+    expect(job.status).toBe("queued");
+    // 만드는 중에 또 누르면 막는다 (사용자당 동시 1개)
+    expect((await post("/api/video-jobs", { plan: plan.plan })).error?.code).toBe("BUSY");
+    const t0 = Date.now();
+    while (["queued", "analyzing", "editing", "rendering", "quality_check"].includes(job.status) && Date.now() - t0 < 150_000) {
+      await sleep(2000);
+      job = (await j<Job>(`/api/video-jobs/${job.id}`)).data;
+    }
+    expect(job.status).toBe("needs_review"); // 데모: 원본 글자 검사·AI 음성 없음 → 자동 승인하지 않는다
+    expect(Math.abs((job.qa.durationSec ?? 0) - (job.qa.expectedDurationSec ?? 0))).toBeLessThan(0.5);
+    expect(job.plan.scenes.every((x) => x.textTreatment === "unchecked")).toBe(true);
+    const file = await fetch(BASE + job.fileUrl!);
+    expect(file.headers.get("content-type")).toContain("video/mp4");
+    expect((await file.arrayBuffer()).byteLength).toBeGreaterThan(50_000);
+    const dl = (await post(`/api/video-jobs/${job.id}/download`, {})).data as { url: string };
+    expect(dl.url).toBeTruthy();
+    expect(((await post(`/api/video-jobs/${job.id}/approve`, {})).data as Job).status).toBe("approved");
+    for (const x of imp) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
+  }, 200_000);
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

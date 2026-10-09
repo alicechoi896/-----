@@ -257,3 +257,7 @@ AI 학습 관리 → 나의 스타일 → 기본 스타일 등록
 ## 부록: 2단계 생성 (v0.9.40)
 
 영상·클립 원고는 **제목을 먼저 고르고 그 제목에 맞는 대본**을 만든다. 1단계에서 실제 플랫폼 데이터(Keyword Intelligence)를 참고해 제목·Hook·CTA 후보를 만들고, 사용자가 제목(여러 개)·Hook·CTA 를 고르면 2단계에서 제목마다 대본 3편·핵심 키워드·태그·설명을 만든다. 블로그는 기존 흐름에 NAVER Keyword Intelligence 만 더한다. 자세히: docs/TWO_STAGE_CONTENT_GENERATION.md
+
+## 부록: 영상 자동 제작 (v0.9.51)
+
+2단계 대본으로 YouTube Shorts·NAVER 클립 영상을 자동으로 만든다. 목표는 '사람이 처음부터 편집'이 아니라 '자동 초안 → 검수·문제 컷 교체 → 승인'. 원본 글자 노출·무음·제목 디자인·효과음 밀도는 자동 검사 조건이다. 자세히: docs/VIDEO_PRODUCTION.md

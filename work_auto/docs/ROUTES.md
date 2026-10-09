@@ -160,3 +160,13 @@
 | GET / PUT / DELETE | `/api/admin/permissions` | 권한표 조회 / 한 칸 변경 `{role, permissionKey, allowed}` / 기본값 복원 | adminService |
 
 **API 권한**: 로그인하지 않으면 401, 등급 권한이 없으면 403. 트렌드·제품·생성·연결·영상 API는 해당 기능 권한을 확인한다 (`requireAccess`).
+
+## 영상 자동 제작 (v0.9.51)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/video-production/options?channelId=` | 고를 대본(2단계)·샤오홍슈 영상·자료 상태 |
+| POST | `/api/video-production/plan` | 컷 계획 (AI 1회: 화면용 제목) |
+| GET/POST | `/api/video-jobs` | 내 작업 목록 / [영상 만들기] (after 렌더) |
+| GET | `/api/video-jobs/:id` | 진행·결과 + 미리보기 주소 |
+| POST | `/api/video-jobs/:id/rerender` · `/approve` · `/download` | 다시 만들기(클립 교체) · 검수 완료 · 1회 다운로드 |

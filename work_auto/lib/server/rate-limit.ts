@@ -23,6 +23,7 @@ export const LIMITS = {
   "xhs-search": 10, // TikHub 영상 검색 (샤오홍슈·도우인 공통, 사용자 키·[검색]·[더 보기] 1번 = 1회 약 $0.01)
   "photo-ai": 10, // 제품 사진 AI 배경 연출 (OpenAI 이미지, 장당 비용)
   "style-import": 20, // 나의 스타일 파일 일괄 추가 미리보기 (파일 파싱만, 외부 호출 없음)
+  "video-render": 4, // 영상 자동 제작 렌더 (함수 1번에 수 분, 사용자당 동시 1개)
   "ai-generate": 20, // 콘텐츠 생성·분석·주제 추천 등 AI 호출
   "product-analyze": 10,
   "product-images": 40, // 상세페이지 이미지 조각 읽기 (긴 페이지는 여러 번)

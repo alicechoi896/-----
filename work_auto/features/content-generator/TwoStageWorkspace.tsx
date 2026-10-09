@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CalendarPlus, Check, ListPlus, Loader2, RefreshCw, Search, Sparkles, Star } from "lucide-react";
+import { CalendarPlus, Check, Film, ListPlus, Loader2, RefreshCw, Search, Sparkles, Star } from "lucide-react";
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -256,6 +256,14 @@ export function TwoStageWorkspace({
                     {scheduledIds[activeGroup.id]} · 업로드 관리 보기
                   </Link>
                 )}
+                <Link
+                  href={`/${stage1.featureId.startsWith("yt-") ? "youtube" : "naver-clip"}/video-production?contentId=${activeGroup.id}`}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-3 text-[13px] font-medium text-fg-muted hover:border-brand-line hover:text-brand"
+                  data-make-video
+                >
+                  <Film className="size-3.5" />
+                  이 제목으로 영상 만들기
+                </Link>
                 <Button size="sm" variant="primary" icon={CalendarPlus} onClick={() => setScheduleFor(activeGroup)} data-schedule-upload-group>
                   이 제목 업로드 예약하기
                 </Button>

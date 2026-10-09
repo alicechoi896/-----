@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 참고용 영상 (커밋하지 않음)
+/KakaoTalk_*.mp4
+*.mp4
+
+# 영상 자료 (글꼴·음원 라이선스 — 공개 저장소에 올리지 않는다. Vercel 배포에는 .vercelignore 기준으로 함께 올라간다)
+/assets/video/
