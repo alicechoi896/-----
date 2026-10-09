@@ -66,7 +66,7 @@ export const videoJobService = {
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     const sourceMode: VideoSourceMode = input.sourceMode === "ai" || input.sourceMode === "mixed" ? input.sourceMode : "xhs";
@@ -74,13 +74,14 @@ export const videoJobService = {
     const content = await getRepositories().contents.get(String(input.contentId ?? ""));
     if (!content || content.userId !== userId) throw new AppError("NOT_FOUND", "대본을 찾을 수 없습니다.", 404);
     if (!VIDEO_SCRIPT_FEATURES[channelId].includes(content.featureId)) throw new AppError("VALIDATION", "이 채널의 영상 원고가 아닙니다.");
-    const all = await myVideos(userId, content.productId);
+    // 제품이 있는 원고면 그 제품에 연결된 영상만 쓴다 (v0.9.52)
+    const all = (await myVideos(userId, content.productId)).filter((v) => !content.productId || v.productId === content.productId);
     const want = new Set((Array.isArray(input.videoIds) ? input.videoIds : []).map(String));
-    const videos = want.size ? all.filter((v) => want.has(v.id)) : all.filter((v) => !content.productId || v.productId === content.productId).slice(0, 8);
-    const picked = videos.length ? videos : all.slice(0, 8);
-    if (!picked.length) throw new AppError("NO_SOURCE", "샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 먼저 영상을 담아 주세요.", 400);
+    const picked = want.size ? all.filter((v) => want.has(v.id)) : all.slice(0, 8);
+    if (!picked.length)
+      throw new AppError("NO_SOURCE", content.productId ? "이 제품에 연결된 샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 이 제품을 연결해 영상을 담아 주세요." : "샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 먼저 영상을 담아 주세요.", 400);
     const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
-    return buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice });
+    return buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice, narrationOn: input.narrationOn !== false, captions: input.captions !== false });
   },
 
   /** 계획 검사 (사용자가 고친 계획을 그대로 믿지 않는다) */
@@ -114,6 +115,8 @@ export const videoJobService = {
       ending: plan.ending !== false,
       bgm: typeof plan.bgm === "string" && bgmNames.has(plan.bgm) ? plan.bgm : null,
       voice: VOICE_OPTIONS.some((v) => v.value === plan.voice) ? plan.voice : VOICE_OPTIONS[0].value,
+      narrationOn: plan.narrationOn !== false,
+      captions: plan.captions !== false,
       meme: false,
     };
   },

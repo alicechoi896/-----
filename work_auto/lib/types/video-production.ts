@@ -50,6 +50,10 @@ export interface VideoPlan {
   ending: boolean;
   bgm: string | null;
   voice: string;
+  /** AI 음성 넣기 (false = 자막만·둘 다 없음, v0.9.52) */
+  narrationOn?: boolean;
+  /** 자막 넣기 (false = 음성만·둘 다 없음) */
+  captions?: boolean;
   /** Giphy 짤 (선택 기능, 저작권 확인 필요) — V1 은 자리만 */
   meme: boolean;
 }
@@ -65,7 +69,7 @@ export interface VideoQa {
   captionsApplied?: boolean;
   /** 원본 글자: 처리 결과별 컷 수 */
   textSummary?: Partial<Record<TextTreatment, number>>;
-  voice?: "tts" | "none";
+  voice?: "tts" | "none" | "off";
   /** 1회 다운로드: 처음 받은 시각 (1시간 뒤 파일 삭제) */
   downloadedAt?: ISODate;
   /** 파일을 지웠으면 */

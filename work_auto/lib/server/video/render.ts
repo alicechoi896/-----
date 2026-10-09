@@ -1,5 +1,5 @@
 import "server-only";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ReferenceVideo } from "@/lib/types";
@@ -17,6 +17,7 @@ import { videoAssets } from "./assets";
 import { mediaDuration, runFfmpeg, videoSize } from "./ffmpeg";
 import { fetchSource, type LocalSource } from "./source";
 import { TREATMENT_RANK, boxesIn, decideTreatment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { captionY, endingY, renderCaption, renderEnding, renderTitleBar } from "./text-image";
 
 /**
  * 영상 렌더 엔진 (v0.9.51) — Vercel 함수 1번 안에서 끝낸다 (임시 폴더에서 만들고 지운다).
@@ -37,16 +38,6 @@ export interface RenderOutput {
 
 const W = C.width;
 const H = C.height;
-
-/**
- * 글자 크기 맞추기: 템플릿 크기를 넘지 않고, 화면 너비(여백 제외)에 들어가게 줄인다 (디자인은 그대로, 크기만).
- * 한글·전각 1칸, 영문·숫자·기호 0.6칸으로 어림한다.
- */
-function fitSize(text: string, maxSize: number, maxWidth = W * 0.92): number {
-  const wide = /[ᄀ-ᇿ㄰-㆏가-힯　-鿿＀-￯]/;
-  const longest = text.split("\n").reduce((m, line) => Math.max(m, [...line].reduce((n, ch) => n + (wide.test(ch) ? 1 : 0.6), 0)), 0);
-  return Math.max(Math.round(maxSize * 0.55), Math.min(maxSize, Math.floor(maxWidth / Math.max(1, longest))));
-}
 
 function wrap(text: string, max: number): string {
   const words = text.split(" ");
@@ -98,8 +89,10 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
 
     // 2) AI 음성 (마디마다) → 앞뒤 무음 정리 → 길이
     await hooks.stage("editing", 25);
-    const tts = await getTTSProvider();
-    if (!tts) issues.push("AI 음성이 연결되지 않아(OpenAI) 음성 없이 자막 시간으로 만들었습니다.");
+    // 음성 끄기(자막만·둘 다 없음)를 고르면 TTS 를 부르지 않는다
+    const wantVoice = plan.narrationOn !== false;
+    const tts = wantVoice ? await getTTSProvider() : null;
+    if (wantVoice && !tts) issues.push("AI 음성이 연결되지 않아(OpenAI) 음성 없이 자막 시간으로 만들었습니다.");
     const audio: { file: string; dur: number }[] = new Array(scenes.length);
     for (let i = 0; i < scenes.length; i += 4) {
       await Promise.all(
@@ -220,42 +213,35 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     await runFfmpeg(["-f", "concat", "-safe", "0", "-i", vlist, "-c", "copy", base]);
     await runFfmpeg(["-f", "concat", "-safe", "0", "-i", alist, "-c", "copy", narration]);
 
-    // 5) 상단 제목·자막·화살표·엔딩 + 배경음악·효과음
-    const font = async (k: string) => {
-      const f = videoAssets.font(k);
-      if (f.fallback) issues.push(`글꼴(${k}) 파일이 없어 기본 글꼴로 만들었습니다 — assets/video/fonts 에 넣어 주세요.`);
-      const name = `font_${k}${path.extname(f.file)}`;
-      await copyFile(f.file, path.join(dir, name));
-      return name;
-    };
-    const titleFont = await font(TOP_TITLE_TEMPLATE.font);
-    const capFont = await font(CAPTION_TEMPLATE.font);
-    const endFont = await font(ENDING_TEMPLATE.font);
-    const txt = async (name: string, text: string) => {
-      await writeFile(path.join(dir, `${name}.txt`), text, "utf8");
-      return `${name}.txt`;
+    // 5) 상단 제목·자막·화살표·엔딩 (글자는 PNG 로 그려 얹는다 — 서버용 FFmpeg 에 drawtext 가 없어서) + 배경음악·효과음
+    const fontWarn = new Set<string>();
+    const note = (ok: boolean, key: string) => {
+      if (!ok && !fontWarn.has(key)) {
+        fontWarn.add(key);
+        issues.push(`글꼴(${key}) 파일이 없어 기본 글꼴로 만들었습니다 — assets/video/fonts 에 넣어 주세요.`);
+      }
     };
     const inputs: string[] = ["-i", base, "-i", narration];
     let idx = 2;
-    const vf: string[] = [];
-    vf.push(`[0:v]drawbox=x=0:y=0:w=${W}:h=${TOP_TITLE_TEMPLATE.barHeight}:color=${TOP_TITLE_TEMPLATE.barColor}:t=fill`);
-    const l1 = await txt("t1", job.plan.topLine1);
-    const l2 = await txt("t2", job.plan.topLine2);
-    vf.push(`drawtext=fontfile='${titleFont}':textfile='${l1}':fontsize=${fitSize(job.plan.topLine1, TOP_TITLE_TEMPLATE.line1.size)}:fontcolor=${TOP_TITLE_TEMPLATE.line1.color}:x=(w-text_w)/2:y=${TOP_TITLE_TEMPLATE.line1.y}`);
-    vf.push(`drawtext=fontfile='${titleFont}':textfile='${l2}':fontsize=${fitSize(job.plan.topLine2, TOP_TITLE_TEMPLATE.line2.size)}:fontcolor=${TOP_TITLE_TEMPLATE.line2.color}:x=(w-text_w)/2:y=${TOP_TITLE_TEMPLATE.line2.y}`);
-    for (const [k, s] of scenes.entries()) {
-      // 마지막 컷은 '최저가 구매링크' 엔딩이 자막 자리를 쓴다 (음성은 그대로, 브루 편집과 같게)
-      if (job.plan.ending && k === scenes.length - 1) continue;
-      const capText = wrap(s.narration, CAPTION_TEMPLATE.maxCharsPerLine);
-      const p = await txt(`c${k}`, capText);
-      const a = s.start!;
-      const b = a + s.duration!;
-      vf.push(
-        `drawtext=fontfile='${capFont}':textfile='${p}':fontsize=${fitSize(capText, CAPTION_TEMPLATE.size, W * 0.88)}:fontcolor=${CAPTION_TEMPLATE.color}:borderw=${CAPTION_TEMPLATE.borderW}:bordercolor=${CAPTION_TEMPLATE.borderColor}:line_spacing=12:text_align=center:x=(w-text_w)/2:y=${Math.round(H * CAPTION_TEMPLATE.centerY)}-text_h/2:enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`,
-      );
-    }
-    let chain = vf.join(",") + "[v0]";
+    const titlePng = path.join(dir, "title.png");
+    note(await renderTitleBar(titlePng, job.plan.topLine1, job.plan.topLine2), TOP_TITLE_TEMPLATE.font);
+    inputs.push("-loop", "1", "-i", titlePng);
+    let chain = `[0:v][${idx}:v]overlay=0:0:shortest=0[v0]`;
     let last = "v0";
+    idx++;
+    if (job.plan.captions !== false) {
+      for (const [k, s] of scenes.entries()) {
+        // 마지막 컷은 '최저가 구매링크' 엔딩이 자막 자리를 쓴다 (음성은 그대로, 브루 편집과 같게)
+        if (job.plan.ending && k === scenes.length - 1) continue;
+        const png = path.join(dir, `cap${k}.png`);
+        note(await renderCaption(png, wrap(s.narration, CAPTION_TEMPLATE.maxCharsPerLine)), CAPTION_TEMPLATE.font);
+        inputs.push("-loop", "1", "-i", png);
+        const en = `between(t,${s.start!.toFixed(3)},${(s.start! + s.duration!).toFixed(3)})`;
+        chain += `;[${last}][${idx}:v]overlay=0:${captionY()}:shortest=0:enable='${en}'[c${k}]`;
+        last = `c${k}`;
+        idx++;
+      }
+    }
     // 화살표 (제품 버튼 쪽으로 돌림)
     const arrow = videoAssets.arrow();
     const arrowScenes = scenes.filter((s) => s.arrow);
@@ -271,8 +257,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     // 엔딩 '최저가 구매링크' + 화살표 (마지막 컷)
     const lastScene = scenes[scenes.length - 1];
     if (job.plan.ending) {
-      const a = lastScene.start!;
-      const en = `gte(t,${a.toFixed(3)})`;
+      const en = `gte(t,${lastScene.start!.toFixed(3)})`;
       const ending = videoAssets.ending();
       if (ending) {
         inputs.push("-ignore_loop", "0", "-i", ending);
@@ -282,15 +267,12 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         last = "v2";
         idx++;
       }
-      let y = ENDING_TEMPLATE.y;
-      const parts: string[] = [];
-      for (const [i, line] of ENDING_TEMPLATE.lines.entries()) {
-        const p = await txt(`e${i}`, line.text);
-        parts.push(`drawtext=fontfile='${endFont}':textfile='${p}':fontsize=${line.size}:fontcolor=${line.color}:borderw=${ENDING_TEMPLATE.borderW}:bordercolor=${ENDING_TEMPLATE.borderColor}:x=${ENDING_TEMPLATE.x}-text_w/2:y=${y}:enable='${en}'`);
-        y += line.size + 14;
-      }
-      chain += `;[${last}]${parts.join(",")}[v3]`;
+      const endPng = path.join(dir, "ending.png");
+      note(await renderEnding(endPng), ENDING_TEMPLATE.font);
+      inputs.push("-loop", "1", "-i", endPng);
+      chain += `;[${last}][${idx}:v]overlay=0:${endingY()}:shortest=0:enable='${en}'[v3]`;
       last = "v3";
+      idx++;
     }
     chain += `;[${last}]format=yuv420p[vout]`;
 
@@ -343,7 +325,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const textSummary: VideoQa["textSummary"] = {};
     for (const s of scenes) textSummary[s.textTreatment ?? "unchecked"] = (textSummary[s.textTreatment ?? "unchecked"] ?? 0) + 1;
     if (blackFrames) issues.push(`검은 화면이 ${blackFrames}번 있습니다.`);
-    if (longSilences && tts) issues.push(`0.8초 넘는 무음이 ${longSilences}번 있습니다.`);
+    if (longSilences && tts && job.plan.captions !== false) issues.push(`0.8초 넘는 무음이 ${longSilences}번 있습니다.`);
     if (Math.abs(durationSec - total) > 0.5) issues.push("영상과 음성 길이가 맞지 않을 수 있습니다.");
     const qa: VideoQa = {
       checkedAt: new Date().toISOString(),
@@ -355,7 +337,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       titleApplied: true,
       captionsApplied: true,
       textSummary,
-      voice: tts ? "tts" : "none",
+      voice: tts ? "tts" : wantVoice ? "none" : "off",
       issues,
     };
     return { file: await readFile(final), scenes, qa, aiCalls };

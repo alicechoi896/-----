@@ -92,4 +92,19 @@ describe("영상 자동 제작", () => {
     const v1 = out.scenes.filter((s) => s.sourceVideoId === "v1").map((s) => s.sourceStart);
     expect(new Set(v1).size).toBe(v1.length);
   }, 180_000);
+
+  it("음성·자막 끄기: 둘 다 없음도 만든다 (음성 off 는 검수 사유가 아님)", async () => {
+    const videos = ["v1"].map((id) => ({ id, userId: "u", url: "https://www.xiaohongshu.com/explore/" + id, platform: "xiaohongshu" as const, title: id, channelName: "", durationSec: 10, thumbnailColor: "", note: null, createdAt: "" }));
+    const job = {
+      id: "vj_off", userId: "u", contentId: null, channelId: "naver-clip" as const, sourceMode: "xhs" as const, status: "queued" as const,
+      plan: { contentId: null, channelId: "naver-clip" as const, selectedTitle: "t", topLine1: "제품", topLine2: "짧은 제목", script: "", sourceMode: "xhs" as const, sourceVideoIds: ["v1"],
+        scenes: ["하나", "둘 셋", "넷"].map((narration, index) => ({ index, narration, sfx: null, arrow: false, sourceVideoId: "v1" })),
+        ending: true, bgm: null, voice: "onyx", narrationOn: false, captions: false, meme: false },
+      qa: { issues: [] }, progress: 0, outputPath: null, error: null, claimedBy: null, claimedAt: null, createdAt: "", updatedAt: "",
+    };
+    const out = await renderVideo(job, videos, { stage: async () => undefined });
+    expect(out.qa.voice).toBe("off");
+    expect(out.qa.issues.some((x) => x.includes("AI 음성"))).toBe(false);
+    expect(out.file.subarray(4, 8).toString()).toBe("ftyp");
+  }, 120_000);
 });

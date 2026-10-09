@@ -245,7 +245,7 @@ export const api = {
   /** 영상 자동 제작 (v0.9.51) */
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
-    plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string }) =>
+    plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string; narrationOn: boolean; captions: boolean }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
     jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),
     create: (plan: VideoPlan) => request<VideoJob>("/api/video-jobs", { method: "POST", body: json({ plan }) }),

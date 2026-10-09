@@ -131,6 +131,8 @@ export async function buildPlan(input: {
   sourceMode: VideoSourceMode;
   videos: ReferenceVideo[];
   voice: string;
+  narrationOn?: boolean;
+  captions?: boolean;
 }): Promise<{ plan: VideoPlan; aiCalls: number }> {
   const { content } = input;
   const scripts = (content.context.userEdits?.script?.value ?? content.output.script) as string[] | string | undefined;
@@ -170,6 +172,8 @@ export async function buildPlan(input: {
     ending: true,
     bgm: bgm.length ? sfxName(bgm[Math.floor(Math.random() * bgm.length)]) : null,
     voice: input.voice,
+    narrationOn: input.narrationOn !== false,
+    captions: input.captions !== false,
     meme: false,
   };
   return { plan, aiCalls };

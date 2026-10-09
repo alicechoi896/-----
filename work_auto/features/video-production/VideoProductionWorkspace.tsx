@@ -25,6 +25,9 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [sourceMode, setSourceMode] = useState<VideoSourceMode>("xhs");
   const [videoIds, setVideoIds] = useState<string[]>([]);
   const [voice, setVoice] = useState("onyx");
+  // 음성·자막 (4가지: 자막+음성 / 자막만 / 음성만 / 둘 다 없음)
+  const [narrationOn, setNarrationOn] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(true);
   const [plan, setPlan] = useState<VideoPlan | null>(null);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +43,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlan(null);
     if (!c) return;
     const linked = o.videos.filter((v) => c.productId && v.productId === c.productId).slice(0, 8);
-    setVideoIds((linked.length ? linked : o.videos.slice(0, 6)).map((v) => v.id));
+    // 제품이 있는 원고는 그 제품의 영상만 쓴다
+    setVideoIds((c.productId ? linked : o.videos.slice(0, 6)).map((v) => v.id));
   }, []);
   const load = useCallback(async () => {
     try {
@@ -80,7 +84,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlanning(true);
     setError(null);
     try {
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode, videoIds, voice });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode, videoIds, voice, narrationOn, captions: captionsOn });
       setPlan(r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
@@ -116,6 +120,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   if (loadError) return <ErrorState message={loadError} onRetry={() => void load()} />;
   if (!opts) return <LoadingState label="대본과 영상 소재를 불러오는 중입니다…" className="py-24" />;
 
+  // 제품이 있는 원고면 그 제품에 연결된 영상만
+  const sourceVideos = content?.productId ? opts.videos.filter((v) => v.productId === content.productId) : opts.videos;
   const videoTitle = (id: string | null) => opts.videos.find((v) => v.id === id)?.title ?? "자동";
   const missing = [
     !opts.ready.voice && "AI 음성(OpenAI 연결) — 없으면 음성 없이 자막 시간으로 만듭니다",
@@ -189,18 +195,21 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   onChange={setSourceMode}
                 />
               </FormField>
-              <FormField label={`샤오홍슈 영상 · ${videoIds.length}개 고름`} hint="제품에 연결된 영상을 먼저 골라 두었습니다. 다양할수록 같은 장면 반복이 줄어듭니다.">
-                {opts.videos.length === 0 ? (
+              <FormField
+                label={`샤오홍슈 영상 · ${videoIds.length}개 고름`}
+                hint={content?.productId ? `'${content.productName ?? "이 제품"}'에 연결된 영상만 보입니다. 다양할수록 같은 장면 반복이 줄어듭니다.` : "다양할수록 같은 장면 반복이 줄어듭니다."}
+              >
+                {sourceVideos.length === 0 ? (
                   <p className="text-[13px] text-fg-subtle">
-                    저장된 샤오홍슈 영상이 없습니다.{" "}
+                    {content?.productId ? "이 제품에 연결된 샤오홍슈 영상이 없습니다." : "저장된 샤오홍슈 영상이 없습니다."}{" "}
                     <Link href="/tools/video-import" className="font-medium text-brand hover:underline">
                       영상 URL 가져오기
                     </Link>
-                    에서 먼저 담아 주세요.
+                    에서 {content?.productId ? "이 제품을 연결해 " : ""}먼저 담아 주세요.
                   </p>
                 ) : (
                   <ul className="max-h-72 space-y-1 overflow-y-auto" data-source-videos>
-                    {opts.videos.map((v) => {
+                    {sourceVideos.map((v) => {
                       const on = videoIds.includes(v.id);
                       return (
                         <li key={v.id}>
@@ -217,9 +226,24 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   </ul>
                 )}
               </FormField>
-              <FormField label="AI 음성">
-                <Select value={voice} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => setVoice(e.target.value)} />
+              <FormField label="음성 · 자막">
+                <div className="flex flex-wrap gap-4 text-[13px]" data-av-options>
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input type="checkbox" checked={narrationOn} onChange={(e) => setNarrationOn(e.target.checked)} className="accent-[var(--color-brand)]" />
+                    AI 음성 넣기
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input type="checkbox" checked={captionsOn} onChange={(e) => setCaptionsOn(e.target.checked)} className="accent-[var(--color-brand)]" />
+                    자막 넣기
+                  </label>
+                </div>
               </FormField>
+              {narrationOn && (
+                <FormField label="AI 음성 목소리">
+                  <Select value={voice} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => setVoice(e.target.value)} />
+                </FormField>
+              )}
+              {!narrationOn && <p className="-mt-2 text-xs text-fg-subtle">음성이 없으면 컷 길이는 자막 글자 수로 정합니다 (배경음악·효과음은 그대로).</p>}
               {error && !plan && <Notice tone="warning">{error}</Notice>}
               <Button variant="primary" icon={Wand2} loading={planning} disabled={!content || !videoIds.length || sourceMode === "ai"} onClick={() => void makePlan()} className="w-full" data-make-plan>
                 컷 계획 만들기
@@ -372,7 +396,7 @@ function JobPanel({
           <div className="mx-auto mt-3 h-2 max-w-xs overflow-hidden rounded-full bg-muted">
             <div className="h-full bg-brand transition-all" style={{ width: `${Math.max(5, job.progress)}%` }} />
           </div>
-          <p className="mt-2 text-xs text-fg-subtle">보통 1~3분 걸립니다. 이 화면을 닫아도 계속 만듭니다.</p>
+          <p className="mt-2 text-xs text-fg-subtle">보통 1~3분 걸립니다. 이 화면을 닫아도 계속 만듭니다. 샤오홍슈 원본은 만들 때만 임시로 받고, 끝나면 바로 지웁니다.</p>
         </div>
       ) : job.status === "failed" ? (
         <div className="space-y-3">

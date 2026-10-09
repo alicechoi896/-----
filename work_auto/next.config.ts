@@ -20,11 +20,11 @@ const nextConfig: NextConfig = {
   devIndicators: { position: "bottom-right" },
   poweredByHeader: false,
   // 영상 자동 제작 (v0.9.51): FFmpeg 실행 파일·영상 자료·기본 글꼴을 렌더 함수에 함께 올린다
-  serverExternalPackages: ["ffmpeg-static"],
+  serverExternalPackages: ["ffmpeg-static", "@napi-rs/canvas"],
   outputFileTracingIncludes: {
-    "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*"],
-    "/api/video-jobs": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
-    "/api/video-jobs/*/rerender": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
+    "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/video-jobs": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/video-jobs/*/rerender": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
