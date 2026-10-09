@@ -15,3 +15,4 @@ export * from "./learning";
 export * from "./error-log";
 export * from "./keyword-intel";
 export * from "./video-production";
+export * from "./instagram";

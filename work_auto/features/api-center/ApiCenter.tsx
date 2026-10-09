@@ -66,8 +66,8 @@ const PROVIDERS: ProviderMeta[] = [
   {
     id: "tikhub",
     name: "TikHub",
-    description: "샤오홍슈·도우인 영상 검색과 도우인 링크 가져오기·다운로드 (영상 URL 가져오기 › 영상 검색). [검색]·[더 보기] 1번 = 1회 약 $0.01 · 도우인 링크·다운로드 주소 1회 약 $0.001 · [테스트]는 무료(계정 정보 확인)",
-    usages: ["샤오홍슈·도우인 영상 검색", "도우인 링크 가져오기·다운로드"],
+    description: "샤오홍슈·도우인 영상 검색과 도우인 링크 가져오기·다운로드 (영상 URL 가져오기 › 영상 검색), 인스타그램 릴스 검색 (Instagram › 트렌드 찾기). [검색]·[더 보기] 1번 = 1회 약 $0.01 · 도우인 링크·다운로드 주소 1회 약 $0.001 · [테스트]는 무료(계정 정보 확인)",
+    usages: ["샤오홍슈·도우인 영상 검색", "도우인 링크 가져오기·다운로드", "인스타그램 릴스 검색"],
     icon: Film,
     fields: [{ name: "apiKey", label: "API Key", placeholder: "TikHub API Key", hint: "tikhub.io → 대시보드 → API Keys. 키는 서버에만 암호화해 저장합니다" }],
     docsUrl: "https://user.tikhub.io",

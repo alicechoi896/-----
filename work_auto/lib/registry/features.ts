@@ -166,6 +166,23 @@ export const FEATURES: FeatureDef[] = [
     outputs: ["9:16 mp4 (1080×1920)", "컷 계획", "자동 품질 검사"],
   },
 
+  // ───────── Instagram ─────────
+  {
+    id: "ig-trends",
+    channelId: "instagram",
+    order: 1,
+    title: "인스타그램 트렌드 찾기",
+    description: "검색어로 인스타그램 릴스를 찾아 조회수·좋아요·댓글 순으로 봅니다. 마음에 든 캡션은 대본 포맷에 담고, 그 소재로 YouTube 영상 원고를 바로 만듭니다.",
+    href: "/instagram/trends",
+    icon: TrendingUp,
+    kind: "trend",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["tikhub"],
+    inputs: ["검색어 (한국어 그대로)"],
+    outputs: ["릴스 목록 (조회수·좋아요·댓글·게시일·작성자)", "해시태그", "대본 포맷에 담기", "YouTube 영상 원고 만들기"],
+  },
+
   // ───────── NAVER 블로그 ─────────
   {
     id: "blog-trends",

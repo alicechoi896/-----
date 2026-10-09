@@ -104,6 +104,10 @@
 
 절차는 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)를 본다.
 
+## Instagram (v0.9.53)
+
+- `ig-trends` (/instagram/trends) — trend, TikHub(Instagram V2 search_reels), docs/INSTAGRAM_TRENDS.md
+
 ## 영상 자동 제작 (v0.9.51)
 
 - `yt-video-production` (/youtube/video-production) · `clip-video-production` (/naver-clip/video-production) — tool, 공통 VideoProductionWorkspace, 엔진 lib/server/video (docs/VIDEO_PRODUCTION.md)

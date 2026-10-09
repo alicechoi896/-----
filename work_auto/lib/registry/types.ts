@@ -5,7 +5,7 @@ import type { ChannelId, FeatureStatus, MemberTier, ProviderId } from "@/lib/typ
 export type HubId = ChannelId | "settings" | "admin";
 
 /** 아이콘 칩 포인트 컬러 (globals.css 의 --color-ch-* 토큰과 1:1) */
-export type AccentColor = "youtube" | "clip" | "blog" | "tools" | "neutral";
+export type AccentColor = "youtube" | "clip" | "blog" | "instagram" | "tools" | "neutral";
 
 export interface ChannelDef {
   id: HubId;

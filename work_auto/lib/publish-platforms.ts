@@ -17,6 +17,8 @@ export const PUBLISH_PLATFORMS: PublishPlatform[] = [
   { id: "youtube", label: "YouTube", dot: "bg-red-500", channelId: "youtube" },
   { id: "naver-clip", label: "NAVER 클립", dot: "bg-blue-500", channelId: "naver-clip" },
   { id: "naver-blog", label: "NAVER 블로그", dot: "bg-green-600", channelId: "naver-blog" },
+  // v0.9.53: 인스타그램 릴스 (YouTube 와 같은 영상을 올린다)
+  { id: "instagram", label: "Instagram", dot: "bg-pink-500", channelId: "instagram" },
   { id: "other", label: "기타", dot: "bg-slate-400" },
 ];
 

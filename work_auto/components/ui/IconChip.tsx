@@ -7,6 +7,7 @@ const ACCENTS: Record<AccentColor, string> = {
   youtube: "bg-ch-youtube-soft text-ch-youtube",
   clip: "bg-ch-clip-soft text-ch-clip",
   blog: "bg-ch-blog-soft text-ch-blog",
+  instagram: "bg-ch-instagram-soft text-ch-instagram",
   tools: "bg-ch-tools-soft text-ch-tools",
   neutral: "bg-ch-neutral-soft text-ch-neutral",
 };

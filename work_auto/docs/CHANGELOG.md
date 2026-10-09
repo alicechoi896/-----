@@ -2,6 +2,14 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.53] - 2026-10-09: Instagram 메뉴 · 인스타그램 트렌드 찾기
+
+### 추가
+- 채널 **Instagram** (메인·사이드바) + **인스타그램 트렌드 찾기** (`/instagram/trends`, docs/INSTAGRAM_TRENDS.md)
+  - TikHub `GET /api/v1/instagram/v2/search_reels` — [검색]·[더 보기] 1번 = 1회(약 $0.01), 30분 기억·동시 요청 1번, 정렬(조회수·팔로워 대비·좋아요·댓글·최신)·기간은 받은 결과 안에서
+  - 많이 쓰인 해시태그, 캡션 [대본 포맷에 담기], [영상 만들기] → YouTube 제품 홍보·정보성 원고 (릴스는 YouTube 와 같은 영상)
+- 업로드 관리 플랫폼에 **Instagram** 추가
+
 ## [0.9.52] - 2026-10-09: 영상 자동 제작 — 서버 렌더 오류 수정 · 음성·자막 4가지 · 제품 영상만
 
 ### 수정

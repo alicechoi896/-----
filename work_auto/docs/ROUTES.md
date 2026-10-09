@@ -170,3 +170,9 @@
 | GET/POST | `/api/video-jobs` | 내 작업 목록 / [영상 만들기] (after 렌더) |
 | GET | `/api/video-jobs/:id` | 진행·결과 + 미리보기 주소 |
 | POST | `/api/video-jobs/:id/rerender` · `/approve` · `/download` | 다시 만들기(클립 교체) · 검수 완료 · 1회 다운로드 |
+
+## Instagram (v0.9.53)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/trends/instagram` { keyword, next?, clientRequestId } | 인스타그램 릴스 검색 ([검색]·[더 보기] 1번 = TikHub 1회) |

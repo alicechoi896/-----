@@ -5,7 +5,7 @@ export type ID = string;
 export type ISODate = string;
 
 /** 1차 메뉴 = 채널. 새 채널은 lib/registry/channels.ts 에도 추가한다. */
-export type ChannelId = "youtube" | "naver-clip" | "naver-blog" | "tools";
+export type ChannelId = "youtube" | "naver-clip" | "naver-blog" | "instagram" | "tools";
 
 /** 외부 API Provider 식별자 (API 연결 센터 단위) */
 export type ProviderId = "openai" | "claude" | "youtube" | "naver" | "naver-searchad" | "tikhub" | "brightdata";

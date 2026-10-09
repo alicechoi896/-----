@@ -1,4 +1,4 @@
-import { BookOpen, Brain, CalendarCheck, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
+import { BookOpen, Brain, CalendarCheck, Camera, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -38,6 +38,17 @@ export const CHANNELS: ChannelDef[] = [
     href: "/naver-blog",
     icon: FileText,
     accent: "blog",
+    showOnHome: true,
+  },
+  {
+    id: "instagram",
+    name: "Instagram",
+    hubTitle: "Instagram 자동화",
+    description: "인스타그램 릴스 트렌드 찾기",
+    hubDescription: "인스타그램에서 잘되는 릴스를 찾습니다. 릴스 영상은 YouTube 영상과 같이 쓰므로, 찾은 소재로 YouTube 영상 원고를 바로 만들 수 있습니다.",
+    href: "/instagram",
+    icon: Camera,
+    accent: "instagram",
     showOnHome: true,
   },
   {
