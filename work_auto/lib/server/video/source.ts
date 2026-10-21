@@ -15,6 +15,23 @@ import { mediaDuration, runFfmpeg } from "./ffmpeg";
  * reference_videos 의 원본(주소)은 바꾸지 않는다.
  */
 const ALLOWED_HOST = /(^|\.)xhscdn\.(com|net)$/i;
+/** 영상 서버는 브라우저가 아닌 요청(기본 User-Agent)을 거절할 수 있다 (v0.9.59) */
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+  Referer: "https://www.xiaohongshu.com/",
+  Accept: "*/*",
+  "Accept-Language": "zh-CN,zh;q=0.9,ko;q=0.8",
+};
+
+/** 받기 실패: resolve = 재생 주소를 못 받음, download = 주소는 받았지만 영상 서버가 거절 */
+export class SourceError extends Error {
+  constructor(
+    public stage: "resolve" | "download" | "file",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export interface LocalSource {
   videoId: string;
@@ -34,17 +51,32 @@ export async function fetchSource(video: ReferenceVideo, dir: string, index: num
     );
     return { videoId: video.id, file, duration: 10, title: video.title };
   }
-  if (video.platform !== "xiaohongshu") throw new Error(`'${video.title.slice(0, 20)}' 는 샤오홍슈 영상이 아니라 자동 제작에 쓰지 못했습니다 (V1 은 샤오홍슈만).`);
-  const resolved = await resolveXiaohongshuWithFallback(video.url);
-  const urls = resolved.streams.flatMap((s) => [s.url, ...s.backupUrls]);
+  const name = `'${video.title.slice(0, 20)}'`;
+  if (video.platform !== "xiaohongshu") throw new SourceError("resolve", `${name} 는 샤오홍슈 영상이 아니라 자동 제작에 쓰지 못했습니다 (V1 은 샤오홍슈만).`);
+  let resolved: Awaited<ReturnType<typeof resolveXiaohongshuWithFallback>>;
+  try {
+    resolved = await resolveXiaohongshuWithFallback(video.url);
+  } catch (e) {
+    throw new SourceError("resolve", `${name} 재생 주소를 받지 못했습니다 (${e instanceof Error ? e.message : String(e)})`);
+  }
+  const raw = resolved.streams.flatMap((s) => [s.url, ...s.backupUrls]).filter(Boolean);
+  // https 가 안 되면 http 로도 (TikHub 주소는 http 로 오는 경우가 있다)
+  const urls = [...new Set(raw.flatMap((u) => [u, u.replace(/^https:\/\//, "http://")]))];
   let lastError = "재생 주소가 없습니다";
-  for (const u of urls.slice(0, 4)) {
+  for (const u of urls.slice(0, 6)) {
+    const t0 = Date.now();
+    let host = "";
     try {
-      const host = new URL(u).hostname;
-      if (!ALLOWED_HOST.test(host)) continue;
-      const res = await safeFetch(u, { signal: AbortSignal.timeout(60_000), headers: { Referer: "https://www.xiaohongshu.com/" } });
+      host = new URL(u).hostname;
+      if (!ALLOWED_HOST.test(host)) {
+        lastError = `허용하지 않은 영상 주소 (${host})`;
+        console.warn("[VideoSource]", JSON.stringify({ videoId: video.id, host, skipped: "host" }));
+        continue;
+      }
+      const res = await safeFetch(u, { signal: AbortSignal.timeout(60_000), headers: BROWSER_HEADERS });
+      console.info("[VideoSource]", JSON.stringify({ videoId: video.id, host, scheme: u.slice(0, 5), status: res.status, len: res.headers.get("content-length"), type: res.headers.get("content-type"), ms: Date.now() - t0 }));
       if (!res.ok) {
-        lastError = `HTTP ${res.status}`;
+        lastError = `영상 서버 HTTP ${res.status}`;
         continue;
       }
       const len = Number(res.headers.get("content-length") ?? 0);
@@ -57,7 +89,8 @@ export async function fetchSource(video: ReferenceVideo, dir: string, index: num
       return { videoId: video.id, file, duration, title: video.title };
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
+      console.warn("[VideoSource]", JSON.stringify({ videoId: video.id, host, error: lastError.slice(0, 200), ms: Date.now() - t0 }));
     }
   }
-  throw new Error(`'${video.title.slice(0, 20)}' 원본을 받지 못했습니다 (${lastError}).`);
+  throw new SourceError("download", `${name} 원본을 받지 못했습니다 (${lastError}).`);
 }

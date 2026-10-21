@@ -15,7 +15,7 @@ import {
 import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
 import { mediaDuration, runFfmpeg, videoSize } from "./ffmpeg";
-import { fetchSource, type LocalSource } from "./source";
+import { SourceError, fetchSource, type LocalSource } from "./source";
 import { TREATMENT_RANK, boxesIn, decideTreatment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { captionY, endingY, renderCaption, renderEnding, renderTitleBar } from "./text-image";
 
@@ -69,23 +69,42 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const used = [...new Set(scenes.map((s) => s.sourceVideoId).filter((x): x is string => Boolean(x)))];
     const byId = new Map(videos.map((v) => [v.id, v]));
     const sources = new Map<string, LocalSource & { scan: TextScan }>();
-    for (let i = 0; i < used.length; i += 3) {
-      await Promise.all(
-        used.slice(i, i + 3).map(async (id, j) => {
-          const v = byId.get(id);
-          if (!v) return;
-          try {
-            const src = await fetchSource(v, dir, i + j);
-            const { scan, aiCalls: n } = await scanText(src.file, src.duration, dir, `s${i + j}`);
-            aiCalls += n;
-            sources.set(id, { ...src, scan });
-          } catch (e) {
-            issues.push(e instanceof Error ? e.message : String(e));
-          }
-        }),
-      );
+    const sourceErrors: string[] = [];
+    const missing = used.filter((id) => !byId.has(id)).length;
+    const loadOne = async (id: string, k: number) => {
+      const v = byId.get(id);
+      if (!v) return;
+      try {
+        const src = await fetchSource(v, dir, k);
+        const { scan, aiCalls: n } = await scanText(src.file, src.duration, dir, `s${k}`);
+        aiCalls += n;
+        sources.set(id, { ...src, scan });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sourceErrors.push(msg);
+        issues.push(msg);
+        throw e;
+      }
+    };
+    // 첫 원본을 먼저 받아 본다: 영상 서버가 우리 서버를 거절하면(다운로드 단계) 나머지는 부르지 않는다 (TikHub 비용 절약, v0.9.59)
+    let stopAll = false;
+    if (used.length) {
+      await loadOne(used[0], 0).catch((e) => {
+        if (e instanceof SourceError && e.stage === "download") stopAll = true;
+      });
     }
-    if (!sources.size) throw new Error("쓸 수 있는 원본 영상이 없습니다. 영상 소재를 골라 주세요.");
+    for (let i = 1; !stopAll && i < used.length; i += 3) {
+      await Promise.all(used.slice(i, i + 3).map((id, j) => loadOne(id, i + j).catch(() => undefined)));
+    }
+    if (!sources.size) {
+      const why = !used.length
+        ? "컷에 원본 영상이 하나도 배정되지 않았습니다. [컷 계획 만들기]를 다시 눌러 주세요."
+        : missing === used.length
+          ? "고른 원본 영상을 찾지 못했습니다 (삭제되었거나 다른 사용자 영상). 영상 소재를 다시 골라 주세요."
+          : (sourceErrors[0] ?? "원본을 받지 못했습니다.") + (stopAll && used.length > 1 ? ` · 같은 이유로 나머지 ${used.length - 1}개는 받지 않았습니다.` : "");
+      console.error("[VideoSource] none", JSON.stringify({ jobId: job.id, used: used.length, missing, errors: sourceErrors.slice(0, 3) }));
+      throw new Error(`쓸 수 있는 원본 영상이 없습니다. ${why}`);
+    }
 
     // 2) AI 음성 (마디마다) → 앞뒤 무음 정리 → 길이
     await hooks.stage("editing", 25);
