@@ -1,6 +1,7 @@
 import "server-only";
 import { MockInstagramProvider, TikHubInstagramProvider, type InstagramProvider } from "./instagram/provider";
 import { GraphInstagramProvider, MockMetaInstagramProvider, type MetaInstagramProvider } from "./instagram/meta-graph";
+import { KieVideoProvider, MockVideoAIProvider, type VideoAIProvider } from "./video-ai/kie";
 import { OpenAITTSProvider, type TTSProvider } from "./tts/openai-tts";
 import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/lib/types";
 import { serverConfig } from "../config";
@@ -122,6 +123,14 @@ export async function getMetaInstagramProvider(): Promise<MetaInstagramProvider 
   return cred ? new GraphInstagramProvider(cred.apiKey, cred.igUserId) : null;
 }
 
+/** AI 영상 (v0.9.60, Kie AI): 연결되어 있지 않으면 null. 데모는 가짜 (바로 끝남) */
+const mockVideoAI = new MockVideoAIProvider();
+export async function getVideoAIProvider(): Promise<VideoAIProvider | null> {
+  if (serverConfig.providerMode !== "live") return mockVideoAI;
+  const cred = await loadCredentials("kie");
+  return cred ? new KieVideoProvider(cred.apiKey) : null;
+}
+
 /** TikHub 가 연결되어 있는지만 (호출 없음) */
 export async function hasTikHub(): Promise<boolean> {
   if (serverConfig.providerMode !== "live") return true;
@@ -196,6 +205,8 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new NaverSearchAdProvider(cred as ProviderCredentialMap["naver-searchad"]);
     case "tikhub":
       return new TikHubXiaohongshuProvider((cred as ProviderCredentialMap["tikhub"]).apiKey);
+    case "kie":
+      return new KieVideoProvider((cred as ProviderCredentialMap["kie"]).apiKey);
     case "meta-instagram": {
       const c = cred as ProviderCredentialMap["meta-instagram"];
       return new GraphInstagramProvider(c.apiKey, c.igUserId);

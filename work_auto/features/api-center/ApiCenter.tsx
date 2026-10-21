@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Bot, Camera, Film, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Bot, Camera, Clapperboard, Film, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
 import type { AiProviderId, ApiConnectionPublic } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -88,6 +88,15 @@ const PROVIDERS: ProviderMeta[] = [
       { name: "igUserId", label: "Instagram 비즈니스 계정 ID", placeholder: "숫자 (예: 17841400000000000)", hint: "Graph API 탐색기에서 GET me/accounts?fields=instagram_business_account 로 확인 (Facebook 페이지에 연결된 비즈니스·크리에이터 계정)" },
     ],
     docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-hashtag-search",
+  },
+  {
+    id: "kie",
+    name: "Kie AI (AI 영상)",
+    description: "영상 자동 제작의 AI 컷: 제품 사진 → 움직이는 영상(Wan 2.6 Flash, 5초 약 $0.10), 글 → 장면(Bytedance V1 Pro). [AI 컷 만들기]를 누를 때만 컷 수만큼 호출하고, 자동 재시도하지 않습니다 · [테스트]는 무료(잔액 확인)",
+    usages: ["AI 컷 (제품 사진 → 영상)", "AI 컷 (글 → 장면)"],
+    icon: Clapperboard,
+    fields: [{ name: "apiKey", label: "API Key", placeholder: "Kie AI API Key", hint: "kie.ai → API Key. 키마다 시간·일·총 사용 한도를 걸 수 있습니다. 키는 서버에만 암호화해 저장합니다" }],
+    docsUrl: "https://kie.ai/api-key",
   },
   {
     id: "brightdata",

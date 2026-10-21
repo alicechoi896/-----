@@ -31,6 +31,29 @@ export interface VideoScene {
   issue?: string | null;
 }
 
+/** AI 컷 (v0.9.60, Kie AI): product = 제품 사진 → 움직이는 영상, text = 글 → 장면 */
+export type AiClipMode = "product" | "text";
+export type AiClipState = "draft" | "waiting" | "generating" | "success" | "fail";
+export interface AiClip {
+  /** ai1, ai2 … — 컷의 sourceVideoId 는 "ai:ai1" 처럼 쓴다 */
+  id: string;
+  mode: AiClipMode;
+  /** 장면 설명 (한국어로 써도 됨, 만들 때 AI 가 영어 프롬프트로 바꾼다) */
+  prompt: string;
+  /** product: 쓸 제품 사진 (그 제품의 사진 중에서만) */
+  imageUrl?: string | null;
+  /** Kie 작업 id (만들기를 누른 뒤) */
+  taskId?: string | null;
+  state: AiClipState;
+  model?: string | null;
+  /** 실제 쓴 크레딧 (끝난 뒤, 1크레딧 = $0.005) */
+  credits?: number | null;
+  error?: string | null;
+}
+export const AI_SOURCE_PREFIX = "ai:";
+export const aiSourceId = (clipId: string) => `${AI_SOURCE_PREFIX}${clipId}`;
+export const isAiSource = (id: string | null | undefined) => Boolean(id && id.startsWith(AI_SOURCE_PREFIX));
+
 export interface VideoPlan {
   contentId: string | null;
   channelId: VideoChannel;
@@ -56,6 +79,8 @@ export interface VideoPlan {
   captions?: boolean;
   /** Giphy 짤 (선택 기능, 저작권 확인 필요) — V1 은 자리만 */
   meme: boolean;
+  /** AI 컷 (섞기·AI만, v0.9.60). 결과 영상은 Kie 에 14일 — 렌더할 때 taskId 로 받아 쓰고 남기지 않는다 */
+  aiClips?: AiClip[];
 }
 
 export interface VideoQa {

@@ -2,7 +2,7 @@ import type { PermissionRow } from "@/lib/permissions";
 import type { IgMetaKind, IgSearchResult, IgSource, IgSourceStatus } from "@/lib/types/instagram";
 import type { ScrapSource } from "@/lib/types/trend";
 import type { KeywordTrend, TrendKeyword, TrendKeywordView } from "@/lib/types/keyword-library";
-import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
+import type { AiClip, VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type { OutlierScore } from "@/lib/domain/outlier";
@@ -270,7 +270,7 @@ export const api = {
   /** 영상 자동 제작 (v0.9.51) */
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
-    plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string; narrationOn: boolean; captions: boolean }) =>
+    plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string; narrationOn: boolean; captions: boolean; aiCount?: number }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
     jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),
     create: (plan: VideoPlan) => request<VideoJob>("/api/video-jobs", { method: "POST", body: json({ plan }) }),
@@ -278,6 +278,10 @@ export const api = {
     approve: (id: string) => request<VideoJob>(`/api/video-jobs/${id}/approve`, { method: "POST" }),
     rerender: (id: string, plan?: VideoPlan) => request<VideoJob>(`/api/video-jobs/${id}/rerender`, { method: "POST", body: json({ plan }) }),
     download: (id: string) => request<{ url: string }>(`/api/video-jobs/${id}/download`, { method: "POST" }),
+    /** AI 컷 만들기 (Kie, 컷 1개 = 1회 과금) */
+    aiClips: (plan: VideoPlan, clientRequestId: string) => request<{ clips: AiClip[]; created: number; aiCalls: number }>("/api/video-production/ai-clips", { method: "POST", body: json({ plan, clientRequestId }) }),
+    /** AI 컷 상태 (무료) */
+    aiClipStatus: (clips: AiClip[]) => request<{ clips: AiClip[] }>("/api/video-production/ai-clips/status", { method: "POST", body: json({ clips }) }),
   },
   publications: {
     list: (from: string, to: string) => request<ContentPublicationView[]>(`/api/publications${qs({ from, to })}`),
@@ -457,10 +461,10 @@ export const api = {
 
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
-  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string }[];
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; images: string[] }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
-  ready: { voice: boolean; vision: boolean; ai: string };
+  ready: { voice: boolean; vision: boolean; ai: string; videoAi: boolean };
   voices: readonly { value: string; label: string }[];
 }
 

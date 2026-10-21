@@ -416,7 +416,6 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(opts.contents.some((c) => c.id === s2.id)).toBe(true);
     // 블로그 원고·다른 채널 원고는 쓸 수 없다
     expect((await post("/api/video-production/plan", { contentId: s2.id, channelId: "naver-clip", sourceMode: "xhs" })).ok).toBe(false);
-    expect((await post("/api/video-production/plan", { contentId: s2.id, channelId: "youtube", sourceMode: "ai" })).error?.code).toBe("NOT_READY");
     type Plan = { scenes: { narration: string; sfx: string | null; arrow: boolean; sourceVideoId: string | null }[]; topLine1: string; topLine2: string; selectedTitle: string };
     const plan = (await post("/api/video-production/plan", { contentId: s2.id, scriptIndex: 0, channelId: "youtube", sourceMode: "xhs", videoIds: imp.map((x) => x.video!.id), voice: "onyx" })).data as { plan: Plan };
     const scenes = plan.plan.scenes;
@@ -444,8 +443,33 @@ describe("트렌드·스타일·오류 기록", () => {
     const dl = (await post(`/api/video-jobs/${job.id}/download`, {})).data as { url: string };
     expect(dl.url).toBeTruthy();
     expect(((await post(`/api/video-jobs/${job.id}/approve`, {})).data as Job).status).toBe("approved");
+
+    // AI 컷 (v0.9.60, 데모 Kie): AI만 → 컷 계획에 AI 컷 2개 → 만들기 전엔 렌더 막힘 → [AI 컷 만들기] → 상태 확인 → 렌더
+    type Clip = { id: string; mode: string; taskId: string | null; state: string; prompt: string };
+    type AiPlan = Plan & { sourceMode: string; aiClips: Clip[] };
+    const ap = ((await post("/api/video-production/plan", { contentId: s2.id, scriptIndex: 0, channelId: "youtube", sourceMode: "ai", voice: "onyx", aiCount: 2 })).data as { plan: AiPlan }).plan;
+    expect(ap.aiClips.map((c) => c.id)).toEqual(["ai1", "ai2"]);
+    expect(ap.aiClips.every((c) => c.state === "draft" && !c.taskId && c.prompt)).toBe(true);
+    expect(ap.scenes.every((x) => x.sourceVideoId?.startsWith("ai:"))).toBe(true);
+    expect((await post("/api/video-jobs", { plan: ap })).error?.code).toBe("AI_NOT_READY");
+    const made = (await post("/api/video-production/ai-clips", { plan: ap, clientRequestId: "ai-test" })).data as { clips: Clip[]; created: number };
+    expect(made.created).toBe(2);
+    expect(made.clips.every((c) => c.taskId && c.state === "waiting")).toBe(true);
+    // 이미 만든 컷은 다시 만들지 않는다 (과금 0)
+    expect(((await post("/api/video-production/ai-clips", { plan: { ...ap, aiClips: made.clips }, clientRequestId: "ai-test-2" })).data as { created: number }).created).toBe(0);
+    const st = (await post("/api/video-production/ai-clips/status", { clips: made.clips, channelId: "youtube" })).data as { clips: Clip[] };
+    expect(st.clips.every((c) => c.state === "success")).toBe(true);
+    let aj = (await post("/api/video-jobs", { plan: { ...ap, aiClips: st.clips } })).data as Job;
+    const t1 = Date.now();
+    while (["queued", "analyzing", "editing", "rendering", "quality_check"].includes(aj.status) && Date.now() - t1 < 150_000) {
+      await sleep(2000);
+      aj = (await j<Job>(`/api/video-jobs/${aj.id}`)).data;
+    }
+    expect(["completed", "needs_review"]).toContain(aj.status);
+    // AI 컷은 글자 없는 영상 → 글자 검사 없이 '글자 없음'
+    expect(aj.plan.scenes.every((x) => x.textTreatment === "clean")).toBe(true);
     for (const x of imp) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
-  }, 200_000);
+  }, 400_000);
 
   it("트렌드 스크랩: YouTube·NAVER·Instagram 저장 → 분류 → 옮기기 → 분류 이름 바꾸기 → 삭제, 같은 항목은 분류만 바뀜", async ({ skip }) => {
     if (!reachable) skip();

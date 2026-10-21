@@ -202,3 +202,10 @@
 |---|---|---|
 | GET | `/api/trends/instagram/status` | 공식 API·TikHub 연결 여부 (DB 만) |
 | POST | `/api/trends/instagram` { keyword, next?, source?: meta\|tikhub, kind?: top\|recent } | source 기본 meta (무료·해시태그), tikhub 는 1회 약 $0.01 |
+
+## 영상 자동 제작 AI 컷 (v0.9.60)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/video-production/ai-clips` { plan, clientRequestId } | AI 컷 만들기 (Kie, 안 만든 컷 1개 = 1회 과금) |
+| POST | `/api/video-production/ai-clips/status` { clips, channelId } | AI 컷 상태 (무료) |

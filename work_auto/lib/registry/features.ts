@@ -91,7 +91,7 @@ export const FEATURES: FeatureDef[] = [
     channelId: "youtube",
     order: 4,
     title: "영상 자동 제작",
-    description: "2단계에서 만든 대본으로 YouTube Shorts 영상을 자동으로 만듭니다. 샤오홍슈 영상을 대본에 맞게 배치하고, AI 음성·상단 제목·자막·화살표·효과음·배경음악을 넣은 9:16 mp4 를 만듭니다.",
+    description: "2단계에서 만든 대본으로 YouTube Shorts 영상을 자동으로 만듭니다. 샤오홍슈 영상과 AI 컷(제품 사진 → 움직이는 영상, Kie AI)을 대본에 맞게 배치하고, AI 음성·상단 제목·자막·화살표·효과음·배경음악을 넣은 9:16 mp4 를 만듭니다.",
     href: "/youtube/video-production",
     icon: Film,
     kind: "tool",

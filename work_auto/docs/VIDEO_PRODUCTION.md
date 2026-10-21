@@ -71,10 +71,23 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 | AI 이미지 읽기(원본 글자) | 원본마다 1~2회 |
 | AI 음성(OpenAI TTS) | 컷 수만큼 |
 | AI 화면용 제목 | 1회 (컷 계획) |
+| Kie AI (AI 컷) | [AI 컷 만들기]를 누를 때만 컷 수만큼 (+ 영어 프롬프트 AI 1회). 상태 확인·렌더 때 결과 받기는 무료 |
+
+## AI 컷 (v0.9.60, Kie AI)
+
+- Provider: `lib/server/providers/video-ai/kie.ts` (registry `getVideoAIProvider`, API 연결 센터 `kie`). 서비스: `lib/server/video/ai-clips.ts`. 모델·가격은 `AI_CLIP_CONFIG` (lib/video-production/config.ts)
+- 계획: 소재 '섞기'·'AI만' + AI 컷 수(1~10) → `plan.aiClips` (ai1…), 컷의 `sourceVideoId = "ai:ai1"`. 섞기는 고르게 n 컷(고정), AI만은 모든 컷을 돌아가며. 이때 Kie 호출 0
+- [AI 컷 만들기] `POST /api/video-production/ai-clips`: 아직 안 만든(또는 실패한) 컷만, 컷 1개 = Kie 작업 1개(과금). AI 1회로 영어 프롬프트. 자동 재시도 없음, 키·잔액 오류면 나머지 중단, 같은 clientRequestId 동시 1번. 로그 `[KieClip]`
+  - product: 제품 사진(그 원고 제품의 사진만) → 720×1280 JPEG(흐린 배경 + 가운데 제품) → Kie 파일 올리기(무료, 24시간) → `wan/2-6-flash-image-to-video` 5초 720p audio:false (20크레딧 ≈ $0.10)
+  - text: `bytedance/v1-pro-text-to-video` 9:16 5초 720p (가격 확인 필요 — 끝나면 creditsConsumed 표시)
+- 상태 `POST /api/video-production/ai-clips/status` (recordInfo, 무료) — 화면이 만드는 중일 때 20초마다
+- 작업 번호는 브라우저 localStorage(`vp-ai-clips:{contentId}:{script}`, 비밀값 아님)에 남겨 같은 대본 계획을 다시 만들어도 이어서 쓴다
+- [영상 만들기]: 쓰는 AI 컷이 모두 success 여야 한다 (아니면 AI_NOT_READY). 렌더할 때 taskId 로 결과 주소를 새로 받아(화면이 보낸 주소를 믿지 않음) 임시 폴더에 받고 지운다. AI 컷은 글자 검사 없이 '글자 없음', 짧으면 반복(stream_loop), 여러 컷에 시작 위치를 바꿔 나눠 쓴다
+- 받지 못한 AI 컷은 검사 결과에 이유를 남기고 다른 영상으로 채운다
 
 ## 아직 안 된 것 (다음 단계)
 
-- AI 영상 생성(소재 'AI만'·'섞기'의 AI 몫) — 업체 선정 후 Provider 로
+- AI 컷: Bytedance 가격 확인, 제품 사진 직접 올리기, Kling·Seedance 등 모델 고르기
 - 움직이는 글자 추적 블러, 제품 중심 리프레이밍, 장면 의미 맞추기(Vision 캡션 → 대본 매칭)
 - 최종 영상 글자 재검사(AI 이미지 읽기), 웃긴 짤(Giphy 선택 기능, 저작권 확인 필요 안내), 구글 드라이브로 보내기
 

@@ -119,6 +119,35 @@ export const VIDEO_SCRIPT_FEATURES: Record<VideoChannel, string[]> = {
 };
 
 /** OpenAI TTS 목소리 (lib/server/providers/tts) */
+/**
+ * AI 컷 (v0.9.60) — Kie AI (docs/VIDEO_PRODUCTION.md). 모델을 바꾸려면 여기만 고친다.
+ * - product: Wan 2.6 Flash 이미지→영상 (입력 사진 비율 그대로 → 서버가 9:16 사진을 만들어 보낸다), 5초 720p 소리 없음 = 20크레딧(약 $0.10)
+ * - text: Bytedance V1 Pro 글→영상 (9:16 설정 있음), 5초 720p — 가격은 Kie 가격표 확인 필요 (끝나면 실제 크레딧 표시)
+ * 소리는 만들지 않는다 (AI 음성·배경음악을 우리가 넣는다).
+ */
+export const AI_CLIP_CONFIG = {
+  creditUsd: 0.005,
+  defaultCount: 3,
+  maxCount: 10,
+  product: { model: "wan/2-6-flash-image-to-video", duration: "5", resolution: "720p", credits: 20 as number | null },
+  text: { model: "bytedance/v1-pro-text-to-video", duration: "5", resolution: "720p", aspectRatio: "9:16", credits: null as number | null },
+  /** 9:16 입력 사진 크기 */
+  imageWidth: 720,
+  imageHeight: 1280,
+} as const;
+
+/** 예상 비용 (모르는 모델은 null) */
+export function estimateAiClipUsd(modes: ("product" | "text")[]): { usd: number; unknown: number } {
+  let usd = 0;
+  let unknown = 0;
+  for (const m of modes) {
+    const c = AI_CLIP_CONFIG[m].credits;
+    if (c == null) unknown++;
+    else usd += c * AI_CLIP_CONFIG.creditUsd;
+  }
+  return { usd: Number(usd.toFixed(2)), unknown };
+}
+
 export const VOICE_OPTIONS = [
   { value: "onyx", label: "남성 · 낮고 또렷함" },
   { value: "echo", label: "남성 · 밝음" },

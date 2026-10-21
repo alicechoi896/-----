@@ -16,6 +16,8 @@ import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
 import { mediaDuration, runFfmpeg, videoSize } from "./ffmpeg";
 import { SourceError, fetchSource, type LocalSource } from "./source";
+import { aiClipService } from "./ai-clips";
+import { isAiSource } from "@/lib/types/video-production";
 import { TREATMENT_RANK, boxesIn, decideTreatment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { captionY, endingY, renderCaption, renderEnding, renderTitleBar } from "./text-image";
 
@@ -66,7 +68,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
 
     // 1) 원본 받기 + 글자 검사 (쓰는 원본만, 동시에 3개씩)
     await hooks.stage("analyzing", 5);
-    const used = [...new Set(scenes.map((s) => s.sourceVideoId).filter((x): x is string => Boolean(x)))];
+    const used = [...new Set(scenes.map((s) => s.sourceVideoId).filter((x): x is string => Boolean(x) && !isAiSource(x)))];
     const byId = new Map(videos.map((v) => [v.id, v]));
     const sources = new Map<string, LocalSource & { scan: TextScan }>();
     const sourceErrors: string[] = [];
@@ -96,8 +98,13 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     for (let i = 1; !stopAll && i < used.length; i += 3) {
       await Promise.all(used.slice(i, i + 3).map((id, j) => loadOne(id, i + j).catch(() => undefined)));
     }
+    // AI 컷 (v0.9.60): Kie 결과 영상 — 글자 없는 AI 영상이라 글자 검사(AI 이미지 읽기)를 하지 않는다
+    const aiFiles = await aiClipService.download(job.plan, dir, issues);
+    for (const [id, f] of aiFiles) sources.set(id, { videoId: id, file: f.file, duration: f.duration, title: f.title, scan: { samples: [], checked: true, interval: 1 } });
     if (!sources.size) {
-      const why = !used.length
+      const why = !used.length && aiFiles.size === 0 && (job.plan.aiClips ?? []).length
+        ? "AI 컷 영상을 받지 못했습니다. 위의 이유를 확인해 주세요: " + issues.slice(-2).join(" / ")
+        : !used.length
         ? "컷에 원본 영상이 하나도 배정되지 않았습니다. [컷 계획 만들기]를 다시 눌러 주세요."
         : missing === used.length
           ? "고른 원본 영상을 찾지 못했습니다 (삭제되었거나 다른 사용자 영상). 영상 소재를 다시 골라 주세요."
@@ -157,6 +164,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const ranges = usedRanges.get(id) ?? [];
         const maxStart = Math.max(0, src.duration - dur - 0.1);
         const steps = Math.max(1, Math.floor(maxStart / 0.5));
+        // AI 컷(5초, 글자 없음)은 여러 컷에 나눠 쓴다: 겹쳐도 되고, 쓸 때마다 시작 위치만 바꾼다
+        if (isAiSource(id)) {
+          best = { id, start: maxStart > 0 ? (ranges.length * 1.7) % maxStart : 0, tr: { kind: "clean" } };
+          break;
+        }
         for (let n = 0; n <= steps; n++) {
           const start = (maxStart * n) / steps;
           if (ranges.some(([a, b]) => start < b && start + dur > a)) continue;
@@ -207,8 +219,10 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           filter += `;[blurred]format=yuv420p[out]`;
         } else filter += `;[base]format=yuv420p[out]`;
       } else filter += `;[base]format=yuv420p[out]`;
+      // 원본이 컷보다 짧으면(AI 컷 5초 등) 반복해서 채운다
+      const loop = src.duration < best.start + dur + 0.05 ? ["-stream_loop", "-1"] : [];
       await runFfmpeg([
-        "-ss", String(best.start), "-t", dur.toFixed(3), "-i", src.file,
+        ...loop, "-ss", String(best.start), "-t", dur.toFixed(3), "-i", src.file,
         "-filter_complex", filter, "-map", "[out]", "-an",
         "-c:v", "libx264", "-preset", C.preset, "-crf", String(C.crf), "-r", String(C.fps), out,
       ], 90_000);

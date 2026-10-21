@@ -114,7 +114,7 @@
 
 ## 영상 자동 제작 (v0.9.51)
 
-- `yt-video-production` (/youtube/video-production) · `clip-video-production` (/naver-clip/video-production) — tool, 공통 VideoProductionWorkspace, 엔진 lib/server/video (docs/VIDEO_PRODUCTION.md)
+- `yt-video-production` (/youtube/video-production) · `clip-video-production` (/naver-clip/video-production) — tool, 공통 VideoProductionWorkspace, 엔진 lib/server/video, AI 컷 = Kie AI(lib/server/providers/video-ai, v0.9.60) (docs/VIDEO_PRODUCTION.md)
 
 ## 2단계 생성 · Keyword Intelligence (v0.9.40)
 
