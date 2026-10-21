@@ -325,8 +325,8 @@ export const api = {
     addCaptions: (body: { formatId?: string; newFormat?: { name: string; contentType: ScriptFormatType }; captions: string[]; titles: string[] }) =>
       request<{ format: ScriptFormat; captions: number; titles: number }>("/api/script-formats/captions", { method: "POST", body: json(body) }),
     /** [대본 포맷에 담기]: 제목만 기존 포맷에 더하거나 새 포맷으로 */
-    addTitles: (body: { formatId?: string; newFormat?: { name: string; contentType: ScriptFormatType }; titles: { title: string; views: number | null }[] }) =>
-      request<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }>("/api/script-formats/titles", { method: "POST", body: json(body) }),
+    addTitles: (body: { formatId?: string; newFormat?: { name: string; contentType: ScriptFormatType }; titles: { title: string; views: number | null }[]; thumbnailTitles?: string[] }) =>
+      request<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number; thumbs?: number }>("/api/script-formats/titles", { method: "POST", body: json(body) }),
     /** 참고 대본 → 포맷 가이드라인 (AI, 저장하지 않음) */
     analyze: (examples: ScriptExample[], contentType: ScriptFormatType) =>
       request<{ name: string; guideline: string; provider: string }>("/api/script-formats/analyze", { method: "POST", body: json({ examples, contentType }) }),

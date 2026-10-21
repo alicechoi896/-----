@@ -7,8 +7,11 @@ import type { ScriptExample, ScriptFormatType } from "@/lib/types/script-format"
 export const SCRIPT_FORMAT_LIMITS = {
   /** 포맷 하나에 넣는 참고 대본 수 (대본 내용이 있는 것) */
   examples: 30,
-  /** 제목만 담은 참고 (트렌드·영상 검색에서 담은 제목·썸네일 문구, v0.9.50) */
+  /** 제목만 담은 참고 (트렌드·영상 검색에서 담은 제목, v0.9.50) */
   titleOnly: 300,
+  /** 섬네일 제목 (v0.9.55) */
+  thumbnailTitles: 300,
+  thumbnailTitleChars: 60,
   exampleChars: 2000,
   titleChars: 200,
   guidelineChars: 3000,

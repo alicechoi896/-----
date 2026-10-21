@@ -86,3 +86,8 @@
 - 생성 프롬프트의 [잘된 제목]은 매번 무작위 20개(포맷 제목 100개 초과면 30개) — `promptTitles()`.
 - 제목 후보 구성 `titleMix()` (10개 기준): 포맷 제목 ≤100 → AI 4 · 포맷 패턴 4 · 플랫폼 트렌드 2, >100 → 2 · 7 · 1. 트렌드 제목은 Keyword Intelligence `topTitles`(이미 받은 데이터, 추가 호출 0). 없는 몫은 AI 로.
 - YouTube 트렌드 [대본 포맷에 담기] → 썸네일 문구도 함께 (`/api/trends/youtube/thumbnail-text`, AI Vision, 최대 10개). 남의 영상 자막은 YouTube API 로 받을 수 없어 Hook·CTA 는 담지 않는다.
+
+## v0.9.55: 섬네일 제목 · 참고 대본은 대본만
+
+- `thumbnailTitles` (script_formats.thumbnail_titles jsonb, 최대 300개·60자): YouTube 트렌드 썸네일 문구 읽기 결과가 여기로. 영상·클립 생성 프롬프트에 무작위 8개 (Hook·화면 문구 참고)
+- 화면에서 ① 참고 대본 = 대본이 있는 것만(제목 칸 없음), ⑦ 잘된 제목 = 제목만 담은 참고. 저장은 그대로 examples 하나 (기존 데이터 이동 없음)

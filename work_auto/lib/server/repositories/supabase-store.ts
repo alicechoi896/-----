@@ -46,7 +46,7 @@ function fail(table: string, action: string, error: { message: string; code?: st
  */
 const PENDING_COLUMNS: Record<string, string[]> = {
   user_styles: ["title_patterns", "preferred_types", "product_format_id", "info_format_id", "product_format_ids", "info_format_ids"], // v0.9.9, v0.9.23, v0.9.27, v0.9.39
-  script_formats: ["hooks", "ctas", "title_patterns", "preferred_types", "bad_examples", "captions"], // v0.9.37, v0.9.54
+  script_formats: ["hooks", "ctas", "title_patterns", "preferred_types", "bad_examples", "captions", "thumbnail_titles"], // v0.9.37, v0.9.54, v0.9.55
   saved_trends: ["folder", "meta"], // v0.9.54 트렌드 스크랩
   content_profiles: ["audience"], // v0.9.37
 };

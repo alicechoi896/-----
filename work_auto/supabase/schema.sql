@@ -480,6 +480,8 @@ alter table public.saved_trends add column if not exists folder text not null de
 alter table public.saved_trends add column if not exists meta   jsonb not null default '{}'::jsonb;
 -- v0.9.54: 대본 포맷 캡션 (인스타그램 트렌드에서 담은 캡션 — 설명글·캡션 참고). 추가만
 alter table public.script_formats add column if not exists captions jsonb not null default '[]'::jsonb;
+-- v0.9.55: 대본 포맷 섬네일 제목 (영상 제목과 성격이 달라 따로). 추가만
+alter table public.script_formats add column if not exists thumbnail_titles jsonb not null default '[]'::jsonb;
 
 -- 자주 쓰는 조회용 인덱스
 create index if not exists idx_saved_filters_user on public.saved_filters (user_id, created_at desc);

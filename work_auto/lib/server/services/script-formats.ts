@@ -30,6 +30,20 @@ function phraseList(v: unknown, max: number): string[] {
 const TYPES: ScriptFormatType[] = ["product", "info"];
 /** 캡션 (v0.9.54): 최대 100개 · 1개 600자 */
 export const CAPTION_LIMITS = { max: 100, chars: 600 } as const;
+/** 섬네일 제목 (v0.9.55): 최대 300개 · 1개 60자, 같은 문구 제외 */
+function thumbList(v: unknown): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of Array.isArray(v) ? v : []) {
+    const t = String(x ?? "").replace(/\s+/g, " ").trim().slice(0, SCRIPT_FORMAT_LIMITS.thumbnailTitleChars);
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+    if (out.length >= SCRIPT_FORMAT_LIMITS.thumbnailTitles) break;
+  }
+  return out;
+}
 function captionList(v: unknown): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -55,11 +69,13 @@ function clean(input: Partial<ScriptFormatInput>): ScriptFormatInput {
   const ctas = phraseList(input.ctas, STYLE_LIMITS.ctas.max);
   const titlePatterns = phraseList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max);
   const captions = captionList(input.captions);
-  if (!guideline && !examples.length && !hooks.length && !ctas.length && !titlePatterns.length && !captions.length) {
-    throw new AppError("VALIDATION", "참고 대본·가이드라인·Hook·CTA·제목 패턴·캡션 중 하나는 넣어 주세요.");
+  const thumbnailTitles = thumbList(input.thumbnailTitles);
+  if (!guideline && !examples.length && !hooks.length && !ctas.length && !titlePatterns.length && !captions.length && !thumbnailTitles.length) {
+    throw new AppError("VALIDATION", "참고 대본·가이드라인·Hook·CTA·제목 패턴·캡션·섬네일 제목 중 하나는 넣어 주세요.");
   }
   return {
     captions,
+    thumbnailTitles,
     hooks,
     ctas,
     titlePatterns,
@@ -96,6 +112,7 @@ function normalize(f: ScriptFormat): ScriptFormat {
     preferredTypes: f.preferredTypes && typeof f.preferredTypes === "object" ? f.preferredTypes : {},
     badExamples: arr(f.badExamples),
     captions: arr(f.captions),
+    thumbnailTitles: arr(f.thumbnailTitles),
   };
 }
 
@@ -200,7 +217,21 @@ export const scriptFormatService = {
     formatId?: unknown;
     newFormat?: { name?: unknown; contentType?: unknown } | null;
     titles?: unknown;
-  }): Promise<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }> {
+    /** 섬네일 제목 (v0.9.55, YouTube 트렌드 썸네일 문구 읽기) — '섬네일 제목'에 따로 */
+    thumbnailTitles?: unknown;
+  }): Promise<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number; thumbs?: number }> {
+    const thumbs = thumbList(input.thumbnailTitles);
+    if (thumbs.length) {
+      const r = await this.addTitlesOnly(input);
+      const current = await own(r.format.id);
+      const next = thumbList([...thumbs, ...(current.thumbnailTitles ?? [])]);
+      const updated = await getRepositories().scriptFormats.update(current.id, { thumbnailTitles: next, updatedAt: nowIso() });
+      return { ...r, format: updated ? normalize(updated) : r.format, thumbs: next.length - (current.thumbnailTitles ?? []).length };
+    }
+    return this.addTitlesOnly(input);
+  },
+
+  async addTitlesOnly(input: { formatId?: unknown; newFormat?: { name?: unknown; contentType?: unknown } | null; titles?: unknown }): Promise<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }> {
     const incoming = cleanScriptExamples(
       (Array.isArray(input.titles) ? input.titles : []).map((t) => ({ title: (t as { title?: unknown })?.title, views: (t as { views?: unknown })?.views ?? null, text: "" })),
     );
@@ -331,6 +362,7 @@ export function mergeFormats(list: ScriptFormat[]): ScriptFormat {
     ctas: uniq(list.flatMap((f) => f.ctas ?? [])),
     titlePatterns: uniq(list.flatMap((f) => f.titlePatterns ?? [])),
     captions: uniq(list.flatMap((f) => f.captions ?? [])),
+    thumbnailTitles: uniq(list.flatMap((f) => f.thumbnailTitles ?? [])),
     preferredTypes: {
       hooks: uniq(list.flatMap((f) => f.preferredTypes?.hooks ?? [])),
       ctas: uniq(list.flatMap((f) => f.preferredTypes?.ctas ?? [])),

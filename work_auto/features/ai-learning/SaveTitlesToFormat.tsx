@@ -86,20 +86,21 @@ export function SaveTitlesToFormat({
         setDone(`'${r.format.name}'에 캡션 ${r.captions}개 · 제목 패턴 ${r.titles}개를 담았습니다 (이미 있는 것은 제외).`);
         return;
       }
-      let all: TitleItem[] = list.map(({ title, views }) => ({ title, views }));
+      const all: TitleItem[] = list.map(({ title, views }) => ({ title, views }));
+      // 썸네일 문구는 대본 포맷의 '섬네일 제목'에 따로 (v0.9.55 — 영상 제목과 성격이 달라서)
+      let thumbTitles: string[] = [];
       let thumbNote = "";
       if (withThumb && withVideo.length) {
         try {
           const { texts } = await api.trends.thumbnailText(withVideo.slice(0, 10).map((t) => t.videoId!));
-          const thumbs = withVideo.map((t) => (texts[t.videoId!] ? { title: texts[t.videoId!], views: t.views } : null)).filter((x): x is TitleItem => Boolean(x));
-          all = [...all, ...thumbs];
-          thumbNote = ` · 썸네일 문구 ${thumbs.length}개`;
+          thumbTitles = withVideo.map((t) => texts[t.videoId!]).filter((x): x is string => Boolean(x));
+          thumbNote = ` · 섬네일 제목 ${thumbTitles.length}개`;
         } catch (e) {
           thumbNote = ` · 썸네일 문구는 읽지 못했습니다 (${e instanceof Error ? e.message : "오류"})`;
         }
       }
       const r = await api.scriptFormats.addTitles(
-        mode === "existing" ? { formatId, titles: all } : { newFormat: { name: name.trim(), contentType }, titles: all },
+        mode === "existing" ? { formatId, titles: all, thumbnailTitles: thumbTitles } : { newFormat: { name: name.trim(), contentType }, titles: all, thumbnailTitles: thumbTitles },
       );
       setFormats((prev) => (prev ? [r.format, ...prev.filter((f) => f.id !== r.format.id)] : [r.format]));
       setFormatId(r.format.id);
@@ -169,9 +170,9 @@ export function SaveTitlesToFormat({
             <label className="flex cursor-pointer items-start gap-2 rounded-control border border-line px-3 py-2 text-[13px] text-fg" data-with-thumb>
               <input type="checkbox" checked={withThumb} onChange={(e) => setWithThumb(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-brand)]" />
               <span>
-                썸네일 문구도 함께 담기
+                썸네일 문구도 함께 담기 (→ 섬네일 제목)
                 <span className="block text-xs text-fg-subtle">
-                  AI 가 썸네일 이미지의 큰 글자를 읽어 제목처럼 담습니다 (최대 10개 · AI {Math.ceil(Math.min(10, withVideo.length) / 8)}회, YouTube API 0회). 영상 대본(Hook·CTA)은 YouTube 가 남의 영상 자막을 주지 않아 담지 않습니다.
+                  AI 가 썸네일 이미지의 큰 글자를 읽어 대본 포맷의 &lsquo;섬네일 제목&rsquo;에 담습니다 (최대 10개 · AI {Math.ceil(Math.min(10, withVideo.length) / 8)}회, YouTube API 0회). 영상 대본(Hook·CTA)은 YouTube 가 남의 영상 자막을 주지 않아 담지 않습니다.
                 </span>
               </span>
             </label>

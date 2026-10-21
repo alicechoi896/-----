@@ -41,8 +41,10 @@ export interface ScriptFormat {
   badExamples?: ScriptExample[];
   /** 캡션 (v0.9.54, 인스타그램 트렌드 등에서 담은 잘된 캡션) — 설명글·캡션 참고 */
   captions?: string[];
+  /** 섬네일 제목 (v0.9.55) — 영상 제목보다 짧고 강한 화면 문구. YouTube 트렌드의 썸네일 문구 읽기·직접 입력 */
+  thumbnailTitles?: string[];
   createdAt: ISODate;
   updatedAt: ISODate;
 }
 
-export type ScriptFormatInput = Pick<ScriptFormat, "name" | "contentType" | "channelIds" | "examples" | "guideline" | "isDefault" | "hooks" | "ctas" | "titlePatterns" | "preferredTypes" | "badExamples" | "captions">;
+export type ScriptFormatInput = Pick<ScriptFormat, "name" | "contentType" | "channelIds" | "examples" | "guideline" | "isDefault" | "hooks" | "ctas" | "titlePatterns" | "preferredTypes" | "badExamples" | "captions" | "thumbnailTitles">;

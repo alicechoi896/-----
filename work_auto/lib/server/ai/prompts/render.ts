@@ -118,6 +118,12 @@ function contextBlocks(ctx: GenerationContext): string[] {
     const picked = [...caps].sort(() => Math.random() - 0.5).slice(0, 3);
     blocks.push(block("대본 포맷 > 잘된 캡션 (설명글·캡션의 말투·길이·해시태그 구성만 참고 — 문장·제품명을 그대로 쓰지 않는다)", picked.map((c, i) => `(${i + 1}) ${c.slice(0, 300).replace(/\n/g, " / ")}`)));
   }
+  // 대본 포맷 섬네일 제목 (v0.9.55): 영상 원고의 Hook·짧은 화면 문구 참고 (무작위 8개, 그대로 쓰지 않는다)
+  const thumbs = ctx.scriptFormatUse === "full" ? (ctx.scriptFormat?.thumbnailTitles ?? []) : [];
+  if (thumbs.length) {
+    const picked = [...thumbs].sort(() => Math.random() - 0.5).slice(0, 8);
+    blocks.push(block("대본 포맷 > 잘된 섬네일 제목 (짧고 강한 화면 문구 — Hook 의 길이·리듬 참고, 그대로 쓰지 않는다)", picked.map((t) => `섬네일: ${t}`)));
+  }
   // Keyword Intelligence: 실제 플랫폼 데이터의 키워드 후보 (검색량 아님)
   if (ctx.keywordIntel && ctx.keywordIntel.candidates.length) {
     const ki = ctx.keywordIntel;

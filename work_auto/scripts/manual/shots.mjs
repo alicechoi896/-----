@@ -647,7 +647,7 @@ export const SHOTS = [
     scrollTo: (p) => p.locator("h2, h3", { hasText: "새 대본 포맷" }).first(),
     marks: {
       1: (p) => btn(p, "메모장 파일 불러오기").first(),
-      2: (p) => p.getByPlaceholder("영상 제목 (선택)").first().locator("xpath=ancestor::div[contains(@class,'rounded-control')][1]"),
+      2: (p) => p.getByText("대본 1", { exact: true }).first().locator("xpath=ancestor::div[contains(@class,'rounded-control')][1]"),
       3: (p) => btn(p, "AI 로 포맷").first(),
       4: (p) => p.locator("main textarea[data-guideline]").first(),
     },

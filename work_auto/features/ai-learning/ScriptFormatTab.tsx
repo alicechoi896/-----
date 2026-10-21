@@ -172,8 +172,9 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           preferredTypes: editing.format.preferredTypes ?? {},
           badExamples: editing.format.badExamples ?? [],
           captions: editing.format.captions ?? [],
+          thumbnailTitles: editing.format.thumbnailTitles ?? [],
         }
-      : { name: "", contentType: editing.contentType, channelIds: [], examples: [], guideline: "", isDefault: false, hooks: [], ctas: [], titlePatterns: [], preferredTypes: {}, badExamples: [], captions: [] };
+      : { name: "", contentType: editing.contentType, channelIds: [], examples: [], guideline: "", isDefault: false, hooks: [], ctas: [], titlePatterns: [], preferredTypes: {}, badExamples: [], captions: [], thumbnailTitles: [] };
   const [form, setForm] = useState<ScriptFormatInput>(initial);
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -202,11 +203,19 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
       }}
     />
   );
-  const setExample = (i: number, patch: Partial<ScriptExample>) => set("examples", form.examples.map((e, j) => (j === i ? { ...e, ...patch } : e)));
+  // v0.9.55: 참고 대본(대본만)과 잘된 제목(제목만 담은 것)을 나눠 보여 준다. 저장은 예전처럼 examples 하나로
+  const isTitleOnly = (e: ScriptExample) => !e.text.trim() && Boolean(e.title.trim());
+  const scripts = form.examples.filter((e) => !isTitleOnly(e));
+  const titleItems = form.examples.filter(isTitleOnly);
+  const setScripts = (next: ScriptExample[]) => set("examples", [...next, ...titleItems]);
+  const setTitles = (titles: string[]) => {
+    const views = new Map(titleItems.map((e) => [e.title, e.views]));
+    set("examples", [...scripts, ...titles.map((title) => ({ title, views: views.get(title) ?? null, text: "" }))]);
+  };
+  const setExample = (i: number, patch: Partial<ScriptExample>) => setScripts(scripts.map((e, j) => (j === i ? { ...e, ...patch } : e)));
   // 저장할 참고 (제목만 담은 것 포함) / AI 구조 분석에 쓸 대본
   const filled = form.examples.filter((e) => e.text.trim() || e.title.trim());
   const withText = filled.filter((e) => e.text.trim());
-  const titleOnly = filled.length - withText.length;
 
   /** 메모장 파일(여러 개) → 대본으로 나눠 목록 위에 더한다. 파일은 브라우저에서만 읽는다 */
   async function importFiles(files: FileList | null) {
@@ -238,10 +247,10 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
     }
     const room = Math.max(0, SCRIPT_FORMAT_LIMITS.examples - form.examples.filter((e) => e.text.trim()).length);
     const kept = added.slice(0, room);
-    set("examples", [...kept, ...form.examples]);
+    setScripts([...kept, ...scripts]);
     setNote({
       tone: kept.length ? "info" : "warning",
-      text: `대본 ${found}개를 찾아 ${kept.length}개를 추가했습니다${dup ? ` · 중복 ${dup}개 제외` : ""}${added.length > kept.length ? ` · ${SCRIPT_FORMAT_LIMITS.examples}개 한도로 ${added.length - kept.length}개 제외` : ""}. 제목·본문을 확인해 주세요.`,
+      text: `대본 ${found}개를 찾아 ${kept.length}개를 추가했습니다${dup ? ` · 중복 ${dup}개 제외` : ""}${added.length > kept.length ? ` · ${SCRIPT_FORMAT_LIMITS.examples}개 한도로 ${added.length - kept.length}개 제외` : ""}. 대본을 확인해 주세요.`,
     });
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -274,7 +283,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
     }
   }
 
-  const rows = expanded ? form.examples : form.examples.slice(0, VISIBLE_EXAMPLES);
+  const rows = expanded ? scripts : scripts.slice(0, VISIBLE_EXAMPLES);
 
   return (
     <SectionCard
@@ -290,7 +299,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           <Button size="sm" variant="ghost" onClick={onCancel}>
             취소
           </Button>
-          <Button size="sm" variant="primary" loading={saving} disabled={!form.name.trim() || (!form.guideline.trim() && !filled.length && !form.hooks?.length && !form.ctas?.length && !form.titlePatterns?.length && !form.captions?.length)} onClick={save}>
+          <Button size="sm" variant="primary" loading={saving} disabled={!form.name.trim() || (!form.guideline.trim() && !filled.length && !form.hooks?.length && !form.ctas?.length && !form.titlePatterns?.length && !form.captions?.length && !form.thumbnailTitles?.length)} onClick={save}>
             저장
           </Button>
         </div>
@@ -330,8 +339,8 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
       <div className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[13.5px] font-semibold text-fg">
-            ① 참고 대본 · {filled.length}개{titleOnly > 0 && <span className="text-xs font-normal text-fg-muted"> (제목만 {titleOnly}개)</span>}{" "}
-            <span className="text-xs font-normal text-fg-subtle">(대본 최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 제목만 최대 {SCRIPT_FORMAT_LIMITS.titleOnly}개 · 잘된 영상의 대본일수록 좋습니다)</span>
+            ① 참고 대본 · {withText.length}개{" "}
+            <span className="text-xs font-normal text-fg-subtle">(최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 대본만 넣습니다. 제목은 아래 &lsquo;잘된 제목&rsquo;·&lsquo;섬네일 제목&rsquo;에)</span>
           </p>
           <div className="flex flex-wrap gap-2">
             <input ref={fileRef} type="file" accept=".txt,.md,.srt,.vtt,text/plain" multiple hidden onChange={(e) => void importFiles(e.target.files)} />
@@ -342,9 +351,9 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
               size="sm"
               variant="ghost"
               icon={Plus}
-              disabled={form.examples.length >= SCRIPT_FORMAT_LIMITS.examples + SCRIPT_FORMAT_LIMITS.titleOnly}
+              disabled={withText.length >= SCRIPT_FORMAT_LIMITS.examples}
               onClick={() => {
-                set("examples", [{ title: "", views: null, text: "" }, ...form.examples]);
+                setScripts([{ title: "", views: null, text: "" }, ...scripts]);
                 setExpanded(true);
               }}
             >
@@ -353,7 +362,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           </div>
         </div>
         <p className="mt-1 text-xs text-fg-subtle">
-          한 파일에 여러 대본이 있어도 됩니다. 구분선(---), 빈 줄 두 줄, &lsquo;제목 :&rsquo;·&lsquo;1.8만회&rsquo; 같은 줄을 기준으로 나누고 제목을 따로 읽습니다. 파일은 서버에 올리지 않습니다.
+          한 파일에 여러 대본이 있어도 됩니다. 구분선(---), 빈 줄 두 줄을 기준으로 나누고, &lsquo;제목 :&rsquo;·&lsquo;1.8만회&rsquo; 같은 줄은 대본에서 뺍니다. 파일은 서버에 올리지 않습니다.
         </p>
         {note && (
           <Notice tone={note.tone} className="mt-2">
@@ -363,27 +372,26 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         <div className="mt-3 space-y-2.5">
           {rows.map((ex, i) => (
             <div key={i} className="rounded-control border border-line bg-subtle/50 p-3">
-              <div className="flex items-center gap-2">
-                <span className="tabular w-5 shrink-0 text-right text-xs text-fg-subtle">{i + 1}</span>
-                <Input className="h-9 flex-1" placeholder="영상 제목 (선택)" value={ex.title} maxLength={SCRIPT_FORMAT_LIMITS.titleChars} onChange={(e) => setExample(i, { title: e.target.value })} />
-                <IconButton icon={X} label="이 대본 빼기" size="sm" onClick={() => set("examples", form.examples.filter((_, j) => j !== i))} />
+              <div className="flex items-center justify-between gap-2">
+                <span className="tabular text-xs font-semibold text-fg-subtle">대본 {i + 1}</span>
+                <IconButton icon={X} label="이 대본 빼기" size="sm" onClick={() => setScripts(scripts.filter((_, j) => j !== i))} />
               </div>
               <Textarea
-                className="mt-2"
+                className="mt-1"
                 rows={4}
-                placeholder={ex.title.trim() && !ex.text.trim() ? "제목만 담겨 있습니다 (제목 패턴으로 씁니다). 대본을 붙여 넣으면 구조 분석에도 씁니다." : "대본을 붙여 넣으세요.\n예: 무선청소기\n아무거나 사면 후회합니다…"}
+                placeholder={"대본을 붙여 넣으세요.\n예: 무선청소기\n아무거나 사면 후회합니다…"}
                 maxLength={SCRIPT_FORMAT_LIMITS.exampleChars}
                 value={ex.text}
                 onChange={(e) => setExample(i, { text: e.target.value })}
               />
             </div>
           ))}
-          {form.examples.length > VISIBLE_EXAMPLES && (
+          {scripts.length > VISIBLE_EXAMPLES && (
             <Button size="sm" variant="ghost" onClick={() => setExpanded((v) => !v)}>
-              {expanded ? "접기" : `나머지 ${form.examples.length - VISIBLE_EXAMPLES}개 보기`}
+              {expanded ? "접기" : `나머지 ${scripts.length - VISIBLE_EXAMPLES}개 보기`}
             </Button>
           )}
-          {form.examples.length === 0 && (
+          {scripts.length === 0 && (
             <p className="rounded-control border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-fg-subtle">
               메모장 파일을 불러오거나 [직접 입력]으로 대본을 넣으세요. 대본 없이 아래 가이드라인만 적어도 됩니다.
             </p>
@@ -451,6 +459,26 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
           items={form.captions ?? []}
           max={100}
           onChange={(v) => set("captions", v)}
+        />
+      </div>
+
+      {/* ⑦ 잘된 제목 · ⑧ 섬네일 제목 (v0.9.55) */}
+      <div className="mt-6 grid gap-5 md:grid-cols-2" data-format-titles>
+        <PhraseListField
+          label={`⑦ 잘된 제목 · ${titleItems.length}개`}
+          hint="실제로 잘된 영상 제목 (트렌드 찾기 [대본 포맷에 담기]로 모이고 직접 넣어도 됩니다). 생성할 때 제목 후보 구성에 매번 무작위로 섞어 씁니다."
+          placeholder="예: 무선청소기 사기 전에 꼭 볼 3가지"
+          items={titleItems.map((e) => e.title)}
+          max={SCRIPT_FORMAT_LIMITS.titleOnly}
+          onChange={setTitles}
+        />
+        <PhraseListField
+          label={`⑧ 섬네일 제목 · ${(form.thumbnailTitles ?? []).length}개`}
+          hint="썸네일에 크게 들어가는 짧고 강한 문구 (영상 제목과 따로). YouTube 트렌드의 '썸네일 문구도 함께 담기'로 모입니다. 생성할 때 Hook·화면 상단 제목의 참고로 씁니다."
+          placeholder="예: 이거 모르면 손해"
+          items={form.thumbnailTitles ?? []}
+          max={SCRIPT_FORMAT_LIMITS.thumbnailTitles}
+          onChange={(v) => set("thumbnailTitles", v)}
         />
       </div>
     </SectionCard>

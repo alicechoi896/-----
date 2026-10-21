@@ -2,6 +2,17 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.55] - 2026-10-21: 대본 포맷 — 섬네일 제목 추가 · 참고 대본은 대본만
+
+### 변경
+- 대본 포맷 **⑧ 섬네일 제목** 추가 (최대 300개·60자). YouTube 트렌드 '썸네일 문구도 함께 담기'는 이제 여기에 담김 (예전: 잘된 제목에 섞임). 생성할 때 Hook·짧은 화면 문구 참고로 무작위 8개 (영상·클립, 프롬프트 1.17.0)
+- **① 참고 대본은 대본만** (제목 칸 삭제). 제목만 담은 것은 **⑦ 잘된 제목** 목록으로 따로 보이고 편집 (저장 구조는 그대로 — 기존 데이터 이동 없음)
+
+### DB (추가만 — schema.sql 재실행)
+```sql
+alter table public.script_formats add column if not exists thumbnail_titles jsonb not null default '[]'::jsonb;
+```
+
 ## [0.9.54] - 2026-10-09: 트렌드 스크랩 · 인스타그램 재생·해시태그 검색·캡션 담기 · 더 보기 고침
 
 ### 추가
