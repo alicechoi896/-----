@@ -84,7 +84,7 @@ export const SHOTS = [
   {
     id: "00-home",
     url: "/",
-    viewport: { width: 1280, height: 900 },
+    viewport: { width: 1280, height: 1250 },
     marks: {
       1: (p) => p.locator("aside nav").first(),
       2: (p) => p.locator("main a", { hasText: "바로가기" }).first(),
@@ -293,7 +293,7 @@ export const SHOTS = [
   {
     id: "04-blog-trends",
     url: "/naver-blog/trends",
-    viewport: { width: 1280, height: 1100 },
+    viewport: { width: 1280, height: 1400 },
     marks: {
       1: (p) => btn(p, "조회").first(),
       2: (p) => card(p, "관련 검색어"),
@@ -367,12 +367,21 @@ export const SHOTS = [
     id: "05-yt-form",
     viewport: { width: 1280, height: 1160 },
     url: "/youtube/product-video",
-    prepare: (p) => pickProduct(p),
+    prepare: async (p) => {
+      // 이 제품에 연결된 뜨는 키워드 (키워드 관리) → 추천 칩
+      const abs = (path) => new URL(path, p.url()).toString();
+      const products = (await (await p.request.get(abs("/api/products"))).json()).data;
+      const pid = (products.find((x) => String(x.name ?? "").includes("클린웨이브")) ?? products[0]).id;
+      await p.request.post(abs("/api/keywords"), { data: { keyword: "무선청소기 추천, 자취 청소기, 원룸 청소템", productId: pid } });
+      await pickProduct(p);
+      await p.locator("[data-keyword-suggest]").first().waitFor({ timeout: 10_000 });
+    },
     marks: {
       1: (p) => field(p, "제품 선택"),
       2: (p) => field(p, "영상 길이"),
       3: (p) => btn(p, "1단계 · 제목·Hook·CTA 만들기").last(),
       4: (p) => p.locator("[data-two-stage-hint]").first(),
+      5: (p) => p.locator("[data-keyword-suggest]").first(),
     },
   },
   {
@@ -465,7 +474,7 @@ export const SHOTS = [
   {
     id: "06-blog-form",
     url: "/naver-blog/product-writing",
-    viewport: { width: 1280, height: 1000 },
+    viewport: { width: 1280, height: 1300 },
     prepare: async (p) => {
       await pickProduct(p);
       await p.getByPlaceholder("예: 무선청소기 추천").fill("무선청소기 추천");
@@ -752,6 +761,7 @@ export const SHOTS = [
   {
     id: "10-history",
     url: "/ai-learning",
+    viewport: { width: 1600, height: 1000 },
     prepare: async (p) => {
       await tab(p, "콘텐츠 히스토리").click();
       await p.waitForTimeout(800);
