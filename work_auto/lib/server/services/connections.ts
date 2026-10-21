@@ -20,7 +20,7 @@ import { encryptSecret, maskSecret } from "../security/crypto";
  *  - 평문 Key 를 로그로 남기지 않는다.
  */
 
-export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver", "naver-searchad", "tikhub", "brightdata"];
+export const PROVIDER_IDS: ProviderId[] = ["openai", "claude", "youtube", "naver", "naver-searchad", "tikhub", "brightdata", "meta-instagram"];
 
 function toPublic(c: ApiConnection): ApiConnectionPublic {
   // encryptedCredentials, userId 를 명시적으로 제거한다
@@ -47,6 +47,11 @@ function validate<P extends ProviderId>(provider: P, raw: unknown): ProviderCred
     if (!cred.apiKey || !cred.secretKey || !cred.customerId) {
       throw new AppError("VALIDATION", "엑세스라이선스, 비밀키, CUSTOMER_ID 세 가지를 모두 입력해 주세요.");
     }
+    return cred as ProviderCredentialMap[P];
+  }
+  if (provider === "meta-instagram") {
+    const cred = { apiKey: str("apiKey"), igUserId: str("igUserId").replace(/[^\d]/g, "") };
+    if (!cred.apiKey || !cred.igUserId) throw new AppError("VALIDATION", "액세스 토큰과 Instagram 비즈니스 계정 ID(숫자)를 모두 입력해 주세요.");
     return cred as ProviderCredentialMap[P];
   }
   if (!str("apiKey")) throw new AppError("VALIDATION", "API Key 를 입력해 주세요.");
@@ -89,6 +94,7 @@ function hintFor(provider: ProviderId, cred: unknown): string {
     const c = cred as ProviderCredentialMap["naver-searchad"];
     return `CUSTOMER_ID ${c.customerId} · ${maskSecret(c.apiKey)}`;
   }
+  if (provider === "meta-instagram") return `IG ${(cred as ProviderCredentialMap["meta-instagram"]).igUserId} · ${maskSecret((cred as { apiKey: string }).apiKey)}`;
   return maskSecret((cred as { apiKey: string }).apiKey);
 }
 

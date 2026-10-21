@@ -44,4 +44,6 @@ export interface ProviderCredentialMap {
   tikhub: { apiKey: string };
   /** 쿠팡·스마트스토어 상세페이지 수집 (v0.9.36, Web Scraper API 토큰) */
   brightdata: { apiKey: string };
+  /** 인스타그램 해시태그 검색 (v0.9.57, Meta 공식 Instagram Graph API — 무료, 7일에 해시태그 30개). apiKey = 액세스 토큰 */
+  "meta-instagram": { apiKey: string; igUserId: string };
 }

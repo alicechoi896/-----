@@ -306,13 +306,14 @@ export const SHOTS = [
     url: "/instagram/trends",
     viewport: { width: 1280, height: 1300 },
     prepare: async (p) => {
+      await p.locator("[data-ig-source]").first().waitFor({ timeout: 10_000 });
       await p.getByLabel("검색어").fill("무선청소기");
       await p.locator("[data-ig-search]").click();
       await p.locator("[data-ig-list] li").first().waitFor({ timeout: 15_000 });
       await p.waitForTimeout(400);
     },
     marks: {
-      1: (p) => p.locator("[data-ig-search]").first(),
+      1: (p) => p.locator("[data-ig-source]").first(),
       2: (p) => p.getByText("많이 쓰인 해시태그").first().locator("xpath=ancestor::section[1]"),
       3: (p) => p.locator("[data-ig-list] li").first(),
       4: (p) => p.locator("[data-ig-list] [data-make-menu]").first(),

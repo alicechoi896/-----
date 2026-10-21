@@ -1,5 +1,5 @@
 import type { PermissionRow } from "@/lib/permissions";
-import type { IgSearchResult } from "@/lib/types/instagram";
+import type { IgMetaKind, IgSearchResult, IgSource, IgSourceStatus } from "@/lib/types/instagram";
 import type { ScrapSource } from "@/lib/types/trend";
 import type { KeywordTrend, TrendKeyword, TrendKeywordView } from "@/lib/types/keyword-library";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
@@ -136,7 +136,8 @@ function qs(params: Record<string, string | number | undefined>) {
 export const api = {
   trends: {
     /** 인스타그램 릴스 검색 ([검색]·[더 보기] 1번 = TikHub 1회) */
-    instagram: (body: { keyword: string; next: string | null; clientRequestId: string }) => request<IgSearchResult>("/api/trends/instagram", { method: "POST", body: json(body) }),
+    instagram: (body: { keyword: string; next: string | null; clientRequestId: string; source?: IgSource; kind?: IgMetaKind }) => request<IgSearchResult>("/api/trends/instagram", { method: "POST", body: json(body) }),
+    instagramStatus: () => request<IgSourceStatus>("/api/trends/instagram/status"),
     instagramMedia: (code: string) => request<{ videoUrl: string | null; calls: number }>("/api/trends/instagram/media", { method: "POST", body: json({ code }) }),
     /** 썸네일 큰 글자 읽기 (AI Vision, 최대 10개) */
     thumbnailText: (videoIds: string[]) => request<{ texts: Record<string, string>; aiCalls: number }>("/api/trends/youtube/thumbnail-text", { method: "POST", body: json({ videoIds }) }),

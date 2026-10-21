@@ -501,6 +501,22 @@ describe("트렌드·스타일·오류 기록", () => {
     for (const k of (await j<K[]>("/api/keywords")).data) await j(`/api/keywords/${k.id}`, { method: "DELETE" });
   });
 
+  it("인스타그램 트렌드: 공식 API(기본, 무료·해시태그)와 TikHub(고를 때만) 병행", async ({ skip }) => {
+    if (!reachable) skip();
+    const st = (await j<{ meta: boolean; tikhub: boolean }>("/api/trends/instagram/status")).data;
+    expect(st).toEqual({ meta: true, tikhub: true });
+    type R = { source: string; hashtag?: string; quota?: { used: number; limit: number }; items: { plays: number | null; likes: number | null }[]; next: string | null; calls: number };
+    const m = (await post("/api/trends/instagram", { keyword: "병행 테스트", next: null, clientRequestId: "m1" })).data as R;
+    expect(m).toMatchObject({ source: "meta", hashtag: "병행테스트", calls: 1 });
+    expect(m.quota?.limit).toBe(30);
+    expect(m.items.every((r) => r.plays === null && r.likes !== null)).toBe(true);
+    const more = (await post("/api/trends/instagram", { keyword: "병행 테스트", next: m.next, clientRequestId: "m2" })).data as R;
+    expect(more.source).toBe("meta");
+    const tk = (await post("/api/trends/instagram", { keyword: "병행 테스트", next: null, clientRequestId: "t1", source: "tikhub" })).data as R;
+    expect(tk.source).toBe("tikhub");
+    expect(tk.items.some((r) => r.plays !== null)).toBe(true);
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

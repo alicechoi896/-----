@@ -195,3 +195,10 @@
 | PATCH/DELETE | `/api/keywords/:id` | 제품 연결·고정·숨김·보관·메모 / 삭제 |
 | POST | `/api/keywords/interest` { ids ≤5 } | NAVER 데이터랩 상대 관심도 (1회) |
 | GET | `/api/keywords/suggest?productId=` | 원고 생성 화면 추천 (DB 만) |
+
+## 인스타그램 공식 API 병행 (v0.9.57)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/trends/instagram/status` | 공식 API·TikHub 연결 여부 (DB 만) |
+| POST | `/api/trends/instagram` { keyword, next?, source?: meta\|tikhub, kind?: top\|recent } | source 기본 meta (무료·해시태그), tikhub 는 1회 약 $0.01 |

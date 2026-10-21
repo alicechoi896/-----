@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Loader2, Play, Search, X } from "lucide-react";
-import type { IgReel } from "@/lib/types/instagram";
-import { api } from "@/lib/api-client";
-import { Button, EmptyState, ErrorState, Input, Notice, SectionCard, Select } from "@/components/ui";
+import type { IgMetaKind, IgReel, IgSource, IgSourceStatus } from "@/lib/types/instagram";
+import { ApiError, api } from "@/lib/api-client";
+import { toHashtag } from "@/lib/instagram";
+import { Button, EmptyState, ErrorState, Input, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
 import { MakeMenu } from "@/components/shared/MakeMenu";
 import { ScrapButton } from "@/components/shared/ScrapButton";
 import { SaveTitlesToFormat } from "@/features/ai-learning/SaveTitlesToFormat";
@@ -32,10 +33,17 @@ const titleOf = (r: IgReel) => (r.caption.split(/\s#/)[0] || r.caption).replace(
 /** 같은 릴스의 재생 주소 (화면에 있는 동안만) */
 const mediaCache = new Map<string, string | null>();
 
+const NO_VIEWS: Sort[] = ["plays", "ratio"];
+const KINDS: { value: IgMetaKind; label: string }[] = [
+  { value: "top", label: "인기 게시물" },
+  { value: "recent", label: "최근 24시간" },
+];
+
 /**
- * 인스타그램 트렌드 찾기 (v0.9.54). docs/INSTAGRAM_TRENDS.md
- * [검색]·[더 보기] 1번 = TikHub 1회. 정렬·기간은 받은 결과 안에서. 해시태그를 누르면 그 해시태그로 다시 검색.
- * 카드 ▶ = 이 화면에서 재생 (재생 주소가 검색 결과에 없을 때만 TikHub 1회).
+ * 인스타그램 트렌드 찾기 (v0.9.54, v0.9.57 공식 API 병행). docs/INSTAGRAM_TRENDS.md
+ * - 공식 API(무료·해시태그만·7일 30개·조회수 없음)가 연결되어 있으면 기본. TikHub(유료)는 사용자가 고를 때만 — 자동으로 넘어가지 않는다
+ * - TikHub: [검색]·[더 보기] 1번 = 1회. 정렬·기간은 받은 결과 안에서. 해시태그를 누르면 그 해시태그로 다시 검색.
+ * 카드 ▶ = 이 화면에서 재생 (TikHub 결과에 재생 주소가 없을 때만 TikHub 1회, 공식 API 결과는 추가 호출 없음).
  */
 export function InstagramTrendExplorer() {
   const [keyword, setKeyword] = useState("");
@@ -51,6 +59,29 @@ export function InstagramTrendExplorer() {
   const [playing, setPlaying] = useState<{ code: string; url: string | null; status: "loading" | "ready" | "error"; message?: string } | null>(null);
   const busy = useRef(false);
   const [now, setNow] = useState(() => Date.now());
+  const [status, setStatus] = useState<IgSourceStatus | null>(null);
+  const [source, setSource] = useState<IgSource>("tikhub");
+  const [kind, setKind] = useState<IgMetaKind>("top");
+  /** 지금 보이는 결과를 어디서 받았는지 */
+  const [shownSource, setShownSource] = useState<IgSource>("tikhub");
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+
+  // 연결 여부만 (DB, 외부 호출 없음) → 공식 API 가 있으면 기본으로
+  useEffect(() => {
+    let alive = true;
+    api.trends
+      .instagramStatus()
+      .then((s) => {
+        if (!alive) return;
+        setStatus(s);
+        setSource(s.meta ? "meta" : "tikhub");
+      })
+      .catch(() => alive && setStatus({ meta: false, tikhub: true }));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // 기다리는 동안 몇 초째인지 보여 준다 (인스타그램 응답이 느릴 때)
   useEffect(() => {
@@ -60,15 +91,20 @@ export function InstagramTrendExplorer() {
     return () => clearInterval(timer);
   }, [loading]);
 
-  async function run(more: boolean, kwOverride?: string) {
+  async function run(more: boolean, kwOverride?: string, sourceOverride?: IgSource) {
     const kw = more ? searched : (kwOverride ?? keyword).trim();
     if (busy.current || !kw) return;
+    const src = more ? shownSource : (sourceOverride ?? source);
     busy.current = true;
     setElapsed(0);
     setLoading(more ? "more" : "first");
     setError(null);
+    setErrorCode(null);
     try {
-      const r = await api.trends.instagram({ keyword: kw, next: more ? next : null, clientRequestId: newId() });
+      const r = await api.trends.instagram({ keyword: kw, next: more ? next : null, clientRequestId: newId(), source: src, kind });
+      setShownSource(r.source);
+      if (r.quota) setQuota(r.quota);
+      if (r.source === "meta") setSort((s) => (NO_VIEWS.includes(s) ? "likes" : s));
       setItems((prev) => {
         if (!more) return r.items;
         const seen = new Set(prev.map((x) => x.code));
@@ -83,10 +119,17 @@ export function InstagramTrendExplorer() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "검색하지 못했습니다.");
+      setErrorCode(e instanceof ApiError ? e.code : null);
     } finally {
       busy.current = false;
       setLoading(null);
     }
+  }
+
+  /** 공식 API 로 안 될 때: 사용자가 눌러야만 TikHub 로 (1회 약 $0.01) */
+  function runTikHub() {
+    setSource("tikhub");
+    void run(false, searched && shownSource === "meta" && !error ? searched : undefined, "tikhub");
   }
 
   function searchTag(tag: string) {
@@ -98,6 +141,8 @@ export function InstagramTrendExplorer() {
   async function play(r: IgReel) {
     const known = r.videoUrl ?? mediaCache.get(r.code);
     if (known) return setPlaying({ code: r.code, url: known, status: "ready" });
+    // 공식 API 결과는 재생 주소를 따로 받지 않는다 (TikHub 비용이 들지 않게)
+    if (shownSource === "meta") return setPlaying({ code: r.code, url: null, status: "error", message: "공식 API 가 재생 주소를 주지 않았습니다. 인스타그램에서 보기를 눌러 주세요." });
     setPlaying({ code: r.code, url: null, status: "loading" });
     try {
       const { videoUrl } = await api.trends.instagramMedia(r.code);
@@ -124,6 +169,11 @@ export function InstagramTrendExplorer() {
     return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24);
   }, [shown]);
   const pickedReels = shown.filter((r) => picked.has(r.code));
+  const meta = source === "meta";
+  const shownMeta = shownSource === "meta";
+  const tag = toHashtag(keyword);
+  const sorts = shownMeta ? SORTS.filter((o) => !NO_VIEWS.includes(o.value)) : SORTS;
+  const tikhubOk = status?.tikhub !== false;
 
   const toggle = (code: string) =>
     setPicked((prev) => {
@@ -135,7 +185,37 @@ export function InstagramTrendExplorer() {
 
   return (
     <div className="space-y-6" data-ig-trends>
-      <SectionCard title="검색" icon={Search} description="한국어 검색어 그대로 인스타그램 릴스를 찾습니다. [검색]·[더 보기] 1번 = TikHub 1회(약 $0.01). 같은 검색어는 30분 동안 다시 부르지 않아 바로 나옵니다.">
+      <SectionCard
+        title="검색"
+        icon={Search}
+        description={
+          meta
+            ? "Instagram 공식 API 로 해시태그 릴스를 무료로 찾습니다. 7일에 서로 다른 해시태그 30개까지 (이미 찾은 해시태그는 다시 찾아도 한도에 안 셉니다). 조회수·작성자는 나오지 않습니다."
+            : "한국어 검색어 그대로 인스타그램 릴스를 찾습니다. [검색]·[더 보기] 1번 = TikHub 1회(약 $0.01). 같은 검색어는 30분 동안 다시 부르지 않아 바로 나옵니다."
+        }
+      >
+        {status && (
+          <div className="mb-3 flex flex-wrap items-center gap-2" data-ig-source>
+            {status.meta ? (
+              <SegmentedControl
+                value={source}
+                onChange={setSource}
+                options={[
+                  { value: "meta", label: "공식 API · 무료 (해시태그)" },
+                  ...(tikhubOk ? [{ value: "tikhub" as const, label: "TikHub · 1회 약 $0.01 (키워드·조회수)" }] : []),
+                ]}
+              />
+            ) : (
+              <span className="text-xs text-fg-subtle">지금은 TikHub(유료)로 찾습니다. 설정 › API 연결 센터에서 &lsquo;Instagram 공식 API&rsquo;를 연결하면 해시태그 검색은 무료입니다.</span>
+            )}
+            {meta && <SegmentedControl size="sm" value={kind} onChange={setKind} options={KINDS} />}
+            {meta && quota && (
+              <span className={cn("text-xs", quota.used >= quota.limit ? "text-danger" : "text-fg-subtle")} data-ig-quota>
+                이번 주 해시태그 {quota.used}/{quota.limit}
+              </span>
+            )}
+          </div>
+        )}
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(e) => {
@@ -143,11 +223,16 @@ export function InstagramTrendExplorer() {
             void run(false);
           }}
         >
-          <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="예: 무선청소기, 자취템, 갤럭시 워치" className="min-w-60 flex-1" aria-label="검색어" />
+          <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder={meta ? "해시태그 예: 무선청소기, 자취템, 갤럭시워치" : "예: 무선청소기, 자취템, 갤럭시 워치"} className="min-w-60 flex-1" aria-label="검색어" />
           <Button type="submit" variant="primary" icon={Search} loading={loading === "first"} disabled={!keyword.trim()} data-ig-search>
             검색
           </Button>
         </form>
+        {meta && keyword.trim() && (
+          <p className="mt-2 text-xs text-fg-subtle" data-ig-tag>
+            {tag ? `#${tag} 로 찾습니다 (띄어쓰기·기호는 뺍니다)` : "해시태그로 찾을 글자가 없습니다 (한글·영문·숫자)."}
+          </p>
+        )}
         {loading && (
           <p className="mt-2 text-xs text-fg-subtle" data-ig-wait>
             <Loader2 className="mr-1 inline size-3.5 animate-spin" />
@@ -157,17 +242,25 @@ export function InstagramTrendExplorer() {
       </SectionCard>
 
       {error && <ErrorState message={error} onRetry={() => void run(false)} />}
+      {error && errorCode?.startsWith("META_") && tikhubOk && (
+        <Notice tone="warning" title="공식 API 로 찾지 못했습니다">
+          <span className="mr-2">같은 검색어를 TikHub 로 찾을 수 있습니다 (키워드 검색·조회수 포함, 1회 약 $0.01).</span>
+          <Button size="sm" onClick={runTikHub} disabled={Boolean(loading)} data-ig-to-tikhub>
+            TikHub 로 찾기 (약 $0.01)
+          </Button>
+        </Notice>
+      )}
 
       {!searched ? (
         loading !== "first" && (
           <SectionCard>
-            <EmptyState icon={Search} title="검색어를 넣고 [검색]을 눌러 주세요" description="처음에는 불러오지 않습니다 (TikHub 비용 절약)." className="py-16" />
+            <EmptyState icon={Search} title="검색어를 넣고 [검색]을 눌러 주세요" description={meta ? "처음에는 불러오지 않습니다 (해시태그 한도 절약)." : "처음에는 불러오지 않습니다 (TikHub 비용 절약)."} className="py-16" />
           </SectionCard>
         )
       ) : (
         <>
           {hashtags.length > 0 && (
-            <SectionCard title="많이 쓰인 해시태그" description="누르면 그 해시태그로 다시 검색합니다 (TikHub 1회).">
+            <SectionCard title="많이 쓰인 해시태그" description={meta ? "누르면 그 해시태그로 다시 검색합니다 (공식 API · 이번 주 처음 찾는 해시태그면 한도 1개)." : "누르면 그 해시태그로 다시 검색합니다 (TikHub 1회)."}>
               <div className="flex flex-wrap gap-1.5" data-ig-hashtags>
                 {hashtags.map(([h, n]) => (
                   <button
@@ -184,11 +277,11 @@ export function InstagramTrendExplorer() {
             </SectionCard>
           )}
           <SectionCard
-            title={`'${searched}' 릴스 · ${shown.length}개`}
+            title={shownMeta ? `#${toHashtag(searched)} ${kind === "recent" ? "최근" : "인기"} 릴스 · ${shown.length}개` : `'${searched}' 릴스 · ${shown.length}개`}
             actions={
               <div className="flex flex-wrap items-center gap-2">
                 <Select value={period} options={PERIODS} onChange={(e) => setPeriod(e.target.value)} aria-label="기간" />
-                <Select value={sort} options={SORTS} onChange={(e) => setSort(e.target.value as Sort)} aria-label="정렬" />
+                <Select value={sort} options={sorts} onChange={(e) => setSort(e.target.value as Sort)} aria-label="정렬" />
                 <SaveTitlesToFormat
                   titles={pickedReels.map((r) => ({ title: titleOf(r), views: r.plays }))}
                   captions={pickedReels.map((r) => r.caption).filter(Boolean)}
@@ -229,6 +322,9 @@ export function InstagramTrendExplorer() {
                             {r.thumbnailUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element -- 인스타그램 썸네일 주소 그대로
                               <img src={r.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover opacity-90 group-hover:opacity-100" />
+                            ) : r.videoUrl ? (
+                              // 공식 API 는 썸네일을 주지 않는다 → 영상 첫 장면
+                              <video src={`${r.videoUrl}#t=0.5`} preload="metadata" muted playsInline className="pointer-events-none size-full object-cover opacity-90 group-hover:opacity-100" />
                             ) : (
                               <span className="block size-full bg-gradient-to-b from-zinc-700 to-zinc-900" />
                             )}
@@ -291,16 +387,24 @@ export function InstagramTrendExplorer() {
               </ul>
             )}
             <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3 text-xs text-fg-subtle">
-              <span>받은 릴스 {items.length}개 · 정렬·기간은 받은 결과 안에서 (추가 호출 없음)</span>
+              <span>받은 릴스 {items.length}개 · 정렬·기간은 받은 결과 안에서 (추가 호출 없음){shownMeta && " · 공식 API 는 조회수·작성자를 주지 않습니다"}</span>
               {next ? (
                 <Button size="sm" loading={loading === "more"} disabled={Boolean(loading)} onClick={() => void run(true)} data-ig-more>
-                  더 보기 (TikHub 1회)
+                  {shownMeta ? "더 보기 (무료)" : "더 보기 (TikHub 1회)"}
                 </Button>
               ) : (
                 <span>인스타그램이 다음 결과를 주지 않았습니다.</span>
               )}
             </div>
           </SectionCard>
+          {shownMeta && tikhubOk && (
+            <Notice tone="neutral">
+              <span className="mr-2">조회수 순으로 보거나 해시태그가 아닌 일반 검색어로 찾으려면 TikHub 를 씁니다 (1회 약 $0.01).</span>
+              <Button size="sm" onClick={runTikHub} disabled={Boolean(loading)} data-ig-to-tikhub>
+                &lsquo;{searched}&rsquo; TikHub 로 찾기
+              </Button>
+            </Notice>
+          )}
           <Notice tone="neutral">릴스는 YouTube 와 같은 영상을 씁니다. [영상 만들기]로 YouTube 원고를 만든 뒤, 업로드 관리에서 Instagram 으로도 예약할 수 있습니다. 스크랩한 릴스는 &lsquo;트렌드 스크랩&rsquo;에서 모아 봅니다.</Notice>
         </>
       )}

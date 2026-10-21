@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Bot, Film, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Bot, Camera, Film, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
 import type { AiProviderId, ApiConnectionPublic } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -71,6 +71,23 @@ const PROVIDERS: ProviderMeta[] = [
     icon: Film,
     fields: [{ name: "apiKey", label: "API Key", placeholder: "TikHub API Key", hint: "tikhub.io → 대시보드 → API Keys. 키는 서버에만 암호화해 저장합니다" }],
     docsUrl: "https://user.tikhub.io",
+  },
+  {
+    id: "meta-instagram",
+    name: "Instagram 공식 API (Meta)",
+    description: "인스타그램 트렌드 찾기의 해시태그 검색 (무료). 7일에 서로 다른 해시태그 30개까지, 이미 찾은 해시태그는 다시 찾아도 한도에 안 셉니다. 조회수·작성자는 주지 않습니다 (필요하면 TikHub). 광고 계정은 필요 없습니다 · [테스트]는 무료(계정 이름 확인) · #인스타그램 #해시태그",
+    usages: ["인스타그램 해시태그 검색 (무료)"],
+    icon: Camera,
+    fields: [
+      {
+        name: "apiKey",
+        label: "액세스 토큰",
+        placeholder: "EAAG…",
+        hint: "developers.facebook.com → 앱 → instagram_basic · pages_show_list 권한 + 'Instagram Public Content Access' 기능 승인 → 비즈니스 설정 › 시스템 사용자 토큰(만료 없음) 권장. 토큰은 서버에만 암호화해 저장합니다",
+      },
+      { name: "igUserId", label: "Instagram 비즈니스 계정 ID", placeholder: "숫자 (예: 17841400000000000)", hint: "Graph API 탐색기에서 GET me/accounts?fields=instagram_business_account 로 확인 (Facebook 페이지에 연결된 비즈니스·크리에이터 계정)" },
+    ],
+    docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-hashtag-search",
   },
   {
     id: "brightdata",

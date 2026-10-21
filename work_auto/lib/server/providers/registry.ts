@@ -1,5 +1,6 @@
 import "server-only";
 import { MockInstagramProvider, TikHubInstagramProvider, type InstagramProvider } from "./instagram/provider";
+import { GraphInstagramProvider, MockMetaInstagramProvider, type MetaInstagramProvider } from "./instagram/meta-graph";
 import { OpenAITTSProvider, type TTSProvider } from "./tts/openai-tts";
 import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/lib/types";
 import { serverConfig } from "../config";
@@ -110,6 +111,23 @@ export async function getInstagramProvider(): Promise<InstagramProvider> {
   return new TikHubInstagramProvider(cred.apiKey);
 }
 
+/**
+ * 인스타그램 해시태그 검색 (v0.9.57, Meta 공식 API — 무료). 연결되어 있지 않으면 null → 화면은 TikHub 만 보여 준다.
+ * 데모 모드는 가짜 결과 (한도 30개도 흉내 낸다)
+ */
+const mockMeta = new MockMetaInstagramProvider();
+export async function getMetaInstagramProvider(): Promise<MetaInstagramProvider | null> {
+  if (serverConfig.providerMode !== "live") return mockMeta;
+  const cred = await loadCredentials("meta-instagram");
+  return cred ? new GraphInstagramProvider(cred.apiKey, cred.igUserId) : null;
+}
+
+/** TikHub 가 연결되어 있는지만 (호출 없음) */
+export async function hasTikHub(): Promise<boolean> {
+  if (serverConfig.providerMode !== "live") return true;
+  return Boolean(await loadCredentials("tikhub").catch(() => null));
+}
+
 /** AI 음성 (영상 자동 제작): OpenAI 키가 연결되어 있을 때만. 데모·미연결이면 null → 음성 없이 자막 시간으로 만든다 */
 export async function getTTSProvider(): Promise<TTSProvider | null> {
   if (serverConfig.providerMode !== "live") return null;
@@ -178,6 +196,10 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new NaverSearchAdProvider(cred as ProviderCredentialMap["naver-searchad"]);
     case "tikhub":
       return new TikHubXiaohongshuProvider((cred as ProviderCredentialMap["tikhub"]).apiKey);
+    case "meta-instagram": {
+      const c = cred as ProviderCredentialMap["meta-instagram"];
+      return new GraphInstagramProvider(c.apiKey, c.igUserId);
+    }
     case "brightdata": {
       const c = new BrightDataCollector((cred as ProviderCredentialMap["brightdata"]).apiKey);
       return { id: c.id, label: "Bright Data", testConnection: () => c.testConnection() } as BaseProvider;

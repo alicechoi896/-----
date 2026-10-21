@@ -4,15 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 인스타그램 트렌드 찾기 (v0.9.53) — 응답 읽기 + 비용 규칙: [검색] 1번 = TikHub 1회, 같은 검색 30분 0회, 동시 요청 1번.
  */
 const ig = { searchReels: vi.fn() };
-vi.mock("@/lib/server/providers/registry", () => ({ getInstagramProvider: async () => ig }));
+const meta = { searchHashtag: vi.fn() };
+let metaConnected = true;
+vi.mock("@/lib/server/providers/registry", () => ({ getInstagramProvider: async () => ig, getMetaInstagramProvider: async () => (metaConnected ? meta : null), hasTikHub: async () => true }));
 vi.mock("@/lib/server/repositories", () => ({ getCurrentUserId: async () => "u_test" }));
 
 const { parseReelSearch } = await import("@/lib/server/providers/instagram/parse");
+const { parseMetaMedia, toHashtag, MockMetaInstagramProvider, resetMockMetaQuota } = await import("@/lib/server/providers/instagram/meta-graph");
 const { instagramTrendService, clearInstagramCache } = await import("@/lib/server/services/instagram-trends");
 
 beforeEach(() => {
   clearInstagramCache();
   vi.clearAllMocks();
+  metaConnected = true;
+  meta.searchHashtag.mockResolvedValue({ items: [], next: "c1", quota: { used: 3, limit: 30 }, newHashtag: true, skipped: 2 });
   ig.searchReels.mockResolvedValue({ items: [{ code: "abc12", url: "u", caption: "x", hashtags: [], author: null, followers: null, plays: 1, likes: null, comments: null, postedAt: null, thumbnailUrl: null, durationSec: null }], next: "tok" });
 });
 
@@ -44,15 +49,57 @@ describe("인스타그램 트렌드", () => {
   });
 
   it("[검색] 1번 = 1회, 같은 검색어 30분 0회, 동시 요청 1번, [더 보기] 1회", async () => {
-    const a = await instagramTrendService.search({ keyword: "청소기" });
+    const a = await instagramTrendService.search({ keyword: "청소기", source: "tikhub" });
     expect(a.calls).toBe(1);
-    const b = await instagramTrendService.search({ keyword: "청소기 " });
+    const b = await instagramTrendService.search({ keyword: "청소기 ", source: "tikhub" });
     expect(b.calls).toBe(0);
     expect(ig.searchReels).toHaveBeenCalledTimes(1);
-    await Promise.all([1, 2, 3].map(() => instagramTrendService.search({ keyword: "자취템" })));
+    await Promise.all([1, 2, 3].map(() => instagramTrendService.search({ keyword: "자취템", source: "tikhub" })));
     expect(ig.searchReels).toHaveBeenCalledTimes(2);
-    await instagramTrendService.search({ keyword: "청소기", next: a.next });
+    await instagramTrendService.search({ keyword: "청소기", next: a.next, source: "tikhub" });
     expect(ig.searchReels).toHaveBeenCalledTimes(3);
     await expect(instagramTrendService.search({ keyword: " " })).rejects.toThrow();
+  });
+});
+
+describe("인스타그램 공식 API 병행 (v0.9.57)", () => {
+  it("해시태그 모양: #·띄어쓰기·기호를 뺀다", () => {
+    expect(toHashtag("#무선 청소기!")).toBe("무선청소기");
+    expect(toHashtag("갤럭시 워치 7")).toBe("갤럭시워치7");
+    expect(toHashtag("  ")).toBe("");
+  });
+  it("Graph API 게시물: 영상만, permalink 에서 코드, 조회수·작성자 없음, media_url 로 재생", () => {
+    const r = parseMetaMedia({ id: "1790", media_type: "VIDEO", permalink: "https://www.instagram.com/reel/DAbc1/", caption: "청소 끝 #자취템 #청소", like_count: 120, comments_count: 4, timestamp: "2026-10-01T10:00:00+0000", media_url: "https://video.cdn/x.mp4" });
+    expect(r).toMatchObject({ code: "DAbc1", plays: null, author: null, likes: 120, comments: 4, videoUrl: "https://video.cdn/x.mp4" });
+    expect(r?.hashtags).toEqual(["자취템", "청소"]);
+    expect(parseMetaMedia({ id: "2", media_type: "IMAGE", permalink: "https://www.instagram.com/p/X1/" })).toBeNull();
+  });
+  it("기본은 공식 API: 해시태그로 바꿔 부르고, 같은 검색 30분 기억, TikHub 는 부르지 않는다", async () => {
+    const a = await instagramTrendService.search({ keyword: "무선 청소기" });
+    expect(a).toMatchObject({ source: "meta", hashtag: "무선청소기", calls: 1, quota: { used: 3, limit: 30 }, skipped: 2, next: "c1" });
+    expect(meta.searchHashtag).toHaveBeenCalledWith("무선청소기", null, "top");
+    expect((await instagramTrendService.search({ keyword: "무선청소기" })).calls).toBe(0);
+    await instagramTrendService.search({ keyword: "무선청소기", kind: "recent" });
+    expect(meta.searchHashtag).toHaveBeenLastCalledWith("무선청소기", null, "recent");
+    expect(ig.searchReels).not.toHaveBeenCalled();
+  });
+  it("공식 API 가 연결되어 있지 않거나 한도를 넘으면 오류 (TikHub 로 자동으로 넘어가지 않음)", async () => {
+    metaConnected = false;
+    await expect(instagramTrendService.search({ keyword: "청소기" })).rejects.toMatchObject({ code: "META_NOT_CONNECTED" });
+    metaConnected = true;
+    const { MetaGraphError } = await import("@/lib/server/providers/instagram/meta-graph");
+    meta.searchHashtag.mockRejectedValueOnce(new MetaGraphError("QUOTA", "한도"));
+    await expect(instagramTrendService.search({ keyword: "새해시태그" })).rejects.toMatchObject({ code: "META_QUOTA" });
+    expect(ig.searchReels).not.toHaveBeenCalled();
+  });
+  it("데모 공식 API: 같은 해시태그는 한도에 다시 안 세고, 31번째 새 해시태그는 거절", async () => {
+    resetMockMetaQuota();
+    const p = new MockMetaInstagramProvider();
+    expect((await p.searchHashtag("a0")).newHashtag).toBe(true);
+    expect((await p.searchHashtag("a0")).newHashtag).toBe(false);
+    for (let i = 1; i < 30; i++) await p.searchHashtag(`a${i}`);
+    expect((await p.searchHashtag("a5")).quota).toEqual({ used: 30, limit: 30 });
+    await expect(p.searchHashtag("a30")).rejects.toMatchObject({ code: "QUOTA" });
+    resetMockMetaQuota();
   });
 });
