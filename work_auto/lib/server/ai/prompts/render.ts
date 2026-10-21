@@ -208,7 +208,8 @@ export function renderContentPrompt(
   const titleSec = config.outputs.find((o) => o.key === "titles");
   if (titleSec) {
     const total = titleSec.count ?? 10;
-    const fCount = ctx.scriptFormat ? formatTitleCount(ctx.scriptFormat.examples) : 0;
+    // 포맷 제목 수 = 제목 패턴 + 예전에 담긴 제목 (v0.9.56)
+    const fCount = ctx.scriptFormat ? formatTitleCount(ctx.scriptFormat.examples) + (ctx.scriptFormat.titlePatterns?.length ?? 0) : 0;
     const trendTitles = ctx.keywordIntel?.topTitles ?? [];
     const mix = titleMix(total, fCount, trendTitles.length);
     userInput.push(

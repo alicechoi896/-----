@@ -1,6 +1,7 @@
 import type { PermissionRow } from "@/lib/permissions";
 import type { IgSearchResult } from "@/lib/types/instagram";
 import type { ScrapSource } from "@/lib/types/trend";
+import type { KeywordTrend, TrendKeyword, TrendKeywordView } from "@/lib/types/keyword-library";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
@@ -247,6 +248,16 @@ export const api = {
   },
 
   /** 업로드 관리 (팀 공용 캘린더) */
+  /** 키워드 관리 (v0.9.56) */
+  keywords: {
+    list: () => request<TrendKeywordView[]>("/api/keywords"),
+    add: (body: { keyword: string; productId?: string | null; productHint?: string; note?: string }) => request<{ ok: true }>("/api/keywords", { method: "POST", body: json(body) }),
+    update: (id: string, patch: Partial<{ productId: string | null; productHint: string; pinned: boolean; hidden: boolean; status: "active" | "archived"; note: string }>) =>
+      request<TrendKeyword>(`/api/keywords/${id}`, { method: "PATCH", body: json(patch) }),
+    remove: (id: string) => request<{ id: string }>(`/api/keywords/${id}`, { method: "DELETE" }),
+    interest: (ids: string[]) => request<{ updated: number; calls: number }>("/api/keywords/interest", { method: "POST", body: json({ ids }) }),
+    suggest: (productId: string) => request<{ keyword: string; trend: KeywordTrend }[]>(`/api/keywords/suggest?productId=${encodeURIComponent(productId)}`),
+  },
   /** 트렌드 스크랩 (v0.9.54, YouTube·NAVER·Instagram) */
   scraps: {
     list: () => request<{ items: SavedTrend[]; folders: { name: string; count: number }[] }>("/api/scraps"),

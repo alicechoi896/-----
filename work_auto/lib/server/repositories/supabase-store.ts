@@ -1,7 +1,7 @@
 import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppError } from "../http";
-import type { ReferenceVideo } from "@/lib/types";
+import type { ReferenceVideo, TrendKeyword } from "@/lib/types";
 import type { Repositories, Repository } from "./types";
 
 /**
@@ -155,4 +155,14 @@ export const supabaseRepositories: Repositories = {
   errorLogs: createTable("error_logs"),
   scriptFormats: createTable("script_formats"),
   videoJobs: createTable("video_jobs"),
+  trendKeywords: {
+    ...createTable<TrendKeyword>("trend_keywords"),
+    async findByNorms(userId, norms) {
+      if (!norms.length) return [];
+      const db = await createSupabaseServerClient();
+      const { data, error } = await db.from("trend_keywords").select("*").eq("user_id", userId).in("norm", norms.slice(0, 300));
+      if (error) fail("trend_keywords", "findByNorms", error);
+      return (data ?? []).map((r) => fromRow<TrendKeyword>(r));
+    },
+  },
 };

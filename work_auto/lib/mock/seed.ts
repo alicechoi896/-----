@@ -22,6 +22,7 @@ import type {
 } from "@/lib/types";
 import { EXAMPLE_PROFILE } from "@/lib/types/profile";
 import type { VideoJob } from "@/lib/types/video-production";
+import type { TrendKeyword } from "@/lib/types/keyword-library";
 import { PRODUCT_CATALOG } from "./product-catalog";
 
 export const DEMO_USER_ID = "demo-user";
@@ -49,6 +50,7 @@ export interface StoreState {
   errorLogs: ErrorLog[];
   scriptFormats: ScriptFormat[];
   videoJobs: VideoJob[];
+  trendKeywords: TrendKeyword[];
 }
 
 const DAY = 86_400_000;
@@ -318,6 +320,7 @@ export function createSeedState(now: number = Date.now()): StoreState {
     learningProfiles: [],
     errorLogs: [],
     videoJobs: [],
+    trendKeywords: [],
     // 데모 대본 포맷 (제품 홍보 기본 1개). 참고 대본은 예시로 쓴 가상의 문장
     scriptFormats: [
       {

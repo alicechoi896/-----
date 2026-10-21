@@ -692,6 +692,25 @@ export const SHOTS = [
 
   /* ───── 10 AI 학습 관리 ───── */
   {
+    id: "10-keywords",
+    url: "/ai-learning?tab=keywords",
+    viewport: { width: 1280, height: 1100 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
+      await p.request.post(abs("/api/keywords"), { data: { keyword: "아이폰듀오, 아이폰18프로, 아이폰 Pro18", productId: pid } });
+      await p.request.post(abs("/api/keywords"), { data: { keyword: "무선청소기 추천템, 자취 청소" } });
+      await p.reload({ waitUntil: "networkidle" });
+      await p.getByRole("radio", { name: /^전체/ }).first().click();
+      await p.locator("[data-keyword-row]").first().waitFor({ timeout: 10_000 });
+    },
+    marks: {
+      1: (p) => p.getByLabel("새 키워드").first().locator("xpath=ancestor::section[1]"),
+      2: (p) => p.locator("[data-keyword-tab] [role=radiogroup]").first(),
+      3: (p) => p.locator("[data-keyword-row]").first(),
+    },
+  },
+  {
     id: "10-overview",
     url: "/ai-learning",
     marks: {

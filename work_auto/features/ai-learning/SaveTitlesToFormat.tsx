@@ -13,7 +13,7 @@ type TitleItem = { title: string; views: number | null; videoId?: string };
 
 /**
  * [대본 포맷에 담기] — 트렌드 찾기(YouTube·NAVER)·영상 검색에서 마음에 든 제목·키워드를
- * 대본 포맷의 참고 대본 '제목칸에만' 담는다 (대본은 비움 → 생성할 때 제목 패턴으로 쓴다). docs/SCRIPT_FORMATS.md
+ * 대본 포맷의 '제목 패턴'에 담는다 (v0.9.56). docs/SCRIPT_FORMATS.md
  * 기존 포맷에 담거나, 새 포맷(이름·유형)을 만들어 담는다.
  */
 export function SaveTitlesToFormat({
@@ -107,7 +107,7 @@ export function SaveTitlesToFormat({
       setMode("existing");
       setName("");
       setDone(
-        `'${r.format.name}'에 제목 ${r.added}개를 담았습니다${thumbNote}${r.duplicated ? ` · 이미 있는 제목 ${r.duplicated}개 제외` : ""}${r.overLimit ? ` · 한도(제목만 ${SCRIPT_FORMAT_LIMITS.titleOnly}개)로 ${r.overLimit}개 제외` : ""}.`,
+        `'${r.format.name}'의 제목 패턴에 ${r.added}개를 담았습니다${thumbNote}${r.duplicated ? ` · 이미 있는 제목 ${r.duplicated}개 제외` : ""}${r.overLimit ? ` · 한도(${SCRIPT_FORMAT_LIMITS.titleOnly}개)로 ${r.overLimit}개 제외` : ""}.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "담지 못했습니다.");
@@ -119,7 +119,7 @@ export function SaveTitlesToFormat({
   const options = (formats ?? []).map((f) => ({
     value: f.id,
     label: `${f.isDefault ? "★ " : ""}${f.name}`,
-    description: `${SCRIPT_FORMAT_TYPES.find((t) => t.value === f.contentType)?.label ?? ""} · 제목 ${f.examples.filter((e) => !e.text.trim()).length}/${SCRIPT_FORMAT_LIMITS.titleOnly} · 대본 ${f.examples.filter((e) => e.text.trim()).length}/${SCRIPT_FORMAT_LIMITS.examples}`,
+    description: `${SCRIPT_FORMAT_TYPES.find((t) => t.value === f.contentType)?.label ?? ""} · 제목 패턴 ${(f.titlePatterns ?? []).length}/${SCRIPT_FORMAT_LIMITS.titleOnly} · 대본 ${f.examples.filter((e) => e.text.trim()).length}/${SCRIPT_FORMAT_LIMITS.examples}`,
   }));
   const canSave = list.length > 0 && (mode === "existing" ? Boolean(formatId) : Boolean(name.trim()));
 
@@ -131,7 +131,7 @@ export function SaveTitlesToFormat({
         icon={BookmarkPlus}
         disabled={disabled || !list.length}
         onClick={() => void show()}
-        title={captionMode ? `${buttonLabel} — 캡션은 '캡션'에, 제목은 '제목 패턴'에` : `${buttonLabel} — 제목칸에만 담습니다 (대본은 비워 둡니다)`}
+        title={captionMode ? `${buttonLabel} — 캡션은 '캡션'에, 제목은 '제목 패턴'에` : `${buttonLabel} — 제목은 대본 포맷의 '제목 패턴'에 담습니다`}
         aria-label={iconOnly ? buttonLabel : undefined}
         data-save-format
       >
@@ -144,7 +144,7 @@ export function SaveTitlesToFormat({
         description={
           captionMode
             ? `${source}의 캡션 ${captions?.length ?? 0}개는 대본 포맷의 '캡션'에, 제목(캡션 첫 문장) ${list.length}개는 '제목 패턴'에 담습니다. 생성할 때 설명글·캡션과 제목의 참고로 씁니다.`
-            : `${source}의 제목 ${list.length}개를 대본 포맷의 '제목칸'에만 담습니다. 대본은 비워 두고, 생성할 때 제목 패턴으로 참고합니다.`
+            : `${source}의 제목 ${list.length}개를 대본 포맷의 '제목 패턴'에 담습니다. 생성할 때 제목 후보를 만드는 참고로 씁니다.`
         }
         footer={
           <div className="flex justify-end gap-2">

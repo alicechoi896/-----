@@ -208,10 +208,6 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
   const scripts = form.examples.filter((e) => !isTitleOnly(e));
   const titleItems = form.examples.filter(isTitleOnly);
   const setScripts = (next: ScriptExample[]) => set("examples", [...next, ...titleItems]);
-  const setTitles = (titles: string[]) => {
-    const views = new Map(titleItems.map((e) => [e.title, e.views]));
-    set("examples", [...scripts, ...titles.map((title) => ({ title, views: views.get(title) ?? null, text: "" }))]);
-  };
   const setExample = (i: number, patch: Partial<ScriptExample>) => setScripts(scripts.map((e, j) => (j === i ? { ...e, ...patch } : e)));
   // 저장할 참고 (제목만 담은 것 포함) / AI 구조 분석에 쓸 대본
   const filled = form.examples.filter((e) => e.text.trim() || e.title.trim());
@@ -340,7 +336,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[13.5px] font-semibold text-fg">
             ① 참고 대본 · {withText.length}개{" "}
-            <span className="text-xs font-normal text-fg-subtle">(최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 대본만 넣습니다. 제목은 아래 &lsquo;잘된 제목&rsquo;·&lsquo;섬네일 제목&rsquo;에)</span>
+            <span className="text-xs font-normal text-fg-subtle">(최대 {SCRIPT_FORMAT_LIMITS.examples}개 · 대본만 넣습니다. 제목은 ④ &lsquo;제목 패턴&rsquo;, 썸네일 문구는 ⑦ &lsquo;섬네일 제목&rsquo;에)</span>
           </p>
           <div className="flex flex-wrap gap-2">
             <input ref={fileRef} type="file" accept=".txt,.md,.srt,.vtt,text/plain" multiple hidden onChange={(e) => void importFiles(e.target.files)} />
@@ -435,7 +431,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
             hint="설득 구조 참고용. 바뀌는 부분은 [제품] [숫자] [대상] 처럼"
             placeholder="예: [제품] 사기 전에 꼭 알아야 하는 [숫자]가지"
             items={form.titlePatterns ?? []}
-            max={STYLE_LIMITS.titlePatterns.max}
+            max={SCRIPT_FORMAT_LIMITS.titleOnly}
             onChange={(v) => set("titlePatterns", v)}
             extra={typePicker("titlePatterns")}
             className="md:col-span-2"
@@ -462,18 +458,10 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
         />
       </div>
 
-      {/* ⑦ 잘된 제목 · ⑧ 섬네일 제목 (v0.9.55) */}
-      <div className="mt-6 grid gap-5 md:grid-cols-2" data-format-titles>
+      {/* ⑦ 섬네일 제목 (v0.9.55) — 제목은 ④ 제목 패턴에 */}
+      <div className="mt-6" data-format-titles>
         <PhraseListField
-          label={`⑦ 잘된 제목 · ${titleItems.length}개`}
-          hint="실제로 잘된 영상 제목 (트렌드 찾기 [대본 포맷에 담기]로 모이고 직접 넣어도 됩니다). 생성할 때 제목 후보 구성에 매번 무작위로 섞어 씁니다."
-          placeholder="예: 무선청소기 사기 전에 꼭 볼 3가지"
-          items={titleItems.map((e) => e.title)}
-          max={SCRIPT_FORMAT_LIMITS.titleOnly}
-          onChange={setTitles}
-        />
-        <PhraseListField
-          label={`⑧ 섬네일 제목 · ${(form.thumbnailTitles ?? []).length}개`}
+          label={`⑦ 섬네일 제목 · ${(form.thumbnailTitles ?? []).length}개`}
           hint="썸네일에 크게 들어가는 짧고 강한 문구 (영상 제목과 따로). YouTube 트렌드의 '썸네일 문구도 함께 담기'로 모입니다. 생성할 때 Hook·화면 상단 제목의 참고로 씁니다."
           placeholder="예: 이거 모르면 손해"
           items={form.thumbnailTitles ?? []}

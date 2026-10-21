@@ -1,5 +1,6 @@
 import "server-only";
 import type { VideoJob } from "@/lib/types/video-production";
+import type { TrendKeyword } from "@/lib/types/keyword-library";
 import type {
   ScriptFormat,
   ErrorLog,
@@ -78,4 +79,6 @@ export interface Repositories {
   scriptFormats: Repository<ScriptFormat>;
   /** 영상 자동 제작 작업 (v0.9.51, 본인 + 관리자) */
   videoJobs: Repository<VideoJob>;
+  /** 키워드 관리 (v0.9.56, 본인 것만). findByNorms = 같은 말 묶음 키로 한 번에 */
+  trendKeywords: Repository<TrendKeyword> & { findByNorms(userId: string, norms: string[]): Promise<TrendKeyword[]> };
 }

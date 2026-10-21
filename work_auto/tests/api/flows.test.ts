@@ -262,19 +262,19 @@ describe("트렌드·스타일·오류 기록", () => {
     for (const x of res) await j(`/api/videos/${x.video!.id}`, { method: "DELETE" });
   });
 
-  it("[대본 포맷에 담기]: 제목칸에만, 새 포맷 만들기·기존 포맷에 더하기·중복 제외", async ({ skip }) => {
+  it("[대본 포맷에 담기]: 제목은 '제목 패턴'에 (v0.9.56), 섬네일 문구는 '섬네일 제목'에, 새 포맷·기존 포맷·중복 제외", async ({ skip }) => {
     if (!reachable) skip();
-    type F = { id: string; name: string; examples: { title: string; views: number | null; text: string }[] };
+    type F = { id: string; name: string; examples: { title: string; views: number | null; text: string }[]; titlePatterns: string[]; thumbnailTitles: string[] };
     type Res = { format: F; added: number; duplicated: number; overLimit: number };
     const created = (await post("/api/script-formats/titles", { newFormat: { name: "트렌드 제목 모음", contentType: "info" }, titles: [{ title: "요즘 난리 난 이유", views: 52000 }] })).data as Res;
     expect(created.added).toBe(1);
-    expect(created.format.examples[0]).toEqual({ title: "요즘 난리 난 이유", views: 52000, text: "" });
-    const more = (await post("/api/script-formats/titles", { formatId: created.format.id, titles: [{ title: "요즘 난리 난 이유", views: null }, { title: "이거 모르면 손해", views: null }] })).data as Res;
+    expect(created.format.titlePatterns).toEqual(["요즘 난리 난 이유"]);
+    expect(created.format.examples).toHaveLength(0);
+    const more = (await post("/api/script-formats/titles", { formatId: created.format.id, titles: [{ title: "요즘 난리 난 이유", views: null }, { title: "이거 모르면 손해", views: null }], thumbnailTitles: ["이거 모르면 손해"] })).data as Res;
     expect(more).toMatchObject({ added: 1, duplicated: 1 });
-    expect(more.format.examples.map((e) => e.title)).toEqual(["이거 모르면 손해", "요즘 난리 난 이유"]);
+    expect(more.format.titlePatterns).toEqual(["이거 모르면 손해", "요즘 난리 난 이유"]);
+    expect(more.format.thumbnailTitles).toEqual(["이거 모르면 손해"]);
     expect((await post("/api/script-formats/titles", { formatId: created.format.id, titles: [] })).ok).toBe(false);
-    // 제목만으로는 AI 구조 분석을 하지 않는다
-    expect((await post("/api/script-formats/analyze", { examples: more.format.examples, contentType: "info" })).ok).toBe(false);
     await j(`/api/script-formats/${created.format.id}`, { method: "DELETE" });
   });
 
@@ -468,6 +468,37 @@ describe("트렌드·스타일·오류 기록", () => {
     const yt = (await j<{ source: string }[]>("/api/trends/youtube/saved")).data;
     expect(yt.every((x) => x.source === "youtube")).toBe(true);
     for (const x of [ig, nv]) await j(`/api/scraps/${x.id}`, { method: "DELETE" });
+  });
+
+  it("키워드 관리: 트렌드 찾기에서 자동 수집 → 같은 말 묶음 → 직접 추가·제품 연결 → 원고 생성 추천 → 고정·숨김·보관함·삭제", async ({ skip }) => {
+    if (!reachable) skip();
+    type K = { id: string; keyword: string; norm: string; aliases: string[]; productId: string | null; sources: Record<string, number>; status: string; pinned: boolean; hidden: boolean; trend: string; daysLeft: number | null };
+    // 자동 수집: 인스타그램 검색 (응답 뒤에 모은다)
+    await post("/api/trends/instagram", { keyword: "키워드테스트청소기", next: null, clientRequestId: "kw" });
+    await sleep(800);
+    const auto = (await j<K[]>("/api/keywords")).data;
+    expect(auto.some((k) => k.sources.instagram && k.keyword.includes("키워드테스트청소기"))).toBe(true);
+    // 직접 추가: 표기가 달라도 같은 키워드
+    const pid = (await j<{ id: string }[]>("/api/products")).data[0].id;
+    expect((await post("/api/keywords", { keyword: "아이폰18프로, 아이폰 Pro18", productId: pid })).ok).toBe(true);
+    await post("/api/keywords", { keyword: "iPhone 18 Pro" });
+    const list = (await j<K[]>("/api/keywords")).data;
+    const ip = list.filter((k) => k.norm === list.find((x) => x.keyword === "아이폰18프로")?.norm);
+    expect(ip).toHaveLength(1);
+    expect(ip[0].aliases).toEqual(expect.arrayContaining(["아이폰 Pro18", "iPhone 18 Pro"]));
+    expect(ip[0]).toMatchObject({ productId: pid, status: "active", pinned: false, trend: "new" });
+    expect(ip[0].daysLeft).toBeGreaterThan(170);
+    // 원고 생성 화면 추천 (이 제품)
+    const sug = (await j<{ keyword: string }[]>(`/api/keywords/suggest?productId=${pid}`)).data;
+    expect(sug.map((x) => x.keyword)).toContain("아이폰18프로");
+    // 고정·숨김·보관함
+    await post(`/api/keywords/${ip[0].id}`, { pinned: true, hidden: true }, "PATCH");
+    expect((await j<{ keyword: string }[]>(`/api/keywords/suggest?productId=${pid}`)).data.map((x) => x.keyword)).not.toContain("아이폰18프로");
+    await post(`/api/keywords/${ip[0].id}`, { status: "archived" }, "PATCH");
+    expect((await j<K[]>("/api/keywords")).data.find((k) => k.id === ip[0].id)?.status).toBe("archived");
+    // 관심도 갱신은 최대 5개
+    expect((await post("/api/keywords/interest", { ids: [] })).ok).toBe(false);
+    for (const k of (await j<K[]>("/api/keywords")).data) await j(`/api/keywords/${k.id}`, { method: "DELETE" });
   });
 
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {

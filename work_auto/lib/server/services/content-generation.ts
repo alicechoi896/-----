@@ -12,6 +12,7 @@ import {
 } from "@/lib/generators/quality";
 import type { ChannelId, ContentWorkflow, ContextSummary, GenerateContentRequest, GeneratedContent, GeneratedValue, KeywordIntelligence } from "@/lib/types";
 import { keywordIntelligence, pickSeed } from "./keyword-intelligence";
+import { keywordLibrary } from "./keyword-library";
 import { createId, nowIso } from "@/lib/utils";
 import { buildGenerationContext } from "../ai/context-builder";
 import { renderContentPrompt } from "../ai/prompts/render";
@@ -209,7 +210,11 @@ async function collectIntel(p: Prepared, requestId?: string): Promise<KeywordInt
     trendTitle: p.context.trend?.title ?? null,
     category: typeof p.input.category === "string" ? p.input.category : null,
   });
-  return keywordIntelligence.collect({ userId: p.userId, featureId: p.featureId, seed, requestId });
+  const intel = await keywordIntelligence.collect({ userId: p.userId, featureId: p.featureId, seed, requestId });
+  // 키워드 관리 자동 수집: 실제 영상·글에서 반복된 키워드 후보 → 이 제품과 연결 (추가 호출 0)
+  if (intel.candidates.length)
+    await keywordLibrary.ingestQuietly(intel.candidates.slice(0, 10).map((c) => ({ keyword: c.keyword, origin: "keyword-intel" as const, productId: p.context.product?.product.id ?? null })), p.userId);
+  return intel;
 }
 const listOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 

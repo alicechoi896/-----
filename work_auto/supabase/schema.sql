@@ -669,6 +669,38 @@ begin
   end if;
 end $$;
 
+-- v0.9.56: 키워드 관리 (뜨는 키워드 ↔ 제품, 6개월 수명). 추가만 — 기존 테이블·정책은 그대로. docs/KEYWORD_LIBRARY.md
+create table if not exists public.trend_keywords (
+  id             text primary key,
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  keyword        text not null,
+  norm           text not null,
+  aliases        jsonb not null default '[]'::jsonb,
+  product_id     text references public.products (id) on delete set null,
+  product_hint   text not null default '',
+  sources        jsonb not null default '{}'::jsonb,
+  weeks          jsonb not null default '{}'::jsonb,
+  views          bigint not null default 0,
+  interest       jsonb,
+  status         text not null default 'active' check (status in ('active', 'archived')),
+  pinned         boolean not null default false,
+  hidden         boolean not null default false,
+  note           text not null default '',
+  first_seen_at  timestamptz not null default now(),
+  last_seen_at   timestamptz not null default now(),
+  archived_at    timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  unique (user_id, norm)
+);
+create index if not exists idx_trend_keywords_user_seen on public.trend_keywords (user_id, last_seen_at desc);
+create index if not exists idx_trend_keywords_product on public.trend_keywords (product_id);
+alter table public.trend_keywords enable row level security;
+drop policy if exists "own_rows" on public.trend_keywords;
+create policy "own_rows" on public.trend_keywords for all to authenticated
+  using (user_id = (select auth.uid()) and (select public.is_active()))
+  with check (user_id = (select auth.uid()) and (select public.is_active()));
+
 -- 통계 갱신: 쿼리 계획이 새 인덱스를 바로 활용하도록
 analyze public.profiles, public.role_permissions, public.audit_logs, public.products, public.generated_contents,
         public.user_feedback, public.user_styles, public.performance_metrics, public.reference_videos;

@@ -1,5 +1,5 @@
 import "server-only";
-import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, exampleKey, formatViews } from "@/lib/script-format";
+import { SCRIPT_FORMAT_LIMITS, cleanScriptExamples, formatViews } from "@/lib/script-format";
 import { STYLE_LIMITS } from "@/lib/style-limits";
 import { cleanPreferredTypes } from "@/lib/style-types";
 import type { ChannelId, ScriptFormat, ScriptFormatInput, ScriptFormatType } from "@/lib/types";
@@ -67,7 +67,7 @@ function clean(input: Partial<ScriptFormatInput>): ScriptFormatInput {
   const guideline = String(input.guideline ?? "").replace(/\r\n?/g, "\n").trim().slice(0, SCRIPT_FORMAT_LIMITS.guidelineChars);
   const hooks = phraseList(input.hooks, STYLE_LIMITS.hooks.max);
   const ctas = phraseList(input.ctas, STYLE_LIMITS.ctas.max);
-  const titlePatterns = phraseList(input.titlePatterns, STYLE_LIMITS.titlePatterns.max);
+  const titlePatterns = phraseList(input.titlePatterns, SCRIPT_FORMAT_LIMITS.titleOnly);
   const captions = captionList(input.captions);
   const thumbnailTitles = thumbList(input.thumbnailTitles);
   if (!guideline && !examples.length && !hooks.length && !ctas.length && !titlePatterns.length && !captions.length && !thumbnailTitles.length) {
@@ -205,7 +205,7 @@ export const scriptFormatService = {
     }
     const current = await own(formatId);
     const nextCaps = captionList([...caps, ...(current.captions ?? [])]);
-    const nextTitles = phraseList([...titles, ...(current.titlePatterns ?? [])], STYLE_LIMITS.titlePatterns.max);
+    const nextTitles = phraseList([...titles, ...(current.titlePatterns ?? [])], SCRIPT_FORMAT_LIMITS.titleOnly);
     const addedCaps = nextCaps.length - (current.captions ?? []).length;
     const addedTitles = nextTitles.length - (current.titlePatterns ?? []).length;
     const updated = await getRepositories().scriptFormats.update(formatId, { captions: nextCaps, titlePatterns: nextTitles, updatedAt: nowIso() });
@@ -231,27 +231,27 @@ export const scriptFormatService = {
     return this.addTitlesOnly(input);
   },
 
+  /** v0.9.56: 트렌드·영상 검색에서 담은 제목은 '제목 패턴'에 (예전 '잘된 제목' 칸은 없앰 — 이미 담긴 것은 그대로 두고 생성에도 그대로 씀) */
   async addTitlesOnly(input: { formatId?: unknown; newFormat?: { name?: unknown; contentType?: unknown } | null; titles?: unknown }): Promise<{ format: ScriptFormat; added: number; duplicated: number; overLimit: number }> {
-    const incoming = cleanScriptExamples(
-      (Array.isArray(input.titles) ? input.titles : []).map((t) => ({ title: (t as { title?: unknown })?.title, views: (t as { views?: unknown })?.views ?? null, text: "" })),
-    );
+    const incoming = phraseList((Array.isArray(input.titles) ? input.titles : []).map((t) => (typeof t === "string" ? t : (t as { title?: unknown })?.title)), 1000);
     if (!incoming.length) throw new AppError("VALIDATION", "담을 제목이 없습니다.");
+    const max = SCRIPT_FORMAT_LIMITS.titleOnly;
     const formatId = typeof input.formatId === "string" ? input.formatId : "";
     if (!formatId) {
       const name = String(input.newFormat?.name ?? "").trim();
-      const kept = incoming.slice(0, SCRIPT_FORMAT_LIMITS.titleOnly);
-      const format = await this.create({ name, contentType: input.newFormat?.contentType as ScriptFormatType, channelIds: [], examples: kept, guideline: "", isDefault: false });
+      const kept = incoming.slice(0, max);
+      const format = await this.create({ name, contentType: input.newFormat?.contentType as ScriptFormatType, channelIds: [], examples: [], guideline: "", isDefault: false, titlePatterns: kept });
       return { format, added: kept.length, duplicated: 0, overLimit: incoming.length - kept.length };
     }
     const current = await own(formatId);
-    const seen = new Set(current.examples.map(exampleKey));
-    const fresh = incoming.filter((e) => !seen.has(exampleKey(e)));
-    const room = Math.max(0, SCRIPT_FORMAT_LIMITS.titleOnly - current.examples.filter((e) => !e.text.trim()).length);
-    const kept = fresh.slice(0, room);
+    const have = current.titlePatterns ?? [];
+    const seen = new Set(have);
+    const fresh = incoming.filter((t) => !seen.has(t));
+    const kept = fresh.slice(0, Math.max(0, max - have.length));
     let format = current;
     if (kept.length) {
-      // 새로 담은 제목이 목록 위로
-      const updated = await getRepositories().scriptFormats.update(formatId, { examples: [...kept, ...current.examples], updatedAt: nowIso() });
+      // 새로 담은 제목이 위로
+      const updated = await getRepositories().scriptFormats.update(formatId, { titlePatterns: [...kept, ...have], updatedAt: nowIso() });
       if (!updated) notFound("대본 포맷");
       format = normalize(updated);
     }

@@ -3,6 +3,7 @@ import type { SavedTrend, ScrapSource } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getCurrentUserId, getRepositories } from "../repositories";
+import { keywordLibrary } from "./keyword-library";
 
 /**
  * 트렌드 스크랩 (v0.9.54) — YouTube·NAVER·Instagram 트렌드를 저장해 두고 분류(폴더 이름)로 모아 본다. docs/SCRAPS.md
@@ -75,6 +76,8 @@ export const scrapService = {
     if (existing.length >= MAX_SCRAPS) throw new AppError("LIMIT", `스크랩은 ${MAX_SCRAPS}개까지 할 수 있습니다. 오래된 스크랩을 정리해 주세요.`);
     const meta = input.meta && typeof input.meta === "object" && !Array.isArray(input.meta) ? JSON.parse(JSON.stringify(input.meta).slice(0, 4000) || "{}") : {};
     const publishedAt = typeof input.publishedAt === "string" && !Number.isNaN(Date.parse(input.publishedAt)) ? new Date(input.publishedAt).toISOString() : null;
+    // 키워드 관리 자동 수집: 스크랩한 트렌드의 키워드
+    await keywordLibrary.ingestQuietly([...strings(input.keywords, 10), ...strings(input.tags, 5)].map((keyword) => ({ keyword, origin: "scrap" as const, views: numOr0(input.views) })));
     return repo.savedTrends.insert({
       id: createId("bm"),
       userId: await getCurrentUserId(),

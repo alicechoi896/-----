@@ -86,4 +86,11 @@ export const memoryRepositories: Repositories = {
   errorLogs: createCollection("errorLogs"),
   scriptFormats: createCollection("scriptFormats"),
   videoJobs: createCollection("videoJobs"),
+  trendKeywords: {
+    ...createCollection("trendKeywords"),
+    async findByNorms(userId, norms) {
+      const want = new Set(norms);
+      return structuredClone(getState().trendKeywords.filter((k) => k.userId === userId && want.has(k.norm)));
+    },
+  },
 };

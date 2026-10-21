@@ -186,3 +186,12 @@
 | PATCH | `/api/scraps/folders` { from, to } | 분류 이름 바꾸기 |
 | POST | `/api/trends/instagram/media` { code } | 릴스 재생 주소 (검색 결과에 없을 때만, TikHub 1회) |
 | POST | `/api/script-formats/captions` | 캡션 → 대본 포맷 '캡션', 제목 → '제목 패턴' |
+
+## 키워드 관리 (v0.9.56)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET/POST | `/api/keywords` | 목록(만료 정리) / 직접 추가 |
+| PATCH/DELETE | `/api/keywords/:id` | 제품 연결·고정·숨김·보관·메모 / 삭제 |
+| POST | `/api/keywords/interest` { ids ≤5 } | NAVER 데이터랩 상대 관심도 (1회) |
+| GET | `/api/keywords/suggest?productId=` | 원고 생성 화면 추천 (DB 만) |

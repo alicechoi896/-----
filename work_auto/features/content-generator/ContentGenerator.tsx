@@ -65,6 +65,32 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
       alive = false;
     };
   }, [photoField, pickedProductId]);
+  // 키워드 관리 (v0.9.56): 고른 제품의 뜨는 키워드 추천 (우리 DB 만, 외부 호출 0)
+  const kwField = config.fields.find((f) => f.name === "keywords") ?? config.fields.find((f) => f.name === "subKeywords");
+  const [kwSuggest, setKwSuggest] = useState<{ productId: string; items: { keyword: string; trend: string }[] } | null>(null);
+  useEffect(() => {
+    if (!kwField || !pickedProductId) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const items = await api.keywords.suggest(pickedProductId);
+        if (alive) setKwSuggest({ productId: pickedProductId, items });
+      } catch {
+        /* 추천 없이 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [kwField, pickedProductId]);
+  const suggestions = kwSuggest && kwSuggest.productId === pickedProductId ? kwSuggest.items : [];
+  const addKeyword = (k: string) => {
+    if (!kwField) return;
+    setValues((prev) => {
+      const cur = (prev[kwField.name] ?? "").split(/[,，\n]/).map((x) => x.trim()).filter(Boolean);
+      return cur.includes(k) ? prev : { ...prev, [kwField.name]: [...cur, k].join(", ") };
+    });
+  };
   // 이 결과를 만들 때 쓴 사진 (생성 후 사진을 바꿔도 결과 미리보기는 그대로)
   const [resultPhotos, setResultPhotos] = useState<PhotoItem[]>([]);
   const history = useAsync(() => api.contents.list({ featureId }), [featureId]);
@@ -181,6 +207,21 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               ),
             )}
           </form>
+          {suggestions.length > 0 && kwField && (
+            <div className="mt-4 rounded-control border border-line bg-subtle/60 px-3 py-2.5" data-keyword-suggest>
+              <p className="text-xs text-fg-muted">
+                이 제품의 뜨는 키워드 <span className="text-fg-subtle">(AI 학습 관리 › 키워드 관리 · 누르면 {kwField.label}에 추가)</span>
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {suggestions.map((s) => (
+                  <button key={s.keyword} type="button" onClick={() => addKeyword(s.keyword)} className="inline-flex h-7 items-center gap-1 rounded-full border border-line bg-canvas px-2.5 text-[12.5px] text-fg hover:border-brand-line hover:text-brand">
+                    {s.trend === "up" ? "↑ " : s.trend === "new" ? "✦ " : ""}
+                    {s.keyword}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {photoNote && <p className="mt-3 text-xs text-fg-subtle" data-photo-note>{photoNote} 필요 없는 사진은 빼고, 직접 올린 사진과 함께 쓸 수 있습니다.</p>}
           {showHonesty && (
             <Notice tone="neutral" icon={ShieldCheck} className="mt-5">
