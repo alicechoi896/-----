@@ -156,13 +156,32 @@ export function cleanScriptExamples(value: unknown): ScriptExample[] {
 /** 제목만 담은 참고 개수 */
 export const titleOnlyCount = (examples: ScriptExample[]) => examples.filter((e) => !e.text.trim() && e.title.trim()).length;
 
-/** 생성할 때 같이 보낼 예시: 조회수가 높은 순, 짧게 */
-export function promptExamples(examples: ScriptExample[]): ScriptExample[] {
+/**
+ * 포맷을 얼마나 따를지 (v0.9.65): 포맷에 담긴 항목(참고 대본·제목·Hook·CTA·섬네일 제목)이 100개 이상이면
+ * 결과의 80% 이상을 포맷 구조 그대로 (단어만 이 제품·주제로), 그보다 적으면 50%.
+ */
+export const FORMAT_HEAVY_ITEMS = 100;
+export function formatStrength(f: { examples?: ScriptExample[]; titlePatterns?: string[]; hooks?: string[]; ctas?: string[]; thumbnailTitles?: string[] } | null): { total: number; heavy: boolean; ratio: number } {
+  if (!f) return { total: 0, heavy: false, ratio: 0 };
+  const total = (f.examples?.length ?? 0) + (f.titlePatterns?.length ?? 0) + (f.hooks?.length ?? 0) + (f.ctas?.length ?? 0) + (f.thumbnailTitles?.length ?? 0);
+  const heavy = total >= FORMAT_HEAVY_ITEMS;
+  return { total, heavy, ratio: heavy ? 0.8 : 0.5 };
+}
+
+/** 무작위 n 개 (생성할 때마다 다른 표본) */
+export function sampleList<T>(xs: T[], n: number): T[] {
+  return xs.length <= n ? [...xs] : [...xs].sort(() => Math.random() - 0.5).slice(0, n);
+}
+
+/** 생성할 때 같이 보낼 예시: 조회수가 높은 순. 포맷이 크면(heavy) 5개·900자, 아니면 2개·500자 */
+export function promptExamples(examples: ScriptExample[], heavy = false): ScriptExample[] {
+  const n = heavy ? 5 : SCRIPT_FORMAT_LIMITS.promptExamples;
+  const chars = heavy ? 900 : SCRIPT_FORMAT_LIMITS.promptExampleChars;
   return examples
     .filter((e) => e.text.trim())
     .sort((a, b) => (b.views ?? -1) - (a.views ?? -1))
-    .slice(0, SCRIPT_FORMAT_LIMITS.promptExamples)
-    .map((e) => ({ ...e, text: e.text.length > SCRIPT_FORMAT_LIMITS.promptExampleChars ? e.text.slice(0, SCRIPT_FORMAT_LIMITS.promptExampleChars) + "…" : e.text }));
+    .slice(0, n)
+    .map((e) => ({ ...e, text: e.text.length > chars ? e.text.slice(0, chars) + "…" : e.text }));
 }
 
 /** 제목 패턴 참고용: 조회수 높은 순 제목 최대 5개 */
@@ -180,7 +199,8 @@ export const formatTitleCount = (examples: ScriptExample[]) => examples.filter((
  * 포맷·트렌드 제목이 없으면 그 몫은 AI 추천으로 돌린다. 다른 개수(예: 20개)는 비율대로 늘린다.
  */
 export function titleMix(total: number, formatTitles: number, trendTitles: number): { ai: number; format: number; trend: number } {
-  const base = formatTitles > 100 ? { ai: 2, format: 7, trend: 1 } : { ai: 4, format: 4, trend: 2 };
+  // v0.9.65: 포맷 제목이 100개를 넘으면 80% (AI 1 · 포맷 8 · 트렌드 1)
+  const base = formatTitles > 100 ? { ai: 1, format: 8, trend: 1 } : { ai: 4, format: 4, trend: 2 };
   const scale = total / 10;
   let format = formatTitles ? Math.round(base.format * scale) : 0;
   let trend = trendTitles ? Math.round(base.trend * scale) : 0;

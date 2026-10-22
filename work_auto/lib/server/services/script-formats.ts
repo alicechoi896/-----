@@ -393,6 +393,14 @@ export function chooseScriptFormat(
   if (linked) return linked;
   const fits = (f: ScriptFormat) => f.contentType === type && f.isDefault && (f.channelIds.length === 0 || f.channelIds.includes(channelId));
   // 이 채널을 직접 고른 포맷(예: 블로그 포맷)을 '모든 채널' 포맷보다 먼저
-  return rows.find((f) => fits(f) && f.channelIds.includes(channelId)) ?? rows.find(fits) ?? null;
+  const byDefault = rows.find((f) => fits(f) && f.channelIds.includes(channelId)) ?? rows.find(fits);
+  if (byDefault) return byDefault;
+  // v0.9.65: 기본(★)을 정하지 않았으면 그 유형에서 항목이 가장 많은 포맷을 쓴다 (만들어 둔 포맷이 그냥 빠지지 않게)
+  const size = (f: ScriptFormat) => (f.examples?.length ?? 0) + (f.titlePatterns?.length ?? 0) + (f.hooks?.length ?? 0) + (f.ctas?.length ?? 0) + (f.thumbnailTitles?.length ?? 0) + (f.guideline ? 5 : 0);
+  return (
+    rows
+      .filter((f) => f.contentType === type && (f.channelIds.length === 0 || f.channelIds.includes(channelId)))
+      .sort((a, b) => size(b) - size(a))[0] ?? null
+  );
 }
 

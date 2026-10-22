@@ -13,7 +13,7 @@ import type { ScriptFormat, UserStyle } from "@/lib/types";
 import { learningConfig } from "@/lib/learning-config";
 import { compressContent, learningService, profileIdForFeature, promptInsights } from "../services/learning";
 import { chooseScriptFormats, loadScriptFormats } from "../services/script-formats";
-import { blogTitleFormatTypeOf, scriptFormatTypeOf } from "@/lib/script-format";
+import { blogTitleFormatTypeOf, formatStrength, scriptFormatTypeOf } from "@/lib/script-format";
 
 /**
  * ★ ContextBuilder — AI Memory 를 "생성 1회분"의 Context 로 조립한다.
@@ -96,7 +96,21 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   // Hook·CTA·제목 패턴·원하는 유형: 대본 포맷에 있으면 포맷 것, 없으면 예전처럼 스타일 것 (v0.9.37, docs/SCRIPT_FORMATS.md)
   const effectiveStyle = mergeFormatPersuasion(style, scriptFormat);
   if (effectiveStyle !== style && scriptFormat) notes.push(`Hook·CTA·제목 패턴: 대본 포맷 '${scriptFormat.name}'의 것을 사용`);
-  const styleContext = effectiveStyle ? buildStyleContext({ style: effectiveStyle, channelId }) : null;
+  const builtStyle = effectiveStyle ? buildStyleContext({ style: effectiveStyle, channelId }) : null;
+  // v0.9.65: 포맷에 Hook·CTA·제목 패턴이 있으면 그건 '대본 포맷' 블록에서 따르기 비율과 함께 보낸다 (스타일 블록에서는 뺀다)
+  const styleContext =
+    builtStyle && scriptFormat
+      ? {
+          ...builtStyle,
+          hooks: scriptFormat.hooks?.length ? [] : builtStyle.hooks,
+          ctas: scriptFormat.ctas?.length ? [] : builtStyle.ctas,
+          titlePatterns: scriptFormat.titlePatterns?.length ? [] : builtStyle.titlePatterns,
+        }
+      : builtStyle;
+  if (scriptFormat) {
+    const st = formatStrength(scriptFormat);
+    notes.push(`대본 포맷 '${scriptFormat.name}' 적용 — 항목 ${st.total}개${st.heavy ? " (100개 이상 → 결과의 80% 이상을 포맷대로)" : " (결과의 약 50%를 포맷대로)"}`);
+  } else if (fullFormatType) notes.push("대본 포맷 없음 → AI 학습 관리 › 대본 포맷에서 만들면 구조·제목·Hook·CTA 를 따릅니다.");
 
   // 0) Content Profile — 생성 폼에서 고른 프로필 → 스타일에 연결된 프로필 → 기본 프로필
   if (pickedProfileId && !profiles.some((p) => p.id === pickedProfileId)) {

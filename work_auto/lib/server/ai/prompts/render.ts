@@ -5,7 +5,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { formatTitleCount, formatViews, promptExamples, promptTitles, titleMix } from "@/lib/script-format";
+import { formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -75,11 +75,17 @@ function contextBlocks(ctx: GenerationContext): string[] {
   // 대본 포맷: 대본 구조를 정한다 (말투는 스타일, 구조는 포맷). 참고 대본은 조회수 높은 2개만 짧게
   if (ctx.scriptFormat && ctx.scriptFormatUse === "full") {
     const f = ctx.scriptFormat;
-    const ex = promptExamples(f.examples);
+    const st = formatStrength(f);
+    const pct = Math.round(st.ratio * 100);
+    const ex = promptExamples(f.examples, st.heavy);
     blocks.push(
-      block(`대본 포맷: ${f.name} (구조 참고 — 그대로 복제하지 않는다)`, [
-        "아래 가이드라인은 잘된 대본들의 공통 구조다. 큰 흐름(Hook → 핵심 → CTA)은 살리되, 단계 일부를 합치거나 순서·강조점·표현을 바꿔 이 제품·주제에 맞게 더 설득력 있게 다시 짠다.",
-        "대본 3편은 같은 포맷에서 출발하되 편마다 Hook 방식·전개·강조 포인트·CTA 를 다르게 해서, 사용자가 좋은 부분을 골라 섞을 수 있게 한다.",
+      block(`대본 포맷: ${f.name} (사용자가 직접 모은 잘된 대본 ${st.total}개 기반 — 결과의 ${pct}% 이상을 이 포맷대로)`, [
+        st.heavy
+          ? "이 포맷은 사용자가 100개 이상 모은 실제 잘된 콘텐츠다. 대본 3편 모두 아래 가이드라인의 단계 순서와 각 단계의 역할을 그대로 따른다. 문장 길이·리듬·연결어·말끝·강조 방식도 참고 대본처럼 쓴다. 바꾸는 것은 제품·주제·숫자 같은 내용뿐이다 (문장 통째 복사는 금지)."
+          : "아래 가이드라인은 잘된 대본들의 공통 구조다. 큰 흐름(Hook → 핵심 → CTA)과 단계 순서를 살려 이 제품·주제에 맞게 쓴다.",
+        st.heavy
+          ? "대본 3편은 모두 포맷 구조를 따르되, Hook 문장과 강조 포인트만 편마다 다르게 한다 (구조를 새로 만들지 않는다)."
+          : "대본 3편은 같은 포맷에서 출발하되 편마다 Hook 방식·전개·강조 포인트·CTA 를 다르게 해서, 사용자가 좋은 부분을 골라 섞을 수 있게 한다.",
         "영상 길이와 말투 규칙('~니다.' 금지, 짧은 리듬)은 그대로 지킨다. 가격·할인·배송·순위 주장은 [제품 정보]에 근거가 있을 때만 쓰고, 없으면 '링크에서 확인' 식으로 바꾼다.",
         ...(f.guideline ? f.guideline.split("\n") : ["(가이드라인 없음 — 아래 참고 대본의 구조를 참고한다)"]),
       ]),
@@ -87,7 +93,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
     if (ex.length) {
       blocks.push(
         block(
-          "대본 포맷 > 참고 대본 (구조·리듬만 참고. 문장·제품명·숫자를 그대로 쓰지 않고, 받아 적은 오타는 따라 하지 않는다)",
+          `대본 포맷 > 참고 대본 ${ex.length}편 (조회수 높은 순 — 구조·리듬·문장 길이를 ${pct}% 이상 따른다. 문장·제품명·숫자를 그대로 쓰지 않고, 받아 적은 오타는 따라 하지 않는다)`,
           ex.map((e, i) => `(${i + 1}${e.views != null ? ` · ${formatViews(e.views)}` : ""}) ${e.text.replace(/\n/g, " / ")}`),
         ),
       );
@@ -99,13 +105,18 @@ function contextBlocks(ctx: GenerationContext): string[] {
       block("대본 포맷 > 피해야 할 대본 (이렇게 쓰지 않는다 — 시작 방식·전개·표현을 반복하지 않는다)", ctx.scriptFormat.badExamples.slice(0, 2).map((e, i) => `(${i + 1}) ${e.text.slice(0, 300).replace(/\n/g, " / ")}`)),
     );
   }
-  // 대본 포맷의 참고 대본 제목 → 영상 제목·블로그 글 제목의 패턴 참고 (복사 금지)
+  // 대본 포맷의 제목 (참고 대본 제목 + 제목 패턴, v0.9.65) → 영상 제목·블로그 글 제목. 포맷이 크면 80% 를 이 구조대로
   if (ctx.scriptFormat) {
-    const titles = promptTitles(ctx.scriptFormat.examples, formatTitleCount(ctx.scriptFormat.examples) > 100 ? 30 : 20);
+    const f = ctx.scriptFormat;
+    const st = formatStrength(f);
+    const all = [...promptTitles(f.examples, 300), ...(f.titlePatterns ?? [])];
+    const titles = sampleList([...new Set(all)], st.heavy ? 40 : 20);
     if (titles.length) {
       blocks.push(
-        block(`대본 포맷 > 잘된 제목 (${ctx.scriptFormatUse === "titles" ? "블로그 글 제목" : "영상 제목"} 패턴 참고 — 그대로 쓰지 않는다)`, [
-          "아래 제목들의 설득 구조(후회·손해 회피, 반문, 숫자, 대상 지정, 비교 등)만 뽑아 지금 주제·제품·키워드에 맞는 새 제목으로 더 설득력 있게 바꾼다. 문장·제품명을 복사하지 않는다.",
+        block(`대본 포맷 > 잘된 제목 ${titles.length}개 (${ctx.scriptFormatUse === "titles" ? "블로그 글 제목" : "영상 제목"} — 포맷 제목 몫은 이 구조를 그대로 따른다)`, [
+          st.heavy
+            ? "아래는 사용자가 모은 실제 잘된 제목이다. 포맷 제목 몫은 아래 제목 하나를 골라 그 구조·어순·길이·말투를 그대로 살리고, 제품·주제·숫자만 지금 것으로 바꿔 쓴다 (문장 통째 복사는 금지)."
+            : "아래 제목들의 설득 구조(후회·손해 회피, 반문, 숫자, 대상 지정, 비교 등)를 뽑아 지금 주제·제품·키워드에 맞는 제목으로 바꾼다. 문장·제품명을 복사하지 않는다.",
           ctx.scriptFormatUse === "titles" ? "블로그는 검색형 제목이다: 핵심 키워드를 앞쪽에 두고 영상식 과장 표현은 줄인다." : "",
           ...titles.map((t) => `잘된 제목: ${t}`),
         ].filter(Boolean)),
@@ -118,10 +129,30 @@ function contextBlocks(ctx: GenerationContext): string[] {
     const picked = [...caps].sort(() => Math.random() - 0.5).slice(0, 3);
     blocks.push(block("대본 포맷 > 잘된 캡션 (설명글·캡션의 말투·길이·해시태그 구성만 참고 — 문장·제품명을 그대로 쓰지 않는다)", picked.map((c, i) => `(${i + 1}) ${c.slice(0, 300).replace(/\n/g, " / ")}`)));
   }
-  // 대본 포맷 섬네일 제목 (v0.9.55): 영상 원고의 Hook·짧은 화면 문구 참고 (무작위 8개, 그대로 쓰지 않는다)
+  // 대본 포맷 Hook·CTA (v0.9.65): 포맷이 크면 표본을 늘리고, 후보의 80% 를 포맷 문장 구조 그대로
+  if (ctx.scriptFormat && ctx.scriptFormatUse === "full") {
+    const f = ctx.scriptFormat;
+    const st = formatStrength(f);
+    const pct = Math.round(st.ratio * 100);
+    const n = st.heavy ? 25 : 10;
+    for (const [key, label, list] of [
+      ["hooks", "Hook", f.hooks ?? []],
+      ["ctas", "CTA", f.ctas ?? []],
+    ] as const) {
+      if (!list.length) continue;
+      blocks.push(
+        block(`대본 포맷 > ${label} ${Math.min(n, list.length)}개 (사용자가 모은 잘된 ${label} — ${label} 후보의 ${pct}% 이상을 이 구조대로)`, [
+          `${key} 후보 중 ${pct}% 이상은 아래 ${label} 하나를 골라 문장 구조·길이·말투·말끝을 그대로 살리고, 제품·주제·숫자 같은 내용 단어만 바꿔 쓴다. 나머지만 새로운 방식으로 쓴다. 문장 통째 복사는 금지.`,
+          "대본의 첫 문장(Hook)과 마지막 문장(CTA)도 이 방식을 따른다.",
+          ...sampleList([...list], n).map((x) => `${label}: ${x}`),
+        ]),
+      );
+    }
+  }
+  // 대본 포맷 섬네일 제목 (v0.9.55): 영상 원고의 Hook·짧은 화면 문구 참고 (무작위, 그대로 쓰지 않는다)
   const thumbs = ctx.scriptFormatUse === "full" ? (ctx.scriptFormat?.thumbnailTitles ?? []) : [];
   if (thumbs.length) {
-    const picked = [...thumbs].sort(() => Math.random() - 0.5).slice(0, 8);
+    const picked = sampleList([...thumbs], formatStrength(ctx.scriptFormat).heavy ? 20 : 8);
     blocks.push(block("대본 포맷 > 잘된 섬네일 제목 (짧고 강한 화면 문구 — 섬네일 제목 후보·Hook 의 길이·리듬 참고, 그대로 쓰지 않는다)", picked.map((t) => `섬네일: ${t}`)));
   }
   // Keyword Intelligence: 실제 플랫폼 데이터의 키워드 후보 (검색량 아님)
@@ -215,7 +246,7 @@ export function renderContentPrompt(
     userInput.push(
       [
         `제목 구성(titles ${total}개): AI 가 지금 뜰 만한 제목 ${mix.ai}개`,
-        mix.format ? `+ [대본 포맷 > 잘된 제목]의 패턴을 바꿔 쓴 제목 ${mix.format}개` : "",
+        mix.format ? `+ [대본 포맷 > 잘된 제목]의 구조를 그대로 따라 단어만 바꾼 제목 ${mix.format}개` : "",
         mix.trend ? `+ [실제 플랫폼에서 잘된 제목]을 참고해 지금 주제로 바꿔 쓴 제목 ${mix.trend}개` : "",
         "— 섞어서 배열하고, 같은 구조·같은 첫 단어가 반복되지 않게 한다. 어느 경우에도 원문 제목을 그대로 쓰지 않는다.",
       ].filter(Boolean).join(" "),
@@ -224,7 +255,7 @@ export function renderContentPrompt(
   }
   // 섬네일 제목 후보 (v0.9.63)
   if (config.outputs.some((o) => o.key === "thumbnailTitles"))
-    userInput.push("섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 8~16자, 줄바꿈 1번까지, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 그 길이·리듬을 참고한다 (문장 복사 금지).");
+    userInput.push(`섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 8~16자, 줄바꿈 1번까지, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 후보의 ${Math.round(formatStrength(ctx.scriptFormat).ratio * 100) || 50}% 이상은 그 구조·길이·리듬을 그대로 따라 단어만 바꾼다 (문장 통째 복사 금지).`);
   // 설명글: 설명란에 그대로 붙여 넣을 글만 (v0.9.50)
   if (config.outputs.some((o) => o.key === "description"))
     userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. '이 설명은 ~입니다', '설명글:', '핵심 요약:', '추천 대상:' 같은 안내·항목 이름·괄호 메모를 쓰지 않는다. 시청자에게 바로 말하듯 제품(주제) 소개 → 장점·확인할 점 순서로 3~6문단, 문단 사이는 빈 줄, 마지막 문단은 CTA(행동 유도)로 끝낸다.");
