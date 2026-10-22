@@ -11,6 +11,8 @@ import {
   ATTENTION_CONFIG,
   ENDING_TEMPLATE,
   VIDEO_RENDER_CONFIG as C,
+  atempoChain,
+  captionChunks,
   cleanCaptionStyle,
   cleanTitleStyle,
   voiceInstructions,
@@ -43,20 +45,6 @@ export interface RenderOutput {
 
 const W = C.width;
 const H = C.height;
-
-function wrap(text: string, max: number): string {
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let cur = "";
-  for (const w of words) {
-    if ((cur + " " + w).trim().length > max && cur) {
-      lines.push(cur.trim());
-      cur = w;
-    } else cur = `${cur} ${w}`;
-  }
-  if (cur.trim()) lines.push(cur.trim());
-  return lines.slice(0, 2).join("\n");
-}
 
 export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks: RenderHooks): Promise<RenderOutput> {
   const dir = path.join(os.tmpdir(), `vj_${job.id.replace(/[^\w-]/g, "")}`);
@@ -136,7 +124,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
               const thr = `${C.silenceThresholdDb}dB`;
               await runFfmpeg([
                 "-i", mp3,
-                "-af", `silenceremove=start_periods=1:start_threshold=${thr}:start_silence=0.02,areverse,silenceremove=start_periods=1:start_threshold=${thr}:start_silence=0.02,areverse`,
+                "-af", `silenceremove=start_periods=1:start_threshold=${thr}:start_silence=0.02,areverse,silenceremove=start_periods=1:start_threshold=${thr}:start_silence=0.02,areverse${atempoChain(plan.voiceSpeed)}`,
                 "-ar", "44100", "-ac", "1", out,
               ]);
               audio[k] = { file: out, dur: await mediaDuration(out) };
@@ -212,7 +200,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       s.start = Number(t.toFixed(2));
       s.duration = Number(dur.toFixed(2));
       s.textTreatment = best.tr.kind as TextTreatment;
-      if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못했습니다 (AI 이미지 읽기 필요).";
+      if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 블러했습니다 (AI 이미지 읽기 연결 필요).";
       t += dur;
 
       const out = path.join(dir, `v${k}.mp4`);
@@ -224,20 +212,23 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       }
       vf.push(`scale=${W}:${H}:force_original_aspect_ratio=increase`, `crop=${W}:${H}`, `fps=${C.fps}`, "setsar=1");
       let filter = `[0:v]${vf.join(",")}[base]`;
-      if (best.tr.blur && size.width) {
-        // 블러 상자를 출력 좌표로 (원본 → 꽉 채우기 비율)
+      const blurBoxes = best.tr.blurs ?? (best.tr.blur ? [best.tr.blur] : []);
+      if (blurBoxes.length && size.width) {
+        // 블러 상자를 출력 좌표로 (원본 → 꽉 채우기 비율). 상자마다 따로 (v0.9.66)
         const scale = Math.max(W / size.width, H / size.height);
         const ox = (size.width * scale - W) / 2;
         const oy = (size.height * scale - H) / 2;
-        const b = best.tr.blur;
-        const bx = Math.max(0, Math.round(b.x * size.width * scale - ox));
-        const by = Math.max(0, Math.round(b.y * size.height * scale - oy));
-        const bw = Math.min(W - bx, Math.round(b.w * size.width * scale));
-        const bh = Math.min(H - by, Math.round(b.h * size.height * scale));
-        if (bw > 8 && bh > 8) {
-          filter += `;[base]split[b1][b2];[b2]crop=${bw}:${bh}:${bx}:${by},boxblur=28:3[bl];[b1][bl]overlay=${bx}:${by}[blurred]`;
-          filter += `;[blurred]format=yuv420p[out]`;
-        } else filter += `;[base]format=yuv420p[out]`;
+        let cur = "base";
+        for (const [n, b] of blurBoxes.entries()) {
+          const bx = Math.max(0, Math.round(b.x * size.width * scale - ox));
+          const by = Math.max(0, Math.round(b.y * size.height * scale - oy));
+          const bw = Math.min(W - bx, Math.round(b.w * size.width * scale));
+          const bh = Math.min(H - by, Math.round(b.h * size.height * scale));
+          if (bw <= 8 || bh <= 8) continue;
+          filter += `;[${cur}]split[p${n}][q${n}];[q${n}]crop=${bw}:${bh}:${bx}:${by},boxblur=36:4[bl${n}];[p${n}][bl${n}]overlay=${bx}:${by}[m${n}]`;
+          cur = `m${n}`;
+        }
+        filter += `;[${cur}]format=yuv420p[out]`;
       } else filter += `;[base]format=yuv420p[out]`;
       // 원본이 컷보다 짧으면(AI 컷 5초 등) 반복해서 채운다
       const loop = src.duration < best.start + dur + 0.05 ? ["-stream_loop", "-1"] : [];
@@ -287,14 +278,23 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       for (const [k, s] of scenes.entries()) {
         // 마지막 컷은 '최저가 구매링크' 엔딩이 자막 자리를 쓴다 (음성은 그대로, 브루 편집과 같게)
         if (job.plan.ending && k === scenes.length - 1) continue;
-        const png = path.join(dir, `cap${k}.png`);
+        // v0.9.66: 자막은 1줄 — 길면 조각으로 나눠 음성 길이를 글자 수 비율로 나눠 차례로
         const cs = cleanCaptionStyle(job.plan.captionStyle);
-        note(await renderCaption(png, wrap(s.narration, CAPTION_TEMPLATE.maxCharsPerLine), cs), cs.font);
-        inputs.push("-loop", "1", "-i", png);
-        const en = `between(t,${s.start!.toFixed(3)},${(s.start! + s.duration!).toFixed(3)})`;
-        chain += `;[${last}][${idx}:v]overlay=0:${captionY(cleanCaptionStyle(job.plan.captionStyle))}:shortest=0:enable='${en}'[c${k}]`;
-        last = `c${k}`;
-        idx++;
+        const chunks = captionChunks(s.narration, CAPTION_TEMPLATE.maxCharsPerLine);
+        const speech = Math.min(s.duration!, Math.max(0.3, audio[k]?.dur ?? s.duration!));
+        const totalChars = chunks.reduce((n, c) => n + c.replace(/\s/g, "").length, 0) || 1;
+        let at = s.start!;
+        for (const [j, text] of chunks.entries()) {
+          const png = path.join(dir, `cap${k}_${j}.png`);
+          note(await renderCaption(png, text, cs), cs.font);
+          inputs.push("-loop", "1", "-i", png);
+          const end = j === chunks.length - 1 ? s.start! + s.duration! : at + (speech * text.replace(/\s/g, "").length) / totalChars;
+          const en = `between(t,${at.toFixed(3)},${(end - 0.001).toFixed(3)})`;
+          chain += `;[${last}][${idx}:v]overlay=0:${captionY(cs)}:shortest=0:enable='${en}'[c${k}_${j}]`;
+          last = `c${k}_${j}`;
+          idx++;
+          at = end;
+        }
       }
     }
     // 주목 효과 (v0.9.64): 강조 컷 앞 1.4초, 통통 튀게. meme GIF 가 있으면 그것, 없으면 직접 그린 스티커

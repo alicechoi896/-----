@@ -31,9 +31,13 @@ describe("영상 자동 제작", () => {
     expect(arrowSceneIndexes(12)).toContain(3);
   });
 
-  it("원본 글자: 없음 → clean, 아래 자막 → crop, 가운데 작은 글자 → blur, 큰 글자 → 제외, 검사 못 함 → unchecked", () => {
+  it("원본 글자 (v0.9.66): 없음 → clean, 아래 자막 → blur(상자마다), 가운데 작은 글자 → blur, 큰 글자 → 제외, 검사 못 함 → 아래 자막 띠 블러", () => {
     expect(decideTreatment([], true).kind).toBe("clean");
-    expect(decideTreatment([{ x: 0.1, y: 0.85, w: 0.8, h: 0.06 }], true).kind).toBe("crop");
+    expect(decideTreatment([{ x: 0.1, y: 0.85, w: 0.8, h: 0.06 }], true).kind).toBe("blur");
+    const two = decideTreatment([{ x: 0.1, y: 0.2, w: 0.3, h: 0.05 }, { x: 0.1, y: 0.85, w: 0.8, h: 0.06 }], true);
+    expect(two.kind).toBe("blur");
+    expect(two.blurs).toHaveLength(2);
+    expect(decideTreatment([], false).blurs?.[0].y).toBe(0.7);
     expect(decideTreatment([{ x: 0.4, y: 0.45, w: 0.2, h: 0.05 }], true).kind).toBe("blur");
     expect(decideTreatment([{ x: 0.05, y: 0.3, w: 0.9, h: 0.4 }], true).kind).toBe("rejected");
     expect(decideTreatment([], false).kind).toBe("unchecked");

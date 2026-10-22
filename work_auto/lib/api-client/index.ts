@@ -290,6 +290,7 @@ export const api = {
       captions: boolean;
       aiCount?: number;
       voiceStyle?: string;
+      voiceSpeed?: number;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
       aiPrompt?: string;
@@ -306,7 +307,7 @@ export const api = {
     /** AI 컷용 제품 사진 직접 올리기 */
     aiClipImage: (dataUrl: string, channelId: VideoChannel) => request<{ imageUrl: string }>("/api/video-production/ai-clips/image", { method: "POST", body: json({ dataUrl, channelId }) }),
     /** 목소리 미리 듣기 (OpenAI TTS 1회) → mp3 */
-    voicePreview: async (body: { voice: string; voiceStyle: string; text?: string; channelId: VideoChannel }): Promise<Blob> => {
+    voicePreview: async (body: { voice: string; voiceStyle: string; voiceSpeed?: number; text?: string; channelId: VideoChannel }): Promise<Blob> => {
       const res = await fetch("/api/video-production/voice-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;

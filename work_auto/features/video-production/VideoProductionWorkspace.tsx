@@ -14,7 +14,9 @@ import {
   CAPTION_STROKES,
   DEFAULT_CAPTION_STYLE,
   DEFAULT_TITLE_STYLE,
+  DEFAULT_VOICE_SPEED,
   TITLE_BAR_COLORS,
+  VOICE_SPEEDS,
   estimateAiClipUsd,
   type CaptionStyle,
   type TitleStyle,
@@ -72,6 +74,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [captionsOn, setCaptionsOn] = useState(true);
   const [aiCount, setAiCount] = useState<number>(AI_CLIP_CONFIG.defaultCount);
   const [voiceStyle, setVoiceStyle] = useState("shorts");
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(DEFAULT_VOICE_SPEED);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
   const [titleStyle, setTitleStyle] = useState<TitleStyle>(DEFAULT_TITLE_STYLE);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -133,7 +136,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlanning(true);
     setError(null);
     try {
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, captionStyle, titleStyle, aiPrompt });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, voiceSpeed, captionStyle, titleStyle, aiPrompt });
       // 같은 대본으로 이미 만든 AI 컷이 있으면 이어서 쓴다 (다시 과금하지 않게)
       const saved = r.plan.aiClips?.length ? loadClips(clipKey(content.id, scriptIndex)) : null;
       if (saved && r.plan.aiClips && saved.length === r.plan.aiClips.length) r.plan.aiClips = saved;
@@ -152,7 +155,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPreviewing(true);
     setVoiceNote(null);
     try {
-      const blob = await api.videoProduction.voicePreview({ voice, voiceStyle, channelId, text: content?.scripts[scriptIndex]?.split("\n").find((l) => l.trim())?.slice(0, 60) });
+      const blob = await api.videoProduction.voicePreview({ voice, voiceStyle, voiceSpeed, channelId, text: content?.scripts[scriptIndex]?.split("\n").find((l) => l.trim())?.slice(0, 60) });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.onended = () => URL.revokeObjectURL(url);
@@ -369,6 +372,14 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   <FormField label="말투">
                     <Select value={voiceStyle} options={opts.voiceStyles} onChange={(e) => setVoiceStyle(e.target.value)} />
                   </FormField>
+                  <FormField label="말하기 속도" className="sm:col-span-2">
+                    <SegmentedControl
+                      size="sm"
+                      value={String(voiceSpeed)}
+                      onChange={(v) => setVoiceSpeed(Number(v))}
+                      options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))}
+                    />
+                  </FormField>
                   <div className="sm:col-span-2">
                     <Button size="sm" icon={Play} loading={previewing} disabled={!opts.ready.voice} onClick={() => void previewVoice()} data-voice-preview>
                       미리 듣기
@@ -478,7 +489,7 @@ function PlanEditor({
           <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9 border-0 bg-transparent text-center text-lg font-bold" style={{ color: plan.titleStyle?.line1 ?? "#FFFFFF" }} aria-label="상단 제목 1줄" />
           <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center font-bold" style={{ color: plan.titleStyle?.line2 ?? "#C8FF00" }} aria-label="상단 제목 2줄" />
         </div>
-        <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일). 선택한 제목: {plan.selectedTitle}</p>
+        <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일 · [ ]로 감싼 글자는 강조색). 선택한 제목: {plan.selectedTitle}</p>
       </div>
       {clips.length > 0 && <AiClipPanel plan={plan} onChange={onChange} images={images} ready={videoAiReady} />}
       <ol className="space-y-1.5">
@@ -910,10 +921,10 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
       <p className="text-[13px] font-semibold text-fg">상단 제목 스타일</p>
       <div className="rounded py-2 text-center font-black" style={{ background: value.bar === "none" ? "linear-gradient(#71717a,#3f3f46)" : value.bar }}>
         <p style={{ color: value.line1, textShadow: outline }} className="text-[17px]">
-          제품명 · 1줄
+          소니 <span style={{ color: value.accent }}>WH-CH720N</span>
         </p>
-        <p style={{ color: value.line2, textShadow: outline }} className="text-[14px]">
-          화면용 짧은 제목 · 2줄
+        <p style={{ color: value.line2, textShadow: outline }} className="text-[18px]">
+          스펙보다 <span style={{ color: value.accent }}>먼저</span> 볼 게 있다?
         </p>
       </div>
       <Select value={value.font} options={CAPTION_FONTS.map((f) => ({ value: f.value, label: f.label }))} onChange={(e) => set({ font: e.target.value as TitleStyle["font"] })} aria-label="제목 글꼴" />
@@ -925,6 +936,14 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
         <span className="w-14 text-xs text-fg-subtle">2줄 색</span>
         {swatches("line2")}
       </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">강조색</span>
+        {CAPTION_COLORS.map((c) => (
+          <button key={c} type="button" onClick={() => set({ accent: c })} aria-label={`강조색 ${c}`} className={cn("size-6 rounded-full border", value.accent === c ? "ring-2 ring-brand ring-offset-1" : "border-line")} style={{ background: c }} />
+        ))}
+        <input type="color" value={value.accent ?? "#FFE94D"} onChange={(e) => set({ accent: e.target.value.toUpperCase() })} aria-label="강조색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />
+      </div>
+      <p className="text-[11px] text-fg-subtle">제목에서 <b>[ ]</b>로 감싼 글자는 강조색으로 나옵니다. 예: 소니 [WH-CH720N] — 한 줄에 여러 색을 쓸 수 있습니다.</p>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="w-14 text-xs text-fg-subtle">띠 색</span>
         {TITLE_BAR_COLORS.map((c) => (

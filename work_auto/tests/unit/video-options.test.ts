@@ -31,11 +31,32 @@ describe("영상 옵션 (v0.9.63)", () => {
 describe("제목 스타일·자막 위치 (v0.9.64)", async () => {
   const { cleanTitleStyle, cleanCaptionStyle, captionCenterY } = await import("@/lib/video-production/config");
   it("제목: 글꼴·색 검사, 띠 없음 가능", () => {
-    expect(cleanTitleStyle({ font: "jua", line1: "#ffffff", line2: "#ffe94d", bar: "none" })).toEqual({ font: "jua", line1: "#FFFFFF", line2: "#FFE94D", bar: "none" });
-    expect(cleanTitleStyle({ font: "x", line1: "red", bar: "javascript:" })).toEqual({ font: "dohyeon", line1: "#FFFFFF", line2: "#C8FF00", bar: "#000000" });
+    expect(cleanTitleStyle({ font: "jua", line1: "#ffffff", line2: "#ffe94d", bar: "none" })).toEqual({ font: "jua", line1: "#FFFFFF", line2: "#FFE94D", accent: "#FFE94D", bar: "none" });
+    expect(cleanTitleStyle({ font: "x", line1: "red", bar: "javascript:" })).toEqual({ font: "dohyeon", line1: "#FFFFFF", line2: "#C8FF00", accent: "#FFE94D", bar: "#000000" });
   });
   it("자막 세로 위치: 기본은 가운데보다 살짝 아래(62%)", () => {
     expect(captionCenterY(cleanCaptionStyle({}))).toBe(0.62);
     expect(captionCenterY(cleanCaptionStyle({ position: "center" }))).toBe(0.5);
+  });
+});
+
+describe("자막 1줄·제목 강조·음성 속도 (v0.9.66)", async () => {
+  const { captionChunks, accentParts, atempoChain, cleanVoiceSpeed } = await import("@/lib/video-production/config");
+  it("자막은 한 줄씩, 비슷한 길이로 띄어쓰기에서 나눈다", () => {
+    expect(captionChunks("노이즈 캔슬링 헤드폰 오래 끼면 귀가 답답하죠", 14)).toEqual(["노이즈 캔슬링 헤드폰", "오래 끼면 귀가 답답하죠"]);
+    expect(captionChunks("짧은 대사", 14)).toEqual(["짧은 대사"]);
+    expect(captionChunks("가성비 끝판왕 무선 이어폰 진짜 좋아", 14)).toEqual(["가성비 끝판왕 무선", "이어폰 진짜 좋아"]);
+  });
+  it("제목 [ ] 는 강조색 조각", () => {
+    expect(accentParts("소니 [WH-CH720N] 후기")).toEqual([
+      { text: "소니 ", accent: false },
+      { text: "WH-CH720N", accent: true },
+      { text: " 후기", accent: false },
+    ]);
+  });
+  it("음성 속도: 기본 2배, 허용 값만", () => {
+    expect(atempoChain(undefined)).toBe(",atempo=2");
+    expect(atempoChain(1)).toBe("");
+    expect(cleanVoiceSpeed(9)).toBe(2);
   });
 });

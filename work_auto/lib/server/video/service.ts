@@ -1,8 +1,12 @@
 import "server-only";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { runFfmpeg } from "./ffmpeg";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { aiSourceId, isAiSource } from "@/lib/types/video-production";
-import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, cleanCaptionStyle, cleanTitleStyle, voiceInstructions } from "@/lib/video-production/config";
+import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanTitleStyle, cleanVoiceSpeed, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider, getVideoAIProvider } from "../providers/registry";
@@ -73,7 +77,7 @@ export const videoJobService = {
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     const sourceMode: VideoSourceMode = input.sourceMode === "ai" || input.sourceMode === "mixed" ? input.sourceMode : "xhs";
@@ -92,6 +96,7 @@ export const videoJobService = {
     built.plan.voiceStyle = VOICE_STYLES.some((v) => v.value === input.voiceStyle) ? String(input.voiceStyle) : VOICE_STYLES[0].value;
     built.plan.captionStyle = cleanCaptionStyle(input.captionStyle);
     built.plan.titleStyle = cleanTitleStyle(input.titleStyle);
+    built.plan.voiceSpeed = cleanVoiceSpeed(input.voiceSpeed);
     if (sourceMode !== "xhs") built.plan.aiPrompt = String(input.aiPrompt ?? "").trim().slice(0, 2000);
     if (sourceMode === "xhs") return built;
     // AI 컷 (v0.9.60): 기본 컷을 만들어 고르게 배치 (아직 Kie 호출 없음 — [AI 컷 만들기]를 누를 때만)
@@ -104,13 +109,24 @@ export const videoJobService = {
 
   /** 계획 검사 (사용자가 고친 계획을 그대로 믿지 않는다) */
   /** 목소리 미리 듣기 (OpenAI TTS 1회) */
-  async voicePreview(input: { voice?: unknown; voiceStyle?: unknown; text?: unknown }): Promise<Buffer> {
+  async voicePreview(input: { voice?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; text?: unknown }): Promise<Buffer> {
     await getCurrentUserId();
     const tts = await getTTSProvider();
     if (!tts) throw new AppError("TTS_NOT_CONNECTED", "AI 음성을 들으려면 API 연결 센터에서 OpenAI 키를 연결해 주세요.", 409);
     const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
     const text = String(input.text ?? "").trim().slice(0, 80) || "이거 하나면 청소 끝이에요. 진짜 써 보면 알아요.";
-    return tts.synthesize(text, voice, voiceInstructions(String(input.voiceStyle ?? "")));
+    const mp3 = await tts.synthesize(text, voice, voiceInstructions(String(input.voiceStyle ?? "")));
+    const chain = atempoChain(input.voiceSpeed);
+    if (!chain) return mp3;
+    // 영상과 같은 속도로 들려준다 (FFmpeg atempo, 임시 파일은 바로 지움)
+    const dir = await mkdtemp(path.join(os.tmpdir(), "vp_prev_"));
+    try {
+      await writeFile(path.join(dir, "a.mp3"), mp3);
+      await runFfmpeg(["-i", path.join(dir, "a.mp3"), "-af", chain.slice(1), path.join(dir, "b.mp3")], 30_000);
+      return await readFile(path.join(dir, "b.mp3"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   },
 
   async sanitize(plan: VideoPlan, userId: string): Promise<VideoPlan> {
@@ -151,8 +167,8 @@ export const videoJobService = {
       contentId: plan.contentId ? String(plan.contentId) : null,
       channelId: plan.channelId === "naver-clip" ? "naver-clip" : "youtube",
       selectedTitle: String(plan.selectedTitle ?? "").slice(0, 200),
-      topLine1: String(plan.topLine1 ?? "").slice(0, 24),
-      topLine2: String(plan.topLine2 ?? "").slice(0, 30),
+      topLine1: String(plan.topLine1 ?? "").slice(0, 30),
+      topLine2: String(plan.topLine2 ?? "").slice(0, 36),
       script: String(plan.script ?? "").slice(0, 4000),
       sourceMode,
       sourceVideoIds: sourceIds,
@@ -165,6 +181,7 @@ export const videoJobService = {
       voiceStyle: VOICE_STYLES.some((v) => v.value === plan.voiceStyle) ? plan.voiceStyle : VOICE_STYLES[0].value,
       captionStyle: cleanCaptionStyle(plan.captionStyle),
       titleStyle: cleanTitleStyle(plan.titleStyle),
+      voiceSpeed: cleanVoiceSpeed(plan.voiceSpeed),
       meme: false,
       ...(aiClips.length ? { aiClips, aiPrompt: String(plan.aiPrompt ?? "").trim().slice(0, 2000) } : {}),
     };

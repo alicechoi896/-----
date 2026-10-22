@@ -47,7 +47,7 @@ export const TOP_TITLE_TEMPLATE = {
   barColor: "black",
   font: "dohyeon",
   line1: { size: 96, color: "white", y: 46, maxChars: 14 },
-  line2: { size: 76, color: "0xC8FF00", y: 190, maxChars: 18 },
+  line2: { size: 92, color: "0xC8FF00", y: 180, maxChars: 16 },
   borderW: 0,
 } as const;
 
@@ -199,6 +199,16 @@ export const VOICE_STYLES = [
 ] as const;
 export const voiceInstructions = (style: string | null | undefined) => (VOICE_STYLES.find((v) => v.value === style) ?? VOICE_STYLES[0]).instructions;
 
+/** 음성 속도 (v0.9.66): 만든 음성을 FFmpeg atempo 로 빠르게 (음높이 그대로). 기본 2배 */
+export const VOICE_SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const;
+export const DEFAULT_VOICE_SPEED = 2;
+export const cleanVoiceSpeed = (v: unknown) => (VOICE_SPEEDS.includes(Number(v) as (typeof VOICE_SPEEDS)[number]) ? Number(v) : DEFAULT_VOICE_SPEED);
+/** ",atempo=2" (atempo 한 번에 0.5~2배) */
+export const atempoChain = (v: unknown) => {
+  const s = cleanVoiceSpeed(v);
+  return s === 1 ? "" : `,atempo=${s}`;
+};
+
 /** 자막 스타일 (v0.9.63): 글꼴·글자색·테두리색·크기를 고른다 */
 export const CAPTION_FONTS = [
   { value: "jua", label: "배달의민족 주아체" },
@@ -213,6 +223,32 @@ export const CAPTION_SIZES = [
   { value: "m", label: "보통", size: 74 },
   { value: "l", label: "크게", size: 88 },
 ] as const;
+/**
+ * 자막은 항상 1줄 (v0.9.66): 대사가 maxCharsPerLine 보다 길면 띄어쓰기에서 나눠, 음성 길이를 글자 수 비율로 나눠 차례로 보여 준다.
+ * 너무 짧은 마지막 조각(3자 이하)은 앞 조각에 붙인다.
+ */
+export function captionChunks(text: string, max = CAPTION_TEMPLATE.maxCharsPerLine): string[] {
+  const t = text.replace(/s+/g, " ").trim();
+  const n = Math.ceil(t.length / max);
+  if (n <= 1) return t ? [t] : [text];
+  // 비슷한 길이로 n 조각: 각 경계는 이상적인 위치에서 가장 가까운 띄어쓰기
+  const spaces = [...t].map((c, i) => (c === " " ? i : -1)).filter((i) => i > 0);
+  const cuts: number[] = [];
+  for (let k = 1; k < n; k++) {
+    const ideal = (t.length * k) / n;
+    const cand = spaces.filter((i) => i > (cuts.at(-1) ?? 0)).sort((x, y) => Math.abs(x - ideal) - Math.abs(y - ideal))[0];
+    if (cand != null) cuts.push(cand);
+  }
+  const out: string[] = [];
+  let from = 0;
+  for (const c of [...cuts.sort((x, y) => x - y), t.length]) {
+    const piece = t.slice(from, c).trim();
+    if (piece) out.push(piece);
+    from = c;
+  }
+  return out;
+}
+
 /** 자막 세로 위치 (화면 높이 비율, 글자 가운데 기준). 가로는 가운데 고정 (v0.9.64) */
 export const CAPTION_POSITIONS = [
   { value: "center", label: "가운데", y: 0.5 },
@@ -236,10 +272,25 @@ export interface TitleStyle {
   font: (typeof CAPTION_FONTS)[number]["value"];
   line1: string;
   line2: string;
+  /** 강조색: 제목에서 [ ] 로 감싼 글자 (v0.9.66) */
+  accent?: string;
   /** 띠 색 (none = 띠 없이 영상 위에 글자 + 테두리) */
   bar: string;
 }
-export const DEFAULT_TITLE_STYLE: TitleStyle = { font: "dohyeon", line1: "#FFFFFF", line2: "#C8FF00", bar: "#000000" };
+export const DEFAULT_TITLE_STYLE: TitleStyle = { font: "dohyeon", line1: "#FFFFFF", line2: "#C8FF00", accent: "#FFE94D", bar: "#000000" };
+/** "[강조] 글자" → 조각 (강조 여부). 괄호는 화면에 그리지 않는다 */
+export function accentParts(text: string): { text: string; accent: boolean }[] {
+  const out: { text: string; accent: boolean }[] = [];
+  const re = /\[([^\]]+)\]/g;
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index! > last) out.push({ text: text.slice(last, m.index), accent: false });
+    out.push({ text: m[1], accent: true });
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), accent: false });
+  return out.filter((p) => p.text);
+}
 const HEX = /^#[0-9a-fA-F]{6}$/;
 export function cleanTitleStyle(raw: unknown): TitleStyle {
   const r = (raw ?? {}) as Partial<TitleStyle>;
@@ -248,6 +299,7 @@ export function cleanTitleStyle(raw: unknown): TitleStyle {
     font: CAPTION_FONTS.some((f) => f.value === r.font) ? (r.font as TitleStyle["font"]) : DEFAULT_TITLE_STYLE.font,
     line1: hex(r.line1, DEFAULT_TITLE_STYLE.line1),
     line2: hex(r.line2, DEFAULT_TITLE_STYLE.line2),
+    accent: hex(r.accent, DEFAULT_TITLE_STYLE.accent!),
     bar: r.bar === "none" ? "none" : hex(r.bar, DEFAULT_TITLE_STYLE.bar),
   };
 }

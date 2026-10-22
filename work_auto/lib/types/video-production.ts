@@ -81,6 +81,8 @@ export interface VideoPlan {
   captions?: boolean;
   /** 말투 (VOICE_STYLES, v0.9.63) */
   voiceStyle?: string;
+  /** 음성 속도 1~2배 (v0.9.66, 기본 2) */
+  voiceSpeed?: number;
   /** 자막 글꼴·색·크기 (v0.9.63) */
   captionStyle?: import("@/lib/video-production/config").CaptionStyle;
   /** 상단 제목 글꼴·색·띠 (v0.9.64) */

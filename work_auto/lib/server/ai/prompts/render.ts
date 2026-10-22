@@ -135,15 +135,25 @@ function contextBlocks(ctx: GenerationContext): string[] {
     const st = formatStrength(f);
     const pct = Math.round(st.ratio * 100);
     const n = st.heavy ? 25 : 10;
-    for (const [key, label, list] of [
-      ["hooks", "Hook", f.hooks ?? []],
-      ["ctas", "CTA", f.ctas ?? []],
-    ] as const) {
+    // CTA 는 포맷 100% (v0.9.66): 후보·대본 마지막 문장 모두 포맷의 CTA 문장을 그대로 고른다
+    const ctas = f.ctas ?? [];
+    if (ctas.length) {
+      const pool = sampleList([...ctas], 30);
+      blocks.push(
+        block(`대본 포맷 > CTA ${pool.length}개 (사용자가 정한 CTA — 100% 이 중에서 고른다)`, [
+          "CTA 후보(ctas)는 전부 아래 CTA 문장 중에서 고른다. 새 CTA 를 만들지 않는다. 문장은 그대로 쓰고, 제품명처럼 꼭 바꿔야 하는 단어만 지금 제품·주제로 바꾼다.",
+          "대본의 마지막 문장(CTA)도 반드시 아래 CTA 중 하나를 그대로 쓴다 (대본마다 다른 CTA).",
+          `아래가 후보 수보다 적으면 같은 문장을 반복하지 말고 있는 만큼만 쓴다.`,
+          ...pool.map((x) => `CTA: ${x}`),
+        ]),
+      );
+    }
+    for (const [key, label, list] of [["hooks", "Hook", f.hooks ?? []]] as const) {
       if (!list.length) continue;
       blocks.push(
         block(`대본 포맷 > ${label} ${Math.min(n, list.length)}개 (사용자가 모은 잘된 ${label} — ${label} 후보의 ${pct}% 이상을 이 구조대로)`, [
           `${key} 후보 중 ${pct}% 이상은 아래 ${label} 하나를 골라 문장 구조·길이·말투·말끝을 그대로 살리고, 제품·주제·숫자 같은 내용 단어만 바꿔 쓴다. 나머지만 새로운 방식으로 쓴다. 문장 통째 복사는 금지.`,
-          "대본의 첫 문장(Hook)과 마지막 문장(CTA)도 이 방식을 따른다.",
+          "대본의 첫 문장(Hook)도 이 방식을 따른다.",
           ...sampleList([...list], n).map((x) => `${label}: ${x}`),
         ]),
       );

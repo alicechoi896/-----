@@ -101,8 +101,25 @@ export interface Treatment {
   kind: TextTreatment;
   /** crop: 원본에서 쓸 영역 (0~1) */
   crop?: Box;
-  /** blur: 원본 비율 상자 (여유 포함) */
+  /** blur: 원본 비율 상자 (여유 포함). v0.9.66: 여러 개 */
   blur?: Box;
+  blurs?: Box[];
+}
+
+/** 샤오홍슈 자막이 주로 있는 아래쪽 띠 (글자 검사를 못 했을 때 기본 블러, v0.9.66) */
+export const SUBTITLE_BAND: Box = { x: 0.04, y: 0.7, w: 0.92, h: 0.2 };
+/** 블러 합계가 화면의 이 비율을 넘으면 쓰지 않는다 */
+const MAX_BLUR_AREA = 0.3;
+
+/** 가까운 상자끼리 합친다 (같은 줄 자막 조각을 하나로) */
+function mergeNear(boxes: Box[]): Box[] {
+  const out: Box[] = [];
+  for (const b of [...boxes].sort((a, c) => a.y - c.y)) {
+    const hit = out.find((o) => !(b.x > o.x + o.w + 0.03 || b.x + b.w < o.x - 0.03 || b.y > o.y + o.h + 0.03 || b.y + b.h < o.y - 0.03));
+    if (hit) Object.assign(hit, union([hit, b]));
+    else out.push({ ...b });
+  }
+  return out;
 }
 
 /**
@@ -110,7 +127,8 @@ export interface Treatment {
  * 출력은 9:16 을 '꽉 채우기'로 만든다고 보고 원본 비율 좌표로 판단한다 (세로 영상 기준).
  */
 export function decideTreatment(boxes: Box[], checked: boolean): Treatment {
-  if (!checked) return { kind: "unchecked" };
+  // v0.9.66: 글자 검사를 못 했으면 아래 자막 띠를 블러 (샤오홍슈 중국어 자막)
+  if (!checked) return { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
   if (!boxes.length) return { kind: "clean" };
   const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
   const u = union(boxes);
@@ -118,6 +136,12 @@ export function decideTreatment(boxes: Box[], checked: boolean): Treatment {
   const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
   // 상단 검은 띠 안에만 있으면 띠가 덮는다
   if (p.y + p.h <= barFrac) return { kind: "clean" };
+  // v0.9.66: 자막·글자는 블러가 먼저 (상자마다 따로, 상단 띠가 덮는 것은 빼고). 합계가 너무 크면 아래 확대·제외로
+  const blurs = mergeNear(boxes)
+    .map((b) => clampBox({ x: b.x - pad, y: b.y - pad * 0.6, w: b.w + pad * 2, h: b.h + pad * 1.2 }))
+    .filter((b) => b.y + b.h > barFrac);
+  const area = blurs.reduce((n, b) => n + b.w * b.h, 0);
+  if (blurs.length && area <= MAX_BLUR_AREA) return { kind: "blur", blur: blurs[0], blurs };
   const maxZoom = VIDEO_RENDER_CONFIG.maxCropZoom;
   // 아래쪽 글자: 위쪽만 쓰도록 확대 (띠가 위 17%를 덮으므로 그만큼 위로 여유)
   if (p.y >= 1 - (1 - 1 / maxZoom)) {

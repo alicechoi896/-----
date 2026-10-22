@@ -1,7 +1,7 @@
 import "server-only";
 import { writeFile } from "node:fs/promises";
 import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
-import { CAPTION_SIZES, CAPTION_TEMPLATE, DEFAULT_CAPTION_STYLE, DEFAULT_TITLE_STYLE, ENDING_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, captionCenterY, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
+import { CAPTION_SIZES, CAPTION_TEMPLATE, DEFAULT_CAPTION_STYLE, DEFAULT_TITLE_STYLE, accentParts, ENDING_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, captionCenterY, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
 import { videoAssets } from "./assets";
 
 /**
@@ -73,11 +73,22 @@ export async function renderTitleBar(file: string, line1: string, line2: string,
   }
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  // 띠가 없으면 영상 위에서도 읽히게 검은 테두리
-  ctx.font = `${fit(ctx, line1, fam.name, t.line1.size, W * 0.92)}px ${fam.name}`;
-  strokeFill(ctx, line1, W / 2, t.line1.y, style.line1, noBar ? "#000000" : null, noBar ? 7 : 0);
-  ctx.font = `${fit(ctx, line2, fam.name, t.line2.size, W * 0.92)}px ${fam.name}`;
-  strokeFill(ctx, line2, W / 2, t.line2.y, style.line2, noBar ? "#000000" : null, noBar ? 6 : 0);
+  // 띠가 없으면 영상 위에서도 읽히게 검은 테두리. [ ] 로 감싼 글자는 강조색 (v0.9.66)
+  const drawLine = (text: string, size: number, y: number, color: string, strokeW: number) => {
+    const parts = accentParts(text);
+    const plain = parts.map((p) => p.text).join("");
+    ctx.font = `${fit(ctx, plain, fam.name, size, W * 0.92)}px ${fam.name}`;
+    const total = ctx.measureText(plain).width;
+    let x = W / 2 - total / 2;
+    ctx.textAlign = "left";
+    for (const p of parts) {
+      strokeFill(ctx, p.text, x, y, p.accent ? (style.accent ?? color) : color, noBar ? "#000000" : null, noBar ? strokeW : 0);
+      x += ctx.measureText(p.text).width;
+    }
+    ctx.textAlign = "center";
+  };
+  drawLine(line1, t.line1.size, t.line1.y, style.line1, 7);
+  drawLine(line2, t.line2.size, t.line2.y, style.line2, 6);
   await writeFile(file, c.toBuffer("image/png"));
   return !fam.fallback;
 }
