@@ -25,6 +25,11 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const inFlight = new Map<string, Promise<unknown>>();
 
 const CLIP_ID = /^ai\d{1,2}$/;
+/** 직접 올린 제품 사진 (Kie 파일 주소, v0.9.63) */
+const KIE_FILE = /^https:\/\/([\w-]+\.)*(redpandaai\.co|kie\.ai|aiquickdraw\.com)\//i;
+export const isKieFile = (u: string | null | undefined) => Boolean(u && KIE_FILE.test(u));
+/** 사람이 나오면 현대 한국인 (v0.9.63) */
+const KOREAN_PEOPLE = "Any people shown are modern-day South Korean (Korean ethnicity, natural Korean looks, contemporary Korean fashion and hairstyles) in present-day Korea (Korean apartment, cafe, street or office). Do not show Western or non-Korean people unless asked.";
 const TASK_ID = /^[\w-]{4,100}$/;
 
 /** 제품 사진 (대표 사진 + 수집한 상세 사진, https 만, 최대 8장) */
@@ -81,7 +86,7 @@ export function sanitizeClips(raw: unknown, allowedImages: Set<string>): AiClip[
       if (!CLIP_ID.test(id) || seen.has(id)) return null;
       seen.add(id);
       const mode: AiClipMode = c.mode === "product" ? "product" : "text";
-      const imageUrl = mode === "product" && typeof c.imageUrl === "string" && allowedImages.has(c.imageUrl) ? c.imageUrl : null;
+      const imageUrl = mode === "product" && typeof c.imageUrl === "string" && (allowedImages.has(c.imageUrl) || isKieFile(c.imageUrl)) ? c.imageUrl : null;
       const taskId = typeof c.taskId === "string" && TASK_ID.test(c.taskId) ? c.taskId : null;
       const state = taskId && ["waiting", "generating", "success", "fail"].includes(String(c.state)) ? (c.state as AiClip["state"]) : "draft";
       return {
@@ -105,7 +110,13 @@ export async function portraitImage(url: string): Promise<Buffer> {
   if (!res.ok) throw new AppError("AI_CLIP_IMAGE", `제품 사진을 받지 못했습니다 (HTTP ${res.status}).`, 502);
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length > MAX_IMAGE_BYTES) throw new AppError("AI_CLIP_IMAGE", "제품 사진이 너무 큽니다 (10MB 초과).", 400);
-  const img = await loadImage(buf);
+  return portraitFromBuffer(buf);
+}
+
+async function portraitFromBuffer(buf: Buffer): Promise<Buffer> {
+  const img = await loadImage(buf).catch(() => {
+    throw new AppError("AI_CLIP_IMAGE", "사진을 읽지 못했습니다.", 400);
+  });
   const W = AI_CLIP_CONFIG.imageWidth;
   const H = AI_CLIP_CONFIG.imageHeight;
   const c = createCanvas(W, H);
@@ -126,23 +137,31 @@ export async function portraitImage(url: string): Promise<Buffer> {
 }
 
 /** 장면 설명 → 영어 프롬프트 (AI 1회, 실패하면 규칙으로) */
-async function englishPrompts(clips: AiClip[], productName: string | null): Promise<{ prompts: Map<string, string>; aiCalls: number }> {
+async function englishPrompts(clips: AiClip[], productName: string | null, common = ""): Promise<{ prompts: Map<string, string>; aiCalls: number }> {
   const rule = (c: AiClip) =>
-    c.mode === "product"
-      ? `Vertical 9:16 smartphone video. A person naturally using ${productName ?? "the product"} shown in the image, realistic hands, bright home interior, smooth camera motion, product clearly visible, no text, no subtitles. ${c.prompt}`
-      : `Vertical 9:16 short-form video scene, realistic, bright natural light, smooth camera motion, no text, no subtitles. ${c.prompt}`;
+    [
+      c.mode === "product"
+        ? `Vertical 9:16 smartphone video. A Korean person naturally using ${productName ?? "the product"} shown in the image, realistic hands, bright Korean home interior, smooth camera motion, product clearly visible, no text, no subtitles.`
+        : "Vertical 9:16 short-form video scene, realistic, bright natural light, smooth camera motion, no text, no subtitles.",
+      KOREAN_PEOPLE,
+      common,
+      c.prompt,
+    ]
+      .filter(Boolean)
+      .join(" ");
   const fallback = new Map(clips.map((c) => [c.id, rule(c)]));
   try {
     const ai = await getAIProvider();
     const { data } = await ai.generateStructured<{ prompts?: { id?: string; prompt?: string }[] }>({
       task: "video-ai-clip-prompt",
       messages: [
-        { role: "system", content: "You write prompts for AI video models (Wan, Seedance). Output concise English prompts (40-80 words) for vertical 9:16 short clips. Never ask for on-screen text, captions, logos or watermarks." },
+        { role: "system", content: `You write prompts for AI video models (Wan, Grok Imagine). Output detailed English prompts (60-150 words) for vertical 9:16 short clips: subject, action, setting, camera, lighting, mood. Never ask for on-screen text, captions, logos or watermarks. ${KOREAN_PEOPLE}` },
         {
           role: "user",
           content: [
             productName ? `[Product] ${productName}` : "",
-            "For each clip, rewrite the Korean description into one English video prompt.",
+            common ? `[Common direction for every clip — apply to all] ${common}` : "",
+            "For each clip, rewrite the Korean description into one English video prompt. Keep every detail the user wrote.",
             "mode=product: the input image shows the product; describe a person using it naturally with realistic hands and motion, keep the product's look unchanged.",
             "mode=text: describe a realistic lifestyle scene matching the description.",
             ...clips.map((c) => `- id=${c.id} mode=${c.mode}: ${c.prompt}`),
@@ -169,7 +188,7 @@ async function englishPrompts(clips: AiClip[], productName: string | null): Prom
     for (const p of Array.isArray(data.prompts) ? data.prompts : []) {
       const id = String(p?.id ?? "");
       const text = String(p?.prompt ?? "").trim();
-      if (out.has(id) && text.length > 10) out.set(id, `${text} Vertical 9:16, no text, no subtitles.`);
+      if (out.has(id) && text.length > 10) out.set(id, `${text} ${KOREAN_PEOPLE} Vertical 9:16, no text, no subtitles.`);
     }
     return { prompts: out, aiCalls: 1 };
   } catch {
@@ -191,6 +210,18 @@ function errorText(e: unknown): string {
 }
 
 export const aiClipService = {
+  /** 제품 사진 직접 올리기 (v0.9.63): 9:16 으로 맞춰 Kie 에 올린다 (무료, 24시간) */
+  async uploadImage(input: { dataUrl?: unknown }): Promise<{ imageUrl: string }> {
+    await getCurrentUserId();
+    const m = String(input.dataUrl ?? "").match(/^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) throw new AppError("VALIDATION", "JPG·PNG·WEBP 사진만 올릴 수 있습니다.");
+    const buf = Buffer.from(m[2], "base64");
+    if (buf.length > MAX_IMAGE_BYTES) throw new AppError("VALIDATION", "사진이 너무 큽니다 (10MB 이하).");
+    const provider = await getVideoAIProvider();
+    if (!provider) throw new AppError("KIE_NOT_CONNECTED", "Kie AI 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 Kie AI 키를 넣어 주세요.", 409);
+    return { imageUrl: await provider.uploadImage(await portraitFromBuffer(buf)) };
+  },
+
   /** [AI 컷 만들기]: 아직 안 만든(또는 실패한) 컷만 Kie 작업으로. 컷 1개 = 1회 과금 */
   async generate(input: { plan?: VideoPlan; clientRequestId?: unknown }): Promise<{ clips: AiClip[]; created: number; aiCalls: number }> {
     const ctx = await ownPlanContext(input.plan);
@@ -205,13 +236,19 @@ export const aiClipService = {
     const running = inFlight.get(key) as Promise<{ clips: AiClip[]; created: number; aiCalls: number }> | undefined;
     if (running) return running;
     const p = (async () => {
-      const { prompts, aiCalls } = await englishPrompts(todo, ctx.productName);
+      const { prompts, aiCalls } = await englishPrompts(todo, ctx.productName, String(input.plan?.aiPrompt ?? "").trim().slice(0, 2000));
       let created = 0;
       // 한 번에 하나씩 (Kie 한도: 10초에 20개) — 실패한 컷은 그 이유를 남기고 다음 컷으로 (다시 부르지 않음)
       for (const c of todo) {
         try {
           const prompt = prompts.get(c.id) ?? c.prompt;
-          const r = c.mode === "product" ? await provider.createProductClip({ prompt, image: await portraitImage(c.imageUrl!) }) : await provider.createTextClip({ prompt });
+          // 직접 올린 사진은 이미 9:16 으로 Kie 에 올라가 있다 → 그대로
+          const r =
+            c.mode === "product"
+              ? isKieFile(c.imageUrl)
+                ? await provider.createTask(AI_CLIP_CONFIG.product.model, { prompt: prompt.slice(0, 1500), image_urls: [c.imageUrl], duration: AI_CLIP_CONFIG.product.duration, resolution: AI_CLIP_CONFIG.product.resolution, audio: false })
+                : await provider.createProductClip({ prompt, image: await portraitImage(c.imageUrl!) })
+              : await provider.createTextClip({ prompt });
           Object.assign(c, { taskId: r.taskId, model: r.model, state: "waiting", error: null, credits: null });
           created++;
           console.info("[KieClip]", JSON.stringify({ clientRequestId: String(input.clientRequestId ?? "-").slice(0, 40), clip: c.id, mode: c.mode, model: r.model, taskId: r.taskId }));

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarPlus, Check, Clapperboard, Download, Film, Loader2, RefreshCw, ScrollText, Sparkles, Video, Wand2 } from "lucide-react";
+import { CalendarPlus, Check, Clapperboard, Download, Film, ImagePlus, Loader2, Play, RefreshCw, ScrollText, Sparkles, Video, Wand2 } from "lucide-react";
 import type { AiClip, VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { VIDEO_STATUS_LABEL, aiSourceId, isAiSource } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, estimateAiClipUsd } from "@/lib/video-production/config";
+import { AI_CLIP_CONFIG, CAPTION_COLORS, CAPTION_FONTS, CAPTION_SIZES, CAPTION_STROKES, DEFAULT_CAPTION_STYLE, estimateAiClipUsd, type CaptionStyle } from "@/lib/video-production/config";
+import { shrinkImage } from "@/lib/image-shrink";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
@@ -57,6 +58,11 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [narrationOn, setNarrationOn] = useState(true);
   const [captionsOn, setCaptionsOn] = useState(true);
   const [aiCount, setAiCount] = useState<number>(AI_CLIP_CONFIG.defaultCount);
+  const [voiceStyle, setVoiceStyle] = useState("shorts");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [previewing, setPreviewing] = useState(false);
+  const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [plan, setPlan] = useState<VideoPlan | null>(null);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +119,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlanning(true);
     setError(null);
     try {
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, captionStyle, aiPrompt });
       // 같은 대본으로 이미 만든 AI 컷이 있으면 이어서 쓴다 (다시 과금하지 않게)
       const saved = r.plan.aiClips?.length ? loadClips(clipKey(content.id, scriptIndex)) : null;
       if (saved && r.plan.aiClips && saved.length === r.plan.aiClips.length) r.plan.aiClips = saved;
@@ -123,6 +129,24 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     } finally {
       busy.current = false;
       setPlanning(false);
+    }
+  }
+
+  /** 목소리 미리 듣기 (OpenAI TTS 1회) */
+  async function previewVoice() {
+    if (previewing) return;
+    setPreviewing(true);
+    setVoiceNote(null);
+    try {
+      const blob = await api.videoProduction.voicePreview({ voice, voiceStyle, channelId, text: content?.scripts[scriptIndex]?.split("\n").find((l) => l.trim())?.slice(0, 60) });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch (e) {
+      setVoiceNote(e instanceof Error ? e.message : "목소리를 불러오지 못했습니다.");
+    } finally {
+      setPreviewing(false);
     }
   }
 
@@ -249,6 +273,20 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   />
                 </FormField>
               )}
+              {usesAi && (
+                <FormField label="AI 컷 공통 프롬프트 (선택)" htmlFor="vp-ai-prompt" hint="모든 AI 컷에 함께 넣는 큰 설명입니다. 분위기·장소·인물·카메라·색감을 자세히 써 주세요 (한국어 OK, 최대 2,000자). 사람이 나오면 현대 한국인으로 만듭니다.">
+                  <Textarea
+                    id="vp-ai-prompt"
+                    rows={4}
+                    value={aiPrompt}
+                    maxLength={2000}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="예: 서울 신축 아파트 거실, 오후 햇살, 20~30대 한국인 부부, 깔끔한 화이트톤 인테리어, 손 클로즈업 위주, 부드러운 카메라 이동"
+                    className="text-[12.5px]"
+                    data-ai-prompt
+                  />
+                </FormField>
+              )}
               {usesAi && !opts.ready.videoAi && (
                 <Notice tone="warning">
                   AI 컷을 만들려면 <Link href="/settings/api" className="font-medium text-brand hover:underline">API 연결 센터</Link>에서 <b>Kie AI</b> 키를 연결해 주세요.
@@ -300,10 +338,23 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                 </div>
               </FormField>
               {narrationOn && (
-                <FormField label="AI 음성 목소리">
-                  <Select value={voice} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => setVoice(e.target.value)} />
-                </FormField>
+                <div className="grid gap-3 sm:grid-cols-2" data-voice-options>
+                  <FormField label={`AI 음성 목소리 · ${opts.voices.length}가지`}>
+                    <Select value={voice} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => setVoice(e.target.value)} />
+                  </FormField>
+                  <FormField label="말투">
+                    <Select value={voiceStyle} options={opts.voiceStyles} onChange={(e) => setVoiceStyle(e.target.value)} />
+                  </FormField>
+                  <div className="sm:col-span-2">
+                    <Button size="sm" icon={Play} loading={previewing} disabled={!opts.ready.voice} onClick={() => void previewVoice()} data-voice-preview>
+                      미리 듣기
+                    </Button>
+                    <span className="ml-2 text-[11.5px] text-fg-subtle">{opts.ready.voice ? "고른 대본 첫 줄로 들려 줍니다 (OpenAI 음성 1회)." : "OpenAI 키를 연결하면 들을 수 있습니다."}</span>
+                    {voiceNote && <p className="mt-1 text-xs text-danger">{voiceNote}</p>}
+                  </div>
+                </div>
               )}
+              {captionsOn && <CaptionStylePicker value={captionStyle} onChange={setCaptionStyle} />}
               {!narrationOn && <p className="-mt-2 text-xs text-fg-subtle">음성이 없으면 컷 길이는 자막 글자 수로 정합니다 (배경음악·효과음은 그대로).</p>}
               {error && !plan && <Notice tone="warning">{error}</Notice>}
               <Button variant="primary" icon={Wand2} loading={planning} disabled={!content || (sourceMode === "xhs" && !videoIds.length)} onClick={() => void makePlan()} className="w-full" data-make-plan>
@@ -596,6 +647,22 @@ function AiClipPanel({ plan, onChange, images, ready }: { plan: VideoPlan; onCha
   const est = estimateAiClipUsd(todo.map((c) => c.mode));
   const spent = clips.reduce((n, c) => n + (c.credits ?? 0), 0);
   const setClip = (id: string, patch: Partial<AiClip>) => onChange({ ...plan, aiClips: clips.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
+  const [uploadingClip, setUploadingClip] = useState<string | null>(null);
+  // 직접 올린 사진도 다른 컷에서 고를 수 있게
+  const allImages = [...new Set([...images, ...clips.map((c) => c.imageUrl).filter((u): u is string => Boolean(u))])];
+  async function uploadFor(c: AiClip, file: File | undefined) {
+    if (!file) return;
+    setUploadingClip(c.id);
+    setNote(null);
+    try {
+      const { imageUrl } = await api.videoProduction.aiClipImage(await shrinkImage(file), plan.channelId);
+      setClip(c.id, { imageUrl, mode: "product" });
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "사진을 올리지 못했습니다.");
+    } finally {
+      setUploadingClip(null);
+    }
+  }
 
   const merge = useCallback(
     (next: AiClip[]) => {
@@ -659,6 +726,14 @@ function AiClipPanel({ plan, onChange, images, ready }: { plan: VideoPlan; onCha
           </Button>
         </span>
       </div>
+      <Textarea
+        value={plan.aiPrompt ?? ""}
+        onChange={(e) => onChange({ ...plan, aiPrompt: e.target.value.slice(0, 2000) })}
+        rows={3}
+        className="mb-2 text-[12.5px]"
+        aria-label="AI 컷 공통 프롬프트"
+        placeholder="공통 프롬프트 (모든 AI 컷에 적용): 분위기·장소·인물·카메라·색감을 자세히 — 사람은 현대 한국인으로 만듭니다"
+      />
       <ul className="space-y-2">
         {clips.map((c) => {
           const locked = Boolean(c.taskId) && c.state !== "fail";
@@ -685,9 +760,15 @@ function AiClipPanel({ plan, onChange, images, ready }: { plan: VideoPlan; onCha
                 </span>
               </div>
               {c.mode === "product" &&
-                (images.length ? (
+                (allImages.length || !locked ? (
                   <div className="mb-1.5 flex gap-1.5 overflow-x-auto" data-ai-images>
-                    {images.map((u) => (
+                    {!locked && (
+                      <label className="flex size-12 shrink-0 cursor-pointer items-center justify-center rounded border border-dashed border-line text-fg-subtle hover:border-brand hover:text-brand" title="제품 사진 올리기" data-ai-upload>
+                        {uploadingClip === c.id ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => void uploadFor(c, e.target.files?.[0])} aria-label={`AI 컷 ${c.id.slice(2)} 제품 사진 올리기`} />
+                      </label>
+                    )}
+                    {allImages.map((u) => (
                       <button
                         key={u}
                         type="button"
@@ -702,13 +783,14 @@ function AiClipPanel({ plan, onChange, images, ready }: { plan: VideoPlan; onCha
                     ))}
                   </div>
                 ) : (
-                  <p className="mb-1.5 text-[11.5px] text-warning">이 제품에 사진이 없습니다. &lsquo;글 → 장면&rsquo;으로 바꾸거나 제품 라이브러리에서 상품 URL 로 다시 학습해 주세요.</p>
+                  <p className="mb-1.5 text-[11.5px] text-warning">이 제품에 사진이 없습니다. 사진을 올리거나 &lsquo;글 → 장면&rsquo;으로 바꿔 주세요.</p>
                 ))}
               <Textarea
                 value={c.prompt}
                 onChange={(e) => setClip(c.id, { prompt: e.target.value })}
                 disabled={locked}
-                rows={2}
+                rows={3}
+                maxLength={500}
                 className="text-[12.5px]"
                 aria-label={`AI 컷 ${c.id.slice(2)} 장면 설명`}
                 placeholder={c.mode === "product" ? "예: 사람이 거실에서 이 청소기로 바닥을 미는 모습" : "예: 아침 햇살이 드는 깔끔한 원룸"}
@@ -723,6 +805,50 @@ function AiClipPanel({ plan, onChange, images, ready }: { plan: VideoPlan; onCha
         {!ready && " Kie AI 키를 연결하면 만들 수 있습니다."}
       </p>
       {note && <p className="mt-1 text-xs text-fg-muted">{note}</p>}
+    </div>
+  );
+}
+
+/** 자막 글꼴·글자색·테두리색·크기 (v0.9.63) — 영상에는 서버가 같은 값으로 그린다 */
+function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange: (v: CaptionStyle) => void }) {
+  const set = (patch: Partial<CaptionStyle>) => onChange({ ...value, ...patch });
+  const shadow = value.stroke === "none" ? "none" : [-3, 3].flatMap((x) => [-3, 3].map((y) => `${x}px ${y}px 0 ${value.stroke}`)).join(",");
+  return (
+    <div className="space-y-2.5 rounded-control border border-line p-3" data-caption-style>
+      <p className="text-[13px] font-semibold text-fg">자막 스타일</p>
+      <div className="flex items-center justify-center rounded bg-gradient-to-b from-zinc-600 to-zinc-800 py-4">
+        <span style={{ color: value.color, textShadow: shadow, fontSize: CAPTION_SIZES.find((x) => x.value === value.size)!.size / 3.2 }} className="font-black">
+          이거 하나면 청소 끝
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Select value={value.font} options={CAPTION_FONTS.map((f) => ({ value: f.value, label: f.label }))} onChange={(e) => set({ font: e.target.value as CaptionStyle["font"] })} aria-label="자막 글꼴" />
+        <SegmentedControl size="sm" value={value.size} onChange={(v) => set({ size: v })} options={CAPTION_SIZES.map((x) => ({ value: x.value, label: x.label }))} />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">글자색</span>
+        {CAPTION_COLORS.map((c) => (
+          <button key={c} type="button" onClick={() => set({ color: c })} aria-label={`글자색 ${c}`} className={cn("size-6 rounded-full border", value.color === c ? "ring-2 ring-brand ring-offset-1" : "border-line")} style={{ background: c }} />
+        ))}
+        <input type="color" value={value.color} onChange={(e) => set({ color: e.target.value.toUpperCase() })} aria-label="글자색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">테두리</span>
+        {CAPTION_STROKES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => set({ stroke: c })}
+            aria-label={c === "none" ? "테두리 없음" : `테두리색 ${c}`}
+            className={cn("flex size-6 items-center justify-center rounded-full border text-[9px] text-fg-subtle", value.stroke === c ? "ring-2 ring-brand ring-offset-1" : "border-line")}
+            style={c === "none" ? undefined : { background: c }}
+          >
+            {c === "none" ? "없음" : ""}
+          </button>
+        ))}
+        {value.stroke !== "none" && <input type="color" value={value.stroke} onChange={(e) => set({ stroke: e.target.value.toUpperCase() })} aria-label="테두리색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />}
+      </div>
+      <p className="text-[11px] text-fg-subtle">미리보기는 색만 맞춘 것입니다. 글꼴은 영상에 고른 글꼴로 들어갑니다.</p>
     </div>
   );
 }

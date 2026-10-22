@@ -2,7 +2,7 @@ import "server-only";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { aiSourceId, isAiSource } from "@/lib/types/video-production";
-import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS } from "@/lib/video-production/config";
+import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, cleanCaptionStyle, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider, getVideoAIProvider } from "../providers/registry";
@@ -68,11 +68,12 @@ export const videoJobService = {
       assets: videoAssets.summary(),
       ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, videoAi: Boolean(videoAi) },
       voices: VOICE_OPTIONS,
+      voiceStyles: VOICE_STYLES.map((v) => ({ value: v.value, label: v.label })),
     };
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; captionStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     const sourceMode: VideoSourceMode = input.sourceMode === "ai" || input.sourceMode === "mixed" ? input.sourceMode : "xhs";
@@ -87,6 +88,10 @@ export const videoJobService = {
       throw new AppError("NO_SOURCE", content.productId ? "이 제품에 연결된 샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 이 제품을 연결해 영상을 담아 주세요." : "샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 먼저 영상을 담아 주세요.", 400);
     const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
     const built = await buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice, narrationOn: input.narrationOn !== false, captions: input.captions !== false });
+    // 말투·자막 스타일·AI 공통 프롬프트 (v0.9.63)
+    built.plan.voiceStyle = VOICE_STYLES.some((v) => v.value === input.voiceStyle) ? String(input.voiceStyle) : VOICE_STYLES[0].value;
+    built.plan.captionStyle = cleanCaptionStyle(input.captionStyle);
+    if (sourceMode !== "xhs") built.plan.aiPrompt = String(input.aiPrompt ?? "").trim().slice(0, 2000);
     if (sourceMode === "xhs") return built;
     // AI 컷 (v0.9.60): 기본 컷을 만들어 고르게 배치 (아직 Kie 호출 없음 — [AI 컷 만들기]를 누를 때만)
     const images = await productImages(content.productId, userId);
@@ -97,6 +102,16 @@ export const videoJobService = {
   },
 
   /** 계획 검사 (사용자가 고친 계획을 그대로 믿지 않는다) */
+  /** 목소리 미리 듣기 (OpenAI TTS 1회) */
+  async voicePreview(input: { voice?: unknown; voiceStyle?: unknown; text?: unknown }): Promise<Buffer> {
+    await getCurrentUserId();
+    const tts = await getTTSProvider();
+    if (!tts) throw new AppError("TTS_NOT_CONNECTED", "AI 음성을 들으려면 API 연결 센터에서 OpenAI 키를 연결해 주세요.", 409);
+    const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
+    const text = String(input.text ?? "").trim().slice(0, 80) || "이거 하나면 청소 끝이에요. 진짜 써 보면 알아요.";
+    return tts.synthesize(text, voice, voiceInstructions(String(input.voiceStyle ?? "")));
+  },
+
   async sanitize(plan: VideoPlan, userId: string): Promise<VideoPlan> {
     const videos = await myVideos(userId, null);
     const sourceMode: VideoSourceMode = plan.sourceMode === "ai" || plan.sourceMode === "mixed" ? plan.sourceMode : "xhs";
@@ -145,8 +160,10 @@ export const videoJobService = {
       voice: VOICE_OPTIONS.some((v) => v.value === plan.voice) ? plan.voice : VOICE_OPTIONS[0].value,
       narrationOn: plan.narrationOn !== false,
       captions: plan.captions !== false,
+      voiceStyle: VOICE_STYLES.some((v) => v.value === plan.voiceStyle) ? plan.voiceStyle : VOICE_STYLES[0].value,
+      captionStyle: cleanCaptionStyle(plan.captionStyle),
       meme: false,
-      ...(aiClips.length ? { aiClips } : {}),
+      ...(aiClips.length ? { aiClips, aiPrompt: String(plan.aiPrompt ?? "").trim().slice(0, 2000) } : {}),
     };
   },
 

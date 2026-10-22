@@ -77,6 +77,12 @@ export interface VideoPlan {
   narrationOn?: boolean;
   /** 자막 넣기 (false = 음성만·둘 다 없음) */
   captions?: boolean;
+  /** 말투 (VOICE_STYLES, v0.9.63) */
+  voiceStyle?: string;
+  /** 자막 글꼴·색·크기 (v0.9.63) */
+  captionStyle?: import("@/lib/video-production/config").CaptionStyle;
+  /** AI 컷 공통 프롬프트 (모든 AI 컷에 함께 넣는 큰 설명, v0.9.63) */
+  aiPrompt?: string;
   /** Giphy 짤 (선택 기능, 저작권 확인 필요) — V1 은 자리만 */
   meme: boolean;
   /** AI 컷 (섞기·AI만, v0.9.60). 결과 영상은 Kie 에 14일 — 렌더할 때 taskId 로 받아 쓰고 남기지 않는다 */

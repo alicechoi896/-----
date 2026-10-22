@@ -7,7 +7,8 @@ import "server-only";
  */
 export interface TTSProvider {
   readonly id: string;
-  synthesize(text: string, voice: string): Promise<Buffer>;
+  /** instructions = 말투 (VOICE_STYLES, v0.9.63) */
+  synthesize(text: string, voice: string, instructions?: string): Promise<Buffer>;
 }
 
 export const TTS_MODEL = "gpt-4o-mini-tts";
@@ -17,13 +18,13 @@ export class OpenAITTSProvider implements TTSProvider {
   readonly id = "openai-tts";
   constructor(private readonly apiKey: string) {}
 
-  async synthesize(text: string, voice: string): Promise<Buffer> {
+  async synthesize(text: string, voice: string, instructions?: string): Promise<Buffer> {
     const res = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
       cache: "no-store",
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ model: TTS_MODEL, voice, input: text.slice(0, 600), instructions: INSTRUCTIONS, response_format: "mp3" }),
+      body: JSON.stringify({ model: TTS_MODEL, voice, input: text.slice(0, 600), instructions: instructions || INSTRUCTIONS, response_format: "mp3" }),
     });
     if (!res.ok) throw new Error(`AI 음성을 만들지 못했습니다 (OpenAI HTTP ${res.status}).`);
     return Buffer.from(await res.arrayBuffer());

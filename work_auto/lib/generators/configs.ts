@@ -116,6 +116,8 @@ const O = {
   topics: (): OutputSection => ({ key: "topics", label: "추천 주제", format: "list", count: 3 }),
   hooks: (): OutputSection => ({ key: "hooks", label: "Hook 후보", format: "list", count: 10, description: "첫 3초 안에 시청자를 붙잡는 문장" }),
   ctas: (description = "마지막 행동 유도 문장"): OutputSection => ({ key: "ctas", label: "CTA 후보", format: "list", count: 10, description }),
+  /** 섬네일에 크게 넣을 짧은 문구 (v0.9.63, 2단계 결과) */
+  thumbnailTitles: (): OutputSection => ({ key: "thumbnailTitles", label: "섬네일 제목 후보", format: "list", count: 10, description: "섬네일에 크게 넣을 짧고 강한 문구 (8~16자, 2줄 이내)" }),
   // 대본은 3편: 좋은 부분을 골라 섞어 쓸 수 있게 (카드로 넘겨 본다, [추가 만들기]로 3편씩 더)
   script: (label = "대본"): OutputSection => ({ key: "script", label, format: "cards", count: 3, description: "서로 다른 대본 3편 · 좋은 부분을 골라 섞어 쓰세요" }),
   description: (): OutputSection => ({ key: "description", label: "설명글", format: "longtext" }),
@@ -142,9 +144,9 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.trendTopic(),
       F.keywords(),
       F.videoLength(),
-      { name: "style", label: "콘텐츠 스타일", type: "multi", options: PRODUCT_VIDEO_STYLES, defaultValue: "리뷰형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: PRODUCT_VIDEO_STYLES, defaultValue: PRODUCT_VIDEO_STYLES.map((o) => o.value).join(","), hint: "기본은 전체 선택 (v0.9.63). 여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
     ],
-    outputs: [O.titles(), O.hooks(), O.script(), O.ctas(), O.description(), O.keywords("주요 키워드"), O.tags()],
+    outputs: [O.titles(), O.hooks(), O.script(), O.ctas(), O.thumbnailTitles(), O.description(), O.keywords("주요 키워드"), O.tags()],
   },
 
   "yt-info-video": {
@@ -159,9 +161,9 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       { name: "topic", label: "주제", type: "text", placeholder: "예: 2026년 달라지는 청년 지원 정책", hint: "비워두면 트렌드와 카테고리를 기준으로 주제를 추천합니다." },
       F.keywords(),
       F.videoLength(),
-      { name: "style", label: "콘텐츠 스타일", type: "multi", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: INFO_VIDEO_STYLES, defaultValue: INFO_VIDEO_STYLES.map((o) => o.value).join(","), hint: "기본은 전체 선택 (v0.9.63). 여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
     ],
-    outputs: [O.topics(), O.titles(), O.hooks(), O.script(), O.ctas(), O.description(), O.keywords(), O.tags()],
+    outputs: [O.topics(), O.titles(), O.hooks(), O.script(), O.ctas(), O.thumbnailTitles(), O.description(), O.keywords(), O.tags()],
   },
 
   "clip-product-content": {
@@ -175,7 +177,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.product(),
       F.naverTrend(),
       F.trendTopic(),
-      { name: "style", label: "콘텐츠 스타일", type: "multi", options: PRODUCT_VIDEO_STYLES, defaultValue: "빠른 요약형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: PRODUCT_VIDEO_STYLES, defaultValue: PRODUCT_VIDEO_STYLES.map((o) => o.value).join(","), hint: "기본은 전체 선택 (v0.9.63). 여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
       F.keywords(),
       F.videoLength(CLIP_LENGTH_OPTIONS),
     ],
@@ -202,7 +204,7 @@ export const GENERATOR_CONFIGS: Record<string, GeneratorConfig> = {
       F.trendTopic(),
       F.keywords("키워드"),
       F.videoLength(CLIP_LENGTH_OPTIONS),
-      { name: "style", label: "콘텐츠 스타일", type: "multi", options: INFO_VIDEO_STYLES, defaultValue: "핵심 요약형", hint: "여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
+      { name: "style", label: "콘텐츠 스타일", type: "multi", options: INFO_VIDEO_STYLES, defaultValue: INFO_VIDEO_STYLES.map((o) => o.value).join(","), hint: "기본은 전체 선택 (v0.9.63). 여러 개 고르면 제목·Hook·대본을 여러 유형으로 섞어 만듭니다." },
     ],
     outputs: [O.topics(), O.titles(), O.hooks(), O.script("클립 대본"), O.ctas(), O.description(), O.keywords()],
   },

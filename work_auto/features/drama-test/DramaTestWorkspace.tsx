@@ -8,6 +8,7 @@ import type { DramaCharacter, DramaScene, DramaTask } from "@/lib/types/drama";
 import { api } from "@/lib/api-client";
 import { Badge, Button, EmptyState, Input, Notice, SectionCard, Textarea } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { shrinkImage } from "@/lib/image-shrink";
 
 const STORE = "drama-test:v1";
 const DAY = 24 * 60 * 60 * 1000;
@@ -43,27 +44,6 @@ function load(): Saved | null {
     return raw ? (JSON.parse(raw) as Saved) : null;
   } catch {
     return null;
-  }
-}
-
-/** 사진 → 긴 쪽 1536px JPEG (올리는 크기를 줄인다) */
-async function shrink(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, no) => {
-      const i = new Image();
-      i.onload = () => ok(i);
-      i.onerror = () => no(new Error("사진을 읽지 못했습니다."));
-      i.src = url;
-    });
-    const fit = Math.min(1, DRAMA_LIMITS.imageMaxSide / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.naturalWidth * fit);
-    c.height = Math.round(img.naturalHeight * fit);
-    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.9);
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
 
@@ -123,7 +103,7 @@ export function DramaTestWorkspace() {
     setUploading(c.id);
     setNote(null);
     try {
-      const dataUrl = await shrink(file);
+      const dataUrl = await shrinkImage(file, DRAMA_LIMITS.imageMaxSide);
       setPreview((p) => ({ ...p, [c.id]: dataUrl }));
       const r = await api.drama.upload(dataUrl);
       setCharacters((list) => list.map((x) => (x.id === c.id ? { ...x, ...r } : x)));

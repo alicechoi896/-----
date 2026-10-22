@@ -14,7 +14,6 @@ import { mediaDuration, runFfmpeg } from "./ffmpeg";
  * - 데모(PROVIDER_MODE≠live): 실제 영상 대신 색이 움직이는 시험 영상을 만든다
  * reference_videos 의 원본(주소)은 바꾸지 않는다.
  */
-const ALLOWED_HOST = /(^|\.)xhscdn\.(com|net)$/i;
 /** 영상 서버는 브라우저가 아닌 요청(기본 User-Agent)을 거절할 수 있다 (v0.9.59) */
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -68,11 +67,7 @@ export async function fetchSource(video: ReferenceVideo, dir: string, index: num
     let host = "";
     try {
       host = new URL(u).hostname;
-      if (!ALLOWED_HOST.test(host)) {
-        lastError = `허용하지 않은 영상 주소 (${host})`;
-        console.warn("[VideoSource]", JSON.stringify({ videoId: video.id, host, skipped: "host" }));
-        continue;
-      }
+      // v0.9.63: 영상 서버 주소 제한 없음 (xhscdn·rednotecdn 등 — 저작권 확인된 영상). 내부망 주소는 safeFetch 가 막는다
       const res = await safeFetch(u, { signal: AbortSignal.timeout(60_000), headers: BROWSER_HEADERS });
       console.info("[VideoSource]", JSON.stringify({ videoId: video.id, host, scheme: u.slice(0, 5), status: res.status, len: res.headers.get("content-length"), type: res.headers.get("content-type"), ms: Date.now() - t0 }));
       if (!res.ok) {

@@ -174,6 +174,7 @@ export function writeMockContent({ featureId, outputs, input, context }: WriterI
     hook: () => hook,
     hooks: (n) => hookPool.slice(0, n),
     ctas: (n) => ctaPool.slice(0, n),
+    thumbnailTitles: (n) => ["이거 모르면 손해", "사기 전 꼭 보세요", "진짜 써 보니까", "가성비 끝판왕?", "1분 만에 정리", "후회하기 전에", "이건 꼭 확인", "솔직 후기", "다들 모르는 것", "결론부터 말하면"].slice(0, n),
     // 짧은 리듬 대본(제품 영상·클립)은 한 줄씩, 정보성 영상은 문단 사이 줄바꿈
     // 대본 n편: 편마다 Hook 과 마무리를 바꾼다 (데모)
     script: (n) =>

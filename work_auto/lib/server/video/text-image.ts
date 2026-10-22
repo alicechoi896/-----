@@ -1,7 +1,7 @@
 import "server-only";
 import { writeFile } from "node:fs/promises";
 import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
-import { CAPTION_TEMPLATE, ENDING_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG } from "@/lib/video-production/config";
+import { CAPTION_SIZES, CAPTION_TEMPLATE, DEFAULT_CAPTION_STYLE, ENDING_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, type CaptionStyle } from "@/lib/video-production/config";
 import { videoAssets } from "./assets";
 
 /**
@@ -16,6 +16,14 @@ const registered = new Map<string, string>();
 /** 템플릿 글꼴 키 → 등록한 글꼴 이름 (없으면 Pretendard) */
 function family(key: string): { name: string; fallback: boolean } {
   const f = videoAssets.font(key);
+  // 프리텐다드는 고른 글꼴 그대로 (기본 포함 글꼴)
+  if (key === "pretendard") {
+    if (!registered.has("vp_pretendard")) {
+      GlobalFonts.registerFromPath(f.file, "vp_pretendard");
+      registered.set("vp_pretendard", f.file);
+    }
+    return { name: "vp_pretendard", fallback: false };
+  }
   const name = `vp_${key}${f.fallback ? "_fb" : ""}`;
   if (!registered.has(name)) {
     GlobalFonts.registerFromPath(f.file, name);
@@ -72,19 +80,20 @@ export async function renderTitleBar(file: string, line1: string, line2: string)
 
 /** 자막 한 컷 (1080 × 440, 투명) — 화면 y = centerY·H - 220 에 얹는다 */
 export const CAPTION_BOX_H = 440;
-export async function renderCaption(file: string, text: string): Promise<boolean> {
+export async function renderCaption(file: string, text: string, style: CaptionStyle = DEFAULT_CAPTION_STYLE): Promise<boolean> {
   const t = CAPTION_TEMPLATE;
-  const fam = family(t.font);
+  const fam = family(style.font);
+  const base = CAPTION_SIZES.find((s) => s.value === style.size)?.size ?? t.size;
   const c = createCanvas(W, CAPTION_BOX_H);
   const ctx = c.getContext("2d");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const size = fit(ctx, text, fam.name, t.size, W * 0.88);
+  const size = fit(ctx, text, fam.name, base, W * 0.88);
   ctx.font = `${size}px ${fam.name}`;
   const lines = text.split("\n");
   const lh = size * 1.25;
   const top = CAPTION_BOX_H / 2 - (lh * (lines.length - 1)) / 2;
-  lines.forEach((l, i) => strokeFill(ctx, l, W / 2, top + i * lh, t.color, t.borderColor, t.borderW));
+  lines.forEach((l, i) => strokeFill(ctx, l, W / 2, top + i * lh, style.color, style.stroke === "none" ? null : style.stroke, t.borderW));
   await writeFile(file, c.toBuffer("image/png"));
   return !fam.fallback;
 }

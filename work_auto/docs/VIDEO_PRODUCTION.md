@@ -85,6 +85,13 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 - [영상 만들기]: 쓰는 AI 컷이 모두 success 여야 한다 (아니면 AI_NOT_READY). 렌더할 때 taskId 로 결과 주소를 새로 받아(화면이 보낸 주소를 믿지 않음) 임시 폴더에 받고 지운다. AI 컷은 글자 검사 없이 '글자 없음', 짧으면 반복(stream_loop), 여러 컷에 시작 위치를 바꿔 나눠 쓴다
 - 받지 못한 AI 컷은 검사 결과에 이유를 남기고 다른 영상으로 채운다
 
+## 음성·자막·AI 컷 옵션 (v0.9.63)
+
+- 음성: `VOICE_OPTIONS` 13가지 + 말투 `VOICE_STYLES` (TTS instructions). `POST /api/video-production/voice-preview` 미리 듣기 (OpenAI 1회, mp3)
+- 자막: `plan.captionStyle` { font: jua|dohyeon|recipe|pretendard, color #RRGGBB, stroke #RRGGBB|none, size s|m|l } → `renderCaption` (cleanCaptionStyle 로 검사)
+- 샤오홍슈 원본: 영상 서버 주소 제한 없음 (xhscdn·rednotecdn 등). safeFetch 가 내부망을 막는다
+- AI 컷: 사람은 현대 한국인(KOREAN_PEOPLE 문장을 모든 프롬프트에), `plan.aiPrompt` 공통 프롬프트(최대 2,000자), 제품 사진 직접 올리기 `POST /api/video-production/ai-clips/image` (9:16 → Kie 파일)
+
 ## 아직 안 된 것 (다음 단계)
 
 - AI 컷: 제품 사진 직접 올리기, 모델 고르기 (Kling·Seedance 등), 드라마(인물 참고 사진·대사 음성 유지)

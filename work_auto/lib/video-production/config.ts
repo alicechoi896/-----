@@ -148,10 +148,63 @@ export function estimateAiClipUsd(modes: ("product" | "text")[]): { usd: number;
   return { usd: Number(usd.toFixed(2)), unknown };
 }
 
+/** OpenAI gpt-4o-mini-tts 목소리 (v0.9.63: 5 → 13가지) */
 export const VOICE_OPTIONS = [
   { value: "onyx", label: "남성 · 낮고 또렷함" },
+  { value: "ash", label: "남성 · 차분하고 단단함" },
   { value: "echo", label: "남성 · 밝음" },
+  { value: "cedar", label: "남성 · 자연스러운 대화" },
+  { value: "verse", label: "남성 · 생동감" },
+  { value: "fable", label: "중성 · 이야기꾼" },
+  { value: "alloy", label: "중성 · 담백함" },
   { value: "nova", label: "여성 · 밝음" },
+  { value: "coral", label: "여성 · 따뜻함" },
+  { value: "marin", label: "여성 · 자연스러운 대화" },
   { value: "shimmer", label: "여성 · 부드러움" },
-  { value: "alloy", label: "중성" },
+  { value: "sage", label: "여성 · 차분함" },
+  { value: "ballad", label: "여성 · 감성적" },
 ] as const;
+
+/** 말투 (TTS instructions) — 같은 목소리도 말투로 느낌이 크게 달라진다 */
+export const VOICE_STYLES = [
+  { value: "shorts", label: "쇼츠 · 밝고 빠르게", instructions: "한국어 쇼츠 내레이션. 밝고 또렷하게, 조금 빠른 속도로, 문장 끝을 늘이지 않는다." },
+  { value: "friend", label: "친구처럼 · 편하게", instructions: "친한 친구에게 꿀팁을 알려 주듯 편하고 자연스러운 한국어 반말 느낌의 말투. 웃음기 있게, 속도는 보통." },
+  { value: "review", label: "리뷰어 · 신뢰감", instructions: "믿음 가는 제품 리뷰 유튜버. 차분하고 또박또박, 핵심 단어에 힘을 준다. 과장하지 않는다." },
+  { value: "excited", label: "언박싱 · 신나게", instructions: "새 제품을 처음 열어 보는 듯 신나고 놀란 말투. 에너지 높게, 빠르게, 감탄을 살린다." },
+  { value: "calm", label: "설명 · 차분하게", instructions: "정보를 정리해 주는 차분한 아나운서 말투. 또렷하고 안정적인 속도, 문장 사이 짧게 쉰다." },
+  { value: "whisper", label: "ASMR · 속삭이듯", instructions: "조용히 속삭이듯 부드럽고 가까운 말투. 천천히, 숨소리는 적게." },
+] as const;
+export const voiceInstructions = (style: string | null | undefined) => (VOICE_STYLES.find((v) => v.value === style) ?? VOICE_STYLES[0]).instructions;
+
+/** 자막 스타일 (v0.9.63): 글꼴·글자색·테두리색·크기를 고른다 */
+export const CAPTION_FONTS = [
+  { value: "jua", label: "배달의민족 주아체" },
+  { value: "dohyeon", label: "배달의민족 도현체" },
+  { value: "recipe", label: "레시피코리아체" },
+  { value: "pretendard", label: "프리텐다드 (굵게)" },
+] as const;
+export const CAPTION_COLORS = ["#FFFFFF", "#FFE94D", "#C8FF00", "#7FE7FF", "#FF8FB1", "#FF4D4D", "#111111"] as const;
+export const CAPTION_STROKES = ["#000000", "#FFFFFF", "#1E3A8A", "none"] as const;
+export const CAPTION_SIZES = [
+  { value: "s", label: "작게", size: 62 },
+  { value: "m", label: "보통", size: 74 },
+  { value: "l", label: "크게", size: 88 },
+] as const;
+export interface CaptionStyle {
+  font: (typeof CAPTION_FONTS)[number]["value"];
+  color: string;
+  /** 테두리 색 (none = 테두리 없음) */
+  stroke: string;
+  size: (typeof CAPTION_SIZES)[number]["value"];
+}
+export const DEFAULT_CAPTION_STYLE: CaptionStyle = { font: "jua", color: "#FFFFFF", stroke: "#000000", size: "m" };
+const HEX = /^#[0-9a-fA-F]{6}$/;
+export function cleanCaptionStyle(raw: unknown): CaptionStyle {
+  const r = (raw ?? {}) as Partial<CaptionStyle>;
+  return {
+    font: CAPTION_FONTS.some((f) => f.value === r.font) ? (r.font as CaptionStyle["font"]) : DEFAULT_CAPTION_STYLE.font,
+    color: typeof r.color === "string" && HEX.test(r.color) ? r.color.toUpperCase() : DEFAULT_CAPTION_STYLE.color,
+    stroke: r.stroke === "none" ? "none" : typeof r.stroke === "string" && HEX.test(r.stroke) ? r.stroke.toUpperCase() : DEFAULT_CAPTION_STYLE.stroke,
+    size: CAPTION_SIZES.some((s) => s.value === r.size) ? (r.size as CaptionStyle["size"]) : DEFAULT_CAPTION_STYLE.size,
+  };
+}

@@ -279,7 +279,20 @@ export const api = {
   },
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
-    plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string; narrationOn: boolean; captions: boolean; aiCount?: number }) =>
+    plan: (body: {
+      contentId: string;
+      scriptIndex: number;
+      channelId: VideoChannel;
+      sourceMode: VideoSourceMode;
+      videoIds: string[];
+      voice: string;
+      narrationOn: boolean;
+      captions: boolean;
+      aiCount?: number;
+      voiceStyle?: string;
+      captionStyle?: import("@/lib/video-production/config").CaptionStyle;
+      aiPrompt?: string;
+    }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
     jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),
     create: (plan: VideoPlan) => request<VideoJob>("/api/video-jobs", { method: "POST", body: json({ plan }) }),
@@ -289,6 +302,17 @@ export const api = {
     download: (id: string) => request<{ url: string }>(`/api/video-jobs/${id}/download`, { method: "POST" }),
     /** AI 컷 만들기 (Kie, 컷 1개 = 1회 과금) */
     aiClips: (plan: VideoPlan, clientRequestId: string) => request<{ clips: AiClip[]; created: number; aiCalls: number }>("/api/video-production/ai-clips", { method: "POST", body: json({ plan, clientRequestId }) }),
+    /** AI 컷용 제품 사진 직접 올리기 */
+    aiClipImage: (dataUrl: string, channelId: VideoChannel) => request<{ imageUrl: string }>("/api/video-production/ai-clips/image", { method: "POST", body: json({ dataUrl, channelId }) }),
+    /** 목소리 미리 듣기 (OpenAI TTS 1회) → mp3 */
+    voicePreview: async (body: { voice: string; voiceStyle: string; text?: string; channelId: VideoChannel }): Promise<Blob> => {
+      const res = await fetch("/api/video-production/voice-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        throw new Error(j?.error?.message ?? "목소리를 불러오지 못했습니다.");
+      }
+      return res.blob();
+    },
     /** AI 컷 상태 (무료) */
     aiClipStatus: (clips: AiClip[]) => request<{ clips: AiClip[] }>("/api/video-production/ai-clips/status", { method: "POST", body: json({ clips }) }),
   },
@@ -475,6 +499,7 @@ export interface VideoProductionOptions {
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string; videoAi: boolean };
   voices: readonly { value: string; label: string }[];
+  voiceStyles: { value: string; label: string }[];
 }
 
 /** 스크랩할 트렌드 (화면에 있는 정보만, 외부 호출 없음) */

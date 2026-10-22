@@ -11,6 +11,8 @@ import {
   ENDING_TEMPLATE,
   TOP_TITLE_TEMPLATE,
   VIDEO_RENDER_CONFIG as C,
+  cleanCaptionStyle,
+  voiceInstructions,
 } from "@/lib/video-production/config";
 import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
@@ -128,7 +130,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           if (tts) {
             try {
               const mp3 = path.join(dir, `a${k}.mp3`);
-              await writeFile(mp3, await tts.synthesize(s.narration, plan.voice));
+              await writeFile(mp3, await tts.synthesize(s.narration, plan.voice, voiceInstructions(plan.voiceStyle)));
               aiCalls++;
               const thr = `${C.silenceThresholdDb}dB`;
               await runFfmpeg([
@@ -267,7 +269,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         // 마지막 컷은 '최저가 구매링크' 엔딩이 자막 자리를 쓴다 (음성은 그대로, 브루 편집과 같게)
         if (job.plan.ending && k === scenes.length - 1) continue;
         const png = path.join(dir, `cap${k}.png`);
-        note(await renderCaption(png, wrap(s.narration, CAPTION_TEMPLATE.maxCharsPerLine)), CAPTION_TEMPLATE.font);
+        const cs = cleanCaptionStyle(job.plan.captionStyle);
+        note(await renderCaption(png, wrap(s.narration, CAPTION_TEMPLATE.maxCharsPerLine), cs), cs.font);
         inputs.push("-loop", "1", "-i", png);
         const en = `between(t,${s.start!.toFixed(3)},${(s.start! + s.duration!).toFixed(3)})`;
         chain += `;[${last}][${idx}:v]overlay=0:${captionY()}:shortest=0:enable='${en}'[c${k}]`;

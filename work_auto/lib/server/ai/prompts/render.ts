@@ -122,7 +122,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
   const thumbs = ctx.scriptFormatUse === "full" ? (ctx.scriptFormat?.thumbnailTitles ?? []) : [];
   if (thumbs.length) {
     const picked = [...thumbs].sort(() => Math.random() - 0.5).slice(0, 8);
-    blocks.push(block("대본 포맷 > 잘된 섬네일 제목 (짧고 강한 화면 문구 — Hook 의 길이·리듬 참고, 그대로 쓰지 않는다)", picked.map((t) => `섬네일: ${t}`)));
+    blocks.push(block("대본 포맷 > 잘된 섬네일 제목 (짧고 강한 화면 문구 — 섬네일 제목 후보·Hook 의 길이·리듬 참고, 그대로 쓰지 않는다)", picked.map((t) => `섬네일: ${t}`)));
   }
   // Keyword Intelligence: 실제 플랫폼 데이터의 키워드 후보 (검색량 아님)
   if (ctx.keywordIntel && ctx.keywordIntel.candidates.length) {
@@ -222,6 +222,9 @@ export function renderContentPrompt(
     );
     if (mix.trend) userInput.push(`실제 플랫폼에서 잘된 제목: ${trendTitles.slice(0, 6).join(" / ")}`);
   }
+  // 섬네일 제목 후보 (v0.9.63)
+  if (config.outputs.some((o) => o.key === "thumbnailTitles"))
+    userInput.push("섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 8~16자, 줄바꿈 1번까지, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 그 길이·리듬을 참고한다 (문장 복사 금지).");
   // 설명글: 설명란에 그대로 붙여 넣을 글만 (v0.9.50)
   if (config.outputs.some((o) => o.key === "description"))
     userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. '이 설명은 ~입니다', '설명글:', '핵심 요약:', '추천 대상:' 같은 안내·항목 이름·괄호 메모를 쓰지 않는다. 시청자에게 바로 말하듯 제품(주제) 소개 → 장점·확인할 점 순서로 3~6문단, 문단 사이는 빈 줄, 마지막 문단은 CTA(행동 유도)로 끝낸다.");
