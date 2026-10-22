@@ -215,3 +215,11 @@
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/api/trends/youtube/channel?channelId=` | 채널 정보 + 최근 6개월 영상·중앙값 배수 (약 3~9 units, 30분 기억) |
+
+## AI 드라마 시험 (v0.9.62)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/drama-test/upload` { dataUrl } | 인물 사진 → Kie (전신·얼굴, 무료·24시간) |
+| POST | `/api/drama-test/create` { characters, scenes, models, clientRequestId } | 장면 × 모델 작업 (각 1회 과금) |
+| POST | `/api/drama-test/status` { tasks } | 상태 (무료) |

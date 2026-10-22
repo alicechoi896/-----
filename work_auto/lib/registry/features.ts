@@ -296,6 +296,22 @@ export const FEATURES: FeatureDef[] = [
     outputs: ["영상 메타데이터", "참고 영상 목록", "샤오홍슈·도우인: 소리 없는 mp4 바로 저장·ZIP", "YouTube: 다운로드 명령(yt-dlp)"],
   },
 
+  {
+    id: "drama-test",
+    channelId: "tools",
+    order: 4,
+    title: "AI 드라마 시험",
+    description: "인물 사진과 장면·대사를 넣고, 같은 장면을 여러 AI 영상 모델(MiniMax H3·Seedance 2.0 Mini·Kling 3.0)로 만들어 인물 유지·한국어 대사·움직임을 비교합니다. 목소리는 영상 모델이 직접 냅니다.",
+    href: "/tools/drama-test",
+    icon: Clapperboard,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["kie"],
+    inputs: ["인물 사진 (최대 3명)", "장면 설명·대사 (최대 5개)", "비교할 모델"],
+    outputs: ["모델별 9:16 8초 영상 (소리 포함)", "실제 쓴 크레딧"],
+  },
+
   // ───────── 설정 ─────────
   {
     id: "api-center",

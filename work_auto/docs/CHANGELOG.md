@@ -2,6 +2,14 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.62] - 2026-10-22: AI 드라마 시험 (모델 비교)
+
+### 추가
+- **공통 도구 › AI 드라마 시험** (docs/DRAMA_TEST.md): 인물 사진(최대 3명) + 장면·대사(최대 5개) → **MiniMax H3 · Seedance 2.0 Mini · Kling 3.0** 으로 같은 장면을 만들어 나란히 비교. 9:16 8초, 목소리는 영상 모델이 직접
+  - 사진은 Kie 에 올림 (24시간), 얼굴 확대 사진 자동 (Kling 인물 요소용)
+  - [시험 만들기 (N편 · 약 $X)] 누를 때만 과금, 상태 확인 무료(20초마다), 실제 크레딧 표시, 결과 받기
+- Kie Provider: `uploadImage`, `createTask`
+
 ## [0.9.61] - 2026-10-22: 채널 정보·최근 6개월 뜬 영상 · AI 컷 글 → 장면 모델 Grok Imagine Video 1.5
 
 ### 추가

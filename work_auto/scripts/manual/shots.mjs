@@ -237,6 +237,43 @@ export const SHOTS = [
 
   /* ───── 04 트렌드 ───── */
   {
+    id: "03-drama-test",
+    url: "/tools/drama-test",
+    viewport: { width: 1280, height: 2200 },
+    prepare: async (p) => {
+      // 데모: 단색 인물 사진 2장 → [시험 만들기] → [상태 확인]
+      const { createCanvas } = await import("@napi-rs/canvas");
+      const photo = (color) => {
+        const c = createCanvas(600, 900);
+        const g = c.getContext("2d");
+        g.fillStyle = color;
+        g.fillRect(0, 0, 600, 900);
+        g.fillStyle = "rgba(255,255,255,0.6)";
+        g.beginPath();
+        g.arc(300, 220, 110, 0, Math.PI * 2);
+        g.fill();
+        g.fillRect(170, 360, 260, 480);
+        return c.toBuffer("image/jpeg");
+      };
+      await p.evaluate(() => localStorage.removeItem("drama-test:v1"));
+      await p.reload({ waitUntil: "networkidle" });
+      await p.getByLabel("인물 1 사진").setInputFiles({ name: "a.jpg", mimeType: "image/jpeg", buffer: photo("#8aa2c8") });
+      await p.getByText("올림").first().waitFor({ timeout: 15_000 });
+      await p.getByLabel("인물 2 사진").setInputFiles({ name: "b.jpg", mimeType: "image/jpeg", buffer: photo("#c8a08a") });
+      await p.getByText("올림").nth(1).waitFor({ timeout: 15_000 });
+      await p.locator("[data-drama-make]").click();
+      await p.locator("[data-drama-result]").first().waitFor({ timeout: 20_000 });
+      await btn(p, "상태 확인").first().click();
+      await p.getByText("데모 모드: 실제 영상 없음").first().waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(300);
+    },
+    marks: {
+      1: (p) => p.locator("[data-drama-characters]").first(),
+      2: (p) => p.locator("[data-drama-scene]").first(),
+      3: (p) => p.locator("[data-drama-make]").first(),
+    },
+  },
+  {
     id: "04-yt-search",
     url: "/youtube/trends",
     viewport: { width: 1280, height: 1300 },

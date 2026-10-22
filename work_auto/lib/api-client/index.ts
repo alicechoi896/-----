@@ -270,6 +270,13 @@ export const api = {
     renameFolder: (from: string, to: string) => request<{ moved: number }>("/api/scraps/folders", { method: "PATCH", body: json({ from, to }) }),
   },
   /** 영상 자동 제작 (v0.9.51) */
+  /** AI 드라마 시험 (v0.9.62, Kie) */
+  drama: {
+    upload: (dataUrl: string) => request<{ imageUrl: string; closeUrl: string; uploadedAt: string }>("/api/drama-test/upload", { method: "POST", body: json({ dataUrl }) }),
+    create: (body: { characters: import("@/lib/types/drama").DramaCharacter[]; scenes: import("@/lib/types/drama").DramaScene[]; models: string[]; clientRequestId: string }) =>
+      request<{ tasks: import("@/lib/types/drama").DramaTask[]; created: number }>("/api/drama-test/create", { method: "POST", body: json(body) }),
+    status: (tasks: import("@/lib/types/drama").DramaTask[]) => request<{ tasks: import("@/lib/types/drama").DramaTask[] }>("/api/drama-test/status", { method: "POST", body: json({ tasks }) }),
+  },
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
     plan: (body: { contentId: string; scriptIndex: number; channelId: VideoChannel; sourceMode: VideoSourceMode; videoIds: string[]; voice: string; narrationOn: boolean; captions: boolean; aiCount?: number }) =>

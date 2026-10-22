@@ -530,13 +530,15 @@ describe("트렌드·스타일·오류 기록", () => {
     const st = (await j<{ meta: boolean; tikhub: boolean }>("/api/trends/instagram/status")).data;
     expect(st).toEqual({ meta: true, tikhub: true });
     type R = { source: string; hashtag?: string; quota?: { used: number; limit: number }; items: { plays: number | null; likes: number | null }[]; next: string | null; calls: number };
-    const m = (await post("/api/trends/instagram", { keyword: "병행 테스트", next: null, clientRequestId: "m1" })).data as R;
-    expect(m).toMatchObject({ source: "meta", hashtag: "병행테스트", calls: 1 });
+    // 같은 서버에서 30분 안에 다시 돌려도 새 검색이 되게 (30분 기억)
+    const kw = `병행 테스트${Date.now() % 100000}`;
+    const m = (await post("/api/trends/instagram", { keyword: kw, next: null, clientRequestId: "m1" })).data as R;
+    expect(m).toMatchObject({ source: "meta", hashtag: kw.replace(/\s/g, ""), calls: 1 });
     expect(m.quota?.limit).toBe(30);
     expect(m.items.every((r) => r.plays === null && r.likes !== null)).toBe(true);
-    const more = (await post("/api/trends/instagram", { keyword: "병행 테스트", next: m.next, clientRequestId: "m2" })).data as R;
+    const more = (await post("/api/trends/instagram", { keyword: kw, next: m.next, clientRequestId: "m2" })).data as R;
     expect(more.source).toBe("meta");
-    const tk = (await post("/api/trends/instagram", { keyword: "병행 테스트", next: null, clientRequestId: "t1", source: "tikhub" })).data as R;
+    const tk = (await post("/api/trends/instagram", { keyword: kw, next: null, clientRequestId: "t1", source: "tikhub" })).data as R;
     expect(tk.source).toBe("tikhub");
     expect(tk.items.some((r) => r.plays !== null)).toBe(true);
   });
@@ -552,6 +554,35 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(a.videos.some((v) => (v.ratio ?? 0) >= 1.5 && (v.ratio ?? 0) < 2)).toBe(true);
     expect((await j<I>("/api/trends/youtube/channel?channelId=UCdemoChannel000000000001")).data.units).toBe(0);
     expect((await j<I>("/api/trends/youtube/channel?channelId=../x")).ok).toBe(false);
+  });
+
+  it("AI 드라마 시험(데모 Kie): 인물 사진 올리기(전신·얼굴) → 장면 × 모델 작업 → 상태 → 다른 주소 사진은 거절", async ({ skip }) => {
+    if (!reachable) skip();
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const c = createCanvas(400, 600);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#88aacc";
+    ctx.fillRect(0, 0, 400, 600);
+    const dataUrl = "data:image/jpeg;base64," + c.toBuffer("image/jpeg").toString("base64");
+    type U = { imageUrl: string; closeUrl: string; uploadedAt: string };
+    const up = (await post("/api/drama-test/upload", { dataUrl })).data as U;
+    expect(up.imageUrl).toMatch(/^https:\/\//);
+    expect(up.closeUrl).not.toBe(up.imageUrl);
+    expect((await post("/api/drama-test/upload", { dataUrl: "data:text/plain;base64,aGk=" })).ok).toBe(false);
+    const characters = [{ id: "c1", name: "민준", description: "20대 남성", ...up }];
+    const scenes = [
+      { id: "s1", description: "카페 창가", dialogue: "민준: 안녕?" },
+      { id: "s2", description: "거리", dialogue: "민준: 가자." },
+    ];
+    type T = { sceneId: string; modelId: string; taskId: string | null; state: string };
+    const made = (await post("/api/drama-test/create", { characters, scenes, models: ["minimax-h3", "kling3"], clientRequestId: "drama-1" })).data as { tasks: T[]; created: number };
+    expect(made.created).toBe(4);
+    expect(made.tasks.every((x) => x.taskId && x.state === "waiting")).toBe(true);
+    const st = (await post("/api/drama-test/status", { tasks: made.tasks })).data as { tasks: T[] };
+    expect(st.tasks.every((x) => x.state === "success")).toBe(true);
+    // Kie 가 올린 사진이 아니면 쓰지 않는다
+    const bad = await post("/api/drama-test/create", { characters: [{ ...characters[0], imageUrl: "https://evil.com/a.jpg" }], scenes, models: ["minimax-h3"], clientRequestId: "drama-2" });
+    expect(bad.ok).toBe(false);
   });
 
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {

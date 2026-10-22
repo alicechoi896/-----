@@ -42,6 +42,10 @@ export interface VideoAIProvider {
   createTextClip(input: { prompt: string }): Promise<{ taskId: string; model: string }>;
   /** 작업 상태 (무료) */
   status(taskId: string): Promise<ClipStatus>;
+  /** 사진 올리기 (무료, 24시간) → 주소 (v0.9.62 드라마 시험) */
+  uploadImage(image: Buffer): Promise<string>;
+  /** 아무 모델 작업 만들기 (1회 과금) */
+  createTask(model: string, input: Record<string, unknown>): Promise<{ taskId: string; model: string }>;
 }
 
 type Obj = Record<string, unknown>;
@@ -86,7 +90,7 @@ export class KieVideoProvider implements VideoAIProvider {
   }
 
   /** 9:16 사진 올리기 (무료, 24시간 뒤 Kie 가 지운다) */
-  private async upload(image: Buffer): Promise<string> {
+  async uploadImage(image: Buffer): Promise<string> {
     const body = await this.call(`${UPLOAD}/api/file-base64-upload`, {
       method: "POST",
       body: { base64Data: `data:image/jpeg;base64,${image.toString("base64")}`, uploadPath: "work-auto", fileName: `clip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg` },
@@ -96,7 +100,7 @@ export class KieVideoProvider implements VideoAIProvider {
     return url;
   }
 
-  private async create(model: string, input: Obj): Promise<{ taskId: string; model: string }> {
+  async createTask(model: string, input: Obj): Promise<{ taskId: string; model: string }> {
     const body = await this.call(`${API}/api/v1/jobs/createTask`, { method: "POST", body: { model, input } });
     const taskId = (body.data as Obj | undefined)?.taskId;
     if (typeof taskId !== "string" || !taskId) throw new VideoAIError("UPSTREAM", "Kie AI 가 작업 번호를 주지 않았습니다.");
@@ -105,14 +109,14 @@ export class KieVideoProvider implements VideoAIProvider {
 
   async createProductClip({ prompt, image }: { prompt: string; image: Buffer }) {
     const c = AI_CLIP_CONFIG.product;
-    const imageUrl = await this.upload(image);
-    return this.create(c.model, { prompt: prompt.slice(0, 1500), image_urls: [imageUrl], duration: c.duration, resolution: c.resolution, audio: false });
+    const imageUrl = await this.uploadImage(image);
+    return this.createTask(c.model, { prompt: prompt.slice(0, 1500), image_urls: [imageUrl], duration: c.duration, resolution: c.resolution, audio: false });
   }
 
   async createTextClip({ prompt }: { prompt: string }) {
     const c = AI_CLIP_CONFIG.text;
     // Grok Imagine Video 1.5: 사진 없이 보내면 글 → 영상 (prompt 최대 4096자, duration 1~15초)
-    return this.create(c.model, { prompt: prompt.slice(0, 4000), aspect_ratio: c.aspectRatio, resolution: c.resolution, duration: c.duration });
+    return this.createTask(c.model, { prompt: prompt.slice(0, 4000), aspect_ratio: c.aspectRatio, resolution: c.resolution, duration: c.duration });
   }
 
   async status(taskId: string): Promise<ClipStatus> {
@@ -164,5 +168,11 @@ export class MockVideoAIProvider implements VideoAIProvider {
   }
   async status(): Promise<ClipStatus> {
     return { state: "success", resultUrl: "mock://ai-clip", credits: 20, error: null };
+  }
+  async uploadImage() {
+    return `https://tempfile.redpandaai.co/mock/${Math.random().toString(36).slice(2, 10)}.jpg`;
+  }
+  async createTask(model: string) {
+    return { taskId: `mock_${Math.random().toString(36).slice(2, 12)}`, model };
   }
 }
