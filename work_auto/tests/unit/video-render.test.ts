@@ -120,3 +120,31 @@ describe("주목 효과·엔딩 (v0.9.64)", async () => {
     expect(attentionSceneIndexes(20, [0, 2, 4, 6, 8, 10, 12, 14, 16], [])).toHaveLength(ATTENTION_CONFIG.maxPerVideo);
   });
 });
+
+describe("장면 고르기 (v0.9.67)", async () => {
+  const { pickSegment, wordsOf } = await import("@/lib/server/video/text-scan");
+  const scan = {
+    checked: true,
+    interval: 1,
+    samples: [
+      { t: 0.5, boxes: [], score: 2, desc: "인트로 로고 화면" },
+      { t: 3, boxes: [], score: 6, desc: "제품 박스 클로즈업" },
+      { t: 6, boxes: [], score: 9, desc: "청소기로 바닥 미는 손" },
+      { t: 9, boxes: [], score: 5, desc: "사람 얼굴" },
+    ],
+  };
+  it("대사와 맞는 장면을 먼저 (앞부분이 아니라)", () => {
+    const r = pickSegment({ narration: "바닥 청소가 10분이면 끝나요", dur: 1.5, used: new Map(), sources: [{ id: "a", duration: 10, scan, assigned: true }] });
+    expect(r!.start).toBeGreaterThan(4.5);
+    expect(r!.start).toBeLessThan(7);
+  });
+  it("맞는 말이 없으면 쓸모 점수 높은 장면, 쓴 구간은 피한다", () => {
+    const used = new Map([["a", [[5.5, 7.5]] as [number, number][]]]);
+    const r = pickSegment({ narration: "가격도 착해요", dur: 1, used, sources: [{ id: "a", duration: 10, scan, assigned: true }] });
+    expect(r!.start < 5.5 - 1 || r!.start >= 7.5).toBe(true);
+    expect(r!.start).toBeGreaterThan(1);
+  });
+  it("조사 떼고 단어 뽑기", () => {
+    expect(wordsOf("바닥을 청소기로 밀어요")).toEqual(expect.arrayContaining(["바닥", "청소기"]));
+  });
+});

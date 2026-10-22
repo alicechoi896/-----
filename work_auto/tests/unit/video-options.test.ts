@@ -60,3 +60,21 @@ describe("자막 1줄·제목 강조·음성 속도 (v0.9.66)", async () => {
     expect(cleanVoiceSpeed(9)).toBe(2);
   });
 });
+
+describe("영상 길이 맞추기 (v0.9.67)", async () => {
+  const { fitTempo, atempoFor, targetFromLength } = await import("@/lib/video-production/config");
+  it("목표 15초: 음성 28초면 약 2배, 짧으면 그대로, 최대 3배", () => {
+    expect(fitTempo(28, 15, 1)).toBe(2);
+    expect(fitTempo(8, 15, 1)).toBe(1);
+    expect(fitTempo(80, 15, 1)).toBe(3);
+    expect(fitTempo(28, 0, 1)).toBe(1);
+  });
+  it("atempo 는 한 번에 최대 2배라 나눠 건다", () => {
+    expect(atempoFor(3)).toBe("atempo=2,atempo=1.5000");
+    expect(atempoFor(1)).toBe("");
+  });
+  it("대본 길이 → 기본 목표", () => {
+    expect(targetFromLength("15s")).toBe(15);
+    expect(targetFromLength("3m")).toBe(0);
+  });
+});

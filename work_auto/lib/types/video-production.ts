@@ -83,6 +83,8 @@ export interface VideoPlan {
   voiceStyle?: string;
   /** 음성 속도 1~2배 (v0.9.66, 기본 2) */
   voiceSpeed?: number;
+  /** 목표 영상 길이(초). 0 = 자동(말하기 속도대로). 고르면 음성 속도를 자동으로 맞춘다 (v0.9.67) */
+  targetSec?: number;
   /** 자막 글꼴·색·크기 (v0.9.63) */
   captionStyle?: import("@/lib/video-production/config").CaptionStyle;
   /** 상단 제목 글꼴·색·띠 (v0.9.64) */
@@ -107,6 +109,9 @@ export interface VideoQa {
   /** 원본 글자: 처리 결과별 컷 수 */
   textSummary?: Partial<Record<TextTreatment, number>>;
   voice?: "tts" | "none" | "off";
+  /** 실제 음성 배속 · 목표 길이 (v0.9.67) */
+  voiceTempo?: number;
+  targetSec?: number;
   /** 1회 다운로드: 처음 받은 시각 (1시간 뒤 파일 삭제) */
   downloadedAt?: ISODate;
   /** 파일을 지웠으면 */

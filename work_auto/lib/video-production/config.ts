@@ -203,6 +203,32 @@ export const voiceInstructions = (style: string | null | undefined) => (VOICE_ST
 export const VOICE_SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const;
 export const DEFAULT_VOICE_SPEED = 2;
 export const cleanVoiceSpeed = (v: unknown) => (VOICE_SPEEDS.includes(Number(v) as (typeof VOICE_SPEEDS)[number]) ? Number(v) : DEFAULT_VOICE_SPEED);
+/**
+ * 영상 길이 맞추기 (v0.9.67): 목표 길이를 고르면 음성 속도를 자동으로 (1~3배). 0 = 자동(말하기 속도대로)
+ * 기본값은 대본을 만들 때 고른 길이 (15s → 15초, 30s → 30초, 60초 이내 → 45초, 3분 → 자동)
+ */
+export const VIDEO_TARGETS = [0, 15, 30, 45, 60] as const;
+export const cleanTarget = (v: unknown) => (VIDEO_TARGETS.includes(Number(v) as (typeof VIDEO_TARGETS)[number]) ? Number(v) : 0);
+export const targetFromLength = (length: unknown): number => ({ "15s": 15, "30s": 30, shorts: 45 })[String(length)] ?? 0;
+export const MAX_FIT_TEMPO = 3;
+/** 목표 길이에 맞는 음성 배속 (줄인 음성 합계 rawSpeech, 컷 사이 여유 fixed) — 느리게는 하지 않는다 */
+export function fitTempo(rawSpeech: number, target: number, fixed: number): number {
+  if (!target || rawSpeech <= 0) return 1;
+  const room = Math.max(1, target - fixed);
+  return Math.min(MAX_FIT_TEMPO, Math.max(1, rawSpeech / room));
+}
+/** 임의 배속 → atempo 사슬 (한 번에 최대 2배) */
+export function atempoFor(tempo: number): string {
+  let left = Math.max(0.5, tempo);
+  const parts: string[] = [];
+  while (left > 2.0001) {
+    parts.push("atempo=2");
+    left /= 2;
+  }
+  if (Math.abs(left - 1) > 0.001) parts.push(`atempo=${left.toFixed(4)}`);
+  return parts.join(",");
+}
+
 /** ",atempo=2" (atempo 한 번에 0.5~2배) */
 export const atempoChain = (v: unknown) => {
   const s = cleanVoiceSpeed(v);

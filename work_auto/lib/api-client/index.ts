@@ -291,6 +291,7 @@ export const api = {
       aiCount?: number;
       voiceStyle?: string;
       voiceSpeed?: number;
+      targetSec?: number;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
       aiPrompt?: string;
@@ -496,7 +497,7 @@ export const api = {
 
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
-  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; images: string[] }[];
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; images: string[]; targetSec: number }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string; videoAi: boolean };

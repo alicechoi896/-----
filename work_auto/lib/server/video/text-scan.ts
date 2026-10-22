@@ -16,7 +16,7 @@ import { runFfmpeg } from "./ffmpeg";
 export type Box = { x: number; y: number; w: number; h: number };
 export interface TextScan {
   /** 샘플 시각(초)마다 글자 상자 */
-  samples: { t: number; boxes: Box[] }[];
+  samples: { t: number; boxes: Box[]; score?: number; desc?: string }[];
   checked: boolean;
   interval: number;
 }
@@ -31,29 +31,39 @@ export async function scanText(file: string, duration: number, dir: string, key:
   for (let t = Math.min(0.2, duration / 2); t < duration - 0.05 && times.length < MAX_SAMPLES; t += interval) times.push(Number(t.toFixed(2)));
   if (!ai.supportsVision) return { scan: { samples: times.map((t) => ({ t, boxes: [] })), checked: false, interval }, aiCalls: 0 };
   // 프레임 뽑기 (작게, 글자를 읽을 정도)
-  const frames: { t: number; file: string }[] = [];
-  for (const [i, t] of times.entries()) {
-    const out = path.join(dir, `${key}_f${i}.jpg`);
-    try {
-      await runFfmpeg(["-ss", String(t), "-i", file, "-frames:v", "1", "-vf", "scale=-2:640", "-q:v", "4", out], 30_000);
-      frames.push({ t, file: out });
-    } catch {
-      /* 이 프레임은 건너뛴다 → 아래에서 검사 안 된 것으로 */
-    }
+  // v0.9.67: 4장씩 동시에
+  const got: ({ t: number; file: string } | null)[] = new Array(times.length).fill(null);
+  for (let i = 0; i < times.length; i += 4) {
+    await Promise.all(
+      times.slice(i, i + 4).map(async (t, j) => {
+        const out = path.join(dir, `${key}_f${i + j}.jpg`);
+        try {
+          await runFfmpeg(["-ss", String(t), "-i", file, "-frames:v", "1", "-vf", "scale=-2:640", "-q:v", "4", out], 30_000);
+          got[i + j] = { t, file: out };
+        } catch {
+          /* 이 프레임은 건너뛴다 → 아래에서 검사 안 된 것으로 */
+        }
+      }),
+    );
   }
-  const samples: { t: number; boxes: Box[] }[] = [];
+  const frames = got.filter((x): x is { t: number; file: string } => Boolean(x));
+  const samples: TextScan["samples"] = [];
   let aiCalls = 0;
   let checked = frames.length === times.length;
-  for (let i = 0; i < frames.length; i += PER_CALL) {
-    const batch = frames.slice(i, i + PER_CALL);
+  // v0.9.67: 묶음(8장)마다 AI 검사를 동시에
+  const batches: { t: number; file: string }[][] = [];
+  for (let i = 0; i < frames.length; i += PER_CALL) batches.push(frames.slice(i, i + PER_CALL));
+  await Promise.all(batches.map(async (batch) => {
     const parts: ChatContentPart[] = [];
     for (const f of batch) parts.push({ type: "image", mediaType: "image/jpeg", data: (await readFile(f.file)).toString("base64") });
     parts.push({
       type: "text",
       text: [
-        `위 영상 프레임 ${batch.length}장을 순서대로 본다. 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·워터마크·로고 글자·스티커 글자)의 위치를 찾는다.`,
-        "제품 본체에 인쇄된 아주 작은 글자(버튼 표시 등)는 빼도 된다. 읽을 수 있는 글자는 모두 넣는다.",
-        '형식: JSON 만. {"frames":[{"i":1,"boxes":[[x,y,w,h],…]},…]} — x,y,w,h 는 화면 너비·높이 대비 0~1 비율, 글자가 없으면 boxes 는 [].',
+        `위 영상 프레임 ${batch.length}장을 순서대로 본다. 쇼츠 제품 영상에 쓸 장면을 고르려고 한다.`,
+        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·워터마크·로고 글자·스티커 글자)의 위치. 제품 본체에 인쇄된 아주 작은 글자는 빼도 된다.",
+        "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게: 제품이 크고 선명하게 보임, 손으로 쓰는 동작·사용 장면, 결과가 보이는 장면. 낮게: 인트로·아웃트로·검은 화면·흔들림·어두움·사람 얼굴만·글자 화면·제품이 안 보임.",
+        "3) desc: 장면을 한국어 10~20자로 (예: '청소기로 바닥 미는 손', '헤드폰 쓰고 웃는 여성', '제품 박스 클로즈업').",
+        '형식: JSON 만. {"frames":[{"i":1,"boxes":[[x,y,w,h],…],"score":7,"desc":"…"},…]} — x,y,w,h 는 화면 너비·높이 대비 0~1 비율, 글자가 없으면 boxes 는 [].',
       ].join("\n"),
     });
     try {
@@ -64,9 +74,9 @@ export async function scanText(file: string, duration: number, dir: string, key:
           { role: "system", content: "당신은 영상 프레임에서 글자 위치를 정확히 찾는 도우미다. 확실하지 않으면 상자를 넉넉하게 잡는다. JSON 만 답한다." },
           { role: "user", content: parts },
         ],
-        maxTokens: 1500,
+        maxTokens: 2500,
       });
-      const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { frames?: { i?: number; boxes?: number[][] }[] };
+      const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { frames?: { i?: number; boxes?: number[][]; score?: number; desc?: string }[] };
       for (const [j, f] of batch.entries()) {
         const row = json.frames?.find((r) => Number(r.i) === j + 1);
         if (!row) {
@@ -74,13 +84,19 @@ export async function scanText(file: string, duration: number, dir: string, key:
           samples.push({ t: f.t, boxes: [{ x: 0, y: 0, w: 1, h: 1 }] }); // 모르면 글자가 있다고 본다
           continue;
         }
-        samples.push({ t: f.t, boxes: (row.boxes ?? []).filter((b) => b.length === 4).map(([x, y, w, h]) => clampBox({ x, y, w, h })) });
+        samples.push({
+          t: f.t,
+          boxes: (row.boxes ?? []).filter((b) => b.length === 4).map(([x, y, w, h]) => clampBox({ x, y, w, h })),
+          score: Number.isFinite(Number(row.score)) ? Math.min(10, Math.max(0, Number(row.score))) : undefined,
+          desc: typeof row.desc === "string" ? row.desc.slice(0, 40) : undefined,
+        });
       }
     } catch {
       checked = false;
       for (const f of batch) samples.push({ t: f.t, boxes: [{ x: 0, y: 0, w: 1, h: 1 }] });
     }
-  }
+  }));
+  samples.sort((a, b) => a.t - b.t);
   return { scan: { samples, checked, interval }, aiCalls };
 }
 
@@ -169,3 +185,45 @@ function union(boxes: Box[]): Box {
 }
 
 export const TREATMENT_RANK: Record<TextTreatment, number> = { clean: 0, crop: 1, blur: 2, unchecked: 3, rejected: 9 };
+
+/**
+ * 컷마다 원본 구간 고르기 (v0.9.67): 앞에서부터가 아니라 '쓸모 있는 장면'을.
+ * 점수 = 대사·장면 설명 맞음(×3) + 장면 쓸모 점수(0~10 ×0.6) − 글자 처리 벌점(×2) + 이 컷에 정한 원본(+1)
+ * 이미 쓴 구간과 겹치지 않고, 가릴 수 없는 글자(rejected)는 건너뛴다. 같은 점수면 앞 구간.
+ */
+const PENALTY: Record<TextTreatment, number> = { clean: 0, blur: 1, crop: 1.5, unchecked: 2, rejected: 99 };
+const JOSA = /(으로|에서|까지|부터|처럼|이에요|예요|해요|하죠|이죠|은|는|이|가|을|를|에|도|로|의|만|요|죠|고|다)$/;
+export const wordsOf = (text: string) =>
+  [...new Set(text.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).map((w) => w.replace(JOSA, "")).filter((w) => w.length >= 2))];
+
+export interface SegmentSource {
+  id: string;
+  duration: number;
+  scan: TextScan;
+  assigned: boolean;
+}
+export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]> }): { id: string; start: number; tr: Treatment; value: number } | null {
+  const words = wordsOf(input.narration);
+  let best: { id: string; start: number; tr: Treatment; value: number } | null = null;
+  for (const src of input.sources) {
+    const ranges = input.used.get(src.id) ?? [];
+    const maxStart = Math.max(0, src.duration - input.dur - 0.1);
+    const steps = Math.max(1, Math.floor(maxStart / 0.5));
+    for (let n = 0; n <= steps; n++) {
+      const start = (maxStart * n) / steps;
+      if (ranges.some(([a, b]) => start < b && start + input.dur > a)) continue;
+      const tr = decideTreatment(boxesIn(src.scan, start, input.dur), src.scan.checked);
+      if (tr.kind === "rejected") continue;
+      // 이 구간의 장면들 (없으면 가장 가까운 장면)
+      let inRange = src.scan.samples.filter((x) => x.t >= start && x.t <= start + input.dur);
+      if (!inRange.length && src.scan.samples.length) inRange = [[...src.scan.samples].sort((a, b) => Math.abs(a.t - start) - Math.abs(b.t - start))[0]];
+      const scores = inRange.map((x) => x.score).filter((x): x is number => typeof x === "number");
+      const quality = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 5;
+      const desc = inRange.map((x) => x.desc ?? "").join(" ");
+      const match = Math.min(3, words.filter((w) => desc.includes(w)).length);
+      const value = match * 3 + quality * 0.6 - PENALTY[tr.kind] * 2 + (src.assigned ? 1 : 0);
+      if (!best || value > best.value + 1e-9) best = { id: src.id, start, tr, value };
+    }
+  }
+  return best;
+}

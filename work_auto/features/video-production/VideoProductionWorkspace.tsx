@@ -16,6 +16,7 @@ import {
   DEFAULT_TITLE_STYLE,
   DEFAULT_VOICE_SPEED,
   TITLE_BAR_COLORS,
+  VIDEO_TARGETS,
   VOICE_SPEEDS,
   estimateAiClipUsd,
   type CaptionStyle,
@@ -75,6 +76,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [aiCount, setAiCount] = useState<number>(AI_CLIP_CONFIG.defaultCount);
   const [voiceStyle, setVoiceStyle] = useState("shorts");
   const [voiceSpeed, setVoiceSpeed] = useState<number>(DEFAULT_VOICE_SPEED);
+  const [targetSec, setTargetSec] = useState<number>(15);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
   const [titleStyle, setTitleStyle] = useState<TitleStyle>(DEFAULT_TITLE_STYLE);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -94,6 +96,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setScriptIndex(0);
     setPlan(null);
     if (!c) return;
+    // 영상 길이 기본값 = 대본을 만들 때 고른 길이
+    setTargetSec(c.targetSec);
     const linked = o.videos.filter((v) => c.productId && v.productId === c.productId).slice(0, 8);
     // 제품이 있는 원고는 그 제품의 영상만 쓴다
     setVideoIds((c.productId ? linked : o.videos.slice(0, 6)).map((v) => v.id));
@@ -136,7 +140,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlanning(true);
     setError(null);
     try {
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, voiceSpeed, captionStyle, titleStyle, aiPrompt });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, voiceSpeed, targetSec, captionStyle, titleStyle, aiPrompt });
       // 같은 대본으로 이미 만든 AI 컷이 있으면 이어서 쓴다 (다시 과금하지 않게)
       const saved = r.plan.aiClips?.length ? loadClips(clipKey(content.id, scriptIndex)) : null;
       if (saved && r.plan.aiClips && saved.length === r.plan.aiClips.length) r.plan.aiClips = saved;
@@ -352,6 +356,14 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                 )}
               </FormField>
               )}
+              <FormField label="영상 길이" hint="고른 길이에 맞게 AI 음성 속도를 자동으로 맞춥니다 (기본은 대본을 만들 때 고른 길이). 자동 = 고른 말하기 속도대로." data-target-sec>
+                <SegmentedControl
+                  size="sm"
+                  value={String(targetSec)}
+                  onChange={(v) => setTargetSec(Number(v))}
+                  options={VIDEO_TARGETS.map((x) => ({ value: String(x), label: x ? `${x}초` : "자동" }))}
+                />
+              </FormField>
               <FormField label="음성 · 자막">
                 <div className="flex flex-wrap gap-4 text-[13px]" data-av-options>
                   <label className="flex cursor-pointer items-center gap-1.5">
@@ -372,13 +384,17 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   <FormField label="말투">
                     <Select value={voiceStyle} options={opts.voiceStyles} onChange={(e) => setVoiceStyle(e.target.value)} />
                   </FormField>
-                  <FormField label="말하기 속도" className="sm:col-span-2">
-                    <SegmentedControl
-                      size="sm"
-                      value={String(voiceSpeed)}
-                      onChange={(v) => setVoiceSpeed(Number(v))}
-                      options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))}
-                    />
+                  <FormField label="말하기 속도" className="sm:col-span-2" hint={targetSec ? `영상 길이를 ${targetSec}초로 골라 속도를 자동으로 맞춥니다 (1~3배).` : undefined}>
+                    {targetSec ? (
+                      <p className="text-[12.5px] text-fg-muted">자동 (영상 길이에 맞춤)</p>
+                    ) : (
+                      <SegmentedControl
+                        size="sm"
+                        value={String(voiceSpeed)}
+                        onChange={(v) => setVoiceSpeed(Number(v))}
+                        options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))}
+                      />
+                    )}
                   </FormField>
                   <div className="sm:col-span-2">
                     <Button size="sm" icon={Play} loading={previewing} disabled={!opts.ready.voice} onClick={() => void previewVoice()} data-voice-preview>
@@ -489,7 +505,7 @@ function PlanEditor({
           <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9 border-0 bg-transparent text-center text-lg font-bold" style={{ color: plan.titleStyle?.line1 ?? "#FFFFFF" }} aria-label="상단 제목 1줄" />
           <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center font-bold" style={{ color: plan.titleStyle?.line2 ?? "#C8FF00" }} aria-label="상단 제목 2줄" />
         </div>
-        <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일 · [ ]로 감싼 글자는 강조색). 선택한 제목: {plan.selectedTitle}</p>
+        <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일 · 2번째 줄의 [ ] 글자는 강조색). 선택한 제목: {plan.selectedTitle}</p>
       </div>
       {clips.length > 0 && <AiClipPanel plan={plan} onChange={onChange} images={images} ready={videoAiReady} />}
       <ol className="space-y-1.5">
@@ -637,7 +653,7 @@ function JobPanel({
               <Notice tone="info">자동 검사를 모두 통과했습니다.</Notice>
             )}
             <p className="text-xs text-fg-subtle">
-              길이 {job.qa.durationSec ?? "-"}초 · 효과음 {job.qa.sfxCount ?? 0}회 · 검은 화면 {job.qa.blackFrames ?? 0} · 긴 무음 {job.qa.longSilences ?? 0} · 음성 {job.qa.voice === "tts" ? "AI" : "없음"}
+              길이 {job.qa.durationSec ?? "-"}초{job.qa.targetSec ? ` (목표 ${job.qa.targetSec}초)` : ""}{job.qa.voiceTempo && job.qa.voiceTempo !== 1 ? ` · 음성 ${job.qa.voiceTempo}배` : ""} · 효과음 {job.qa.sfxCount ?? 0}회 · 검은 화면 {job.qa.blackFrames ?? 0} · 긴 무음 {job.qa.longSilences ?? 0} · 음성 {job.qa.voice === "tts" ? "AI" : "없음"}
             </p>
             <ol className="space-y-1" data-job-scenes>
               {edited.scenes.map((s, i) => (
@@ -921,7 +937,7 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
       <p className="text-[13px] font-semibold text-fg">상단 제목 스타일</p>
       <div className="rounded py-2 text-center font-black" style={{ background: value.bar === "none" ? "linear-gradient(#71717a,#3f3f46)" : value.bar }}>
         <p style={{ color: value.line1, textShadow: outline }} className="text-[17px]">
-          소니 <span style={{ color: value.accent }}>WH-CH720N</span>
+          소니 WH-CH720N
         </p>
         <p style={{ color: value.line2, textShadow: outline }} className="text-[18px]">
           스펙보다 <span style={{ color: value.accent }}>먼저</span> 볼 게 있다?
@@ -943,7 +959,7 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
         ))}
         <input type="color" value={value.accent ?? "#FFE94D"} onChange={(e) => set({ accent: e.target.value.toUpperCase() })} aria-label="강조색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />
       </div>
-      <p className="text-[11px] text-fg-subtle">제목에서 <b>[ ]</b>로 감싼 글자는 강조색으로 나옵니다. 예: 소니 [WH-CH720N] — 한 줄에 여러 색을 쓸 수 있습니다.</p>
+      <p className="text-[11px] text-fg-subtle"><b>2번째 줄</b>에서 <b>[ ]</b>로 감싼 글자는 강조색으로 나옵니다. 예: 스펙보다 [먼저] 볼 게 있다? (1번째 줄은 한 색)</p>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="w-14 text-xs text-fg-subtle">띠 색</span>
         {TITLE_BAR_COLORS.map((c) => (
