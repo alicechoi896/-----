@@ -1,7 +1,7 @@
 import "server-only";
 import { writeFile } from "node:fs/promises";
 import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
-import { CAPTION_SIZES, CAPTION_TEMPLATE, DEFAULT_CAPTION_STYLE, ENDING_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, type CaptionStyle } from "@/lib/video-production/config";
+import { CAPTION_SIZES, CAPTION_TEMPLATE, DEFAULT_CAPTION_STYLE, DEFAULT_TITLE_STYLE, ENDING_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, captionCenterY, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
 import { videoAssets } from "./assets";
 
 /**
@@ -61,19 +61,23 @@ export interface TextImages {
 }
 
 /** 상단 검은 띠 + 2줄 (1080 × barHeight) */
-export async function renderTitleBar(file: string, line1: string, line2: string): Promise<boolean> {
+export async function renderTitleBar(file: string, line1: string, line2: string, style: TitleStyle = DEFAULT_TITLE_STYLE): Promise<boolean> {
   const t = TOP_TITLE_TEMPLATE;
-  const fam = family(t.font);
+  const fam = family(style.font);
   const c = createCanvas(W, t.barHeight);
   const ctx = c.getContext("2d");
-  ctx.fillStyle = t.barColor;
-  ctx.fillRect(0, 0, W, t.barHeight);
+  const noBar = style.bar === "none";
+  if (!noBar) {
+    ctx.fillStyle = style.bar;
+    ctx.fillRect(0, 0, W, t.barHeight);
+  }
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
+  // 띠가 없으면 영상 위에서도 읽히게 검은 테두리
   ctx.font = `${fit(ctx, line1, fam.name, t.line1.size, W * 0.92)}px ${fam.name}`;
-  strokeFill(ctx, line1, W / 2, t.line1.y, t.line1.color, null, 0);
+  strokeFill(ctx, line1, W / 2, t.line1.y, style.line1, noBar ? "#000000" : null, noBar ? 7 : 0);
   ctx.font = `${fit(ctx, line2, fam.name, t.line2.size, W * 0.92)}px ${fam.name}`;
-  strokeFill(ctx, line2, W / 2, t.line2.y, t.line2.color, null, 0);
+  strokeFill(ctx, line2, W / 2, t.line2.y, style.line2, noBar ? "#000000" : null, noBar ? 6 : 0);
   await writeFile(file, c.toBuffer("image/png"));
   return !fam.fallback;
 }
@@ -97,7 +101,38 @@ export async function renderCaption(file: string, text: string, style: CaptionSt
   await writeFile(file, c.toBuffer("image/png"));
   return !fam.fallback;
 }
-export const captionY = () => Math.round(H * CAPTION_TEMPLATE.centerY - CAPTION_BOX_H / 2);
+export const captionY = (style?: CaptionStyle | null) => Math.round(H * captionCenterY(style) - CAPTION_BOX_H / 2);
+
+/** 주목 스티커 (v0.9.64): 노란 말풍선 + 굵은 글자, 살짝 기울임 (투명 PNG, 가로 ATTENTION_CONFIG.width) */
+export async function renderSticker(file: string, word: string, tilt = -8): Promise<boolean> {
+  const fam = family("dohyeon");
+  const w = 360;
+  const h = 200;
+  const c = createCanvas(w, h);
+  const ctx = c.getContext("2d");
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate((tilt * Math.PI) / 180);
+  // 터지는 별 모양 배경
+  const spikes = 14;
+  ctx.beginPath();
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 ? 70 : 92;
+    const a = (Math.PI * i) / spikes;
+    ctx.lineTo(Math.cos(a) * r * 1.65, Math.sin(a) * r * 0.95);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "#FFE600";
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = "#111111";
+  ctx.stroke();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${fit(ctx, word, fam.name, 74, 200)}px ${fam.name}`;
+  strokeFill(ctx, word, 0, 4, "#FF2D2D", "#FFFFFF", 6);
+  await writeFile(file, c.toBuffer("image/png"));
+  return !fam.fallback;
+}
 
 /** 엔딩 '최저가 / 구매링크' (투명, 1080 × 420) — 화면 y = ENDING_TEMPLATE.y - 40 */
 export const ENDING_BOX_H = 420;

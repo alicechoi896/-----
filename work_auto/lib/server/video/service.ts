@@ -2,7 +2,7 @@ import "server-only";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { aiSourceId, isAiSource } from "@/lib/types/video-production";
-import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, cleanCaptionStyle, voiceInstructions } from "@/lib/video-production/config";
+import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, cleanCaptionStyle, cleanTitleStyle, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider, getVideoAIProvider } from "../providers/registry";
@@ -73,7 +73,7 @@ export const videoJobService = {
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; captionStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     const sourceMode: VideoSourceMode = input.sourceMode === "ai" || input.sourceMode === "mixed" ? input.sourceMode : "xhs";
@@ -91,6 +91,7 @@ export const videoJobService = {
     // 말투·자막 스타일·AI 공통 프롬프트 (v0.9.63)
     built.plan.voiceStyle = VOICE_STYLES.some((v) => v.value === input.voiceStyle) ? String(input.voiceStyle) : VOICE_STYLES[0].value;
     built.plan.captionStyle = cleanCaptionStyle(input.captionStyle);
+    built.plan.titleStyle = cleanTitleStyle(input.titleStyle);
     if (sourceMode !== "xhs") built.plan.aiPrompt = String(input.aiPrompt ?? "").trim().slice(0, 2000);
     if (sourceMode === "xhs") return built;
     // AI 컷 (v0.9.60): 기본 컷을 만들어 고르게 배치 (아직 Kie 호출 없음 — [AI 컷 만들기]를 누를 때만)
@@ -129,6 +130,7 @@ export const videoJobService = {
       // 효과음은 자료 폴더에 있는 이름만 (파일 이름에 공백·괄호가 있어도 그대로)
       sfx: typeof s.sfx === "string" && sfxNames.has(s.sfx) ? s.sfx : null,
       arrow: Boolean(s.arrow),
+      attention: Boolean(s.attention),
       sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null,
       pinned: Boolean(s.pinned),
     }));
@@ -162,6 +164,7 @@ export const videoJobService = {
       captions: plan.captions !== false,
       voiceStyle: VOICE_STYLES.some((v) => v.value === plan.voiceStyle) ? plan.voiceStyle : VOICE_STYLES[0].value,
       captionStyle: cleanCaptionStyle(plan.captionStyle),
+      titleStyle: cleanTitleStyle(plan.titleStyle),
       meme: false,
       ...(aiClips.length ? { aiClips, aiPrompt: String(plan.aiPrompt ?? "").trim().slice(0, 2000) } : {}),
     };

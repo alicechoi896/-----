@@ -8,10 +8,11 @@ import {
   ARROW_PLACEMENT,
   CAPTION_TEMPLATE,
   ENDING_ARROW_PLACEMENT,
+  ATTENTION_CONFIG,
   ENDING_TEMPLATE,
-  TOP_TITLE_TEMPLATE,
   VIDEO_RENDER_CONFIG as C,
   cleanCaptionStyle,
+  cleanTitleStyle,
   voiceInstructions,
 } from "@/lib/video-production/config";
 import { getTTSProvider } from "../providers/registry";
@@ -21,7 +22,7 @@ import { SourceError, fetchSource, type LocalSource } from "./source";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
 import { TREATMENT_RANK, boxesIn, decideTreatment, scanText, type Treatment, type TextScan } from "./text-scan";
-import { captionY, endingY, renderCaption, renderEnding, renderTitleBar } from "./text-image";
+import { captionY, endingY, renderCaption, renderEnding, renderSticker, renderTitleBar } from "./text-image";
 
 /**
  * 영상 렌더 엔진 (v0.9.51) — Vercel 함수 1번 안에서 끝낸다 (임시 폴더에서 만들고 지운다).
@@ -157,9 +158,15 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const sceneFiles: string[] = [];
     const sceneAudio: string[] = [];
     for (const [k, s] of scenes.entries()) {
-      const dur = audio[k].dur + C.minSpeechGapSec + (k === scenes.length - 1 ? C.tailSec : 0);
-      // 이 컷의 원본: 정한 것 → 안 되면 다른 원본 중 가장 깨끗한 것
-      const candidates = [s.sourceVideoId, ...[...sources.keys()].filter((id) => id !== s.sourceVideoId)].filter((x): x is string => Boolean(x && sources.has(x)));
+      const isLast = k === scenes.length - 1;
+      let dur = audio[k].dur + C.minSpeechGapSec + (isLast ? C.tailSec : 0);
+      // 엔딩(최저가 구매링크 + 화살표)은 2초 넘게 보이게 (v0.9.64)
+      if (isLast && job.plan.ending) dur = Math.max(dur, C.endingMinSec);
+      // 이 컷의 원본: 정한 것 → 안 되면 다른 원본 중 가장 깨끗한 것.
+      // AI 컷은 AI 로 정한 컷에만 쓴다 (글자 없는 AI 컷이 샤오홍슈 컷을 모두 가져가지 않게, v0.9.64)
+      const aiScene = isAiSource(s.sourceVideoId);
+      const others = [...sources.keys()].filter((id) => id !== s.sourceVideoId && (aiScene || !isAiSource(id)));
+      const candidates = [s.sourceVideoId, ...others].filter((x): x is string => Boolean(x && sources.has(x)));
       let best: { id: string; start: number; tr: Treatment } | null = null;
       for (const id of candidates) {
         const src = sources.get(id)!;
@@ -180,6 +187,17 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         }
         if (best?.tr.kind === "clean") break;
         if (best && id === s.sourceVideoId && TREATMENT_RANK[best.tr.kind] <= TREATMENT_RANK.blur) break;
+      }
+      // 샤오홍슈 원본을 하나도 쓸 수 없으면(받기 실패·글자를 못 가림) AI 컷으로 대신
+      if ((!best || best.tr.kind === "rejected") && !aiScene) {
+        const ai = [...sources.keys()].find((id) => isAiSource(id));
+        if (ai) {
+          const src = sources.get(ai)!;
+          const n = (usedRanges.get(ai) ?? []).length;
+          const maxStart = Math.max(0, src.duration - dur - 0.1);
+          best = { id: ai, start: maxStart > 0 ? (n * 1.7) % maxStart : 0, tr: { kind: "clean" } };
+          s.issue = candidates.length ? "샤오홍슈 원본의 글자를 가리지 못해 AI 컷으로 대신했습니다." : "샤오홍슈 원본을 받지 못해 AI 컷으로 대신했습니다.";
+        }
       }
       if (!best || best.tr.kind === "rejected") {
         // 모든 원본이 안 되면 첫 원본을 반복 없이 못 쓰므로 검수 필요로 (가장 덜 나쁜 구간)
@@ -259,7 +277,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const inputs: string[] = ["-i", base, "-i", narration];
     let idx = 2;
     const titlePng = path.join(dir, "title.png");
-    note(await renderTitleBar(titlePng, job.plan.topLine1, job.plan.topLine2), TOP_TITLE_TEMPLATE.font);
+    const ts = cleanTitleStyle(job.plan.titleStyle);
+    note(await renderTitleBar(titlePng, job.plan.topLine1, job.plan.topLine2, ts), ts.font);
     inputs.push("-loop", "1", "-i", titlePng);
     let chain = `[0:v][${idx}:v]overlay=0:0:shortest=0[v0]`;
     let last = "v0";
@@ -273,11 +292,32 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         note(await renderCaption(png, wrap(s.narration, CAPTION_TEMPLATE.maxCharsPerLine), cs), cs.font);
         inputs.push("-loop", "1", "-i", png);
         const en = `between(t,${s.start!.toFixed(3)},${(s.start! + s.duration!).toFixed(3)})`;
-        chain += `;[${last}][${idx}:v]overlay=0:${captionY()}:shortest=0:enable='${en}'[c${k}]`;
+        chain += `;[${last}][${idx}:v]overlay=0:${captionY(cleanCaptionStyle(job.plan.captionStyle))}:shortest=0:enable='${en}'[c${k}]`;
         last = `c${k}`;
         idx++;
       }
     }
+    // 주목 효과 (v0.9.64): 강조 컷 앞 1.4초, 통통 튀게. meme GIF 가 있으면 그것, 없으면 직접 그린 스티커
+    const memes = videoAssets.meme();
+    const attn = scenes.filter((s, k) => s.attention && k < scenes.length - 1);
+    for (const [n, s] of attn.entries()) {
+      const a = ATTENTION_CONFIG;
+      const t0 = s.start!;
+      const t1 = t0 + Math.min(a.showSec, s.duration!);
+      const bounce = `${a.y}-18*abs(sin(9*(t-${t0.toFixed(3)})))`;
+      if (memes.length) {
+        inputs.push("-ignore_loop", "0", "-i", memes[n % memes.length]);
+        chain += `;[${idx}:v]format=rgba,scale=${a.width}:-1[mm${n}];[${last}][mm${n}]overlay=${a.x}:'${bounce}':shortest=0:eof_action=pass:enable='between(t,${t0.toFixed(3)},${t1.toFixed(3)})'[at${n}]`;
+      } else {
+        const png = path.join(dir, `st${n}.png`);
+        await renderSticker(png, a.words[(s.index + n) % a.words.length], n % 2 ? 7 : -8);
+        inputs.push("-loop", "1", "-i", png);
+        chain += `;[${last}][${idx}:v]overlay=${a.x}:'${bounce}':shortest=0:enable='between(t,${t0.toFixed(3)},${t1.toFixed(3)})'[at${n}]`;
+      }
+      last = `at${n}`;
+      idx++;
+    }
+
     // 화살표 (제품 버튼 쪽으로 돌림)
     const arrow = videoAssets.arrow();
     const arrowScenes = scenes.filter((s) => s.arrow);

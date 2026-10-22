@@ -19,6 +19,8 @@ export interface VideoScene {
   sfx: string | null;
   /** 제품 버튼 화살표를 이 컷에 */
   arrow: boolean;
+  /** 주목 효과 스티커 (v0.9.64) */
+  attention?: boolean;
   /** 원본 영상 (reference_videos.id) */
   sourceVideoId: string | null;
   /** 사람이 고른 클립이면 자동 배치가 바꾸지 않는다 */
@@ -81,6 +83,8 @@ export interface VideoPlan {
   voiceStyle?: string;
   /** 자막 글꼴·색·크기 (v0.9.63) */
   captionStyle?: import("@/lib/video-production/config").CaptionStyle;
+  /** 상단 제목 글꼴·색·띠 (v0.9.64) */
+  titleStyle?: import("@/lib/video-production/config").TitleStyle;
   /** AI 컷 공통 프롬프트 (모든 AI 컷에 함께 넣는 큰 설명, v0.9.63) */
   aiPrompt?: string;
   /** Giphy 짤 (선택 기능, 저작권 확인 필요) — V1 은 자리만 */

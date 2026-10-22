@@ -5,7 +5,20 @@ import Link from "next/link";
 import { CalendarPlus, Check, Clapperboard, Download, Film, ImagePlus, Loader2, Play, RefreshCw, ScrollText, Sparkles, Video, Wand2 } from "lucide-react";
 import type { AiClip, VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { VIDEO_STATUS_LABEL, aiSourceId, isAiSource } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, CAPTION_COLORS, CAPTION_FONTS, CAPTION_SIZES, CAPTION_STROKES, DEFAULT_CAPTION_STYLE, estimateAiClipUsd, type CaptionStyle } from "@/lib/video-production/config";
+import {
+  AI_CLIP_CONFIG,
+  CAPTION_COLORS,
+  CAPTION_FONTS,
+  CAPTION_POSITIONS,
+  CAPTION_SIZES,
+  CAPTION_STROKES,
+  DEFAULT_CAPTION_STYLE,
+  DEFAULT_TITLE_STYLE,
+  TITLE_BAR_COLORS,
+  estimateAiClipUsd,
+  type CaptionStyle,
+  type TitleStyle,
+} from "@/lib/video-production/config";
 import { shrinkImage } from "@/lib/image-shrink";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
@@ -60,6 +73,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [aiCount, setAiCount] = useState<number>(AI_CLIP_CONFIG.defaultCount);
   const [voiceStyle, setVoiceStyle] = useState("shorts");
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
+  const [titleStyle, setTitleStyle] = useState<TitleStyle>(DEFAULT_TITLE_STYLE);
   const [aiPrompt, setAiPrompt] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
@@ -119,7 +133,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlanning(true);
     setError(null);
     try {
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, captionStyle, aiPrompt });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, captionStyle, titleStyle, aiPrompt });
       // 같은 대본으로 이미 만든 AI 컷이 있으면 이어서 쓴다 (다시 과금하지 않게)
       const saved = r.plan.aiClips?.length ? loadClips(clipKey(content.id, scriptIndex)) : null;
       if (saved && r.plan.aiClips && saved.length === r.plan.aiClips.length) r.plan.aiClips = saved;
@@ -306,6 +320,15 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                     에서 {content?.productId ? "이 제품을 연결해 " : ""}먼저 담아 주세요.
                   </p>
                 ) : (
+                  <>
+                  <div className="mb-1.5 flex gap-1.5" data-source-bulk>
+                    <Button size="sm" variant="ghost" onClick={() => setVideoIds(sourceVideos.map((v) => v.id))} disabled={videoIds.length === sourceVideos.length}>
+                      전체 선택
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setVideoIds([])} disabled={!videoIds.length}>
+                      전체 해제
+                    </Button>
+                  </div>
                   <ul className="max-h-72 space-y-1 overflow-y-auto" data-source-videos>
                     {sourceVideos.map((v) => {
                       const on = videoIds.includes(v.id);
@@ -322,6 +345,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                       );
                     })}
                   </ul>
+                  </>
                 )}
               </FormField>
               )}
@@ -354,6 +378,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   </div>
                 </div>
               )}
+              <TitleStylePicker value={titleStyle} onChange={setTitleStyle} />
               {captionsOn && <CaptionStylePicker value={captionStyle} onChange={setCaptionStyle} />}
               {!narrationOn && <p className="-mt-2 text-xs text-fg-subtle">음성이 없으면 컷 길이는 자막 글자 수로 정합니다 (배경음악·효과음은 그대로).</p>}
               {error && !plan && <Notice tone="warning">{error}</Notice>}
@@ -449,11 +474,11 @@ function PlanEditor({
       data-plan-editor
     >
       <div className="mb-4 overflow-hidden rounded-control border border-line">
-        <div className="bg-black px-4 py-3 text-center">
-          <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9 border-0 bg-transparent text-center text-lg font-bold text-white" aria-label="상단 제목 1줄" />
-          <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center font-bold text-[#C8FF00]" aria-label="상단 제목 2줄" />
+        <div className="px-4 py-3 text-center" style={{ background: plan.titleStyle?.bar && plan.titleStyle.bar !== "none" ? plan.titleStyle.bar : "#3f3f46" }}>
+          <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9 border-0 bg-transparent text-center text-lg font-bold" style={{ color: plan.titleStyle?.line1 ?? "#FFFFFF" }} aria-label="상단 제목 1줄" />
+          <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center font-bold" style={{ color: plan.titleStyle?.line2 ?? "#C8FF00" }} aria-label="상단 제목 2줄" />
         </div>
-        <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (고정 디자인 · 도현체). 선택한 제목: {plan.selectedTitle}</p>
+        <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일). 선택한 제목: {plan.selectedTitle}</p>
       </div>
       {clips.length > 0 && <AiClipPanel plan={plan} onChange={onChange} images={images} ready={videoAiReady} />}
       <ol className="space-y-1.5">
@@ -465,6 +490,17 @@ function PlanEditor({
               <span className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-fg-subtle">
                 {s.sfx && <Badge tone="info">효과음 {s.sfx}</Badge>}
                 {s.arrow && <Badge tone="brand">↓ 제품 버튼 화살표</Badge>}
+                {i < plan.scenes.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setScene(i, { attention: !s.attention })}
+                    className={cn("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset", s.attention ? "bg-warning-soft text-warning ring-warning/40" : "text-fg-subtle ring-line hover:bg-subtle")}
+                    title="강조 컷에 통통 튀는 주목 스티커 (assets/video/meme 에 GIF 가 있으면 GIF)"
+                    data-attention-toggle
+                  >
+                    {s.attention ? "✨ 주목 효과" : "+ 주목 효과"}
+                  </button>
+                )}
                 {i === plan.scenes.length - 1 && plan.ending && <Badge tone="danger">최저가 구매링크</Badge>}
               </span>
             </span>
@@ -826,6 +862,10 @@ function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange
         <SegmentedControl size="sm" value={value.size} onChange={(v) => set({ size: v })} options={CAPTION_SIZES.map((x) => ({ value: x.value, label: x.label }))} />
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">세로 위치</span>
+        <SegmentedControl size="sm" value={value.position ?? "lower"} onChange={(v) => set({ position: v })} options={CAPTION_POSITIONS.map((x) => ({ value: x.value, label: x.label }))} />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="w-14 text-xs text-fg-subtle">글자색</span>
         {CAPTION_COLORS.map((c) => (
           <button key={c} type="button" onClick={() => set({ color: c })} aria-label={`글자색 ${c}`} className={cn("size-6 rounded-full border", value.color === c ? "ring-2 ring-brand ring-offset-1" : "border-line")} style={{ background: c }} />
@@ -849,6 +889,58 @@ function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange
         {value.stroke !== "none" && <input type="color" value={value.stroke} onChange={(e) => set({ stroke: e.target.value.toUpperCase() })} aria-label="테두리색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />}
       </div>
       <p className="text-[11px] text-fg-subtle">미리보기는 색만 맞춘 것입니다. 글꼴은 영상에 고른 글꼴로 들어갑니다.</p>
+    </div>
+  );
+}
+
+/** 상단 제목 스타일 (v0.9.64): 글꼴·1줄 색·2줄 색·띠 색 */
+function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v: TitleStyle) => void }) {
+  const set = (patch: Partial<TitleStyle>) => onChange({ ...value, ...patch });
+  const swatches = (key: "line1" | "line2") => (
+    <>
+      {CAPTION_COLORS.map((c) => (
+        <button key={c} type="button" onClick={() => set({ [key]: c })} aria-label={`${key === "line1" ? "1줄" : "2줄"} 색 ${c}`} className={cn("size-6 rounded-full border", value[key] === c ? "ring-2 ring-brand ring-offset-1" : "border-line")} style={{ background: c }} />
+      ))}
+      <input type="color" value={value[key]} onChange={(e) => set({ [key]: e.target.value.toUpperCase() })} aria-label={`${key === "line1" ? "1줄" : "2줄"} 색 직접 고르기`} className="size-7 cursor-pointer rounded border border-line bg-transparent" />
+    </>
+  );
+  const outline = value.bar === "none" ? "-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000" : "none";
+  return (
+    <div className="space-y-2.5 rounded-control border border-line p-3" data-title-style>
+      <p className="text-[13px] font-semibold text-fg">상단 제목 스타일</p>
+      <div className="rounded py-2 text-center font-black" style={{ background: value.bar === "none" ? "linear-gradient(#71717a,#3f3f46)" : value.bar }}>
+        <p style={{ color: value.line1, textShadow: outline }} className="text-[17px]">
+          제품명 · 1줄
+        </p>
+        <p style={{ color: value.line2, textShadow: outline }} className="text-[14px]">
+          화면용 짧은 제목 · 2줄
+        </p>
+      </div>
+      <Select value={value.font} options={CAPTION_FONTS.map((f) => ({ value: f.value, label: f.label }))} onChange={(e) => set({ font: e.target.value as TitleStyle["font"] })} aria-label="제목 글꼴" />
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">1줄 색</span>
+        {swatches("line1")}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">2줄 색</span>
+        {swatches("line2")}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="w-14 text-xs text-fg-subtle">띠 색</span>
+        {TITLE_BAR_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => set({ bar: c })}
+            aria-label={c === "none" ? "띠 없음" : `띠 색 ${c}`}
+            className={cn("flex size-6 items-center justify-center rounded-full border text-[9px] text-fg-subtle", value.bar === c ? "ring-2 ring-brand ring-offset-1" : "border-line")}
+            style={c === "none" ? undefined : { background: c }}
+          >
+            {c === "none" ? "없음" : ""}
+          </button>
+        ))}
+        {value.bar !== "none" && <input type="color" value={value.bar} onChange={(e) => set({ bar: e.target.value.toUpperCase() })} aria-label="띠 색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />}
+      </div>
     </div>
   );
 }

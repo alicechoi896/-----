@@ -108,3 +108,11 @@ describe("영상 자동 제작", () => {
     expect(out.file.subarray(4, 8).toString()).toBe("ftyp");
   }, 120_000);
 });
+
+describe("주목 효과·엔딩 (v0.9.64)", async () => {
+  const { attentionSceneIndexes, ATTENTION_CONFIG } = await import("@/lib/video-production/config");
+  it("효과음 컷 중 첫·마지막·화살표 컷을 빼고 최대 4개", () => {
+    expect(attentionSceneIndexes(12, [0, 2, 4, 6, 8, 11], [4])).toEqual([2, 6, 8]);
+    expect(attentionSceneIndexes(20, [0, 2, 4, 6, 8, 10, 12, 14, 16], [])).toHaveLength(ATTENTION_CONFIG.maxPerVideo);
+  });
+});

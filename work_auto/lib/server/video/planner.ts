@@ -1,7 +1,7 @@
 import "server-only";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoPlan, VideoScene, VideoSourceMode } from "@/lib/types/video-production";
-import { CAPTION_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, arrowSceneIndexes, sfxSceneIndexes } from "@/lib/video-production/config";
+import { CAPTION_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, arrowSceneIndexes, attentionSceneIndexes, sfxSceneIndexes } from "@/lib/video-production/config";
 import { getAIProvider } from "../providers/registry";
 import { videoAssets, sfxName } from "./assets";
 
@@ -149,6 +149,7 @@ export async function buildPlan(input: {
   const sfxFiles = videoAssets.sfx();
   const sfxAt = new Set(sfxSceneIndexes(phrases.length, emphasis));
   const arrowAt = new Set(arrowSceneIndexes(phrases.length));
+  const attentionAt = new Set(attentionSceneIndexes(phrases.length, [...sfxAt], [...arrowAt]));
   let sfxTurn = 0;
   const scenes: VideoScene[] = phrases.map((narration, index) => ({
     index,
@@ -156,6 +157,7 @@ export async function buildPlan(input: {
     // 같은 효과음이 연달아 나오지 않게 돌아가며
     sfx: sfxAt.has(index) && sfxFiles.length ? sfxName(sfxFiles[sfxTurn++ % sfxFiles.length]) : null,
     arrow: arrowAt.has(index),
+    attention: attentionAt.has(index),
     sourceVideoId: null,
   }));
   const bgm = videoAssets.bgm();

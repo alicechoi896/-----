@@ -291,6 +291,7 @@ export const api = {
       aiCount?: number;
       voiceStyle?: string;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
+      titleStyle?: import("@/lib/video-production/config").TitleStyle;
       aiPrompt?: string;
     }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),

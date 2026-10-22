@@ -18,6 +18,8 @@ export const VIDEO_RENDER_CONFIG = {
   minSpeechGapSec: 0.1,
   /** 마지막 컷 뒤 여유 (엔딩 GIF 가 보이게) */
   tailSec: 0.6,
+  /** 엔딩(최저가 구매링크 + 화살표) 컷 최소 길이 — 화살표가 2초 넘게 보이게 (v0.9.64) */
+  endingMinSec: 2.5,
   /** 음성이 없을 때(데모·TTS 미연결) 글자 수로 길이 추정: 초당 글자 */
   charsPerSec: 7,
 
@@ -95,6 +97,27 @@ export function arrowSceneIndexes(count: number): number[] {
   if (count >= 5) out.add(3);
   if (count >= 10) out.add(Math.round(count * 0.6));
   return [...out].filter((i) => i < count - 1);
+}
+
+/**
+ * 주목 효과 (v0.9.64): 강조 컷에 통통 튀는 스티커 (직접 그림 — 저작권 걱정 없음).
+ * assets/video/meme 에 GIF 가 있으면 그 GIF 를 먼저 쓴다. 화면 오른쪽 위 (상단 제목 아래), 컷 앞 1.4초
+ */
+export const ATTENTION_CONFIG = {
+  maxPerVideo: 4,
+  showSec: 1.4,
+  x: 650,
+  y: 400,
+  width: 360,
+  words: ["주목!", "핵심", "꿀팁", "체크!", "대박", "진짜?", "필수", "이거!"],
+} as const;
+
+/** 주목 효과 넣을 컷: 효과음 컷 중 첫 컷·마지막 컷·화살표 컷을 빼고 고르게 (최대 4) */
+export function attentionSceneIndexes(count: number, sfx: number[], arrows: number[]): number[] {
+  const pool = sfx.filter((i) => i > 0 && i < count - 1 && !arrows.includes(i));
+  if (pool.length <= ATTENTION_CONFIG.maxPerVideo) return pool;
+  const step = pool.length / ATTENTION_CONFIG.maxPerVideo;
+  return Array.from({ length: ATTENTION_CONFIG.maxPerVideo }, (_, k) => pool[Math.floor(k * step)]);
 }
 
 /** 효과음 넣을 컷: 강조 컷 우선, 약 2컷당 1회, 연속 금지, 첫 컷(Hook)은 항상 */
@@ -190,18 +213,49 @@ export const CAPTION_SIZES = [
   { value: "m", label: "보통", size: 74 },
   { value: "l", label: "크게", size: 88 },
 ] as const;
+/** 자막 세로 위치 (화면 높이 비율, 글자 가운데 기준). 가로는 가운데 고정 (v0.9.64) */
+export const CAPTION_POSITIONS = [
+  { value: "center", label: "가운데", y: 0.5 },
+  { value: "lower", label: "살짝 아래", y: 0.62 },
+  { value: "bottom", label: "아래", y: 0.72 },
+] as const;
 export interface CaptionStyle {
   font: (typeof CAPTION_FONTS)[number]["value"];
   color: string;
   /** 테두리 색 (none = 테두리 없음) */
   stroke: string;
   size: (typeof CAPTION_SIZES)[number]["value"];
+  position?: (typeof CAPTION_POSITIONS)[number]["value"];
 }
-export const DEFAULT_CAPTION_STYLE: CaptionStyle = { font: "jua", color: "#FFFFFF", stroke: "#000000", size: "m" };
+export const DEFAULT_CAPTION_STYLE: CaptionStyle = { font: "jua", color: "#FFFFFF", stroke: "#000000", size: "m", position: "lower" };
+export const captionCenterY = (style?: CaptionStyle | null) => (CAPTION_POSITIONS.find((p) => p.value === style?.position) ?? CAPTION_POSITIONS[1]).y;
+
+/** 상단 제목 스타일 (v0.9.64): 글꼴·1줄 색·2줄 색·띠 색 */
+export const TITLE_BAR_COLORS = ["#000000", "#FFFFFF", "#1E3A8A", "#B91C1C", "#FFE94D", "none"] as const;
+export interface TitleStyle {
+  font: (typeof CAPTION_FONTS)[number]["value"];
+  line1: string;
+  line2: string;
+  /** 띠 색 (none = 띠 없이 영상 위에 글자 + 테두리) */
+  bar: string;
+}
+export const DEFAULT_TITLE_STYLE: TitleStyle = { font: "dohyeon", line1: "#FFFFFF", line2: "#C8FF00", bar: "#000000" };
 const HEX = /^#[0-9a-fA-F]{6}$/;
+export function cleanTitleStyle(raw: unknown): TitleStyle {
+  const r = (raw ?? {}) as Partial<TitleStyle>;
+  const hex = (v: unknown, d: string) => (typeof v === "string" && HEX.test(v) ? v.toUpperCase() : d);
+  return {
+    font: CAPTION_FONTS.some((f) => f.value === r.font) ? (r.font as TitleStyle["font"]) : DEFAULT_TITLE_STYLE.font,
+    line1: hex(r.line1, DEFAULT_TITLE_STYLE.line1),
+    line2: hex(r.line2, DEFAULT_TITLE_STYLE.line2),
+    bar: r.bar === "none" ? "none" : hex(r.bar, DEFAULT_TITLE_STYLE.bar),
+  };
+}
+
 export function cleanCaptionStyle(raw: unknown): CaptionStyle {
   const r = (raw ?? {}) as Partial<CaptionStyle>;
   return {
+    position: CAPTION_POSITIONS.some((p) => p.value === r.position) ? r.position : DEFAULT_CAPTION_STYLE.position,
     font: CAPTION_FONTS.some((f) => f.value === r.font) ? (r.font as CaptionStyle["font"]) : DEFAULT_CAPTION_STYLE.font,
     color: typeof r.color === "string" && HEX.test(r.color) ? r.color.toUpperCase() : DEFAULT_CAPTION_STYLE.color,
     stroke: r.stroke === "none" ? "none" : typeof r.stroke === "string" && HEX.test(r.stroke) ? r.stroke.toUpperCase() : DEFAULT_CAPTION_STYLE.stroke,
