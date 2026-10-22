@@ -123,11 +123,16 @@ function contextBlocks(ctx: GenerationContext): string[] {
       );
     }
   }
-  // 대본 포맷 캡션 (v0.9.54): 설명글·캡션의 말투·구성 참고 (무작위 3개, 그대로 쓰지 않는다)
+  // 대본 포맷 캡션 (v0.9.66): 설명글은 캡션을 100% 따른다 — 캡션 하나의 구성·길이·말투·이모지·해시태그 방식 그대로, 내용만 바꿈
   const caps = ctx.scriptFormat?.captions ?? [];
   if (caps.length) {
-    const picked = [...caps].sort(() => Math.random() - 0.5).slice(0, 3);
-    blocks.push(block("대본 포맷 > 잘된 캡션 (설명글·캡션의 말투·길이·해시태그 구성만 참고 — 문장·제품명을 그대로 쓰지 않는다)", picked.map((c, i) => `(${i + 1}) ${c.slice(0, 300).replace(/\n/g, " / ")}`)));
+    const picked = sampleList([...caps], 5);
+    blocks.push(
+      block(`대본 포맷 > 잘된 캡션 ${picked.length}개 (설명글은 100% 이 캡션 방식대로)`, [
+        "설명글(description)은 아래 캡션 중 하나를 골라 그 문단 수·줄바꿈·길이·말투·말끝·이모지 쓰는 법·해시태그 개수와 위치를 100% 그대로 따른다. 바꾸는 것은 제품·주제·장점·숫자 같은 내용뿐이다. 다른 구성을 새로 만들지 않는다 (문장 통째 복사는 금지).",
+        ...picked.map((c, i) => `[캡션 ${i + 1}]\n${c.slice(0, 600)}`),
+      ]),
+    );
   }
   // 대본 포맷 Hook·CTA (v0.9.65): 포맷이 크면 표본을 늘리고, 후보의 80% 를 포맷 문장 구조 그대로
   if (ctx.scriptFormat && ctx.scriptFormatUse === "full") {
@@ -267,7 +272,9 @@ export function renderContentPrompt(
   if (config.outputs.some((o) => o.key === "thumbnailTitles"))
     userInput.push(`섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 8~16자, 줄바꿈 1번까지, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 후보의 ${Math.round(formatStrength(ctx.scriptFormat).ratio * 100) || 50}% 이상은 그 구조·길이·리듬을 그대로 따라 단어만 바꾼다 (문장 통째 복사 금지).`);
   // 설명글: 설명란에 그대로 붙여 넣을 글만 (v0.9.50)
-  if (config.outputs.some((o) => o.key === "description"))
+  if (config.outputs.some((o) => o.key === "description") && ctx.scriptFormat?.captions?.length)
+    userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. 구성·길이·말투·이모지·해시태그는 [대본 포맷 > 잘된 캡션] 중 하나를 100% 그대로 따른다 (아래 기본 구성 대신). 안내 문장·항목 이름·괄호 메모는 쓰지 않는다.");
+  else if (config.outputs.some((o) => o.key === "description"))
     userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. '이 설명은 ~입니다', '설명글:', '핵심 요약:', '추천 대상:' 같은 안내·항목 이름·괄호 메모를 쓰지 않는다. 시청자에게 바로 말하듯 제품(주제) 소개 → 장점·확인할 점 순서로 3~6문단, 문단 사이는 빈 줄, 마지막 문단은 CTA(행동 유도)로 끝낸다.");
 
   const user = [
