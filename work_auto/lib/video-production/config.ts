@@ -122,7 +122,7 @@ export const VIDEO_SCRIPT_FEATURES: Record<VideoChannel, string[]> = {
 /**
  * AI 컷 (v0.9.60) — Kie AI (docs/VIDEO_PRODUCTION.md). 모델을 바꾸려면 여기만 고친다.
  * - product: Wan 2.6 Flash 이미지→영상 (입력 사진 비율 그대로 → 서버가 9:16 사진을 만들어 보낸다), 5초 720p 소리 없음 = 20크레딧(약 $0.10)
- * - text: Bytedance V1 Pro 글→영상 (9:16 설정 있음), 5초 720p — 가격은 Kie 가격표 확인 필요 (끝나면 실제 크레딧 표시)
+ * - text: Grok Imagine Video 1.5 글→영상 (9:16), 5초 720p = 초당 4.5크레딧 → 22.5크레딧(약 $0.11). 소리는 항상 만들어지지만 렌더할 때 뺀다 (v0.9.61)
  * 소리는 만들지 않는다 (AI 음성·배경음악을 우리가 넣는다).
  */
 export const AI_CLIP_CONFIG = {
@@ -130,7 +130,7 @@ export const AI_CLIP_CONFIG = {
   defaultCount: 3,
   maxCount: 10,
   product: { model: "wan/2-6-flash-image-to-video", duration: "5", resolution: "720p", credits: 20 as number | null },
-  text: { model: "bytedance/v1-pro-text-to-video", duration: "5", resolution: "720p", aspectRatio: "9:16", credits: null as number | null },
+  text: { model: "grok-imagine-video-1-5-preview", duration: 5, resolution: "720p", aspectRatio: "9:16", credits: 22.5 as number | null },
   /** 9:16 입력 사진 크기 */
   imageWidth: 720,
   imageHeight: 1280,

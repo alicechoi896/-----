@@ -38,3 +38,24 @@ export function outlierScore(views: number, recentViews: number[]): OutlierScore
 }
 
 export const isOutlierHit = (s: OutlierScore | null | undefined) => Boolean(s && s.score >= OUTLIER_CONFIG.hitRatio);
+
+/**
+ * 채널 최근 영상 배수 (v0.9.61): Shorts·롱폼을 따로 중앙값을 내고, 각 영상 조회수 ÷ 같은 형식 중앙값.
+ * 표본이 minSample 보다 적은 형식은 배수 없음.
+ */
+export function channelRatios<T extends { views: number | null; format: "shorts" | "long" }>(
+  videos: T[],
+): { videos: (T & { ratio: number | null })[]; median: { shorts: number | null; long: number | null; shortsSample: number; longSample: number } } {
+  const of = (f: "shorts" | "long") => videos.filter((v) => v.format === f && v.views != null).map((v) => v.views as number);
+  const s = of("shorts");
+  const l = of("long");
+  const ms = s.length >= OUTLIER_CONFIG.minSample ? median(s) : null;
+  const ml = l.length >= OUTLIER_CONFIG.minSample ? median(l) : null;
+  return {
+    videos: videos.map((v) => {
+      const m = v.format === "shorts" ? ms : ml;
+      return { ...v, ratio: m && v.views != null ? Math.round((v.views / m) * 10) / 10 : null };
+    }),
+    median: { shorts: ms == null ? null : Math.round(ms), long: ml == null ? null : Math.round(ml), shortsSample: s.length, longSample: l.length },
+  };
+}

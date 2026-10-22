@@ -264,6 +264,24 @@ export const SHOTS = [
     },
   },
   {
+    id: "04-yt-channel",
+    url: "/youtube/trends",
+    viewport: { width: 1280, height: 1300 },
+    prepare: async (p) => {
+      await p.locator("main select").nth(1).selectOption("");
+      await p.locator("[data-rising]").first().click();
+      await p.locator("[data-channel-open]").first().waitFor({ timeout: 20_000 });
+      await p.locator("[data-channel-open]").first().click();
+      await p.locator("[data-channel-hits]").first().waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(400);
+    },
+    marks: {
+      1: (p) => p.locator("[data-channel-stats]").first(),
+      2: (p) => p.locator("[data-channel-median]").first(),
+      3: (p) => p.locator("[data-channel-filter]").first(),
+    },
+  },
+  {
     id: "04-yt-outlier",
     url: "/youtube/trends",
     prepare: async (p) => {

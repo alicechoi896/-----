@@ -100,6 +100,48 @@ export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
     return Array.from({ length: count }, (_, i) => `${channelId}-recent-${i}`);
   }
 
+  /** 데모: 6개월 동안 쇼츠·롱폼 섞어 36개, 몇 개는 크게 뜸 */
+  async getChannelInsight(channelId: string, sinceDays: number) {
+    const now = Date.now();
+    const titles = ["사기 전에 꼭 볼 3가지", "이거 하나로 끝", "솔직 후기 한 달 써 봄", "가성비 끝판왕 비교", "모르면 손해 보는 꿀팁", "광고 아님 내돈내산"];
+    const videos = Array.from({ length: 36 }, (_, i) => {
+      const shorts = i % 3 !== 0;
+      const base = seededNumber(`${channelId}-v${i}`, 6_000, 14_000) * (shorts ? 1 : 2);
+      const hit = i % 7 === 2 ? 4.5 : i % 11 === 5 ? 2.2 : i % 5 === 1 ? 1.6 : 1;
+      const views = Math.round(base * hit);
+      return {
+        videoId: `${channelId.slice(-6)}v${String(i).padStart(3, "0")}`,
+        title: `${titles[i % titles.length]} #${i + 1}`,
+        url: `https://www.youtube.com/watch?v=demo${i}`,
+        thumbnailUrl: null,
+        publishedAt: new Date(now - Math.round(((i + 1) * sinceDays * 86_400_000) / 38)).toISOString(),
+        durationSec: shorts ? 30 + (i % 4) * 10 : 420 + (i % 5) * 60,
+        format: (shorts ? "shorts" : "long") as "shorts" | "long",
+        views,
+        likes: Math.round(views * 0.03),
+        comments: Math.round(views * 0.002),
+        tags: ["추천", "리뷰", "꿀템"],
+      };
+    });
+    return {
+      channel: {
+        channelId,
+        title: "데모 채널",
+        handle: "@demo-channel",
+        description: "데모 모드의 예시 채널입니다.",
+        thumbnailUrl: null,
+        subscribers: seededNumber(channelId, 12_000, 480_000),
+        videoCount: 214,
+        totalViews: 38_000_000,
+        createdAt: "2021-03-02T00:00:00Z",
+        url: "https://www.youtube.com/",
+      },
+      videos,
+      truncated: false,
+      units: 3,
+    };
+  }
+
   async getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>> {
     const hours = Math.floor(Date.now() / 3_600_000);
     return Object.fromEntries(

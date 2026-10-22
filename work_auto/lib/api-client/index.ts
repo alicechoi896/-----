@@ -152,6 +152,8 @@ export const api = {
     /** 아웃라이어 점수 (누를 때만, YouTube 할당량 사용) */
     outliers: (items: { videoId: string; channelId: string; views: number }[]) =>
       request<{ scores: Record<string, OutlierScore | null>; unitsUsed: number; channels: number; cachedChannels: number }>("/api/trends/youtube/outliers", { method: "POST", body: json({ items }) }),
+    /** 채널 정보 · 최근 6개월 뜬 영상 (누를 때만, 30분 기억) */
+    youtubeChannel: (channelId: string) => request<import("@/lib/types/youtube-channel").YouTubeChannelInsight>(`/api/trends/youtube/channel${qs({ channelId })}`),
     suggestTopics: (videos: YouTubeTrendItem[], keywords: string[]) =>
       request<{ topics: YouTubeTopicSuggestion[]; provider: string }>("/api/trends/youtube/topics", {
         method: "POST",

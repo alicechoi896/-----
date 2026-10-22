@@ -20,6 +20,7 @@ export function VideoDetailDrawer({
   onClose,
   onToggleSave,
   onKeywordClick,
+  onChannelClick,
 }: {
   item: YouTubeTrendItem | null;
   saved: boolean;
@@ -27,6 +28,8 @@ export function VideoDetailDrawer({
   onClose: () => void;
   onToggleSave: (item: YouTubeTrendItem) => void;
   onKeywordClick: (keyword: string) => void;
+  /** 채널 이름 → 채널 정보·최근 6개월 뜬 영상 (v0.9.61) */
+  onChannelClick?: (item: YouTubeTrendItem) => void;
 }) {
   // 영상이 바뀌면 key 로 내부 상태를 새로 만든다
   return (
@@ -43,6 +46,7 @@ export function VideoDetailDrawer({
           savedAnalysis={savedAnalysis ?? null}
           onToggleSave={onToggleSave}
           onKeywordClick={onKeywordClick}
+          onChannelClick={onChannelClick}
         />
       )}
     </Drawer>
@@ -55,12 +59,14 @@ function DetailBody({
   savedAnalysis,
   onToggleSave,
   onKeywordClick,
+  onChannelClick,
 }: {
   item: YouTubeTrendItem;
   saved: boolean;
   savedAnalysis: YouTubeVideoAnalysis | null;
   onToggleSave: (item: YouTubeTrendItem) => void;
   onKeywordClick: (keyword: string) => void;
+  onChannelClick?: (item: YouTubeTrendItem) => void;
 }) {
   const [analysis, setAnalysis] = useState<YouTubeVideoAnalysis | null>(savedAnalysis);
   const [analyzing, setAnalyzing] = useState(false);
@@ -98,7 +104,13 @@ function DetailBody({
             <Badge tone="neutral">{item.category}</Badge>
             <Badge tone="neutral">길이 {formatDuration(item.durationSec)}</Badge>
           </div>
-          <p className="font-medium text-fg">{item.channelName}</p>
+          {onChannelClick ? (
+            <button type="button" onClick={() => onChannelClick(item)} className="font-medium text-fg hover:text-brand hover:underline" title="채널 정보 · 최근 6개월 뜬 영상">
+              {item.channelName} ›
+            </button>
+          ) : (
+            <p className="font-medium text-fg">{item.channelName}</p>
+          )}
           <p className="text-fg-subtle">구독자 {formatNumber(item.channelSubscribers)}명</p>
           <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline">
             YouTube 에서 보기 <ExternalLink className="size-3.5" />

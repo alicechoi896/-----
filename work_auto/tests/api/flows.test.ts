@@ -541,6 +541,19 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(tk.items.some((r) => r.plays !== null)).toBe(true);
   });
 
+  it("채널 정보·최근 6개월 뜬 영상: 중앙값 배수, 같은 채널 30분 기억(0 units)", async ({ skip }) => {
+    if (!reachable) skip();
+    type I = { channel: { title: string; subscribers: number | null }; videos: { ratio: number | null; format: string }[]; median: { shorts: number | null; long: number | null }; units: number; sinceDays: number };
+    const a = (await j<I>("/api/trends/youtube/channel?channelId=UCdemoChannel000000000001")).data;
+    expect(a.sinceDays).toBe(180);
+    expect(a.units).toBeGreaterThan(0);
+    expect(a.median.shorts).toBeGreaterThan(0);
+    expect(a.videos.some((v) => (v.ratio ?? 0) >= 3)).toBe(true);
+    expect(a.videos.some((v) => (v.ratio ?? 0) >= 1.5 && (v.ratio ?? 0) < 2)).toBe(true);
+    expect((await j<I>("/api/trends/youtube/channel?channelId=UCdemoChannel000000000001")).data.units).toBe(0);
+    expect((await j<I>("/api/trends/youtube/channel?channelId=../x")).ok).toBe(false);
+  });
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

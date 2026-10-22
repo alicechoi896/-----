@@ -31,6 +31,13 @@ YouTube 트렌드 찾기 › 트렌드 영상 표에서 **[아웃라이어 점�
 - `POST /api/trends/youtube/outliers` { items: [{ videoId, channelId, views }] } → `requireAccess("yt-trends")`
 - `YouTubeTrendProvider.getChannelRecentVideoIds()`: 실제 API와 데모(가짜 ID 15개)
 
+## 채널 정보 · 최근 6개월 뜬 영상 (v0.9.61)
+
+- 트렌드 표·영상 상세의 **채널 이름**을 누르면 `ChannelDrawer` (features/youtube-trends) → `GET /api/trends/youtube/channel?channelId=`
+- `YouTubeTrendProvider.getChannelInsight(channelId, 180)`: channels.list 1 + 업로드 재생목록 playlistItems.list 페이지당 1 (최신순, 180일보다 오래된 영상이 나오면 멈춤, 최대 4페이지 = 200개) + videos.list 50개당 1 → **약 3~9 units** (돈 0, 하루 무료 할당량 안)
+- `channelRatios()` (lib/domain/outlier.ts): **Shorts·롱폼 따로 조회수 중앙값**(표본 5개 이상), 영상마다 배수. 1.5·2·3배 거르기는 화면에서 (추가 호출 없음)
+- 같은 채널은 서버 메모리 30분 기억 (공개 정보라 사용자 사이에 같이 씀, 0 units), 동시 요청 1번. 로그 `[YtChannel]`. 호출 한도 `youtube-outlier`
+
 ## 한계
 
 - 업로드 목록에는 쇼츠와 롱폼이 섞여 있어, 둘을 다 올리는 채널은 점수가 덜 정확합니다.

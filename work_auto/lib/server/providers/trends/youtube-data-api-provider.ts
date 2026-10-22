@@ -341,6 +341,90 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     return (res.items ?? []).map((i) => i.contentDetails?.videoId ?? "").filter(Boolean);
   }
 
+  /**
+   * 채널 정보 + 최근 sinceDays 일 업로드 (v0.9.61). 할당량: channels.list 1 + playlistItems.list 페이지당 1 (최대 4) + videos.list 50개당 1 (최대 4)
+   * 업로드 재생목록은 최신순이라 기간보다 오래된 영상이 나오면 멈춘다.
+   */
+  async getChannelInsight(channelId: string, sinceDays: number) {
+    if (!/^UC[\w-]{22}$/.test(channelId)) throw new AppError("VALIDATION", "채널 ID 가 올바르지 않습니다.");
+    let units = 0;
+    const ch = await this.get<{ items?: { id: string; snippet?: { title?: string; description?: string; customUrl?: string; publishedAt?: string; thumbnails?: Record<string, { url?: string }> }; statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean; videoCount?: string; viewCount?: string } }[] }>("channels", {
+      part: "snippet,statistics",
+      id: channelId,
+    });
+    units++;
+    const c = ch.items?.[0];
+    if (!c) throw new AppError("NOT_FOUND", "채널을 찾을 수 없습니다.", 404);
+    const since = Date.now() - sinceDays * 86_400_000;
+    const ids: string[] = [];
+    let page: string | undefined;
+    let truncated = false;
+    for (let i = 0; i < 4; i++) {
+      const res = await this.get<{ nextPageToken?: string; items?: { contentDetails?: { videoId?: string; videoPublishedAt?: string } }[] }>("playlistItems", {
+        part: "contentDetails",
+        playlistId: `UU${channelId.slice(2)}`,
+        maxResults: 50,
+        pageToken: page,
+      }).catch((e) => {
+        if (e instanceof AppError && (e.code === "YOUTUBE_QUOTA" || e.code.startsWith("YOUTUBE_KEY"))) throw e;
+        return { nextPageToken: undefined, items: [] };
+      });
+      units++;
+      let older = false;
+      for (const it of res.items ?? []) {
+        const at = Date.parse(it.contentDetails?.videoPublishedAt ?? "");
+        if (at && at < since) {
+          older = true;
+          continue;
+        }
+        if (it.contentDetails?.videoId) ids.push(it.contentDetails.videoId);
+      }
+      page = res.nextPageToken;
+      if (older || !page) break;
+      if (i === 3) truncated = true;
+    }
+    const videos: Omit<import("@/lib/types/youtube-channel").YouTubeChannelVideo, "ratio">[] = [];
+    for (let i = 0; i < ids.length; i += 50) {
+      const res = await this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: ids.slice(i, i + 50).join(","), maxResults: 50 });
+      units++;
+      for (const v of res.items) {
+        const durationSec = parseIsoDuration(v.contentDetails?.duration ?? "");
+        const num = (x?: string) => (x == null ? null : Number(x));
+        videos.push({
+          videoId: v.id,
+          title: v.snippet.title,
+          url: durationSec && durationSec <= SHORTS_MAX_SEC ? `https://www.youtube.com/shorts/${v.id}` : `https://www.youtube.com/watch?v=${v.id}`,
+          thumbnailUrl: v.snippet.thumbnails?.medium?.url ?? v.snippet.thumbnails?.default?.url ?? null,
+          publishedAt: v.snippet.publishedAt,
+          durationSec,
+          format: durationSec > 0 && durationSec <= SHORTS_MAX_SEC ? "shorts" : "long",
+          views: num(v.statistics?.viewCount),
+          likes: num(v.statistics?.likeCount),
+          comments: num(v.statistics?.commentCount),
+          tags: (v.snippet.tags ?? []).slice(0, 15),
+        });
+      }
+    }
+    const thumbs = c.snippet?.thumbnails ?? {};
+    return {
+      channel: {
+        channelId,
+        title: c.snippet?.title ?? "",
+        handle: c.snippet?.customUrl ?? null,
+        description: (c.snippet?.description ?? "").slice(0, 400),
+        thumbnailUrl: thumbs.medium?.url ?? thumbs.default?.url ?? null,
+        subscribers: c.statistics?.hiddenSubscriberCount ? null : c.statistics?.subscriberCount != null ? Number(c.statistics.subscriberCount) : null,
+        videoCount: c.statistics?.videoCount != null ? Number(c.statistics.videoCount) : null,
+        totalViews: c.statistics?.viewCount != null ? Number(c.statistics.viewCount) : null,
+        createdAt: c.snippet?.publishedAt ?? null,
+        url: c.snippet?.customUrl ? `https://www.youtube.com/${c.snippet.customUrl}` : `https://www.youtube.com/channel/${channelId}`,
+      },
+      videos,
+      truncated,
+      units,
+    };
+  }
+
   /** 영상 ID 로 트렌드 항목 1개 조회 (북마크·생성 화면의 참고 트렌드용, 2 units) */
   async getTrendItem(videoId: string): Promise<YouTubeTrendItem | null> {
     const res = await this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: videoId });

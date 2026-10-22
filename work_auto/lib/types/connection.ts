@@ -46,6 +46,6 @@ export interface ProviderCredentialMap {
   brightdata: { apiKey: string };
   /** 인스타그램 해시태그 검색 (v0.9.57, Meta 공식 Instagram Graph API — 무료, 7일에 해시태그 30개). apiKey = 액세스 토큰 */
   "meta-instagram": { apiKey: string; igUserId: string };
-  /** AI 영상 (v0.9.60, Kie AI — Wan·Bytedance 등). 1크레딧 = $0.005 */
+  /** AI 영상 (v0.9.60, Kie AI — Wan·Grok Imagine 등). 1크레딧 = $0.005 */
   kie: { apiKey: string };
 }

@@ -209,3 +209,9 @@
 |---|---|---|
 | POST | `/api/video-production/ai-clips` { plan, clientRequestId } | AI 컷 만들기 (Kie, 안 만든 컷 1개 = 1회 과금) |
 | POST | `/api/video-production/ai-clips/status` { clips, channelId } | AI 컷 상태 (무료) |
+
+## 채널 정보 (v0.9.61)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/trends/youtube/channel?channelId=` | 채널 정보 + 최근 6개월 영상·중앙값 배수 (약 3~9 units, 30분 기억) |

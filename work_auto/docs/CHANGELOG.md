@@ -2,6 +2,15 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.61] - 2026-10-22: 채널 정보·최근 6개월 뜬 영상 · AI 컷 글 → 장면 모델 Grok Imagine Video 1.5
+
+### 추가
+- YouTube 트렌드 찾기: **채널 이름을 누르면 채널 정보**(구독자·전체 영상·최근 6개월 업로드·개설일)와 **최근 6개월 뜬 영상** — Shorts·롱폼 따로 조회수 중앙값, **1.5 / 2 / 3배 이상** 고르기, 영상마다 스크랩·대본 포맷 담기·영상 만들기. 약 3~9 units, 같은 채널 30분 기억 (docs/OUTLIER_SCORE.md)
+- `GET /api/trends/youtube/channel`
+
+### 변경
+- 글 → 장면: Bytedance V1 Pro → **Grok Imagine Video 1.5** (9:16 5초 720p, 약 $0.11 — 가격을 미리 보여 줌). 제품 사진 → 움직임은 Wan 2.6 Flash 그대로
+
 ## [0.9.60] - 2026-10-21: 영상 자동 제작 — AI 컷 (Kie AI)
 
 ### 추가

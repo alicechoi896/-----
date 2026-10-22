@@ -111,7 +111,8 @@ export class KieVideoProvider implements VideoAIProvider {
 
   async createTextClip({ prompt }: { prompt: string }) {
     const c = AI_CLIP_CONFIG.text;
-    return this.create(c.model, { prompt: prompt.slice(0, 2000), aspect_ratio: c.aspectRatio, resolution: c.resolution, duration: c.duration, camera_fixed: false, seed: -1 });
+    // Grok Imagine Video 1.5: 사진 없이 보내면 글 → 영상 (prompt 최대 4096자, duration 1~15초)
+    return this.create(c.model, { prompt: prompt.slice(0, 4000), aspect_ratio: c.aspectRatio, resolution: c.resolution, duration: c.duration });
   }
 
   async status(taskId: string): Promise<ClipStatus> {

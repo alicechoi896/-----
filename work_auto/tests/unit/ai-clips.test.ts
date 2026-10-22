@@ -48,7 +48,7 @@ describe("AI 컷 (v0.9.60, Kie AI)", () => {
     expect(out[0].state).toBe("success");
     expect(out[1]).toMatchObject({ taskId: null, state: "draft" });
   });
-  it("예상 비용: 제품 컷 $0.10, 가격 모르는 모델은 따로 센다", () => {
-    expect(estimateAiClipUsd(["product", "product", "text"])).toEqual({ usd: 0.2, unknown: 1 });
+  it("예상 비용: 제품 컷 $0.10 · 장면 컷(Grok 1.5 5초 720p) $0.11", () => {
+    expect(estimateAiClipUsd(["product", "product", "text"])).toEqual({ usd: 0.31, unknown: 0 });
   });
 });

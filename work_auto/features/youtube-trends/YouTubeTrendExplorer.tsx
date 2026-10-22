@@ -15,6 +15,7 @@ import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils";
 import { TrendFilterPanel, type TrendDraft } from "./TrendFilterPanel";
 import { TrendInsights } from "./TrendInsights";
 import { FormatBadge, VideoDetailDrawer } from "./VideoDetailDrawer";
+import { ChannelDrawer } from "./ChannelDrawer";
 import { infoVideoHref, productVideoHref, trendPrefill } from "./trend-links";
 import { MakeMenu } from "@/components/shared/MakeMenu";
 import { ScrapButton } from "@/components/shared/ScrapButton";
@@ -50,6 +51,8 @@ export function YouTubeTrendExplorer() {
   const [saved, setSaved] = useState<SavedTrend[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [detail, setDetail] = useState<YouTubeTrendItem | null>(null);
+  /** 채널 정보 · 최근 6개월 뜬 영상 (v0.9.61) */
+  const [channel, setChannel] = useState<{ id: string; name: string } | null>(null);
   // 체크해서 고른 영상 → [제목 N개 대본 포맷에 담기]
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // 아웃라이어 점수 (videoId → 점수, 계산한 것만). [아웃라이어 점수 계산]을 누를 때만 YouTube 할당량을 쓴다
@@ -322,7 +325,18 @@ export function YouTubeTrendExplorer() {
       sortValue: (r) => r.channelSubscribers,
       render: (r) => (
         <div className="max-w-[140px]">
-          <p className="truncate text-fg-muted">{r.channelName}</p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setChannel({ id: r.channelId, name: r.channelName });
+            }}
+            className="block max-w-full truncate text-left text-fg-muted hover:text-brand hover:underline"
+            title="채널 정보 · 최근 6개월 뜬 영상"
+            data-channel-open
+          >
+            {r.channelName}
+          </button>
           <p className="tabular text-xs text-fg-subtle">구독자 {formatCompact(r.channelSubscribers)}</p>
         </div>
       ),
@@ -541,7 +555,9 @@ export function YouTubeTrendExplorer() {
         onClose={() => setDetail(null)}
         onToggleSave={(item) => void toggleSave(item)}
         onKeywordClick={searchKeyword}
+        onChannelClick={(item) => setChannel({ id: item.channelId, name: item.channelName })}
       />
+      <ChannelDrawer channelId={channel?.id ?? null} channelName={channel?.name} onClose={() => setChannel(null)} />
     </div>
   );
 }
