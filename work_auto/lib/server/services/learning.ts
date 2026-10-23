@@ -347,7 +347,8 @@ export const learningService = {
     const repo = getRepositories();
     const session = await getSession();
     if (!session) throw new AppError("UNAUTHORIZED", "로그인이 필요합니다.", 401);
-    const userId = session.user.id;
+    // 관리자 공용 데이터면 공용 주인의 콘텐츠로 학습 (v0.9.68)
+    const userId = await getCurrentUserId();
     const [channelId, contentType] = profileId.split(":") as [string, "product" | "info"];
     const current = (await this.get(profileId)) ?? emptyProfile(channelId, contentType);
     const since = current.userCursors?.[userId] ?? null;

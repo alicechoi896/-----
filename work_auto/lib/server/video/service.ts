@@ -11,7 +11,7 @@ import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider, getVideoAIProvider } from "../providers/registry";
 import { defaultClips, placeClips, productImages, sanitizeClips } from "./ai-clips";
-import { getCurrentUserId, getRepositories } from "../repositories";
+import { getActorId, getCurrentUserId, getRepositories } from "../repositories";
 import { sfxName, videoAssets } from "./assets";
 import { assignSources, buildPlan } from "./planner";
 import { renderVideo } from "./render";
@@ -196,7 +196,9 @@ export const videoJobService = {
     if (!input.plan) throw new AppError("VALIDATION", "컷 계획이 없습니다.");
     const repo = getRepositories();
     await this.expire(userId);
-    const running = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status));
+    const actor = await getActorId();
+    // 동시 1개는 사람마다 (관리자 공용 데이터에서도 서로 막지 않게, v0.9.68)
+    const running = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status) && (j.qa?.createdBy ?? j.userId) === (j.qa?.createdBy ? actor : userId));
     if (running.length) throw new AppError("BUSY", "이미 만들고 있는 영상이 있습니다. 끝난 뒤 다시 눌러 주세요.", 409);
     const plan = await this.sanitize(input.plan, userId);
     // AI 컷: 쓰는 컷이 모두 다 만들어져야 렌더 (만드는 중에 렌더하면 그 컷이 빠진다)
@@ -218,7 +220,7 @@ export const videoJobService = {
       sourceMode: plan.sourceMode,
       status: "queued",
       plan,
-      qa: { issues: [] },
+      qa: { issues: [], createdBy: actor },
       progress: 0,
       outputPath: null,
       error: null,

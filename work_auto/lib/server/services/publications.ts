@@ -11,7 +11,7 @@ import type {
 } from "@/lib/types";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError, notFound } from "../http";
-import { getRepositories } from "../repositories";
+import { getRepositories, getCurrentUserId } from "../repositories";
 import { auditService } from "./audit";
 
 /**
@@ -72,7 +72,8 @@ async function normalize(session: SessionInfo, input: Partial<ContentPublication
 
   if (contentId && contentId !== current?.contentId) {
     const content = await repo.contents.get(contentId);
-    if (!content || content.userId !== session.user.id) throw new AppError("VALIDATION", "연결할 콘텐츠를 찾을 수 없습니다. 내가 만든 콘텐츠만 연결할 수 있습니다.");
+    const dataId = await getCurrentUserId();
+    if (!content || (content.userId !== session.user.id && content.userId !== dataId)) throw new AppError("VALIDATION", "연결할 콘텐츠를 찾을 수 없습니다. 내가 만든 콘텐츠만 연결할 수 있습니다.");
     productId = productId ?? content.productId;
     title = title || content.headline;
     contentType = contentType || (findFeature(content.featureId)?.title ?? "");
@@ -81,7 +82,8 @@ async function normalize(session: SessionInfo, input: Partial<ContentPublication
   let productName = current && productId === current.productId ? current.productName : "";
   if (productId && productId !== current?.productId) {
     const product = await repo.products.get(productId);
-    if (!product || product.userId !== session.user.id) throw new AppError("VALIDATION", "연결할 제품을 찾을 수 없습니다.");
+    const dataOwner = await getCurrentUserId();
+    if (!product || (product.userId !== session.user.id && product.userId !== dataOwner)) throw new AppError("VALIDATION", "연결할 제품을 찾을 수 없습니다.");
     productName = product.name;
   }
   if (!platform) throw new AppError("VALIDATION", "플랫폼을 골라 주세요.");

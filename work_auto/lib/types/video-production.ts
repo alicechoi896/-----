@@ -117,6 +117,8 @@ export interface VideoQa {
   /** 파일을 지웠으면 */
   fileDeleted?: boolean;
   aiCalls?: number;
+  /** 만든 사람 (관리자 공용 데이터에서 동시 1개 제한을 사람마다, v0.9.68) */
+  createdBy?: string;
   issues: string[];
 }
 

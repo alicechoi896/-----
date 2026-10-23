@@ -777,3 +777,46 @@ end $$;
 --  set role = 'admin', status = 'active', approved_at = now(), updated_at = now()
 --  where email = 'you@example.com';
 -- ════════════════════════════════════════════════════════════════
+
+-- v0.9.68: 관리자 공용 데이터 (추가만 — 기존 테이블·컬럼·데이터·own_rows 정책은 그대로). docs/ADMIN_SHARED.md
+-- 공용 주인 지정은 SQL Editor 에서 따로 (저장소에 이메일을 넣지 않는다):
+--   insert into public.workspace_settings (key, value) select 'shared_owner_id', id::text from auth.users where email = '<공용 주인 이메일>'
+--   on conflict (key) do update set value = excluded.value, updated_at = now();
+-- 1) 설정 표 (공용 주인 계정 하나만 담는다)
+create table if not exists public.workspace_settings (
+  key         text primary key,
+  value       text not null,
+  updated_at  timestamptz not null default now()
+);
+alter table public.workspace_settings enable row level security;
+drop policy if exists "workspace_settings_admin" on public.workspace_settings;
+create policy "workspace_settings_admin" on public.workspace_settings for all to authenticated
+  using ((select public.is_admin())) with check ((select public.is_admin()));
+
+-- 2) 공용 주인 id (없으면 null → 지금처럼 각자)
+create or replace function public.shared_owner_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select nullif(value, '')::uuid from public.workspace_settings where key = 'shared_owner_id';
+$$;
+
+-- 3) 관리자는 공용 주인 행도 읽고 쓸 수 있다 (기존 own_rows 정책은 그대로 두고 정책을 하나 더)
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'api_connections', 'products', 'product_sources', 'product_analyses', 'generated_contents',
+    'user_styles', 'user_feedback', 'performance_metrics', 'reference_videos', 'user_settings',
+    'saved_filters', 'saved_trends', 'content_profiles', 'script_formats', 'trend_keywords', 'video_jobs'
+  ] loop
+    execute format('drop policy if exists "admin_shared" on public.%I', t);
+    execute format(
+      'create policy "admin_shared" on public.%I for all to authenticated using ((select public.is_admin()) and user_id = (select public.shared_owner_id())) with check ((select public.is_admin()) and user_id = (select public.shared_owner_id()))',
+      t
+    );
+  end loop;
+end $$;
