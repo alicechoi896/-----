@@ -107,7 +107,20 @@ export class ClaudeProvider implements AIProvider {
       if (e instanceof Anthropic.RateLimitError) throw new AppError("AI_RATE_LIMIT", "Claude 호출 한도에 걸렸습니다. 잠시 후 다시 시도해 주세요.", 429);
       if (e instanceof Anthropic.BadRequestError) {
         console.error("[claude] bad request", e.message);
-        throw new AppError("AI_BAD_REQUEST", "Claude 가 요청을 처리할 수 없습니다. (이미지가 너무 크거나 형식이 맞지 않을 수 있습니다)", 400);
+        // v0.9.69: 실제 이유를 알려 준다 (잔액 부족을 '이미지 문제'로 잘못 안내하던 문제)
+        if (/credit balance|billing|purchase credits/i.test(e.message)) {
+          throw new AppError(
+            "AI_CREDIT",
+            "Claude API 크레딧(잔액)이 부족합니다. console.anthropic.com › Plans & Billing 에서 충전하거나, 설정 › API 연결 센터의 '기본 AI'를 OpenAI 로 바꿔 주세요.",
+            402,
+          );
+        }
+        const hasImage = request.messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === "image"));
+        throw new AppError(
+          "AI_BAD_REQUEST",
+          hasImage ? "Claude 가 요청을 처리할 수 없습니다. (이미지가 너무 크거나 형식이 맞지 않을 수 있습니다)" : "Claude 가 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+          400,
+        );
       }
       if (e instanceof Anthropic.APIConnectionTimeoutError) {
         throw new AppError("AI_TIMEOUT", "Claude 응답이 100초 넘게 없어 중단했습니다. 잠시 후 다시 시도해 주세요.", 504);
