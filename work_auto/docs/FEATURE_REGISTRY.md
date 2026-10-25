@@ -110,6 +110,7 @@
 
 ## Instagram (v0.9.53)
 
+- `silence-cut` (/tools/silence-cut) — tool, FFmpeg silencedetect → 무음 모두 자르기, 저장소 직접 올리기, docs/SILENCE_CUT.md (v0.9.70)
 - `drama-test` (/tools/drama-test) — tool, Kie AI (MiniMax H3·Seedance 2.0 Mini·Kling 3.0 비교), docs/DRAMA_TEST.md (v0.9.62)
 - `ig-trends` (/instagram/trends) — trend, Instagram 공식 API(해시태그, 무료·기본, v0.9.57) + TikHub(Instagram V2 search_reels, 고를 때만), docs/INSTAGRAM_TRENDS.md
 

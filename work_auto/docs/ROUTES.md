@@ -223,3 +223,11 @@
 | POST | `/api/drama-test/upload` { dataUrl } | 인물 사진 → Kie (전신·얼굴, 무료·24시간) |
 | POST | `/api/drama-test/create` { characters, scenes, models, clientRequestId } | 장면 × 모델 작업 (각 1회 과금) |
 | POST | `/api/drama-test/status` { tasks } | 상태 (무료) |
+
+## 무음 구간 자르기 (v0.9.70)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/tools/silence-cut/prepare` { fileName, size } | 저장소 직접 올리기 주소 |
+| POST | `/api/tools/silence-cut/upload?key=` | 데모 전용 올리기 |
+| POST | `/api/tools/silence-cut/cut` { key, minSilence, noiseDb, pad, fileName } | 무음 모두 자르기 → 미리보기·다운로드 주소 (1시간) |

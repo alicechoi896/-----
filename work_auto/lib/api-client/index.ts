@@ -270,6 +270,23 @@ export const api = {
     renameFolder: (from: string, to: string) => request<{ moved: number }>("/api/scraps/folders", { method: "PATCH", body: json({ from, to }) }),
   },
   /** 영상 자동 제작 (v0.9.51) */
+  /** 무음 구간 자르기 (v0.9.70) */
+  silenceCut: {
+    prepare: (fileName: string, size: number) => request<{ key: string; url: string; method: "PUT" | "POST" }>("/api/tools/silence-cut/prepare", { method: "POST", body: json({ fileName, size }) }),
+    /** 직접 올리기 (진행률) — Supabase Storage 서명 주소 또는 데모 주소 */
+    upload: (target: { url: string; method: "PUT" | "POST" }, file: File, onProgress: (pct: number) => void) =>
+      new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(target.method, target.url);
+        xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+        if (target.method === "PUT") xhr.setRequestHeader("x-upsert", "true");
+        xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(xhr.status === 413 ? "영상이 너무 큽니다 (저장소 한도). 더 짧게 잘라 올려 주세요." : `영상을 올리지 못했습니다 (HTTP ${xhr.status}).`)));
+        xhr.onerror = () => reject(new Error("영상을 올리지 못했습니다. 네트워크를 확인해 주세요."));
+        xhr.send(file);
+      }),
+    cut: (body: { key: string; minSilence: number; noiseDb: number; pad: number; fileName: string }) => request<import("@/lib/silence-cut").SilenceCutResult>("/api/tools/silence-cut/cut", { method: "POST", body: json(body) }),
+  },
   /** AI 드라마 시험 (v0.9.62, Kie) */
   drama: {
     upload: (dataUrl: string) => request<{ imageUrl: string; closeUrl: string; uploadedAt: string }>("/api/drama-test/upload", { method: "POST", body: json({ dataUrl }) }),

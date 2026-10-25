@@ -356,6 +356,34 @@
       }
     ]
   },
+  "03-silence-cut": {
+    "file": "/manual/shots/03-silence-cut.png",
+    "w": 1280,
+    "h": 1000,
+    "boxes": [
+      {
+        "n": 1,
+        "x": 303,
+        "y": 275,
+        "w": 390,
+        "h": 152
+      },
+      {
+        "n": 2,
+        "x": 303,
+        "y": 753,
+        "w": 390,
+        "h": 48
+      },
+      {
+        "n": 3,
+        "x": 1047,
+        "y": 382,
+        "w": 116,
+        "h": 52
+      }
+    ]
+  },
   "03-social-search": {
     "file": "/manual/shots/03-social-search.png",
     "w": 1280,

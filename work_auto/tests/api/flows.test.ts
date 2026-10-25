@@ -585,6 +585,34 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(bad.ok).toBe(false);
   });
 
+  it("무음 구간 자르기(데모): 올릴 주소 → 올리기 → 무음 모두 잘라 냄 → 받기", async ({ skip }) => {
+    if (!reachable) skip();
+    // 소리 1초 · 무음 1.5초 · 소리 1초 · 무음 0.5초 · 소리 1초 (총 5초) 영상 만들기
+    const { execFileSync } = await import("node:child_process");
+    const { readFileSync, mkdtempSync } = await import("node:fs");
+    const os = await import("node:os");
+    const pathMod = await import("node:path");
+    const ffmpeg = (await import("ffmpeg-static")).default as unknown as string;
+    const dir = mkdtempSync(pathMod.join(os.tmpdir(), "sct_"));
+    const src = pathMod.join(dir, "in.mp4");
+    execFileSync(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=5", "-f", "lavfi", "-i", "sine=f=440:d=5", "-filter_complex", "[1:a]volume='if(between(t,1,2.5)+between(t,3.5,4),0,1)':eval=frame[a]", "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-shortest", src]);
+    const buf = readFileSync(src);
+    type P = { key: string; url: string; method: string };
+    const prep = (await post("/api/tools/silence-cut/prepare", { fileName: "test.mp4", size: buf.length })).data as P;
+    expect(prep.key).toMatch(/\/silence\/[\w-]+\.mp4$/);
+    const up = await fetch(BASE + prep.url, { method: "POST", headers: { "content-type": "video/mp4" }, body: buf });
+    expect(up.ok).toBe(true);
+    type R = { url: string; downloadUrl: string; beforeSec: number; afterSec: number; removedSec: number; cuts: number };
+    const r = (await post("/api/tools/silence-cut/cut", { key: prep.key, minSilence: 0.2, noiseDb: -35, pad: 0.05, fileName: "test.mp4" })).data as R;
+    expect(r.cuts).toBe(2);
+    expect(r.afterSec).toBeGreaterThan(2.9);
+    expect(r.afterSec).toBeLessThan(3.5);
+    const dl = await fetch(BASE + r.downloadUrl);
+    expect(dl.headers.get("content-disposition")).toContain("attachment");
+    // 원본은 처리 뒤 지워진다 → 같은 키로 다시 자르면 실패
+    expect((await post("/api/tools/silence-cut/cut", { key: prep.key })).ok).toBe(false);
+  }, 120_000);
+
   it("화면 오류 기록: 비밀값을 가리고 관리자만 본다", async ({ skip }) => {
     if (!reachable) skip();
     const msg = `테스트 오류 ${Date.now()} key=sk-ant-abcdefghijklmnop1234`;

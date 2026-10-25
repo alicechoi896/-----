@@ -1,4 +1,5 @@
 import {
+  AudioLines,
   BookOpen,
   Clapperboard,
   Film,
@@ -297,9 +298,24 @@ export const FEATURES: FeatureDef[] = [
   },
 
   {
-    id: "drama-test",
+    id: "silence-cut",
     channelId: "tools",
     order: 4,
+    title: "무음 구간 자르기",
+    description: "영상을 올리면 말이 없는 구간을 모두 잘라 내고, 잘라 낸 영상을 바로 받습니다. 무음으로 볼 길이(기본 0.2초)와 소리 기준을 고를 수 있습니다.",
+    href: "/tools/silence-cut",
+    icon: AudioLines,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: [],
+    inputs: ["영상 파일 (mp4·mov, 최대 300MB·20분)", "무음 길이 (0.1~1초)", "무음 기준 소리 크기"],
+    outputs: ["무음을 잘라 낸 mp4 (다운로드)", "줄어든 길이·자른 곳 수"],
+  },
+  {
+    id: "drama-test",
+    channelId: "tools",
+    order: 5,
     title: "AI 드라마 시험",
     description: "인물 사진과 장면·대사를 넣고, 같은 장면을 여러 AI 영상 모델(MiniMax H3·Seedance 2.0 Mini·Kling 3.0)로 만들어 인물 유지·한국어 대사·움직임을 비교합니다. 목소리는 영상 모델이 직접 냅니다.",
     href: "/tools/drama-test",

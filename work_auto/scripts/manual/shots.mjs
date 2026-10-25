@@ -237,6 +237,30 @@ export const SHOTS = [
 
   /* ───── 04 트렌드 ───── */
   {
+    id: "03-silence-cut",
+    url: "/tools/silence-cut",
+    viewport: { width: 1280, height: 1000 },
+    prepare: async (p) => {
+      // 데모: 소리 1초 · 무음 1.5초 · 소리 1초 · 무음 0.5초 · 소리 1초 영상을 만들어 올린다
+      const { execFileSync } = await import("node:child_process");
+      const { readFileSync, mkdtempSync } = await import("node:fs");
+      const os = await import("node:os");
+      const pathMod = await import("node:path");
+      const ffmpeg = (await import("ffmpeg-static")).default;
+      const src = pathMod.join(mkdtempSync(pathMod.join(os.tmpdir(), "scm_")), "interview.mp4");
+      execFileSync(ffmpeg, ["-y", "-f", "lavfi", "-i", "testsrc2=s=540x960:d=5", "-f", "lavfi", "-i", "sine=f=440:d=5", "-filter_complex", "[1:a]volume='if(between(t,1,2.5)+between(t,3.5,4),0,1)':eval=frame[a]", "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-shortest", src]);
+      await p.getByLabel("영상 파일").setInputFiles({ name: "interview.mp4", mimeType: "video/mp4", buffer: readFileSync(src) });
+      await p.locator("[data-silence-run]").click();
+      await p.locator("[data-silence-result]").first().waitFor({ timeout: 60_000 });
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: (p) => p.locator("[data-silence-file]").first(),
+      2: (p) => p.locator("[data-silence-run]").first(),
+      3: (p) => p.locator("[data-silence-download]").first(),
+    },
+  },
+  {
     id: "03-drama-test",
     url: "/tools/drama-test",
     viewport: { width: 1280, height: 2200 },
