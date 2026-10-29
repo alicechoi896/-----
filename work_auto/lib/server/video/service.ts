@@ -5,12 +5,10 @@ import path from "node:path";
 import { runFfmpeg } from "./ffmpeg";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
-import { aiSourceId, isAiSource } from "@/lib/types/video-production";
 import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
-import { getAIProvider, getTTSProvider, getVideoAIProvider } from "../providers/registry";
-import { defaultClips, placeClips, productImages, sanitizeClips } from "./ai-clips";
+import { getAIProvider, getTTSProvider } from "../providers/registry";
 import { getActorId, getCurrentUserId, getRepositories } from "../repositories";
 import { sfxName, videoAssets } from "./assets";
 import { assignSources, buildPlan } from "./planner";
@@ -53,13 +51,9 @@ export const videoJobService = {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 40);
     const videos = await myVideos(userId, null);
-    const [ai, tts, videoAi] = await Promise.all([getAIProvider(), getTTSProvider(), getVideoAIProvider().catch(() => null)]);
-    // AI 컷(제품 사진 → 영상)에 쓸 제품 사진 (제품마다 한 번)
-    const productIds = [...new Set(contents.map((c) => c.productId).filter((x): x is string => Boolean(x)))];
-    const images = new Map(await Promise.all(productIds.map(async (id) => [id, await productImages(id, userId)] as const)));
+    const [ai, tts] = await Promise.all([getAIProvider(), getTTSProvider()]);
     return {
       contents: contents.map((c) => ({
-        images: c.productId ? (images.get(c.productId) ?? []) : [],
         id: c.id,
         featureId: c.featureId,
         headline: c.headline,
@@ -71,7 +65,7 @@ export const videoJobService = {
       })),
       videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null })),
       assets: videoAssets.summary(),
-      ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, videoAi: Boolean(videoAi) },
+      ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id },
       voices: VOICE_OPTIONS,
       voiceStyles: VOICE_STYLES.map((v) => ({ value: v.value, label: v.label })),
     };
@@ -81,15 +75,16 @@ export const videoJobService = {
   async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
-    const sourceMode: VideoSourceMode = input.sourceMode === "ai" || input.sourceMode === "mixed" ? input.sourceMode : "xhs";
+    // v0.9.71: AI 영상 생성(AI 컷)은 뺐다 — 고른 샤오홍슈 영상만으로 만든다
+    const sourceMode: VideoSourceMode = "xhs";
     const content = await getRepositories().contents.get(String(input.contentId ?? ""));
     if (!content || content.userId !== userId) throw new AppError("NOT_FOUND", "대본을 찾을 수 없습니다.", 404);
     if (!VIDEO_SCRIPT_FEATURES[channelId].includes(content.featureId)) throw new AppError("VALIDATION", "이 채널의 영상 원고가 아닙니다.");
     // 제품이 있는 원고면 그 제품에 연결된 영상만 쓴다 (v0.9.52)
     const all = (await myVideos(userId, content.productId)).filter((v) => !content.productId || v.productId === content.productId);
     const want = new Set((Array.isArray(input.videoIds) ? input.videoIds : []).map(String));
-    const picked = sourceMode === "ai" ? [] : want.size ? all.filter((v) => want.has(v.id)) : all.slice(0, 8);
-    if (!picked.length && sourceMode === "xhs")
+    const picked = want.size ? all.filter((v) => want.has(v.id)) : all.slice(0, 8);
+    if (!picked.length)
       throw new AppError("NO_SOURCE", content.productId ? "이 제품에 연결된 샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 이 제품을 연결해 영상을 담아 주세요." : "샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 먼저 영상을 담아 주세요.", 400);
     const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
     const built = await buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice, narrationOn: input.narrationOn !== false, captions: input.captions !== false });
@@ -99,14 +94,7 @@ export const videoJobService = {
     built.plan.titleStyle = cleanTitleStyle(input.titleStyle);
     built.plan.voiceSpeed = cleanVoiceSpeed(input.voiceSpeed);
     built.plan.targetSec = input.targetSec === undefined ? targetFromLength(content.input?.length) : cleanTarget(input.targetSec);
-    if (sourceMode !== "xhs") built.plan.aiPrompt = String(input.aiPrompt ?? "").trim().slice(0, 2000);
-    if (sourceMode === "xhs") return built;
-    // AI 컷 (v0.9.60): 기본 컷을 만들어 고르게 배치 (아직 Kie 호출 없음 — [AI 컷 만들기]를 누를 때만)
-    const images = await productImages(content.productId, userId);
-    const clips = defaultClips(Number(input.aiCount ?? 0), { productName: content.context.product?.name ?? null, images, narrations: built.plan.scenes.map((s) => s.narration) });
-    const plan = { ...built.plan, aiClips: clips };
-    plan.scenes = placeClips(plan, clips, sourceMode === "ai" || !picked.length);
-    return { plan, aiCalls: built.aiCalls };
+    return built;
   },
 
   /** 계획 검사 (사용자가 고친 계획을 그대로 믿지 않는다) */
@@ -133,13 +121,9 @@ export const videoJobService = {
 
   async sanitize(plan: VideoPlan, userId: string): Promise<VideoPlan> {
     const videos = await myVideos(userId, null);
-    const sourceMode: VideoSourceMode = plan.sourceMode === "ai" || plan.sourceMode === "mixed" ? plan.sourceMode : "xhs";
-    // AI 컷: 그 원고 제품의 사진만 허용
-    const content = plan.contentId ? await getRepositories().contents.get(String(plan.contentId)) : null;
-    const images = content && content.userId === userId ? await productImages(content.productId, userId) : [];
-    const aiClips = sourceMode === "xhs" ? [] : sanitizeClips(plan.aiClips, new Set(images));
-    const aiIds = new Set(aiClips.map((c) => aiSourceId(c.id)));
-    const ok = new Set([...videos.map((v) => v.id), ...aiIds]);
+    // v0.9.71: 샤오홍슈만 (예전에 만든 AI 컷 계획이 들어와도 AI 컷은 쓰지 않는다)
+    const sourceMode: VideoSourceMode = "xhs";
+    const ok = new Set(videos.map((v) => v.id));
     const sfxNames = new Set(videoAssets.sfx().map(sfxName));
     const bgmNames = new Set(videoAssets.bgm().map(sfxName));
     const scenes = (Array.isArray(plan.scenes) ? plan.scenes : []).slice(0, VIDEO_RENDER_CONFIG.maxScenes).map((s, i) => ({
@@ -153,18 +137,9 @@ export const videoJobService = {
       pinned: Boolean(s.pinned),
     }));
     if (!scenes.some((s) => s.narration)) throw new AppError("VALIDATION", "컷이 없습니다. 컷 계획을 다시 만들어 주세요.");
-    const sourceIds = (Array.isArray(plan.sourceVideoIds) ? plan.sourceVideoIds : []).map(String).filter((id) => ok.has(id) && !isAiSource(id));
+    const sourceIds = (Array.isArray(plan.sourceVideoIds) ? plan.sourceVideoIds : []).map(String).filter((id) => ok.has(id));
     const pool = videos.filter((v) => sourceIds.includes(v.id));
-    // AI 컷이 정해진 컷은 그대로, 나머지만 샤오홍슈 영상으로 (AI만이면 AI 컷을 돌아가며)
-    const kept = scenes.filter((s) => s.narration);
-    const aiList = [...aiIds];
-    const placed =
-      sourceMode === "ai" || (aiList.length && !pool.length && sourceMode === "mixed")
-        ? kept.map((s, i) => (isAiSource(s.sourceVideoId) ? s : { ...s, sourceVideoId: aiList[i % aiList.length] ?? null }))
-        : (() => {
-            const xhsScenes = assignSources(kept.map((s) => (isAiSource(s.sourceVideoId) ? { ...s, pinned: true } : s)), pool.length ? pool : videos.slice(0, 8), null);
-            return xhsScenes;
-          })();
+    const placed = assignSources(scenes.filter((s) => s.narration), pool.length ? pool : videos.slice(0, 8), null);
     return {
       contentId: plan.contentId ? String(plan.contentId) : null,
       channelId: plan.channelId === "naver-clip" ? "naver-clip" : "youtube",
@@ -186,7 +161,6 @@ export const videoJobService = {
       voiceSpeed: cleanVoiceSpeed(plan.voiceSpeed),
       targetSec: cleanTarget(plan.targetSec),
       meme: false,
-      ...(aiClips.length ? { aiClips, aiPrompt: String(plan.aiPrompt ?? "").trim().slice(0, 2000) } : {}),
     };
   },
 
@@ -201,16 +175,7 @@ export const videoJobService = {
     const running = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status) && (j.qa?.createdBy ?? j.userId) === (j.qa?.createdBy ? actor : userId));
     if (running.length) throw new AppError("BUSY", "이미 만들고 있는 영상이 있습니다. 끝난 뒤 다시 눌러 주세요.", 409);
     const plan = await this.sanitize(input.plan, userId);
-    // AI 컷: 쓰는 컷이 모두 다 만들어져야 렌더 (만드는 중에 렌더하면 그 컷이 빠진다)
-    const usedAi = new Set(plan.scenes.map((s) => s.sourceVideoId).filter(isAiSource));
-    const notReady = (plan.aiClips ?? []).filter((c) => usedAi.has(aiSourceId(c.id)) && c.state !== "success");
-    if (notReady.length)
-      throw new AppError(
-        "AI_NOT_READY",
-        `AI 컷 ${notReady.map((c) => c.id.slice(2)).join(", ")}번이 아직 준비되지 않았습니다. ${notReady.some((c) => !c.taskId || c.state === "fail") ? "[AI 컷 만들기]를 누르거나 그 컷을 다른 영상으로 바꿔 주세요." : "다 만들어지면(보통 1~5분) [영상 만들기]를 눌러 주세요."}`,
-        409,
-      );
-    if (!plan.scenes.some((s) => s.sourceVideoId)) throw new AppError("NO_SOURCE", "컷에 쓸 영상이 없습니다. 샤오홍슈 영상을 고르거나 AI 컷을 만들어 주세요.", 400);
+    if (!plan.scenes.some((s) => s.sourceVideoId)) throw new AppError("NO_SOURCE", "컷에 쓸 영상이 없습니다. 샤오홍슈 영상을 골라 주세요.", 400);
     const now = nowIso();
     const job: VideoJob = {
       id: createId("vj"),

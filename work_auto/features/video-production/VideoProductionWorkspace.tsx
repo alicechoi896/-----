@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarPlus, Check, Clapperboard, Download, Film, ImagePlus, Loader2, Play, RefreshCw, ScrollText, Sparkles, Video, Wand2 } from "lucide-react";
-import type { AiClip, VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
-import { VIDEO_STATUS_LABEL, aiSourceId, isAiSource } from "@/lib/types/video-production";
+import { CalendarPlus, Check, Clapperboard, Download, Film, Loader2, Play, RefreshCw, ScrollText, Video, Wand2 } from "lucide-react";
+import type { VideoChannel, VideoJob, VideoPlan } from "@/lib/types/video-production";
+import { VIDEO_STATUS_LABEL, isAiSource } from "@/lib/types/video-production";
 import {
-  AI_CLIP_CONFIG,
   CAPTION_COLORS,
   CAPTION_FONTS,
   CAPTION_POSITIONS,
@@ -18,46 +17,16 @@ import {
   TITLE_BAR_COLORS,
   VIDEO_TARGETS,
   VOICE_SPEEDS,
-  estimateAiClipUsd,
   type CaptionStyle,
   type TitleStyle,
 } from "@/lib/video-production/config";
-import { shrinkImage } from "@/lib/image-shrink";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
-import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
 const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: "확대로 제거", blur: "블러", rejected: "확인 필요", unchecked: "검사 안 됨" };
-const CLIP_STATE: Record<AiClip["state"], { label: string; tone: "neutral" | "info" | "success" | "danger" }> = {
-  draft: { label: "만들기 전", tone: "neutral" },
-  waiting: { label: "대기 중", tone: "info" },
-  generating: { label: "만드는 중", tone: "info" },
-  success: { label: "완료", tone: "success" },
-  fail: { label: "실패", tone: "danger" },
-};
-const PENDING = (c: AiClip) => c.state === "waiting" || c.state === "generating";
-const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `vp-${Date.now()}`);
-/** AI 컷 작업 번호는 화면을 닫아도 잃지 않게 이 브라우저에만 (비밀값 아님, 결과는 Kie 에 14일) */
-const clipKey = (contentId: string, scriptIndex: number) => `vp-ai-clips:${contentId}:${scriptIndex}`;
-function loadClips(key: string): AiClip[] | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as AiClip[]) : null;
-  } catch {
-    return null;
-  }
-}
-function saveClips(key: string, clips: AiClip[] | undefined) {
-  try {
-    if (clips?.some((c) => c.taskId)) localStorage.setItem(key, JSON.stringify(clips));
-  } catch {
-    /* 저장 못 해도 계속 */
-  }
-}
-const clipLabel = (c: AiClip) => `AI 컷 ${c.id.slice(2)} · ${c.mode === "product" ? "제품" : "장면"}`;
-
 /**
  * 영상 자동 제작 (v0.9.51) — YouTube·NAVER 클립 공통. docs/VIDEO_PRODUCTION.md
  * ① 대본 고르기(2단계 결과) → ② 영상 소재·음성 → [컷 계획 만들기] → ③ 컷 확인·클립 교체 → [영상 만들기] → ④ 결과·검수·승인
@@ -67,19 +36,16 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [loadError, setLoadError] = useState<string | null>(null);
   const [contentId, setContentId] = useState(initialContentId ?? "");
   const [scriptIndex, setScriptIndex] = useState(0);
-  const [sourceMode, setSourceMode] = useState<VideoSourceMode>("xhs");
   const [videoIds, setVideoIds] = useState<string[]>([]);
   const [voice, setVoice] = useState("onyx");
   // 음성·자막 (4가지: 자막+음성 / 자막만 / 음성만 / 둘 다 없음)
   const [narrationOn, setNarrationOn] = useState(true);
   const [captionsOn, setCaptionsOn] = useState(true);
-  const [aiCount, setAiCount] = useState<number>(AI_CLIP_CONFIG.defaultCount);
   const [voiceStyle, setVoiceStyle] = useState("shorts");
   const [voiceSpeed, setVoiceSpeed] = useState<number>(DEFAULT_VOICE_SPEED);
   const [targetSec, setTargetSec] = useState<number>(15);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
   const [titleStyle, setTitleStyle] = useState<TitleStyle>(DEFAULT_TITLE_STYLE);
-  const [aiPrompt, setAiPrompt] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [plan, setPlan] = useState<VideoPlan | null>(null);
@@ -140,10 +106,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPlanning(true);
     setError(null);
     try {
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: sourceMode, videoIds: sourceMode === "ai" ? [] : videoIds, voice, narrationOn, captions: captionsOn, aiCount, voiceStyle, voiceSpeed, targetSec, captionStyle, titleStyle, aiPrompt });
-      // 같은 대본으로 이미 만든 AI 컷이 있으면 이어서 쓴다 (다시 과금하지 않게)
-      const saved = r.plan.aiClips?.length ? loadClips(clipKey(content.id, scriptIndex)) : null;
-      if (saved && r.plan.aiClips && saved.length === r.plan.aiClips.length) r.plan.aiClips = saved;
+      // v0.9.71: 고른 샤오홍슈 영상만으로 만든다 (AI 영상 생성 없음)
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, captionStyle, titleStyle });
       setPlan(r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
@@ -200,7 +164,6 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   // 제품이 있는 원고면 그 제품에 연결된 영상만
   const sourceVideos = content?.productId ? opts.videos.filter((v) => v.productId === content.productId) : opts.videos;
   const videoTitle = (id: string | null) => (isAiSource(id) ? `AI 컷 ${id!.slice(5)}` : (opts.videos.find((v) => v.id === id)?.title ?? "자동"));
-  const usesAi = sourceMode !== "xhs";
   const missing = [
     !opts.ready.voice && "AI 음성(OpenAI 연결) — 없으면 음성 없이 자막 시간으로 만듭니다",
     !opts.ready.vision && "원본 글자 검사(AI 이미지 읽기: Claude·OpenAI 연결) — 없으면 모든 컷이 검수 필요",
@@ -262,59 +225,6 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
           <SectionCard title="② 영상 소재 · 음성" icon={Film}>
             <div className="space-y-4">
               <FormField
-                label="소재"
-                hint={sourceMode === "ai" ? "모든 컷을 AI 컷으로 채웁니다 (AI 컷을 돌아가며 씀)." : sourceMode === "mixed" ? "AI 컷을 고르게 넣고 나머지는 샤오홍슈 영상으로 채웁니다." : undefined}
-              >
-                <SegmentedControl
-                  size="sm"
-                  options={[
-                    { value: "xhs", label: "샤오홍슈만" },
-                    { value: "mixed", label: "섞기" },
-                    { value: "ai", label: "AI만" },
-                  ]}
-                  value={sourceMode}
-                  onChange={setSourceMode}
-                />
-              </FormField>
-              {usesAi && (
-                <FormField
-                  label="AI 컷 수"
-                  htmlFor="vp-ai-count"
-                  hint={`영상 1개에 넣을 AI 컷 (1~${AI_CLIP_CONFIG.maxCount}개, 컷 1개 = 5초). 제품 사진 → 움직이는 영상은 1개 약 $${((AI_CLIP_CONFIG.product.credits ?? 0) * AI_CLIP_CONFIG.creditUsd).toFixed(2)}. 컷 계획에서 [AI 컷 만들기]를 누를 때만 과금됩니다.`}
-                >
-                  <Input
-                    id="vp-ai-count"
-                    type="number"
-                    min={1}
-                    max={AI_CLIP_CONFIG.maxCount}
-                    value={aiCount}
-                    onChange={(e) => setAiCount(Math.max(1, Math.min(AI_CLIP_CONFIG.maxCount, Number(e.target.value) || 1)))}
-                    className="w-28"
-                    data-ai-count
-                  />
-                </FormField>
-              )}
-              {usesAi && (
-                <FormField label="AI 컷 공통 프롬프트 (선택)" htmlFor="vp-ai-prompt" hint="모든 AI 컷에 함께 넣는 큰 설명입니다. 분위기·장소·인물·카메라·색감을 자세히 써 주세요 (한국어 OK, 최대 2,000자). 사람이 나오면 현대 한국인으로 만듭니다.">
-                  <Textarea
-                    id="vp-ai-prompt"
-                    rows={4}
-                    value={aiPrompt}
-                    maxLength={2000}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="예: 서울 신축 아파트 거실, 오후 햇살, 20~30대 한국인 부부, 깔끔한 화이트톤 인테리어, 손 클로즈업 위주, 부드러운 카메라 이동"
-                    className="text-[12.5px]"
-                    data-ai-prompt
-                  />
-                </FormField>
-              )}
-              {usesAi && !opts.ready.videoAi && (
-                <Notice tone="warning">
-                  AI 컷을 만들려면 <Link href="/settings/api" className="font-medium text-brand hover:underline">API 연결 센터</Link>에서 <b>Kie AI</b> 키를 연결해 주세요.
-                </Notice>
-              )}
-              {sourceMode !== "ai" && (
-              <FormField
                 label={`샤오홍슈 영상 · ${videoIds.length}개 고름`}
                 hint={content?.productId ? `'${content.productName ?? "이 제품"}'에 연결된 영상만 보입니다. 다양할수록 같은 장면 반복이 줄어듭니다.` : "다양할수록 같은 장면 반복이 줄어듭니다."}
               >
@@ -355,7 +265,6 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   </>
                 )}
               </FormField>
-              )}
               <FormField label="영상 길이" hint="고른 길이에 맞게 AI 음성 속도를 자동으로 맞춥니다 (기본은 대본을 만들 때 고른 길이). 자동 = 고른 말하기 속도대로." data-target-sec>
                 <SegmentedControl
                   size="sm"
@@ -409,7 +318,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
               {captionsOn && <CaptionStylePicker value={captionStyle} onChange={setCaptionStyle} />}
               {!narrationOn && <p className="-mt-2 text-xs text-fg-subtle">음성이 없으면 컷 길이는 자막 글자 수로 정합니다 (배경음악·효과음은 그대로).</p>}
               {error && !plan && <Notice tone="warning">{error}</Notice>}
-              <Button variant="primary" icon={Wand2} loading={planning} disabled={!content || (sourceMode === "xhs" && !videoIds.length)} onClick={() => void makePlan()} className="w-full" data-make-plan>
+              <Button variant="primary" icon={Wand2} loading={planning} disabled={!content || !videoIds.length} onClick={() => void makePlan()} className="w-full" data-make-plan>
                 컷 계획 만들기
               </Button>
             </div>
@@ -422,13 +331,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
           ) : plan ? (
             <PlanEditor
               plan={plan}
-              onChange={(p) => {
-                setPlan(p);
-                if (content) saveClips(clipKey(content.id, scriptIndex), p.aiClips);
-              }}
+              onChange={setPlan}
               videos={opts.videos.filter((v) => plan.sourceVideoIds.includes(v.id))}
-              images={content?.images ?? []}
-              videoAiReady={opts.ready.videoAi}
               onRender={() => void render(plan)}
               error={error}
             />
@@ -475,24 +379,17 @@ function PlanEditor({
   plan,
   onChange,
   videos,
-  images,
-  videoAiReady,
   onRender,
   error,
 }: {
   plan: VideoPlan;
   onChange: (p: VideoPlan) => void;
   videos: VideoProductionOptions["videos"];
-  images: string[];
-  videoAiReady: boolean;
   onRender: () => void;
   error: string | null;
 }) {
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => onChange({ ...plan, scenes: plan.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
-  const clips = plan.aiClips ?? [];
-  const usedAi = new Set(plan.scenes.map((s) => s.sourceVideoId).filter(isAiSource));
-  const notReady = clips.filter((c) => usedAi.has(aiSourceId(c.id)) && c.state !== "success");
-  const clipOptions = [...clips.map((c) => ({ value: aiSourceId(c.id), label: clipLabel(c) })), ...videos.map((v) => ({ value: v.id, label: v.title.slice(0, 22) }))];
+  const clipOptions = videos.map((v) => ({ value: v.id, label: v.title.slice(0, 22) }));
   return (
     <SectionCard
       title={`③ 컷 계획 · ${plan.scenes.length}컷`}
@@ -507,7 +404,6 @@ function PlanEditor({
         </div>
         <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일 · 2번째 줄의 [ ] 글자는 강조색). 선택한 제목: {plan.selectedTitle}</p>
       </div>
-      {clips.length > 0 && <AiClipPanel plan={plan} onChange={onChange} images={images} ready={videoAiReady} />}
       <ol className="space-y-1.5">
         {plan.scenes.map((s, i) => (
           <li key={i} className="grid grid-cols-[28px_minmax(0,1fr)_200px] items-center gap-2 rounded-control border border-line px-2 py-1.5 text-[12.5px]" data-plan-scene>
@@ -542,8 +438,7 @@ function PlanEditor({
       </ol>
       {error && <Notice tone="warning" className="mt-3">{error}</Notice>}
       <div className="mt-4 flex items-center justify-end gap-3">
-        {notReady.length > 0 && <span className="text-xs text-fg-subtle">AI 컷 {notReady.map((c) => c.id.slice(2)).join(", ")}번이 다 만들어지면 누를 수 있습니다.</span>}
-        <Button variant="primary" icon={Film} onClick={onRender} disabled={notReady.length > 0} data-render>
+        <Button variant="primary" icon={Film} onClick={onRender} data-render>
           영상 만들기
         </Button>
       </div>
@@ -572,10 +467,7 @@ function JobPanel({
   const [note, setNote] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const changed = JSON.stringify(edited.scenes.map((s) => s.sourceVideoId)) !== JSON.stringify(job.plan.scenes.map((s) => s.sourceVideoId));
-  const pool = [
-    ...(job.plan.aiClips ?? []).filter((c) => c.state === "success").map((c) => ({ value: aiSourceId(c.id), label: clipLabel(c) })),
-    ...videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) })),
-  ];
+  const pool = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) }));
 
   async function download() {
     setNote(null);
@@ -690,185 +582,6 @@ function JobPanel({
       )}
       {plan && null}
     </SectionCard>
-  );
-}
-
-/**
- * AI 컷 (v0.9.60, Kie AI): 컷마다 '제품 사진 → 움직이는 영상' 또는 '글 → 장면'.
- * [AI 컷 만들기] 1번 = 아직 안 만든(또는 실패한) 컷 수만큼 과금. 상태 확인은 무료 — 만드는 중이면 20초마다 확인한다.
- */
-function AiClipPanel({ plan, onChange, images, ready }: { plan: VideoPlan; onChange: (p: VideoPlan) => void; images: string[]; ready: boolean }) {
-  const clips = plan.aiClips ?? [];
-  const [busy, setBusy] = useState<"make" | "check" | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const planRef = useRef(plan);
-  useEffect(() => {
-    planRef.current = plan;
-  }, [plan]);
-  const todo = clips.filter((c) => !c.taskId || c.state === "fail");
-  const pending = clips.some(PENDING);
-  const est = estimateAiClipUsd(todo.map((c) => c.mode));
-  const spent = clips.reduce((n, c) => n + (c.credits ?? 0), 0);
-  const setClip = (id: string, patch: Partial<AiClip>) => onChange({ ...plan, aiClips: clips.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
-  const [uploadingClip, setUploadingClip] = useState<string | null>(null);
-  // 직접 올린 사진도 다른 컷에서 고를 수 있게
-  const allImages = [...new Set([...images, ...clips.map((c) => c.imageUrl).filter((u): u is string => Boolean(u))])];
-  async function uploadFor(c: AiClip, file: File | undefined) {
-    if (!file) return;
-    setUploadingClip(c.id);
-    setNote(null);
-    try {
-      const { imageUrl } = await api.videoProduction.aiClipImage(await shrinkImage(file), plan.channelId);
-      setClip(c.id, { imageUrl, mode: "product" });
-    } catch (e) {
-      setNote(e instanceof Error ? e.message : "사진을 올리지 못했습니다.");
-    } finally {
-      setUploadingClip(null);
-    }
-  }
-
-  const merge = useCallback(
-    (next: AiClip[]) => {
-      const p = planRef.current;
-      const byId = new Map(next.map((c) => [c.id, c]));
-      onChange({ ...p, aiClips: (p.aiClips ?? []).map((c) => byId.get(c.id) ?? c) });
-    },
-    [onChange],
-  );
-
-  async function make() {
-    if (busy || !todo.length) return;
-    setBusy("make");
-    setNote(null);
-    try {
-      const r = await api.videoProduction.aiClips(plan, newId());
-      merge(r.clips);
-      const failed = r.clips.filter((c) => c.state === "fail");
-      setNote(`AI 컷 ${r.created}개를 만들기 시작했습니다 (보통 1~5분).${failed.length ? ` 실패 ${failed.length}개: ${failed[0].error ?? ""}` : ""}`);
-    } catch (e) {
-      setNote(e instanceof Error ? e.message : "AI 컷을 만들지 못했습니다.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const check = useCallback(async () => {
-    const now = planRef.current.aiClips ?? [];
-    if (!now.some(PENDING)) return;
-    setBusy((b) => b ?? "check");
-    try {
-      merge((await api.videoProduction.aiClipStatus(now)).clips);
-    } catch (e) {
-      setNote(e instanceof Error ? e.message : "상태를 확인하지 못했습니다.");
-    } finally {
-      setBusy((b) => (b === "check" ? null : b));
-    }
-  }, [merge]);
-
-  // 만드는 중이면 20초마다 상태 확인 (무료 API)
-  useEffect(() => {
-    if (!pending) return;
-    const timer = setInterval(() => void check(), 20_000);
-    return () => clearInterval(timer);
-  }, [pending, check]);
-
-  return (
-    <div className="mb-4 rounded-control border border-brand-line bg-brand-soft/30 p-3" data-ai-clips>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[13px] font-semibold text-fg">
-          <Sparkles className="size-4 text-brand" /> AI 컷 {clips.length}개 <span className="font-normal text-fg-subtle">(Kie AI · 5초 · 소리 없음)</span>
-        </p>
-        <span className="flex items-center gap-2">
-          {pending && (
-            <Button size="sm" icon={RefreshCw} loading={busy === "check"} onClick={() => void check()}>
-              상태 확인
-            </Button>
-          )}
-          <Button size="sm" variant="primary" icon={Sparkles} loading={busy === "make"} disabled={!ready || !todo.length || Boolean(busy)} onClick={() => void make()} data-ai-make>
-            {todo.length ? `AI 컷 만들기 (${todo.length}개${est.usd ? ` · 약 $${est.usd.toFixed(2)}` : ""}${est.unknown ? ` · 장면 ${est.unknown}개는 끝난 뒤 실제 비용 표시` : ""})` : "AI 컷 모두 요청함"}
-          </Button>
-        </span>
-      </div>
-      <Textarea
-        value={plan.aiPrompt ?? ""}
-        onChange={(e) => onChange({ ...plan, aiPrompt: e.target.value.slice(0, 2000) })}
-        rows={3}
-        className="mb-2 text-[12.5px]"
-        aria-label="AI 컷 공통 프롬프트"
-        placeholder="공통 프롬프트 (모든 AI 컷에 적용): 분위기·장소·인물·카메라·색감을 자세히 — 사람은 현대 한국인으로 만듭니다"
-      />
-      <ul className="space-y-2">
-        {clips.map((c) => {
-          const locked = Boolean(c.taskId) && c.state !== "fail";
-          const st = CLIP_STATE[c.state];
-          return (
-            <li key={c.id} className="rounded-control border border-line bg-canvas p-2.5" data-ai-clip>
-              <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                <span className="text-[12.5px] font-semibold text-fg">AI 컷 {c.id.slice(2)}</span>
-                <Badge tone={st.tone}>
-                  {PENDING(c) && <Loader2 className="mr-1 inline size-3 animate-spin" />}
-                  {st.label}
-                </Badge>
-                {c.credits != null && <span className="text-[11px] text-fg-subtle">{c.credits} 크레딧 (약 ${(c.credits * AI_CLIP_CONFIG.creditUsd).toFixed(2)})</span>}
-                <span className="ml-auto">
-                  <SegmentedControl
-                    size="sm"
-                    value={c.mode}
-                    onChange={(m) => !locked && setClip(c.id, { mode: m, imageUrl: m === "product" ? (c.imageUrl ?? images[0] ?? null) : null })}
-                    options={[
-                      { value: "product", label: "제품 사진 → 움직임" },
-                      { value: "text", label: "글 → 장면" },
-                    ]}
-                  />
-                </span>
-              </div>
-              {c.mode === "product" &&
-                (allImages.length || !locked ? (
-                  <div className="mb-1.5 flex gap-1.5 overflow-x-auto" data-ai-images>
-                    {!locked && (
-                      <label className="flex size-12 shrink-0 cursor-pointer items-center justify-center rounded border border-dashed border-line text-fg-subtle hover:border-brand hover:text-brand" title="제품 사진 올리기" data-ai-upload>
-                        {uploadingClip === c.id ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
-                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => void uploadFor(c, e.target.files?.[0])} aria-label={`AI 컷 ${c.id.slice(2)} 제품 사진 올리기`} />
-                      </label>
-                    )}
-                    {allImages.map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        disabled={locked}
-                        onClick={() => setClip(c.id, { imageUrl: u })}
-                        className={cn("size-12 shrink-0 overflow-hidden rounded border-2", c.imageUrl === u ? "border-brand" : "border-transparent opacity-70 hover:opacity-100")}
-                        aria-label="이 제품 사진 쓰기"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- 제품 사진 주소 그대로 */}
-                        <img src={u} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mb-1.5 text-[11.5px] text-warning">이 제품에 사진이 없습니다. 사진을 올리거나 &lsquo;글 → 장면&rsquo;으로 바꿔 주세요.</p>
-                ))}
-              <Textarea
-                value={c.prompt}
-                onChange={(e) => setClip(c.id, { prompt: e.target.value })}
-                disabled={locked}
-                rows={3}
-                maxLength={500}
-                className="text-[12.5px]"
-                aria-label={`AI 컷 ${c.id.slice(2)} 장면 설명`}
-                placeholder={c.mode === "product" ? "예: 사람이 거실에서 이 청소기로 바닥을 미는 모습" : "예: 아침 햇살이 드는 깔끔한 원룸"}
-              />
-              {c.error && <p className="mt-1 text-[11.5px] text-danger">{c.error}</p>}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="mt-2 text-[11px] text-fg-subtle">
-        한국어로 써도 됩니다 (만들 때 AI 가 영어 프롬프트로 바꿉니다). 만든 컷은 실패하지 않는 한 다시 과금하지 않습니다.{spent ? ` 지금까지 ${spent} 크레딧 (약 $${(spent * AI_CLIP_CONFIG.creditUsd).toFixed(2)}).` : ""}
-        {!ready && " Kie AI 키를 연결하면 만들 수 있습니다."}
-      </p>
-      {note && <p className="mt-1 text-xs text-fg-muted">{note}</p>}
-    </div>
   );
 }
 

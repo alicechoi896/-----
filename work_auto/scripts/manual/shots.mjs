@@ -538,34 +538,6 @@ export const SHOTS = [
     },
   },
   {
-    id: "05-ai-clips",
-    url: "/youtube/video-production",
-    viewport: { width: 1440, height: 2300 },
-    prepare: async (p) => {
-      // 데모: 원고가 없으면 만든다 → '섞기' → AI 컷 2개 → [컷 계획 만들기] → AI 컷 칸
-      const abs = (path) => new URL(path, p.url()).toString();
-      const api = (path, body) => p.request.post(abs(path), { data: body }).then((r) => r.json());
-      const opts = (await (await p.request.get(abs("/api/video-production/options?channelId=youtube"))).json()).data;
-      if (!opts.contents.length) {
-        const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
-        const s1 = (await api("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: "manual-ai" })).data;
-        await api("/api/contents/stage2", { stage1Id: s1.id, title: s1.output.titles[0], hook: s1.output.hooks[0], cta: s1.output.ctas[0] });
-        await p.reload({ waitUntil: "networkidle" });
-      }
-      await p.getByRole("radio", { name: "섞기" }).first().click();
-      await p.locator("[data-ai-count]").fill("2");
-      await p.locator("[data-make-plan]").click();
-      await p.locator("[data-ai-clip]").first().waitFor({ timeout: 20_000 });
-      await p.waitForTimeout(400);
-    },
-    marks: {
-      1: (p) => p.locator("[data-ai-count]").first(),
-      2: (p) => p.locator("[data-ai-clip]").first(),
-      3: (p) => p.locator("[data-ai-make]").first(),
-      4: (p) => p.locator("[data-render]").first(),
-    },
-  },
-  {
     id: "05-clip-form",
     viewport: { width: 1280, height: 1130 },
     url: "/naver-clip/product-content",

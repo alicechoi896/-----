@@ -92,8 +92,8 @@ const PROVIDERS: ProviderMeta[] = [
   {
     id: "kie",
     name: "Kie AI (AI 영상)",
-    description: "영상 자동 제작의 AI 컷: 제품 사진 → 움직이는 영상(Wan 2.6 Flash, 5초 약 $0.10), 글 → 장면(Grok Imagine Video 1.5, 5초 약 $0.11). [AI 컷 만들기]를 누를 때만 컷 수만큼 호출하고, 자동 재시도하지 않습니다 · [테스트]는 무료(잔액 확인)",
-    usages: ["AI 컷 (제품 사진 → 영상)", "AI 컷 (글 → 장면)"],
+    description: "공통 도구 › AI 드라마 시험 (MiniMax H3 · Seedance 2.0 Mini · Kling 3.0 비교). [시험 만들기]를 누를 때만 장면 × 모델 수만큼 호출하고, 자동 재시도하지 않습니다 · [테스트]는 무료(잔액 확인)",
+    usages: ["AI 드라마 시험"],
     icon: Clapperboard,
     fields: [{ name: "apiKey", label: "API Key", placeholder: "Kie AI API Key", hint: "kie.ai → API Key. 키마다 시간·일·총 사용 한도를 걸 수 있습니다. 키는 서버에만 암호화해 저장합니다" }],
     docsUrl: "https://kie.ai/api-key",

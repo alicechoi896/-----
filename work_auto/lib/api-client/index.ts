@@ -2,7 +2,7 @@ import type { PermissionRow } from "@/lib/permissions";
 import type { IgMetaKind, IgSearchResult, IgSource, IgSourceStatus } from "@/lib/types/instagram";
 import type { ScrapSource } from "@/lib/types/trend";
 import type { KeywordTrend, TrendKeyword, TrendKeywordView } from "@/lib/types/keyword-library";
-import type { AiClip, VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
+import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import type { StyleImportKind } from "@/lib/style-limits";
 import type { StyleImportPreview } from "@/lib/types";
 import type { OutlierScore } from "@/lib/domain/outlier";
@@ -305,13 +305,11 @@ export const api = {
       voice: string;
       narrationOn: boolean;
       captions: boolean;
-      aiCount?: number;
       voiceStyle?: string;
       voiceSpeed?: number;
       targetSec?: number;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
-      aiPrompt?: string;
     }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
     jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),
@@ -320,10 +318,6 @@ export const api = {
     approve: (id: string) => request<VideoJob>(`/api/video-jobs/${id}/approve`, { method: "POST" }),
     rerender: (id: string, plan?: VideoPlan) => request<VideoJob>(`/api/video-jobs/${id}/rerender`, { method: "POST", body: json({ plan }) }),
     download: (id: string) => request<{ url: string }>(`/api/video-jobs/${id}/download`, { method: "POST" }),
-    /** AI 컷 만들기 (Kie, 컷 1개 = 1회 과금) */
-    aiClips: (plan: VideoPlan, clientRequestId: string) => request<{ clips: AiClip[]; created: number; aiCalls: number }>("/api/video-production/ai-clips", { method: "POST", body: json({ plan, clientRequestId }) }),
-    /** AI 컷용 제품 사진 직접 올리기 */
-    aiClipImage: (dataUrl: string, channelId: VideoChannel) => request<{ imageUrl: string }>("/api/video-production/ai-clips/image", { method: "POST", body: json({ dataUrl, channelId }) }),
     /** 목소리 미리 듣기 (OpenAI TTS 1회) → mp3 */
     voicePreview: async (body: { voice: string; voiceStyle: string; voiceSpeed?: number; text?: string; channelId: VideoChannel }): Promise<Blob> => {
       const res = await fetch("/api/video-production/voice-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -333,8 +327,6 @@ export const api = {
       }
       return res.blob();
     },
-    /** AI 컷 상태 (무료) */
-    aiClipStatus: (clips: AiClip[]) => request<{ clips: AiClip[] }>("/api/video-production/ai-clips/status", { method: "POST", body: json({ clips }) }),
   },
   publications: {
     list: (from: string, to: string) => request<ContentPublicationView[]>(`/api/publications${qs({ from, to })}`),
@@ -514,10 +506,10 @@ export const api = {
 
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
-  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; images: string[]; targetSec: number }[];
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
-  ready: { voice: boolean; vision: boolean; ai: string; videoAi: boolean };
+  ready: { voice: boolean; vision: boolean; ai: string };
   voices: readonly { value: string; label: string }[];
   voiceStyles: { value: string; label: string }[];
 }

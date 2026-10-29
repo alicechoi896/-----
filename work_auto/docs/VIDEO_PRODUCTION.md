@@ -73,7 +73,10 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 | AI 화면용 제목 | 1회 (컷 계획) |
 | Kie AI (AI 컷) | [AI 컷 만들기]를 누를 때만 컷 수만큼 (+ 영어 프롬프트 AI 1회). 상태 확인·렌더 때 결과 받기는 무료 |
 
-## AI 컷 (v0.9.60, Kie AI)
+## AI 컷 (v0.9.60, Kie AI) — **v0.9.71 에서 뺐다**
+
+> v0.9.71: 영상 자동 제작은 **고른 샤오홍슈 영상만**으로 잘라 붙인다. 화면의 소재 선택(섞기·AI만)·AI 컷 칸과 `/api/video-production/ai-clips*` 를 없앴고, 계획·검사는 항상 sourceMode = xhs (예전 계획의 aiClips 는 무시). 아래는 예전 기록 (lib/server/video/ai-clips.ts 는 렌더의 예전 작업 호환용으로만 남김). Kie 키는 AI 드라마 시험에서 씀.
+
 
 - Provider: `lib/server/providers/video-ai/kie.ts` (registry `getVideoAIProvider`, API 연결 센터 `kie`). 서비스: `lib/server/video/ai-clips.ts`. 모델·가격은 `AI_CLIP_CONFIG` (lib/video-production/config.ts)
 - 계획: 소재 '섞기'·'AI만' + AI 컷 수(1~10) → `plan.aiClips` (ai1…), 컷의 `sourceVideoId = "ai:ai1"`. 섞기는 고르게 n 컷(고정), AI만은 모든 컷을 돌아가며. 이때 Kie 호출 0
