@@ -13,7 +13,9 @@ import {
   CAPTION_STROKES,
   DEFAULT_CAPTION_STYLE,
   DEFAULT_TITLE_STYLE,
+  DEFAULT_PAUSE,
   DEFAULT_VOICE_SPEED,
+  PAUSE_OPTIONS,
   TITLE_BAR_COLORS,
   VIDEO_TARGETS,
   VOICE_SPEEDS,
@@ -44,6 +46,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [voiceStyle, setVoiceStyle] = useState("shorts");
   const [voiceSpeed, setVoiceSpeed] = useState<number>(DEFAULT_VOICE_SPEED);
   const [targetSec, setTargetSec] = useState<number>(15);
+  const [maxPause, setMaxPause] = useState<number>(DEFAULT_PAUSE);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
   const [titleStyle, setTitleStyle] = useState<TitleStyle>(DEFAULT_TITLE_STYLE);
   const [previewing, setPreviewing] = useState(false);
@@ -107,7 +110,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setError(null);
     try {
       // v0.9.71: 고른 샤오홍슈 영상만으로 만든다 (AI 영상 생성 없음)
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, captionStyle, titleStyle });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle });
       setPlan(r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
@@ -271,6 +274,14 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   value={String(targetSec)}
                   onChange={(v) => setTargetSec(Number(v))}
                   options={VIDEO_TARGETS.map((x) => ({ value: String(x), label: x ? `${x}초` : "자동" }))}
+                />
+              </FormField>
+              <FormField label="말 사이 무음 없애기" hint="AI 음성 안의 쉼이 이보다 길면 모두 줄입니다 (무음 구간 자르기와 같은 방식). 컷 사이도 0.04초만 둡니다." data-max-pause>
+                <SegmentedControl
+                  size="sm"
+                  value={String(maxPause)}
+                  onChange={(v) => setMaxPause(Number(v))}
+                  options={PAUSE_OPTIONS.map((x) => ({ value: String(x), label: `${x}초 넘으면` }))}
                 />
               </FormField>
               <FormField label="음성 · 자막">

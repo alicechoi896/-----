@@ -308,6 +308,7 @@ export const api = {
       voiceStyle?: string;
       voiceSpeed?: number;
       targetSec?: number;
+      maxPauseSec?: number;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
     }) =>

@@ -13,6 +13,7 @@ import {
   VIDEO_RENDER_CONFIG as C,
   atempoFor,
   captionChunks,
+  cleanPause,
   cleanTarget,
   cleanVoiceSpeed,
   fitTempo,
@@ -24,6 +25,7 @@ import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
 import { mediaDuration, runFfmpeg, videoSize } from "./ffmpeg";
 import { SourceError, fetchSource, type LocalSource } from "./source";
+import { removePauses } from "./pauses";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
 import { pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
@@ -78,12 +80,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
               const mp3 = path.join(dir, `a${k}.mp3`);
               await writeFile(mp3, await tts.synthesize(s.narration, plan.voice, voiceInstructions(plan.voiceStyle)));
               aiCalls++;
-              const thr = `${C.silenceThresholdDb}dB`;
-              await runFfmpeg([
-                "-i", mp3,
-                "-af", `silenceremove=start_periods=1:start_threshold=${thr}:start_silence=0.02,areverse,silenceremove=start_periods=1:start_threshold=${thr}:start_silence=0.02,areverse`,
-                "-ar", "44100", "-ac", "1", out,
-              ]);
+              // v0.9.72: 앞뒤 무음 + 문장 중간의 긴 쉼(기본 0.2초 넘는 것)까지 모두 없앤다 (무음 구간 자르기와 같은 방식)
+              await removePauses(mp3, out, { thresholdDb: C.silenceThresholdDb, maxPause: cleanPause(plan.maxPauseSec), dir, key: `a${k}` });
               audio[k] = { file: out, dur: await mediaDuration(out) };
               return;
             } catch (e) {

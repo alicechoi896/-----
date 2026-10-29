@@ -83,6 +83,8 @@ export interface VideoPlan {
   voiceStyle?: string;
   /** 음성 속도 1~2배 (v0.9.66, 기본 2) */
   voiceSpeed?: number;
+  /** 말 사이 무음: 이보다 긴 쉼은 모두 줄인다 (v0.9.72, 기본 0.2초) */
+  maxPauseSec?: number;
   /** 목표 영상 길이(초). 0 = 자동(말하기 속도대로). 고르면 음성 속도를 자동으로 맞춘다 (v0.9.67) */
   targetSec?: number;
   /** 자막 글꼴·색·크기 (v0.9.63) */

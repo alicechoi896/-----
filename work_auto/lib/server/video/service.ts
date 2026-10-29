@@ -5,7 +5,7 @@ import path from "node:path";
 import { runFfmpeg } from "./ffmpeg";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
-import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
+import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider } from "../providers/registry";
@@ -72,7 +72,7 @@ export const videoJobService = {
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; maxPauseSec?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     // v0.9.71: AI 영상 생성(AI 컷)은 뺐다 — 고른 샤오홍슈 영상만으로 만든다
@@ -93,6 +93,7 @@ export const videoJobService = {
     built.plan.captionStyle = cleanCaptionStyle(input.captionStyle);
     built.plan.titleStyle = cleanTitleStyle(input.titleStyle);
     built.plan.voiceSpeed = cleanVoiceSpeed(input.voiceSpeed);
+    built.plan.maxPauseSec = cleanPause(input.maxPauseSec);
     built.plan.targetSec = input.targetSec === undefined ? targetFromLength(content.input?.length) : cleanTarget(input.targetSec);
     return built;
   },
@@ -159,6 +160,7 @@ export const videoJobService = {
       captionStyle: cleanCaptionStyle(plan.captionStyle),
       titleStyle: cleanTitleStyle(plan.titleStyle),
       voiceSpeed: cleanVoiceSpeed(plan.voiceSpeed),
+      maxPauseSec: cleanPause(plan.maxPauseSec),
       targetSec: cleanTarget(plan.targetSec),
       meme: false,
     };

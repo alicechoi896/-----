@@ -14,8 +14,9 @@ export const VIDEO_RENDER_CONFIG = {
   preset: "veryfast",
 
   /** 무음 정리: 마디마다 앞뒤 무음을 자르고, 마디 사이는 짧은 호흡만 */
-  silenceThresholdDb: -40,
-  minSpeechGapSec: 0.1,
+  silenceThresholdDb: -35,
+  /** 컷 사이 숨 (v0.9.72: 0.1 → 0.04초, 무음이 거의 없게) */
+  minSpeechGapSec: 0.04,
   /** 마지막 컷 뒤 여유 (엔딩 GIF 가 보이게) */
   tailSec: 0.6,
   /** 엔딩(최저가 구매링크 + 화살표) 컷 최소 길이 — 화살표가 2초 넘게 보이게 (v0.9.64) */
@@ -228,6 +229,13 @@ export function atempoFor(tempo: number): string {
   if (Math.abs(left - 1) > 0.001) parts.push(`atempo=${left.toFixed(4)}`);
   return parts.join(",");
 }
+
+/**
+ * 말 사이 무음 (v0.9.72): 음성 안의 쉼이 이 길이보다 길면 모두 줄인다 (무음 구간 자르기와 같은 방식). 기본 0.2초
+ */
+export const PAUSE_OPTIONS = [0.1, 0.2, 0.3, 0.5] as const;
+export const DEFAULT_PAUSE = 0.2;
+export const cleanPause = (v: unknown) => (PAUSE_OPTIONS.includes(Number(v) as (typeof PAUSE_OPTIONS)[number]) ? Number(v) : DEFAULT_PAUSE);
 
 /** ",atempo=2" (atempo 한 번에 0.5~2배) */
 export const atempoChain = (v: unknown) => {

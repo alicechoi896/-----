@@ -148,3 +148,29 @@ describe("장면 고르기 (v0.9.67)", async () => {
     expect(wordsOf("바닥을 청소기로 밀어요")).toEqual(expect.arrayContaining(["바닥", "청소기"]));
   });
 });
+
+describe("말 사이 무음 없애기 (v0.9.72)", async () => {
+  const { removePauses } = await import("@/lib/server/video/pauses");
+  const { execFileSync, spawnSync } = await import("node:child_process");
+  const { mkdtempSync } = await import("node:fs");
+  const os = await import("node:os");
+  const pathMod = await import("node:path");
+  const ffmpeg = (await import("ffmpeg-static")).default as unknown as string;
+  const durOf = (file: string) => {
+    const log = spawnSync(ffmpeg, ["-i", file, "-f", "null", "-"], { encoding: "utf8" }).stderr ?? "";
+    const m = [...log.matchAll(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/g)].at(-1);
+    return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
+  };
+  it("앞 0.3초 · 중간 0.8초 쉼 · 끝 0.5초 무음을 모두 줄인다 (소리 2초는 그대로)", async () => {
+    const dir = mkdtempSync(pathMod.join(os.tmpdir(), "pause_"));
+    const src = pathMod.join(dir, "a.wav");
+    const out = pathMod.join(dir, "b.wav");
+    // 0~0.3 무음, 0.3~1.3 소리, 1.3~2.1 무음, 2.1~3.1 소리, 3.1~3.6 무음
+    execFileSync(ffmpeg, ["-y", "-f", "lavfi", "-i", "sine=f=300:d=3.6", "-af", "volume='if(lt(t,0.3)+between(t,1.3,2.1)+gt(t,3.1),0,1)':eval=frame", src], { stdio: "ignore" });
+    await removePauses(src, out, { thresholdDb: -35, maxPause: 0.2, dir, key: "t" });
+    expect(durOf(src)).toBeGreaterThan(3.5);
+    const after = durOf(out);
+    expect(after).toBeGreaterThan(1.9);
+    expect(after).toBeLessThan(2.2);
+  });
+});

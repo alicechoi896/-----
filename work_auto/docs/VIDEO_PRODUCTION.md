@@ -95,6 +95,11 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 - 샤오홍슈 원본: 영상 서버 주소 제한 없음 (xhscdn·rednotecdn 등). safeFetch 가 내부망을 막는다
 - AI 컷: 사람은 현대 한국인(KOREAN_PEOPLE 문장을 모든 프롬프트에), `plan.aiPrompt` 공통 프롬프트(최대 2,000자), 제품 사진 직접 올리기 `POST /api/video-production/ai-clips/image` (9:16 → Kie 파일)
 
+## 무음 없애기 (v0.9.72)
+
+- 음성 마디마다 `removePauses()` (lib/server/video/pauses.ts): 앞뒤 무음은 모두 자르고, 중간의 쉼 중 `maxPauseSec`(기본 0.2초) 이상은 silencedetect → aselect 로 잘라 말 앞뒤 0.03초만 남긴다 (무음 구간 자르기와 같은 keepSegments). 기준 -35dB
+- 컷 사이 숨 `minSpeechGapSec` 0.04초. 엔딩 컷(최소 2.5초)은 배경음악이 깔린다
+
 ## 컷 매칭·주목 효과·엔딩 (v0.9.64)
 
 - 컷 원본 고르기: 정한 원본 → 같은 종류의 다른 원본. **AI 컷(ai:…)은 AI 로 정한 컷에만** 후보가 된다. 샤오홍슈 원본이 하나도 안 되면(받기 실패·rejected) AI 컷으로 대신하고 `scene.issue` 에 이유
