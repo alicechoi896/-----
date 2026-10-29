@@ -101,7 +101,8 @@ export async function mediaDuration(file: string): Promise<number> {
 
 /** 영상 크기 */
 export async function videoSize(file: string): Promise<{ width: number; height: number }> {
-  const { stderr } = await runFfmpeg(["-i", file], 30_000).catch((e: Error) => ({ stderr: e.message }));
+  // v0.9.74: '-i' 만 하면 FFmpeg 가 실패로 끝나고 오류 로그가 잘려 크기를 못 읽었다 (→ 블러·확대가 빠짐). 0초만 버리는 출력으로
+  const { stderr } = await runFfmpeg(["-i", file, "-t", "0", "-f", "null", "-"], 30_000).catch((e: Error) => ({ stderr: e.message }));
   const m = stderr.match(/Video:.*?(\d{2,5})x(\d{2,5})/);
   return m ? { width: Number(m[1]), height: Number(m[2]) } : { width: 0, height: 0 };
 }

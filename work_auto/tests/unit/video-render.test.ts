@@ -174,3 +174,17 @@ describe("말 사이 무음 없애기 (v0.9.72)", async () => {
     expect(after).toBeLessThan(2.2);
   });
 });
+
+describe("영상 크기 읽기 (v0.9.74)", async () => {
+  const { videoSize } = await import("@/lib/server/video/ffmpeg");
+  const { execFileSync } = await import("node:child_process");
+  const { mkdtempSync } = await import("node:fs");
+  const os = await import("node:os");
+  const pathMod = await import("node:path");
+  const ffmpeg = (await import("ffmpeg-static")).default as unknown as string;
+  it("세로 영상 크기를 읽는다 (예전엔 0×0 → 블러·확대가 빠졌다)", async () => {
+    const f = pathMod.join(mkdtempSync(pathMod.join(os.tmpdir(), "vs_")), "a.mp4");
+    execFileSync(ffmpeg, ["-y", "-f", "lavfi", "-i", "testsrc2=s=720x1280:d=1", "-c:v", "libx264", "-preset", "ultrafast", f], { stdio: "ignore" });
+    expect(await videoSize(f)).toEqual({ width: 720, height: 1280 });
+  });
+});
