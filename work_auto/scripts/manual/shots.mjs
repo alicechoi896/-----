@@ -515,7 +515,7 @@ export const SHOTS = [
   {
     id: "05-video-production",
     url: "/youtube/video-production",
-    viewport: { width: 1440, height: 1500 },
+    viewport: { width: 1440, height: 2100 },
     prepare: async (p) => {
       // 데모 데이터: 샤오홍슈 영상 3개 담기 → 2단계 대본 만들기 → 화면 다시 열기 → [컷 계획 만들기]
       const abs = (path) => new URL(path, p.url()).toString();

@@ -863,7 +863,7 @@
   "05-video-production": {
     "file": "/manual/shots/05-video-production.png",
     "w": 1440,
-    "h": 1500,
+    "h": 2100,
     "boxes": [
       {
         "n": 1,
@@ -891,7 +891,7 @@
         "x": 1260,
         "y": 1503,
         "w": 125,
-        "h": -4
+        "h": 48
       }
     ]
   },
