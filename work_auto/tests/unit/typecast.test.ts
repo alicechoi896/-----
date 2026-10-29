@@ -29,9 +29,9 @@ describe("타입캐스트 음성 (v0.9.73)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     await expect(p.synthesize("a", "tc_60e5426de8b95f1d3000d7b5")).rejects.toThrow("크레딧");
   });
-  it("목소리 목록: 한국어 이름·성별·샘플", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([{ voice_id: "tc_abcdef123456", voice_name: { eng: "Valkyrie", kor: "발키리" }, gender: "female", age: "young_adult", use_cases: ["Ads"], preview_url: "https://x/p.mp3", voice_type: "original", models: [{ version: "ssfm-v30", emotions: ["normal", "happy"] }] }]), { status: 200 })));
+  it("목소리 목록: 한국어로 읽을 수 있는 것(ssfm-v30)만 · 한국어 이름·성별·샘플", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([{ voice_id: "tc_abcdef123456", voice_name: { eng: "Valkyrie", kor: "발키리" }, gender: "female", age: "young_adult", use_cases: ["Ads"], preview_url: "https://x/p.mp3", voice_type: "original", models: [{ version: "ssfm-v30", emotions: ["normal", "happy"] }] }, { voice_id: "tc_old0000000001", voice_name: { eng: "Old", kor: "옛" }, voice_type: "original", models: [{ version: "ssfm-v21", emotions: [] }] }]), { status: 200 })));
     const list = await new TypecastTTSProvider("KEY").listVoices();
-    expect(list).toEqual([{ id: "tc_abcdef123456", name: "발키리", gender: "female", age: "young_adult", useCases: ["Ads"], previewUrl: "https://x/p.mp3", emotions: ["normal", "happy"], custom: false }]);
+    expect(list).toEqual([{ id: "tc_abcdef123456", name: "발키리", gender: "female", age: "young_adult", useCases: ["Ads"], previewUrl: "https://x/p.mp3", emotions: ["normal", "happy"], custom: false, korean: true }]);
   });
 });

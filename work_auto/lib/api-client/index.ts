@@ -324,7 +324,7 @@ export const api = {
     /** 목소리 미리 듣기 (OpenAI TTS 1회) → mp3 */
     /** 타입캐스트 목소리 목록 */
     typecastVoices: (channelId: VideoChannel) =>
-      request<{ id: string; name: string; gender: string | null; age: string | null; useCases: string[]; previewUrl: string | null; emotions: string[]; custom: boolean }[]>(`/api/video-production/typecast-voices?channelId=${channelId}`),
+      request<{ id: string; name: string; gender: string | null; age: string | null; useCases: string[]; previewUrl: string | null; emotions: string[]; custom: boolean; korean: boolean }[]>(`/api/video-production/typecast-voices?channelId=${channelId}`),
     voicePreview: async (body: { voice: string; voiceStyle: string; voiceSpeed?: number; text?: string; channelId: VideoChannel; ttsEngine?: "openai" | "typecast"; ttsEmotion?: string }): Promise<Blob> => {
       const res = await fetch("/api/video-production/voice-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) {

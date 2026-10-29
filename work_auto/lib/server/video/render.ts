@@ -173,6 +173,12 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     await hooks.stage("editing", 30);
 
     // 3) 컷마다 원본 구간 고르기 (글자 없는 구간 우선, 같은 구간 반복 금지) → 컷 영상
+    // v0.9.76: 원본 비율 (확대할 때 꽉 채우기로 잘리는 부분까지 계산)
+    const aspects = new Map<string, number>();
+    await Promise.all([...sources.entries()].map(async ([id, x]) => {
+      const z = await videoSize(x.file).catch(() => ({ width: 0, height: 0 }));
+      aspects.set(id, z.width && z.height ? z.width / z.height : 9 / 16);
+    }));
     const usedRanges = new Map<string, [number, number][]>();
     let t = 0;
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number }[] = [];
@@ -198,7 +204,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           narration: s.narration,
           dur,
           used: usedRanges,
-          sources: candidates.filter((id) => !isAiSource(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === s.sourceVideoId })),
+          sources: candidates.filter((id) => !isAiSource(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === s.sourceVideoId, aspect: aspects.get(id) })),
         });
       }
       // 샤오홍슈 원본을 하나도 쓸 수 없으면(받기 실패·글자를 못 가림) AI 컷으로 대신
@@ -225,7 +231,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       s.start = Number(t.toFixed(2));
       s.duration = Number(dur.toFixed(2));
       s.textTreatment = best.tr.kind as TextTreatment;
-      if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 블러했습니다 (AI 이미지 읽기 연결 필요).";
+      if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 가렸습니다 (확대 또는 블러 · AI 이미지 읽기 연결 필요).";
       t += dur;
 
       picks.push({ k, s, src, best, dur });

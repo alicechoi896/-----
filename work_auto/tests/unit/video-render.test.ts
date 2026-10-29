@@ -31,17 +31,27 @@ describe("영상 자동 제작", () => {
     expect(arrowSceneIndexes(12)).toContain(3);
   });
 
-  it("원본 글자 (v0.9.66): 없음 → clean, 아래 자막 → blur(상자마다), 가운데 작은 글자 → blur, 큰 글자 → 제외, 검사 못 함 → 아래 자막 띠 블러", () => {
+  it("원본 글자 (v0.9.76): 자막·로고는 확대로 먼저 가리고, 안 되면 블러, 큰 글자는 제외", () => {
     expect(decideTreatment([], true).kind).toBe("clean");
-    expect(decideTreatment([{ x: 0.1, y: 0.85, w: 0.8, h: 0.06 }], true).kind).toBe("blur");
-    const two = decideTreatment([{ x: 0.1, y: 0.2, w: 0.3, h: 0.05 }, { x: 0.1, y: 0.85, w: 0.8, h: 0.06 }], true);
-    expect(two.kind).toBe("blur");
-    expect(two.blurs).toHaveLength(2);
-    expect(decideTreatment([], false).blurs?.[0].y).toBe(0.7);
+    // 아래 자막 → 확대 (창 아래 끝이 자막 위)
+    const bottom = decideTreatment([{ x: 0.1, y: 0.85, w: 0.8, h: 0.06 }], true);
+    expect(bottom.kind).toBe("crop");
+    expect(bottom.crop!.y + bottom.crop!.h).toBeLessThanOrEqual(0.85);
+    expect(1 / bottom.crop!.w).toBeLessThanOrEqual(1.6);
+    // 오른쪽 위 로고 → 확대
+    const logo = decideTreatment([{ x: 0.78, y: 0.22, w: 0.18, h: 0.05 }], true);
+    expect(logo.kind).toBe("crop");
+    // 가운데 작은 글자 → 확대로 못 가려서 블러, 큰 글자 → 제외
     expect(decideTreatment([{ x: 0.4, y: 0.45, w: 0.2, h: 0.05 }], true).kind).toBe("blur");
     expect(decideTreatment([{ x: 0.05, y: 0.3, w: 0.9, h: 0.4 }], true).kind).toBe("rejected");
-    expect(decideTreatment([], false).kind).toBe("unchecked");
-    expect(decideTreatment([{ x: 0.1, y: 0.02, w: 0.8, h: 0.08 }], true).kind).toBe("clean"); // 상단 띠가 덮음
+    // 상단 띠가 덮음
+    expect(decideTreatment([{ x: 0.1, y: 0.02, w: 0.8, h: 0.08 }], true).kind).toBe("clean");
+    // 가로 영상(16:9)은 꽉 채우기에서 양옆이 잘리므로 왼쪽 끝 로고는 이미 안 보임
+    expect(decideTreatment([{ x: 0.02, y: 0.4, w: 0.12, h: 0.06 }], true, 16 / 9).kind).toBe("clean");
+    // 검사 못 함 → 아래 자막 띠를 확대로 잘라 냄
+    const un = decideTreatment([], false);
+    expect(un.kind).toBe("unchecked");
+    expect(un.crop!.y + un.crop!.h).toBeLessThanOrEqual(0.7);
   });
 
   it("렌더: 9:16 mp4 · 컷 길이 합 = 영상 길이 · 상단 제목·자막·엔딩", async () => {

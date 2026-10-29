@@ -7,7 +7,8 @@ import type { TTSProvider } from "./openai-tts";
  * AI 음성 — 타입캐스트 (v0.9.73, Neosapience). docs/VIDEO_PRODUCTION.md
  * - 음성: POST https://api.typecast.ai/v1/text-to-speech (X-API-KEY) → 오디오 그대로 (mp3)
  *   { voice_id "tc_…"|"uc_…", text ≤2000, model "ssfm-v30", language "kor", prompt { emotion_type "preset", emotion_preset, emotion_intensity }, output { audio_format "mp3" } }
- * - 목소리 목록: GET /v3/voices?model=ssfm-v30 (무료)
+ * - 목소리 목록: GET /v3/voices?model=ssfm-v30 (무료). 목소리에는 '지원 언어' 값이 없고 언어는 모델이 정한다
+ *   (ssfm-v30 = 한국어 포함 37개 언어) → v0.9.76: ssfm-v30 모델이 있는 목소리(+내 목소리)만 = 한국어로 읽을 수 있는 것만
  * - 연결 확인: GET /v1/users/me/subscription (무료, 플랜·남은 크레딧)
  * 1글자 = 1크레딧. 무료 플랜은 상업적 사용 불가 (유료 Lite 부터). 키는 헤더로만, 로그·오류에 넣지 않는다.
  */
@@ -33,6 +34,8 @@ export interface TypecastVoice {
   previewUrl: string | null;
   emotions: string[];
   custom: boolean;
+  /** 한국어로 읽을 수 있음 (ssfm-v30 모델 있음 또는 내 목소리) */
+  korean: boolean;
 }
 
 function errorOf(status: number): Error {
@@ -91,8 +94,9 @@ export class TypecastTTSProvider implements TTSProvider {
         previewUrl: typeof v.preview_url === "string" ? v.preview_url : null,
         emotions: models.find((m) => m.version === MODEL)?.emotions ?? [],
         custom: v.voice_type === "custom",
+        korean: v.voice_type === "custom" || models.some((m) => m.version === MODEL),
       };
-    }).filter((v) => TYPECAST_VOICE_ID.test(v.id));
+    }).filter((v) => TYPECAST_VOICE_ID.test(v.id) && v.korean);
   }
 
   async testConnection(): Promise<ConnectionTestResult> {

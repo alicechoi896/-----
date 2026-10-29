@@ -814,7 +814,7 @@ function TypecastVoicePicker({
       </div>
       {list && (
         <>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`이름으로 찾기 (목소리 ${list.length}개)`} aria-label="타입캐스트 목소리 찾기" className="h-9" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`이름·ID로 찾기 (한국어로 읽을 수 있는 목소리 ${list.length}개)`} aria-label="타입캐스트 목소리 찾기" className="h-9" />
           <ul className="max-h-60 space-y-1 overflow-y-auto" data-typecast-voices>
             {shown.map((v) => (
               <li key={v.id}>
@@ -827,6 +827,7 @@ function TypecastVoicePicker({
                     <span className="ml-1.5 text-[11px] text-fg-subtle">
                       {[v.gender === "female" ? "여성" : v.gender === "male" ? "남성" : null, v.age, v.custom ? "내 목소리" : null, ...v.useCases.slice(0, 2)].filter(Boolean).join(" · ")}
                     </span>
+                    <span className="block font-mono text-[10.5px] text-fg-subtle" data-typecast-id>{v.id}</span>
                   </button>
                   {v.id === value && <Check className="size-4 shrink-0 text-brand" />}
                 </div>
@@ -841,7 +842,7 @@ function TypecastVoicePicker({
         <Select value={emotion} options={emotions.map((e) => ({ value: e.value, label: `감정 · ${e.label}`}))} onChange={(e) => onEmotion(e.target.value)} aria-label="타입캐스트 감정" />
       </div>
       {err && <p className="text-xs text-danger">{err}</p>}
-      <p className="text-[11px] text-fg-subtle">원하는 목소리 이름을 찾아 ▶로 샘플을 듣고 고르세요. 타입캐스트 스튜디오에서 본 목소리 ID(tc_…)를 직접 넣어도 됩니다. 1글자 = 1크레딧 · 무료 플랜은 상업적 사용 불가.</p>
+      <p className="text-[11px] text-fg-subtle">[목록 불러오기]는 한국어로 읽을 수 있는 목소리만 보여 줍니다. 이름을 찾아 ▶로 샘플을 듣고 누르면 ID(tc_…)가 자동으로 들어갑니다. 타입캐스트 사이트에서 고르려면 studio.typecast.ai/developers/api/voices (로그인) 에서 목소리의 Voice ID 를 복사해 직접 넣으세요. 1글자 = 1크레딧 · 무료 플랜은 상업적 사용 불가.</p>
     </div>
   );
 }

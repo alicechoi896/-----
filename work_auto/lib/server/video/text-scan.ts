@@ -60,7 +60,7 @@ export async function scanText(file: string, duration: number, dir: string, key:
       type: "text",
       text: [
         `위 영상 프레임 ${batch.length}장을 순서대로 본다. 쇼츠 제품 영상에 쓸 장면을 고르려고 한다.`,
-        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·워터마크·로고 글자·스티커 글자)의 위치. 제품 본체에 인쇄된 아주 작은 글자는 빼도 된다.",
+        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 제품 본체에 인쇄된 아주 작은 글자는 빼도 된다.",
         "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게: 제품이 크고 선명하게 보임, 손으로 쓰는 동작·사용 장면, 결과가 보이는 장면. 낮게: 인트로·아웃트로·검은 화면·흔들림·어두움·사람 얼굴만·글자 화면·제품이 안 보임.",
         "3) desc: 장면을 한국어 10~20자로 (예: '청소기로 바닥 미는 손', '헤드폰 쓰고 웃는 여성', '제품 박스 클로즈업').",
         '형식: JSON 만. {"frames":[{"i":1,"boxes":[[x,y,w,h],…],"score":7,"desc":"…"},…]} — x,y,w,h 는 화면 너비·높이 대비 0~1 비율, 글자가 없으면 boxes 는 [].',
@@ -138,41 +138,93 @@ function mergeNear(boxes: Box[]): Box[] {
   return out;
 }
 
+/** 9:16 출력 비율 */
+const OUT_ASPECT = 9 / 16;
+/** 상자끼리 겹치는 넓이 */
+function overlap(a: Box, b: Box): number {
+  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
 /**
- * 우선순위: 글자 없음 → 상단 제목 띠가 덮는 곳 → 확대·크롭 → 블러 → 사용 안 함.
- * 출력은 9:16 을 '꽉 채우기'로 만든다고 보고 원본 비율 좌표로 판단한다 (세로 영상 기준).
+ * 원본에서 창(정사각 비율 s, 원본과 같은 모양)을 잘라 9:16 꽉 채우기로 만들 때 '보이는 곳' 중 상단 제목 띠 아래 영역.
+ * 이 영역에 글자·로고가 하나도 없으면 그 창은 쓸 수 있다.
  */
-export function decideTreatment(boxes: Box[], checked: boolean): Treatment {
-  // v0.9.66: 글자 검사를 못 했으면 아래 자막 띠를 블러 (샤오홍슈 중국어 자막)
-  if (!checked) return { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
+function exposed(win: Box, aspect: number, barFrac: number): Box {
+  const fw = aspect > OUT_ASPECT ? OUT_ASPECT / aspect : 1;
+  const fh = aspect < OUT_ASPECT ? aspect / OUT_ASPECT : 1;
+  const vx = win.x + (win.w * (1 - fw)) / 2;
+  const vy = win.y + (win.h * (1 - fh)) / 2;
+  const vh = win.h * fh;
+  return { x: vx, y: vy + vh * barFrac, w: win.w * fw, h: vh * (1 - barFrac) };
+}
+/**
+ * 글자·로고가 보이지 않게 하는 가장 덜 확대한 창 (v0.9.76). 없으면 null.
+ * 배율 1 → maxZoom 으로 조금씩 키우며, 같은 배율이면 화면 가운데에 가까운 창.
+ */
+export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.maxCropZoom): Box | null {
+  const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+  const step = 0.01;
+  for (let s = 1; s >= 1 / maxZoom - 1e-9; s -= step) {
+    const room = Math.max(0, 1 - s);
+    const n = Math.round(room / step);
+    let best: Box | null = null;
+    let bestD = Infinity;
+    for (let i = 0; i <= n; i++) {
+      const y = n ? (room * i) / n : 0;
+      for (let j = 0; j <= n; j++) {
+        const x = n ? (room * j) / n : 0;
+        const win = { x, y, w: s, h: s };
+        const ex = exposed(win, aspect, barFrac);
+        if (boxes.some((b) => overlap(b, ex) > 0.00002)) continue;
+        const d = Math.abs(x + s / 2 - 0.5) + Math.abs(y + s / 2 - 0.5);
+        if (d < bestD) {
+          bestD = d;
+          best = { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), w: Number(s.toFixed(4)), h: Number(s.toFixed(4)) };
+        }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+const decided = new Map<string, Treatment>();
+/**
+ * 우선순위 (v0.9.76): 글자·로고 없음(또는 상단 띠·꽉 채우기로 이미 안 보임) → 확대로 안 보이게 → 블러 → 사용 안 함.
+ * 좌표는 원본 비율(0~1). aspect = 원본 가로÷세로 (꽉 채우기에서 잘리는 양옆·위아래 계산).
+ */
+export function decideTreatment(boxes: Box[], checked: boolean, aspect = OUT_ASPECT): Treatment {
+  const key = `${checked ? 1 : 0}|${aspect.toFixed(3)}|${boxes.map((b) => `${b.x.toFixed(3)},${b.y.toFixed(3)},${b.w.toFixed(3)},${b.h.toFixed(3)}`).join(";")}`;
+  const hit = decided.get(key);
+  if (hit) return hit;
+  const tr = decide(boxes, checked, aspect);
+  if (decided.size > 5000) decided.clear();
+  decided.set(key, tr);
+  return tr;
+}
+
+function decide(boxes: Box[], checked: boolean, aspect: number): Treatment {
+  // 글자 검사를 못 했으면 아래 자막 띠(샤오홍슈 중국어 자막)를 확대로 잘라 내고, 안 되면 블러
+  if (!checked) {
+    const crop = findCrop([SUBTITLE_BAND], aspect);
+    return crop ? { kind: "unchecked", crop } : { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
+  }
   if (!boxes.length) return { kind: "clean" };
   const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
-  const u = union(boxes);
-  const p: Box = clampBox({ x: u.x - pad, y: u.y - pad, w: u.w + pad * 2, h: u.h + pad * 2 });
+  // 확대 판단은 여유를 조금만 (너무 크게 확대하지 않게)
+  const padded = boxes.map((b) => clampBox({ x: b.x - pad / 2, y: b.y - pad / 2, w: b.w + pad, h: b.h + pad }));
+  const full = findCrop(padded, aspect, 1);
+  if (full) return { kind: "clean" };
+  const crop = findCrop(padded, aspect);
+  if (crop) return { kind: "crop", crop };
+  // 확대로 안 되면 블러 (상자마다 따로, 상단 띠가 덮는 것은 빼고). 합계가 너무 크면 사용 안 함
   const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
-  // 상단 검은 띠 안에만 있으면 띠가 덮는다
-  if (p.y + p.h <= barFrac) return { kind: "clean" };
-  // v0.9.66: 자막·글자는 블러가 먼저 (상자마다 따로, 상단 띠가 덮는 것은 빼고). 합계가 너무 크면 아래 확대·제외로
   const blurs = mergeNear(boxes)
     .map((b) => clampBox({ x: b.x - pad, y: b.y - pad * 0.6, w: b.w + pad * 2, h: b.h + pad * 1.2 }))
     .filter((b) => b.y + b.h > barFrac);
   const area = blurs.reduce((n, b) => n + b.w * b.h, 0);
   if (blurs.length && area <= MAX_BLUR_AREA) return { kind: "blur", blur: blurs[0], blurs };
-  const maxZoom = VIDEO_RENDER_CONFIG.maxCropZoom;
-  // 아래쪽 글자: 위쪽만 쓰도록 확대 (띠가 위 17%를 덮으므로 그만큼 위로 여유)
-  if (p.y >= 1 - (1 - 1 / maxZoom)) {
-    const h = p.y;
-    if (1 / h <= maxZoom) return { kind: "crop", crop: { x: (1 - h) / 2, y: 0, w: h, h } };
-  }
-  // 위쪽 글자(띠 아래까지 내려옴): 아래쪽만 쓰도록 확대
-  const top = p.y + p.h;
-  // 창의 위 17%(띠가 덮는 곳)에 글자가 들어가도록: (1 - top) = h × (1 - 띠비율)
-  const hTop = (1 - top) / (1 - barFrac);
-  if (p.y <= 0.02 && hTop < 1 && 1 / hTop <= maxZoom) {
-    return { kind: "crop", crop: { x: (1 - hTop) / 2, y: 1 - hTop, w: hTop, h: hTop } };
-  }
-  // 가운데 글자: 영역이 작으면 블러, 크면 쓰지 않는다
-  if (p.w * p.h <= 0.18 && boxes.every((b) => b.w * b.h <= 0.18)) return { kind: "blur", blur: p };
   return { kind: "rejected" };
 }
 
@@ -191,7 +243,8 @@ export const TREATMENT_RANK: Record<TextTreatment, number> = { clean: 0, crop: 1
  * 점수 = 대사·장면 설명 맞음(×3) + 장면 쓸모 점수(0~10 ×0.6) − 글자 처리 벌점(×2) + 이 컷에 정한 원본(+1)
  * 이미 쓴 구간과 겹치지 않고, 가릴 수 없는 글자(rejected)는 건너뛴다. 같은 점수면 앞 구간.
  */
-const PENALTY: Record<TextTreatment, number> = { clean: 0, blur: 1, crop: 1.5, unchecked: 2, rejected: 99 };
+// v0.9.76: 자막·로고는 확대로 가리는 것을 블러보다 먼저
+const PENALTY: Record<TextTreatment, number> = { clean: 0, crop: 0.7, blur: 1.5, unchecked: 2, rejected: 99 };
 const JOSA = /(으로|에서|까지|부터|처럼|이에요|예요|해요|하죠|이죠|은|는|이|가|을|를|에|도|로|의|만|요|죠|고|다)$/;
 export const wordsOf = (text: string) =>
   [...new Set(text.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).map((w) => w.replace(JOSA, "")).filter((w) => w.length >= 2))];
@@ -201,6 +254,8 @@ export interface SegmentSource {
   duration: number;
   scan: TextScan;
   assigned: boolean;
+  /** 원본 가로÷세로 (꽉 채우기에서 잘리는 부분 계산, 없으면 9:16) */
+  aspect?: number;
 }
 export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]> }): { id: string; start: number; tr: Treatment; value: number } | null {
   const words = wordsOf(input.narration);
@@ -212,7 +267,7 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
     for (let n = 0; n <= steps; n++) {
       const start = (maxStart * n) / steps;
       if (ranges.some(([a, b]) => start < b && start + input.dur > a)) continue;
-      const tr = decideTreatment(boxesIn(src.scan, start, input.dur), src.scan.checked);
+      const tr = decideTreatment(boxesIn(src.scan, start, input.dur), src.scan.checked, src.aspect);
       if (tr.kind === "rejected") continue;
       // 이 구간의 장면들 (없으면 가장 가까운 장면)
       let inRange = src.scan.samples.filter((x) => x.t >= start && x.t <= start + input.dur);
