@@ -3,6 +3,7 @@ import { MockInstagramProvider, TikHubInstagramProvider, type InstagramProvider 
 import { GraphInstagramProvider, MockMetaInstagramProvider, type MetaInstagramProvider } from "./instagram/meta-graph";
 import { KieVideoProvider, MockVideoAIProvider, type VideoAIProvider } from "./video-ai/kie";
 import { OpenAITTSProvider, type TTSProvider } from "./tts/openai-tts";
+import { TypecastTTSProvider } from "./tts/typecast";
 import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/lib/types";
 import { serverConfig } from "../config";
 import { AppError } from "../http";
@@ -138,10 +139,22 @@ export async function hasTikHub(): Promise<boolean> {
 }
 
 /** AI 음성 (영상 자동 제작): OpenAI 키가 연결되어 있을 때만. 데모·미연결이면 null → 음성 없이 자막 시간으로 만든다 */
-export async function getTTSProvider(): Promise<TTSProvider | null> {
+export async function getTTSProvider(engine: "openai" | "typecast" = "openai"): Promise<TTSProvider | null> {
   if (serverConfig.providerMode !== "live") return null;
+  // v0.9.73: 타입캐스트를 고르면 타입캐스트 (연결 안 됐으면 null → 음성 없이)
+  if (engine === "typecast") {
+    const tc = await loadCredentials("typecast");
+    return tc ? new TypecastTTSProvider(tc.apiKey) : null;
+  }
   const openai = await loadCredentials("openai");
   return openai ? new OpenAITTSProvider(openai.apiKey) : null;
+}
+
+/** 타입캐스트 연결 (목소리 목록용) */
+export async function getTypecastProvider(): Promise<TypecastTTSProvider | null> {
+  if (serverConfig.providerMode !== "live") return null;
+  const tc = await loadCredentials("typecast");
+  return tc ? new TypecastTTSProvider(tc.apiKey) : null;
 }
 
 /** 도우인 (검색·공유 링크): TikHub 키 필요 (샤오홍슈와 같은 키). 데모 모드는 가짜 결과 */
@@ -205,6 +218,8 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new NaverSearchAdProvider(cred as ProviderCredentialMap["naver-searchad"]);
     case "tikhub":
       return new TikHubXiaohongshuProvider((cred as ProviderCredentialMap["tikhub"]).apiKey);
+    case "typecast":
+      return new TypecastTTSProvider((cred as ProviderCredentialMap["typecast"]).apiKey) as unknown as BaseProvider;
     case "kie":
       return new KieVideoProvider((cred as ProviderCredentialMap["kie"]).apiKey);
     case "meta-instagram": {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Bot, Camera, Clapperboard, Film, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Bot, Camera, Clapperboard, Film, Mic, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
 import type { AiProviderId, ApiConnectionPublic } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -88,6 +88,15 @@ const PROVIDERS: ProviderMeta[] = [
       { name: "igUserId", label: "Instagram 비즈니스 계정 ID", placeholder: "숫자 (예: 17841400000000000)", hint: "Graph API 탐색기에서 GET me/accounts?fields=instagram_business_account 로 확인 (Facebook 페이지에 연결된 비즈니스·크리에이터 계정)" },
     ],
     docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-hashtag-search",
+  },
+  {
+    id: "typecast",
+    name: "타입캐스트 (AI 음성)",
+    description: "영상 자동 제작의 AI 음성을 타입캐스트 목소리로 (영상 자동 제작 › 음성 엔진 › 타입캐스트). 1글자 = 1크레딧. 무료 플랜은 상업적 사용 불가 — 유료(Lite $15/월~)로 쓰세요 · [테스트]는 무료(플랜·남은 크레딧)",
+    usages: ["영상 AI 음성 (타입캐스트 목소리)"],
+    icon: Mic,
+    fields: [{ name: "apiKey", label: "API Key", placeholder: "타입캐스트 API Key", hint: "studio.typecast.ai/developers/api 에서 발급 (예전 Starter 키는 안 됨). 키는 서버에만 암호화해 저장합니다" }],
+    docsUrl: "https://typecast.ai/docs/quickstart",
   },
   {
     id: "kie",

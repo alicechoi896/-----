@@ -40,6 +40,10 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [scriptIndex, setScriptIndex] = useState(0);
   const [videoIds, setVideoIds] = useState<string[]>([]);
   const [voice, setVoice] = useState("onyx");
+  // 음성 엔진 (v0.9.73): OpenAI | 타입캐스트. 타입캐스트 목소리는 tc_… id
+  const [ttsEngine, setTtsEngine] = useState<"openai" | "typecast">("openai");
+  const [tcVoice, setTcVoice] = useState("");
+  const [tcEmotion, setTcEmotion] = useState("normal");
   // 음성·자막 (4가지: 자막+음성 / 자막만 / 음성만 / 둘 다 없음)
   const [narrationOn, setNarrationOn] = useState(true);
   const [captionsOn, setCaptionsOn] = useState(true);
@@ -110,7 +114,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setError(null);
     try {
       // v0.9.71: 고른 샤오홍슈 영상만으로 만든다 (AI 영상 생성 없음)
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle });
       setPlan(r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
@@ -126,7 +130,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setPreviewing(true);
     setVoiceNote(null);
     try {
-      const blob = await api.videoProduction.voicePreview({ voice, voiceStyle, voiceSpeed, channelId, text: content?.scripts[scriptIndex]?.split("\n").find((l) => l.trim())?.slice(0, 60) });
+      const blob = await api.videoProduction.voicePreview({ voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, voiceStyle, voiceSpeed, channelId, text: content?.scripts[scriptIndex]?.split("\n").find((l) => l.trim())?.slice(0, 60) });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.onended = () => URL.revokeObjectURL(url);
@@ -298,12 +302,31 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
               </FormField>
               {narrationOn && (
                 <div className="grid gap-3 sm:grid-cols-2" data-voice-options>
-                  <FormField label={`AI 음성 목소리 · ${opts.voices.length}가지`}>
-                    <Select value={voice} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => setVoice(e.target.value)} />
+                  <FormField label="음성 엔진" className="sm:col-span-2" hint={opts.ready.typecast ? undefined : "타입캐스트 목소리를 쓰려면 설정 › API 연결 센터에서 타입캐스트 키를 넣어 주세요."}>
+                    <SegmentedControl
+                      size="sm"
+                      value={ttsEngine}
+                      onChange={setTtsEngine}
+                      options={[
+                        { value: "openai", label: "OpenAI" },
+                        { value: "typecast", label: "타입캐스트" },
+                      ]}
+                    />
                   </FormField>
-                  <FormField label="말투">
-                    <Select value={voiceStyle} options={opts.voiceStyles} onChange={(e) => setVoiceStyle(e.target.value)} />
-                  </FormField>
+                  {ttsEngine === "typecast" ? (
+                    <div className="sm:col-span-2">
+                      <TypecastVoicePicker channelId={channelId} ready={opts.ready.typecast} value={tcVoice} onChange={setTcVoice} emotion={tcEmotion} onEmotion={setTcEmotion} emotions={opts.typecastEmotions} />
+                    </div>
+                  ) : (
+                    <>
+                      <FormField label={`AI 음성 목소리 · ${opts.voices.length}가지`}>
+                        <Select value={voice} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => setVoice(e.target.value)} />
+                      </FormField>
+                      <FormField label="말투">
+                        <Select value={voiceStyle} options={opts.voiceStyles} onChange={(e) => setVoiceStyle(e.target.value)} />
+                      </FormField>
+                    </>
+                  )}
                   <FormField label="말하기 속도" className="sm:col-span-2" hint={targetSec ? `영상 길이를 ${targetSec}초로 골라 속도를 자동으로 맞춥니다 (1~3배).` : undefined}>
                     {targetSec ? (
                       <p className="text-[12.5px] text-fg-muted">자동 (영상 길이에 맞춤)</p>
@@ -317,10 +340,10 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                     )}
                   </FormField>
                   <div className="sm:col-span-2">
-                    <Button size="sm" icon={Play} loading={previewing} disabled={!opts.ready.voice} onClick={() => void previewVoice()} data-voice-preview>
+                    <Button size="sm" icon={Play} loading={previewing} disabled={ttsEngine === "typecast" ? !opts.ready.typecast || !tcVoice : !opts.ready.voice} onClick={() => void previewVoice()} data-voice-preview>
                       미리 듣기
                     </Button>
-                    <span className="ml-2 text-[11.5px] text-fg-subtle">{opts.ready.voice ? "고른 대본 첫 줄로 들려 줍니다 (OpenAI 음성 1회)." : "OpenAI 키를 연결하면 들을 수 있습니다."}</span>
+                    <span className="ml-2 text-[11.5px] text-fg-subtle">{ttsEngine === "typecast" ? (tcVoice ? "고른 대본 첫 줄로 들려 줍니다 (타입캐스트 1회, 글자 수만큼 크레딧)." : "타입캐스트 목소리를 먼저 골라 주세요.") : opts.ready.voice ? "고른 대본 첫 줄로 들려 줍니다 (OpenAI 음성 1회)." : "OpenAI 키를 연결하면 들을 수 있습니다."}</span>
                     {voiceNote && <p className="mt-1 text-xs text-danger">{voiceNote}</p>}
                   </div>
                 </div>
@@ -329,7 +352,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
               {captionsOn && <CaptionStylePicker value={captionStyle} onChange={setCaptionStyle} />}
               {!narrationOn && <p className="-mt-2 text-xs text-fg-subtle">음성이 없으면 컷 길이는 자막 글자 수로 정합니다 (배경음악·효과음은 그대로).</p>}
               {error && !plan && <Notice tone="warning">{error}</Notice>}
-              <Button variant="primary" icon={Wand2} loading={planning} disabled={!content || !videoIds.length} onClick={() => void makePlan()} className="w-full" data-make-plan>
+              <Button variant="primary" icon={Wand2} loading={planning} disabled={!content || !videoIds.length || (narrationOn && ttsEngine === "typecast" && !tcVoice)} onClick={() => void makePlan()} className="w-full" data-make-plan>
                 컷 계획 만들기
               </Button>
             </div>
@@ -700,6 +723,98 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
         ))}
         {value.bar !== "none" && <input type="color" value={value.bar} onChange={(e) => set({ bar: e.target.value.toUpperCase() })} aria-label="띠 색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />}
       </div>
+    </div>
+  );
+}
+
+/** 타입캐스트 목소리 고르기 (v0.9.73): 목록(무료, 1시간 기억)에서 이름으로 찾아 샘플을 듣고 고르거나, 목소리 ID 를 직접 넣는다 */
+function TypecastVoicePicker({
+  channelId,
+  ready,
+  value,
+  onChange,
+  emotion,
+  onEmotion,
+  emotions,
+}: {
+  channelId: VideoChannel;
+  ready: boolean;
+  value: string;
+  onChange: (id: string) => void;
+  emotion: string;
+  onEmotion: (v: string) => void;
+  emotions: readonly { value: string; label: string }[];
+}) {
+  type V = Awaited<ReturnType<typeof api.videoProduction.typecastVoices>>[number];
+  const [list, setList] = useState<V[] | null>(null);
+  const [q, setQ] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
+
+  async function load() {
+    if (loading) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      setList(await api.videoProduction.typecastVoices(channelId));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "목소리 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  function sample(url: string | null) {
+    if (!url) return;
+    audio.current?.pause();
+    audio.current = new Audio(url);
+    void audio.current.play();
+  }
+  const key = q.trim().toLowerCase();
+  const shown = (list ?? []).filter((v) => !key || v.name.toLowerCase().includes(key) || v.id.includes(key)).slice(0, 60);
+  const picked = list?.find((v) => v.id === value);
+
+  return (
+    <div className="space-y-2.5 rounded-control border border-line p-3" data-typecast-picker>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-[13px] font-semibold text-fg">타입캐스트 목소리</p>
+        {value && <Badge tone="brand">{picked ? picked.name : value}</Badge>}
+        <span className="ml-auto">
+          <Button size="sm" icon={RefreshCw} loading={loading} disabled={!ready} onClick={() => void load()} data-typecast-load>
+            {list ? "다시 불러오기" : "목소리 목록 불러오기"}
+          </Button>
+        </span>
+      </div>
+      {list && (
+        <>
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`이름으로 찾기 (목소리 ${list.length}개)`} aria-label="타입캐스트 목소리 찾기" className="h-9" />
+          <ul className="max-h-60 space-y-1 overflow-y-auto" data-typecast-voices>
+            {shown.map((v) => (
+              <li key={v.id}>
+                <div className={cn("flex items-center gap-2 rounded-control px-2 py-1.5 text-[12.5px]", v.id === value ? "bg-brand-soft/60" : "hover:bg-subtle")}>
+                  <button type="button" onClick={() => sample(v.previewUrl)} disabled={!v.previewUrl} aria-label={`${v.name} 샘플 듣기`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-line text-fg-subtle hover:text-brand disabled:opacity-40">
+                    <Play className="size-3.5" />
+                  </button>
+                  <button type="button" onClick={() => onChange(v.id)} className="min-w-0 flex-1 text-left">
+                    <span className="font-medium text-fg">{v.name}</span>
+                    <span className="ml-1.5 text-[11px] text-fg-subtle">
+                      {[v.gender === "female" ? "여성" : v.gender === "male" ? "남성" : null, v.age, v.custom ? "내 목소리" : null, ...v.useCases.slice(0, 2)].filter(Boolean).join(" · ")}
+                    </span>
+                  </button>
+                  {v.id === value && <Check className="size-4 shrink-0 text-brand" />}
+                </div>
+              </li>
+            ))}
+            {!shown.length && <li className="px-2 py-3 text-xs text-fg-subtle">찾는 목소리가 없습니다.</li>}
+          </ul>
+        </>
+      )}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Input value={value} onChange={(e) => onChange(e.target.value.trim())} placeholder="목소리 ID 직접 넣기 (tc_…)" aria-label="타입캐스트 목소리 ID" className="h-9 font-mono text-[12px]" />
+        <Select value={emotion} options={emotions.map((e) => ({ value: e.value, label: `감정 · ${e.label}`}))} onChange={(e) => onEmotion(e.target.value)} aria-label="타입캐스트 감정" />
+      </div>
+      {err && <p className="text-xs text-danger">{err}</p>}
+      <p className="text-[11px] text-fg-subtle">원하는 목소리 이름을 찾아 ▶로 샘플을 듣고 고르세요. 타입캐스트 스튜디오에서 본 목소리 ID(tc_…)를 직접 넣어도 됩니다. 1글자 = 1크레딧 · 무료 플랜은 상업적 사용 불가.</p>
     </div>
   );
 }

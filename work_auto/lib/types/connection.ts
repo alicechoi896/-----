@@ -48,4 +48,6 @@ export interface ProviderCredentialMap {
   "meta-instagram": { apiKey: string; igUserId: string };
   /** AI 영상 (v0.9.60, Kie AI — Wan·Grok Imagine 등). 1크레딧 = $0.005 */
   kie: { apiKey: string };
+  /** AI 음성 (v0.9.73, 타입캐스트). 1글자 = 1크레딧 */
+  typecast: { apiKey: string };
 }

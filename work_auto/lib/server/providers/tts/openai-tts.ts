@@ -8,7 +8,7 @@ import "server-only";
 export interface TTSProvider {
   readonly id: string;
   /** instructions = 말투 (VOICE_STYLES, v0.9.63) */
-  synthesize(text: string, voice: string, instructions?: string): Promise<Buffer>;
+  synthesize(text: string, voice: string, instructions?: string, opts?: { emotion?: string }): Promise<Buffer>;
 }
 
 export const TTS_MODEL = "gpt-4o-mini-tts";

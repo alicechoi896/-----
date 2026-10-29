@@ -309,6 +309,8 @@ export const api = {
       voiceSpeed?: number;
       targetSec?: number;
       maxPauseSec?: number;
+      ttsEngine?: "openai" | "typecast";
+      ttsEmotion?: string;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
     }) =>
@@ -320,7 +322,10 @@ export const api = {
     rerender: (id: string, plan?: VideoPlan) => request<VideoJob>(`/api/video-jobs/${id}/rerender`, { method: "POST", body: json({ plan }) }),
     download: (id: string) => request<{ url: string }>(`/api/video-jobs/${id}/download`, { method: "POST" }),
     /** 목소리 미리 듣기 (OpenAI TTS 1회) → mp3 */
-    voicePreview: async (body: { voice: string; voiceStyle: string; voiceSpeed?: number; text?: string; channelId: VideoChannel }): Promise<Blob> => {
+    /** 타입캐스트 목소리 목록 */
+    typecastVoices: (channelId: VideoChannel) =>
+      request<{ id: string; name: string; gender: string | null; age: string | null; useCases: string[]; previewUrl: string | null; emotions: string[]; custom: boolean }[]>(`/api/video-production/typecast-voices?channelId=${channelId}`),
+    voicePreview: async (body: { voice: string; voiceStyle: string; voiceSpeed?: number; text?: string; channelId: VideoChannel; ttsEngine?: "openai" | "typecast"; ttsEmotion?: string }): Promise<Blob> => {
       const res = await fetch("/api/video-production/voice-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -510,7 +515,8 @@ export interface VideoProductionOptions {
   contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
-  ready: { voice: boolean; vision: boolean; ai: string };
+  ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean };
+  typecastEmotions: readonly { value: string; label: string }[];
   voices: readonly { value: string; label: string }[];
   voiceStyles: { value: string; label: string }[];
 }

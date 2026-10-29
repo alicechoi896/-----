@@ -95,6 +95,12 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 - 샤오홍슈 원본: 영상 서버 주소 제한 없음 (xhscdn·rednotecdn 등). safeFetch 가 내부망을 막는다
 - AI 컷: 사람은 현대 한국인(KOREAN_PEOPLE 문장을 모든 프롬프트에), `plan.aiPrompt` 공통 프롬프트(최대 2,000자), 제품 사진 직접 올리기 `POST /api/video-production/ai-clips/image` (9:16 → Kie 파일)
 
+## 타입캐스트 음성 (v0.9.73)
+
+- `lib/server/providers/tts/typecast.ts` — `getTTSProvider("typecast")`. plan.ttsEngine = typecast 면 plan.voice = voice_id (tc_…/uc_…), plan.ttsEmotion = 감정 preset
+- 목소리 목록 `GET /api/video-production/typecast-voices` (GET /v3/voices?model=ssfm-v30, 서버 1시간 기억)
+- 음성 길이·무음·속도 처리는 OpenAI 와 같음 (removePauses → atempo)
+
 ## 무음 없애기 (v0.9.72)
 
 - 음성 마디마다 `removePauses()` (lib/server/video/pauses.ts): 앞뒤 무음은 모두 자르고, 중간의 쉼 중 `maxPauseSec`(기본 0.2초) 이상은 silencedetect → aselect 로 잘라 말 앞뒤 0.03초만 남긴다 (무음 구간 자르기와 같은 keepSegments). 기준 -35dB

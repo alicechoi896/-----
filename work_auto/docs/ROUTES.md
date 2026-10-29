@@ -231,3 +231,9 @@
 | POST | `/api/tools/silence-cut/prepare` { fileName, size } | 저장소 직접 올리기 주소 |
 | POST | `/api/tools/silence-cut/upload?key=` | 데모 전용 올리기 |
 | POST | `/api/tools/silence-cut/cut` { key, minSilence, noiseDb, pad, fileName } | 무음 모두 자르기 → 미리보기·다운로드 주소 (1시간) |
+
+## 타입캐스트 (v0.9.73)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/video-production/typecast-voices?channelId=` | 타입캐스트 목소리 목록 (무료, 1시간 기억) |

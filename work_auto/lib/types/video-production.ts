@@ -75,6 +75,10 @@ export interface VideoPlan {
   ending: boolean;
   bgm: string | null;
   voice: string;
+  /** 음성 엔진 (v0.9.73): openai(기본) | typecast. typecast 면 voice = 타입캐스트 voice_id (tc_…) */
+  ttsEngine?: "openai" | "typecast";
+  /** 타입캐스트 감정 (normal·happy·toneup …) */
+  ttsEmotion?: string;
   /** AI 음성 넣기 (false = 자막만·둘 다 없음, v0.9.52) */
   narrationOn?: boolean;
   /** 자막 넣기 (false = 음성만·둘 다 없음) */

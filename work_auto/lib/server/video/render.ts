@@ -65,8 +65,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     // 2) AI 음성 (마디마다) → 앞뒤 무음 정리 → 속도 → 길이. v0.9.67: 원본 받기·글자 검사와 동시에, 8개씩
     // 음성 끄기(자막만·둘 다 없음)를 고르면 TTS 를 부르지 않는다
     const wantVoice = plan.narrationOn !== false;
-    const tts = wantVoice ? await getTTSProvider() : null;
-    if (wantVoice && !tts) issues.push("AI 음성이 연결되지 않아(OpenAI) 음성 없이 자막 시간으로 만들었습니다.");
+    const engine = plan.ttsEngine === "typecast" ? "typecast" : "openai";
+    const tts = wantVoice ? await getTTSProvider(engine) : null;
+    if (wantVoice && !tts) issues.push(`AI 음성이 연결되지 않아(${engine === "typecast" ? "타입캐스트" : "OpenAI"}) 음성 없이 자막 시간으로 만들었습니다.`);
     let voiceTempo = 1;
     const audioPromise = (async () => {
     const audio: { file: string; dur: number }[] = new Array(scenes.length);
@@ -78,7 +79,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           if (tts) {
             try {
               const mp3 = path.join(dir, `a${k}.mp3`);
-              await writeFile(mp3, await tts.synthesize(s.narration, plan.voice, voiceInstructions(plan.voiceStyle)));
+              await writeFile(mp3, await tts.synthesize(s.narration, plan.voice, voiceInstructions(plan.voiceStyle), { emotion: plan.ttsEmotion }));
               aiCalls++;
               // v0.9.72: 앞뒤 무음 + 문장 중간의 긴 쉼(기본 0.2초 넘는 것)까지 모두 없앤다 (무음 구간 자르기와 같은 방식)
               await removePauses(mp3, out, { thresholdDb: C.silenceThresholdDb, maxPause: cleanPause(plan.maxPauseSec), dir, key: `a${k}` });

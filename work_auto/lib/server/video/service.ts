@@ -8,7 +8,8 @@ import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/t
 import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
-import { getAIProvider, getTTSProvider } from "../providers/registry";
+import { getAIProvider, getTTSProvider, getTypecastProvider } from "../providers/registry";
+import { TYPECAST_EMOTIONS, TYPECAST_VOICE_ID, type TypecastVoice } from "../providers/tts/typecast";
 import { getActorId, getCurrentUserId, getRepositories } from "../repositories";
 import { sfxName, videoAssets } from "./assets";
 import { assignSources, buildPlan } from "./planner";
@@ -26,6 +27,14 @@ const STALE_MS = 10 * 60 * 1000;
 const KEEP_AFTER_DOWNLOAD_MS = 60 * 60 * 1000;
 const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const fileKey = (j: Pick<VideoJob, "userId" | "id">) => `${j.userId}/${j.id}.mp4`;
+
+/** 음성 엔진·목소리 검사 (v0.9.73): 타입캐스트면 tc_…/uc_… id, 아니면 OpenAI 목소리 */
+function cleanVoice(engine: unknown, voice: unknown): { ttsEngine: "openai" | "typecast"; voice: string } {
+  if (engine === "typecast" && typeof voice === "string" && TYPECAST_VOICE_ID.test(voice)) return { ttsEngine: "typecast", voice };
+  return { ttsEngine: "openai", voice: VOICE_OPTIONS.some((v) => v.value === voice) ? String(voice) : VOICE_OPTIONS[0].value };
+}
+const cleanEmotion = (v: unknown) => (TYPECAST_EMOTIONS.some((e) => e.value === v) ? String(v) : "normal");
+let tcVoices: { at: number; list: TypecastVoice[] } | null = null;
 
 async function ownJob(id: string): Promise<VideoJob> {
   const userId = await getCurrentUserId();
@@ -51,7 +60,7 @@ export const videoJobService = {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 40);
     const videos = await myVideos(userId, null);
-    const [ai, tts] = await Promise.all([getAIProvider(), getTTSProvider()]);
+    const [ai, tts, typecast] = await Promise.all([getAIProvider(), getTTSProvider(), getTTSProvider("typecast").catch(() => null)]);
     return {
       contents: contents.map((c) => ({
         id: c.id,
@@ -65,14 +74,15 @@ export const videoJobService = {
       })),
       videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null })),
       assets: videoAssets.summary(),
-      ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id },
+      ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, typecast: Boolean(typecast) },
+      typecastEmotions: TYPECAST_EMOTIONS,
       voices: VOICE_OPTIONS,
       voiceStyles: VOICE_STYLES.map((v) => ({ value: v.value, label: v.label })),
     };
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; maxPauseSec?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; maxPauseSec?: unknown; ttsEngine?: unknown; ttsEmotion?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     // v0.9.71: AI 영상 생성(AI 컷)은 뺐다 — 고른 샤오홍슈 영상만으로 만든다
@@ -86,7 +96,7 @@ export const videoJobService = {
     const picked = want.size ? all.filter((v) => want.has(v.id)) : all.slice(0, 8);
     if (!picked.length)
       throw new AppError("NO_SOURCE", content.productId ? "이 제품에 연결된 샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 이 제품을 연결해 영상을 담아 주세요." : "샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 먼저 영상을 담아 주세요.", 400);
-    const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
+    const { ttsEngine, voice } = cleanVoice(input.ttsEngine, input.voice);
     const built = await buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice, narrationOn: input.narrationOn !== false, captions: input.captions !== false });
     // 말투·자막 스타일·AI 공통 프롬프트 (v0.9.63)
     built.plan.voiceStyle = VOICE_STYLES.some((v) => v.value === input.voiceStyle) ? String(input.voiceStyle) : VOICE_STYLES[0].value;
@@ -94,19 +104,36 @@ export const videoJobService = {
     built.plan.titleStyle = cleanTitleStyle(input.titleStyle);
     built.plan.voiceSpeed = cleanVoiceSpeed(input.voiceSpeed);
     built.plan.maxPauseSec = cleanPause(input.maxPauseSec);
+    built.plan.ttsEngine = ttsEngine;
+    built.plan.ttsEmotion = cleanEmotion(input.ttsEmotion);
     built.plan.targetSec = input.targetSec === undefined ? targetFromLength(content.input?.length) : cleanTarget(input.targetSec);
     return built;
   },
 
   /** 계획 검사 (사용자가 고친 계획을 그대로 믿지 않는다) */
-  /** 목소리 미리 듣기 (OpenAI TTS 1회) */
-  async voicePreview(input: { voice?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; text?: unknown }): Promise<Buffer> {
+  /** 타입캐스트 목소리 목록 (무료, 1시간 기억) */
+  async typecastVoices(): Promise<TypecastVoice[]> {
     await getCurrentUserId();
-    const tts = await getTTSProvider();
-    if (!tts) throw new AppError("TTS_NOT_CONNECTED", "AI 음성을 들으려면 API 연결 센터에서 OpenAI 키를 연결해 주세요.", 409);
-    const voice = VOICE_OPTIONS.some((v) => v.value === input.voice) ? String(input.voice) : VOICE_OPTIONS[0].value;
+    if (tcVoices && Date.now() - tcVoices.at < 60 * 60 * 1000) return tcVoices.list;
+    const tc = await getTypecastProvider();
+    if (!tc) throw new AppError("TYPECAST_NOT_CONNECTED", "타입캐스트가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 타입캐스트 키를 넣어 주세요.", 409);
+    const list = await tc.listVoices().catch((e: Error) => {
+      throw new AppError("TYPECAST_ERROR", e.message, 502);
+    });
+    tcVoices = { at: Date.now(), list };
+    return list;
+  },
+
+  /** 목소리 미리 듣기 (OpenAI 또는 타입캐스트 1회) */
+  async voicePreview(input: { voice?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; text?: unknown; ttsEngine?: unknown; ttsEmotion?: unknown }): Promise<Buffer> {
+    await getCurrentUserId();
+    const { ttsEngine, voice } = cleanVoice(input.ttsEngine, input.voice);
+    const tts = await getTTSProvider(ttsEngine);
+    if (!tts) throw new AppError("TTS_NOT_CONNECTED", `AI 음성을 들으려면 API 연결 센터에서 ${ttsEngine === "typecast" ? "타입캐스트" : "OpenAI"} 키를 연결해 주세요.`, 409);
     const text = String(input.text ?? "").trim().slice(0, 80) || "이거 하나면 청소 끝이에요. 진짜 써 보면 알아요.";
-    const mp3 = await tts.synthesize(text, voice, voiceInstructions(String(input.voiceStyle ?? "")));
+    const mp3 = await tts.synthesize(text, voice, voiceInstructions(String(input.voiceStyle ?? "")), { emotion: cleanEmotion(input.ttsEmotion) }).catch((e: Error) => {
+      throw new AppError("TTS_ERROR", e.message, 502);
+    });
     const chain = atempoChain(input.voiceSpeed);
     if (!chain) return mp3;
     // 영상과 같은 속도로 들려준다 (FFmpeg atempo, 임시 파일은 바로 지움)
@@ -153,7 +180,8 @@ export const videoJobService = {
       scenes: placed,
       ending: plan.ending !== false,
       bgm: typeof plan.bgm === "string" && bgmNames.has(plan.bgm) ? plan.bgm : null,
-      voice: VOICE_OPTIONS.some((v) => v.value === plan.voice) ? plan.voice : VOICE_OPTIONS[0].value,
+      ...cleanVoice(plan.ttsEngine, plan.voice),
+      ttsEmotion: cleanEmotion(plan.ttsEmotion),
       narrationOn: plan.narrationOn !== false,
       captions: plan.captions !== false,
       voiceStyle: VOICE_STYLES.some((v) => v.value === plan.voiceStyle) ? plan.voiceStyle : VOICE_STYLES[0].value,

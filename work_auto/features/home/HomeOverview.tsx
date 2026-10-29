@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, LoadingState } from "@/components/ui/States";
 import { formatRelative } from "@/lib/utils";
 
-const PROVIDER_NAME = { claude: "Claude", openai: "OpenAI", youtube: "YouTube Data API", naver: "NAVER API", "naver-searchad": "NAVER 검색광고", tikhub: "TikHub (샤오홍슈·도우인)", brightdata: "Bright Data (쿠팡·스마트스토어)", "meta-instagram": "Instagram 공식 API (해시태그)", kie: "Kie AI (AI 영상)" } as const;
+const PROVIDER_NAME = { claude: "Claude", openai: "OpenAI", youtube: "YouTube Data API", naver: "NAVER API", "naver-searchad": "NAVER 검색광고", tikhub: "TikHub (샤오홍슈·도우인)", brightdata: "Bright Data (쿠팡·스마트스토어)", "meta-instagram": "Instagram 공식 API (해시태그)", kie: "Kie AI (AI 영상)", typecast: "타입캐스트 (AI 음성)" } as const;
 
 /** 메인 화면 하단: 최근 생성, 제품 라이브러리, API 연결 상태 요약 */
 export function HomeOverview() {
