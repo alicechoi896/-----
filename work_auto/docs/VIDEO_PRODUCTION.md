@@ -103,7 +103,7 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 
 ## 무음 없애기 (v0.9.72)
 
-- 음성 마디마다 `removePauses()` (lib/server/video/pauses.ts): 앞뒤 무음은 모두 자르고, 중간의 쉼 중 `maxPauseSec`(기본 0.2초) 이상은 silencedetect → aselect 로 잘라 말 앞뒤 0.03초만 남긴다 (무음 구간 자르기와 같은 keepSegments). 기준 -35dB
+- 음성 마디마다 `removePauses()` (lib/server/video/pauses.ts): 앞뒤 무음은 모두 자르고, 중간의 쉼 중 `maxPauseSec`(기본 0.1초, v0.9.75) 이상은 silencedetect → aselect 로 잘라 말 앞뒤 0.03초만 남긴다 (무음 구간 자르기와 같은 keepSegments). 기준 -35dB
 - 컷 사이 숨 `minSpeechGapSec` 0.04초. 엔딩 컷(최소 2.5초)은 배경음악이 깔린다
 
 ## 컷 매칭·주목 효과·엔딩 (v0.9.64)
@@ -122,3 +122,8 @@ YouTube Shorts·NAVER 클립용 9:16 영상(1080×1920)을 2단계 대본으로 
 
 - `tests/unit/video-render.test.ts` — 컷 나누기, 효과음·화살표 규칙, 글자 처리 판단, 실제 FFmpeg 렌더(데모 시험 영상)
 - `tests/api/flows.test.ts` "영상 자동 제작(데모)" — 대본 → 계획 → 렌더 → 검수 필요 → 1회 다운로드 → 승인, 동시 2개 막기
+
+## v0.9.75 음성 기본값·속도
+- 음성 엔진 기본 = 타입캐스트. 엔진·타입캐스트 목소리·감정·속도·무음 길이는 브라우저 localStorage(`vp-voice-prefs:v1`, 비밀값 아님)에 기억
+- 말 사이 무음 기본 0.1초
+- 말하기 속도는 영상 길이를 골라도 항상 선택 가능: `playTempo()` = max(고른 속도, 목표 길이에 맞는 배속), 최대 3배. 미리 듣기도 같은 속도

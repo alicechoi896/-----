@@ -15,8 +15,7 @@ import {
   captionChunks,
   cleanPause,
   cleanTarget,
-  cleanVoiceSpeed,
-  fitTempo,
+  playTempo,
   cleanCaptionStyle,
   cleanTitleStyle,
   voiceInstructions,
@@ -95,11 +94,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         }),
       );
     }
-    // 속도: 목표 길이를 골랐으면 그 길이에 맞게 자동(1~3배), 아니면 고른 말하기 속도 (v0.9.67)
+    // 속도: 고른 말하기 속도, 목표 길이를 골랐는데 그래도 길면 더 빠르게 (최대 3배) — v0.9.75
     const target = cleanTarget(plan.targetSec);
     const raw = audio.reduce((n, a) => n + (a?.dur ?? 0), 0);
     const fixed = scenes.length * C.minSpeechGapSec + C.tailSec;
-    const tempo = target ? fitTempo(raw, target, fixed) : cleanVoiceSpeed(plan.voiceSpeed);
+    const tempo = playTempo(raw, target, fixed, plan.voiceSpeed);
     if (target && raw / tempo + fixed > target + 1) issues.push(`대본이 길어 3배 속도로도 목표 ${target}초보다 깁니다 (약 ${Math.round(raw / tempo + fixed)}초). 대본을 줄이거나 더 긴 길이를 골라 주세요.`);
     const chain = atempoFor(tempo);
     if (chain) {

@@ -28,6 +28,7 @@ import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
+const VOICE_PREFS_KEY = "vp-voice-prefs:v1";
 const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: "확대로 제거", blur: "블러", rejected: "확인 필요", unchecked: "검사 안 됨" };
 /**
  * 영상 자동 제작 (v0.9.51) — YouTube·NAVER 클립 공통. docs/VIDEO_PRODUCTION.md
@@ -40,8 +41,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [scriptIndex, setScriptIndex] = useState(0);
   const [videoIds, setVideoIds] = useState<string[]>([]);
   const [voice, setVoice] = useState("onyx");
-  // 음성 엔진 (v0.9.73): OpenAI | 타입캐스트. 타입캐스트 목소리는 tc_… id
-  const [ttsEngine, setTtsEngine] = useState<"openai" | "typecast">("openai");
+  // 음성 엔진 (v0.9.73): OpenAI | 타입캐스트. 타입캐스트 목소리는 tc_… id. v0.9.75: 기본 타입캐스트
+  const [ttsEngine, setTtsEngine] = useState<"openai" | "typecast">("typecast");
   const [tcVoice, setTcVoice] = useState("");
   const [tcEmotion, setTcEmotion] = useState("normal");
   // 음성·자막 (4가지: 자막+음성 / 자막만 / 음성만 / 둘 다 없음)
@@ -79,6 +80,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     try {
       const [o, list] = await Promise.all([api.videoProduction.options(channelId), api.videoProduction.jobs(channelId)]);
       setOpts(o);
+      // 타입캐스트 키가 없으면 OpenAI 로 (기본은 타입캐스트)
+      if (!o.ready.typecast) setTtsEngine("openai");
       setJobs(list);
       setVoice(o.voices[0]?.value ?? "onyx");
       pickContent(o, o.contents.some((c) => c.id === initialContentId) ? initialContentId! : (o.contents[0]?.id ?? ""));
@@ -89,6 +92,34 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   useEffect(() => {
     void (async () => load())();
   }, [load]);
+
+  // v0.9.75: 음성 엔진·타입캐스트 목소리·감정·속도·무음은 이 브라우저에 기억 (비밀값 아님)
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      try {
+        const p = JSON.parse(localStorage.getItem(VOICE_PREFS_KEY) ?? "null") as Record<string, unknown> | null;
+        if (p) {
+          if (p.ttsEngine === "openai" || p.ttsEngine === "typecast") setTtsEngine(p.ttsEngine);
+          if (typeof p.tcVoice === "string") setTcVoice(p.tcVoice);
+          if (typeof p.tcEmotion === "string") setTcEmotion(p.tcEmotion);
+          if ((VOICE_SPEEDS as readonly number[]).includes(Number(p.voiceSpeed))) setVoiceSpeed(Number(p.voiceSpeed));
+          if ((PAUSE_OPTIONS as readonly number[]).includes(Number(p.maxPause))) setMaxPause(Number(p.maxPause));
+        }
+      } catch {
+        /* 저장값 없음 */
+      }
+      setPrefsLoaded(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    try {
+      localStorage.setItem(VOICE_PREFS_KEY, JSON.stringify({ ttsEngine, tcVoice, tcEmotion, voiceSpeed, maxPause }));
+    } catch {
+      /* 저장 못 해도 계속 */
+    }
+  }, [prefsLoaded, ttsEngine, tcVoice, tcEmotion, voiceSpeed, maxPause]);
 
   const content = opts?.contents.find((c) => c.id === contentId) ?? null;
 
@@ -272,7 +303,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   </>
                 )}
               </FormField>
-              <FormField label="영상 길이" hint="고른 길이에 맞게 AI 음성 속도를 자동으로 맞춥니다 (기본은 대본을 만들 때 고른 길이). 자동 = 고른 말하기 속도대로." data-target-sec>
+              <FormField label="영상 길이" hint="고른 말하기 속도로 읽고, 그래도 이 길이보다 길면 맞출 만큼 더 빠르게 합니다 (최대 3배). 기본은 대본을 만들 때 고른 길이. 자동 = 고른 속도 그대로." data-target-sec>
                 <SegmentedControl
                   size="sm"
                   value={String(targetSec)}
@@ -327,17 +358,13 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                       </FormField>
                     </>
                   )}
-                  <FormField label="말하기 속도" className="sm:col-span-2" hint={targetSec ? `영상 길이를 ${targetSec}초로 골라 속도를 자동으로 맞춥니다 (1~3배).` : undefined}>
-                    {targetSec ? (
-                      <p className="text-[12.5px] text-fg-muted">자동 (영상 길이에 맞춤)</p>
-                    ) : (
-                      <SegmentedControl
-                        size="sm"
-                        value={String(voiceSpeed)}
-                        onChange={(v) => setVoiceSpeed(Number(v))}
-                        options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))}
-                      />
-                    )}
+                  <FormField label="말하기 속도" className="sm:col-span-2" hint={`${ttsEngine === "typecast" ? "타입캐스트" : "OpenAI"} 음성을 이 속도로 빠르게 합니다 (음높이 그대로, 미리 듣기도 같은 속도).${targetSec ? ` 그래도 ${targetSec}초보다 길면 더 빠르게 맞춥니다.` : ""}`} data-voice-speed>
+                    <SegmentedControl
+                      size="sm"
+                      value={String(voiceSpeed)}
+                      onChange={(v) => setVoiceSpeed(Number(v))}
+                      options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))}
+                    />
                   </FormField>
                   <div className="sm:col-span-2">
                     <Button size="sm" icon={Play} loading={previewing} disabled={ttsEngine === "typecast" ? !opts.ready.typecast || !tcVoice : !opts.ready.voice} onClick={() => void previewVoice()} data-voice-preview>

@@ -206,6 +206,7 @@ export const DEFAULT_VOICE_SPEED = 2;
 export const cleanVoiceSpeed = (v: unknown) => (VOICE_SPEEDS.includes(Number(v) as (typeof VOICE_SPEEDS)[number]) ? Number(v) : DEFAULT_VOICE_SPEED);
 /**
  * 영상 길이 맞추기 (v0.9.67): 목표 길이를 고르면 음성 속도를 자동으로 (1~3배). 0 = 자동(말하기 속도대로)
+ * v0.9.75: 고른 말하기 속도는 항상 쓰고, 그래도 목표보다 길 때만 더 빠르게 (playTempo)
  * 기본값은 대본을 만들 때 고른 길이 (15s → 15초, 30s → 30초, 60초 이내 → 45초, 3분 → 자동)
  */
 export const VIDEO_TARGETS = [0, 15, 30, 45, 60] as const;
@@ -217,6 +218,11 @@ export function fitTempo(rawSpeech: number, target: number, fixed: number): numb
   if (!target || rawSpeech <= 0) return 1;
   const room = Math.max(1, target - fixed);
   return Math.min(MAX_FIT_TEMPO, Math.max(1, rawSpeech / room));
+}
+/** 실제 음성 배속 = 고른 속도, 목표 길이를 넘으면 맞출 만큼 더 빠르게 (최대 3배) */
+export function playTempo(rawSpeech: number, target: number, fixed: number, speed: unknown): number {
+  const chosen = cleanVoiceSpeed(speed);
+  return target ? Math.max(chosen, fitTempo(rawSpeech, target, fixed)) : chosen;
 }
 /** 임의 배속 → atempo 사슬 (한 번에 최대 2배) */
 export function atempoFor(tempo: number): string {
@@ -231,10 +237,10 @@ export function atempoFor(tempo: number): string {
 }
 
 /**
- * 말 사이 무음 (v0.9.72): 음성 안의 쉼이 이 길이보다 길면 모두 줄인다 (무음 구간 자르기와 같은 방식). 기본 0.2초
+ * 말 사이 무음 (v0.9.72): 음성 안의 쉼이 이 길이보다 길면 모두 줄인다 (무음 구간 자르기와 같은 방식). 기본 0.1초 (v0.9.75)
  */
 export const PAUSE_OPTIONS = [0.1, 0.2, 0.3, 0.5] as const;
-export const DEFAULT_PAUSE = 0.2;
+export const DEFAULT_PAUSE = 0.1;
 export const cleanPause = (v: unknown) => (PAUSE_OPTIONS.includes(Number(v) as (typeof PAUSE_OPTIONS)[number]) ? Number(v) : DEFAULT_PAUSE);
 
 /** ",atempo=2" (atempo 한 번에 0.5~2배) */

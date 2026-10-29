@@ -69,6 +69,13 @@ describe("영상 길이 맞추기 (v0.9.67)", async () => {
     expect(fitTempo(80, 15, 1)).toBe(3);
     expect(fitTempo(28, 0, 1)).toBe(1);
   });
+  it("v0.9.75: 고른 속도는 항상 쓰고, 목표보다 길 때만 더 빠르게", async () => {
+    const { playTempo, DEFAULT_PAUSE } = await import("@/lib/video-production/config");
+    expect(playTempo(8, 15, 1, 1.5)).toBe(1.5);
+    expect(playTempo(28, 15, 1, 1.25)).toBe(2);
+    expect(playTempo(28, 0, 1, 1.25)).toBe(1.25);
+    expect(DEFAULT_PAUSE).toBe(0.1);
+  });
   it("atempo 는 한 번에 최대 2배라 나눠 건다", () => {
     expect(atempoFor(3)).toBe("atempo=2,atempo=1.5000");
     expect(atempoFor(1)).toBe("");
