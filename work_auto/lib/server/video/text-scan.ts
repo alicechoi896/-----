@@ -62,7 +62,7 @@ export async function scanText(file: string, duration: number, dir: string, key:
         `위 영상 프레임 ${batch.length}장을 순서대로 본다. 쇼츠 제품 영상에 쓸 장면을 고르려고 한다.`,
         "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 제품 본체에 인쇄된 아주 작은 글자는 빼도 된다.",
         "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게: 제품이 크고 선명하게 보임, 손으로 쓰는 동작·사용 장면, 결과가 보이는 장면. 낮게: 인트로·아웃트로·검은 화면·흔들림·어두움·사람 얼굴만·글자 화면·제품이 안 보임.",
-        "3) desc: 장면을 한국어 10~20자로 (예: '청소기로 바닥 미는 손', '헤드폰 쓰고 웃는 여성', '제품 박스 클로즈업').",
+        "3) desc: 장면을 한국어 10~25자로, 제품의 어떤 기능·동작을 보여 주는지 드러나게 (예: '충전 케이블 꽂는 손', '물 뿌려 방수 시험', '청소기로 바닥 미는 손', '한 손으로 가볍게 들기', '제품 박스 클로즈업').",
         '형식: JSON 만. {"frames":[{"i":1,"boxes":[[x,y,w,h],…],"score":7,"desc":"…"},…]} — x,y,w,h 는 화면 너비·높이 대비 0~1 비율, 글자가 없으면 boxes 는 [].',
       ].join("\n"),
     });
@@ -254,10 +254,14 @@ export interface SegmentSource {
   duration: number;
   scan: TextScan;
   assigned: boolean;
+  /** 사람이 고른 클립 (v0.9.78: 뜻 매핑보다 우선) */
+  pinned?: boolean;
   /** 원본 가로÷세로 (꽉 채우기에서 잘리는 부분 계산, 없으면 9:16) */
   aspect?: number;
 }
-export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]> }): { id: string; start: number; tr: Treatment; value: number } | null {
+/** v0.9.78: 대사와 뜻이 맞는 장면(want)을 품은 구간 보너스 */
+const WANT_BONUS = 6;
+export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]>; want?: { id: string; t: number } | null }): { id: string; start: number; tr: Treatment; value: number } | null {
   const words = wordsOf(input.narration);
   let best: { id: string; start: number; tr: Treatment; value: number } | null = null;
   for (const src of input.sources) {
@@ -276,7 +280,8 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
       const quality = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 5;
       const desc = inRange.map((x) => x.desc ?? "").join(" ");
       const match = Math.min(3, words.filter((w) => desc.includes(w)).length);
-      const value = match * 3 + quality * 0.6 - PENALTY[tr.kind] * 2 + (src.assigned ? 1 : 0);
+      const wanted = input.want && input.want.id === src.id && input.want.t >= start - 0.3 && input.want.t <= start + input.dur + 0.3 ? WANT_BONUS : 0;
+      const value = match * 3 + quality * 0.6 - PENALTY[tr.kind] * 2 + (src.assigned ? (src.pinned ? 8 : 1) : 0) + wanted;
       if (!best || value > best.value + 1e-9) best = { id: src.id, start, tr, value };
     }
   }

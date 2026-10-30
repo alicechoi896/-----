@@ -29,6 +29,9 @@ import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
 const VOICE_PREFS_KEY = "vp-voice-prefs:v1";
+/** 미리보기 글꼴 (v0.9.78): 영상에 쓰는 글꼴 파일을 그대로 받아 미리보기도 같은 글꼴로 */
+const previewFont = (key: string | undefined) => ({ fontFamily: `"vp-${key ?? "pretendard"}", "Pretendard", sans-serif`, fontWeight: key === "pretendard" ? 900 : 400 });
+const FONT_FACES = CAPTION_FONTS.map((f) => `@font-face{font-family:"vp-${f.value}";src:url(/api/video-production/font/${f.value});font-display:swap}`).join("");
 const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: "확대로 제거", blur: "블러", rejected: "확인 필요", unchecked: "검사 안 됨" };
 /**
  * 영상 자동 제작 (v0.9.51) — YouTube·NAVER 클립 공통. docs/VIDEO_PRODUCTION.md
@@ -173,10 +176,25 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     }
   }
 
-  async function render(p: VideoPlan, rerenderOf?: string) {
+  async function render(p0: VideoPlan, rerenderOf?: string) {
     if (busy.current) return;
     busy.current = true;
     setError(null);
+    // v0.9.78: 컷 계획을 만든 뒤 바꾼 스타일·음성 설정도 영상에 넣는다 (전에는 계획을 만들 때 값만 써서 글꼴을 바꿔도 그대로였다)
+    const p: VideoPlan = {
+      ...p0,
+      titleStyle,
+      captionStyle,
+      captions: captionsOn,
+      narrationOn,
+      ttsEngine,
+      voice: ttsEngine === "typecast" ? tcVoice || p0.voice : voice,
+      ttsEmotion: tcEmotion,
+      voiceStyle,
+      voiceSpeed,
+      targetSec,
+      maxPauseSec: maxPause,
+    };
     try {
       const created = rerenderOf ? await api.videoProduction.rerender(rerenderOf, p) : await api.videoProduction.create(p);
       setJob(created);
@@ -212,6 +230,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
 
   return (
     <div className="space-y-6" data-video-production>
+      <style>{FONT_FACES}</style>
       {missing.length > 0 && (
         <Notice tone="warning">
           아직 준비되지 않은 것: {missing.join(" · ")}. 빠진 것은 빼고 만듭니다.
@@ -396,6 +415,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
               videos={opts.videos.filter((v) => plan.sourceVideoIds.includes(v.id))}
               onRender={() => void render(plan)}
               error={error}
+              titleStyle={titleStyle}
             />
           ) : (
             <SectionCard>
@@ -442,12 +462,15 @@ function PlanEditor({
   videos,
   onRender,
   error,
+  titleStyle,
 }: {
   plan: VideoPlan;
   onChange: (p: VideoPlan) => void;
   videos: VideoProductionOptions["videos"];
   onRender: () => void;
   error: string | null;
+  /** 지금 고른 제목 스타일 (계획을 만든 뒤 바꿔도 미리보기에 반영) */
+  titleStyle: TitleStyle;
 }) {
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => onChange({ ...plan, scenes: plan.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
   const clipOptions = videos.map((v) => ({ value: v.id, label: v.title.slice(0, 22) }));
@@ -459,9 +482,9 @@ function PlanEditor({
       data-plan-editor
     >
       <div className="mb-4 overflow-hidden rounded-control border border-line">
-        <div className="px-4 py-3 text-center" style={{ background: plan.titleStyle?.bar && plan.titleStyle.bar !== "none" ? plan.titleStyle.bar : "#3f3f46" }}>
-          <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9 border-0 bg-transparent text-center text-lg font-bold" style={{ color: plan.titleStyle?.line1 ?? "#FFFFFF" }} aria-label="상단 제목 1줄" />
-          <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center font-bold" style={{ color: plan.titleStyle?.line2 ?? "#C8FF00" }} aria-label="상단 제목 2줄" />
+        <div className="px-4 py-3 text-center" style={{ background: titleStyle.bar !== "none" ? titleStyle.bar : "#3f3f46" }}>
+          <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9 border-0 bg-transparent text-center text-lg" style={{ color: titleStyle.line1, ...previewFont(titleStyle.font) }} aria-label="상단 제목 1줄" />
+          <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center" style={{ color: titleStyle.line2, ...previewFont(titleStyle.font) }} aria-label="상단 제목 2줄" />
         </div>
         <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일 · 2번째 줄의 [ ] 글자는 강조색). 선택한 제목: {plan.selectedTitle}</p>
       </div>
@@ -654,7 +677,7 @@ function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange
     <div className="space-y-2.5 rounded-control border border-line p-3" data-caption-style>
       <p className="text-[13px] font-semibold text-fg">자막 스타일</p>
       <div className="flex items-center justify-center rounded bg-gradient-to-b from-zinc-600 to-zinc-800 py-4">
-        <span style={{ color: value.color, textShadow: shadow, fontSize: CAPTION_SIZES.find((x) => x.value === value.size)!.size / 3.2 }} className="font-black">
+        <span style={{ color: value.color, textShadow: shadow, fontSize: CAPTION_SIZES.find((x) => x.value === value.size)!.size / 3.2, ...previewFont(value.font) }} data-caption-preview>
           이거 하나면 청소 끝
         </span>
       </div>
@@ -689,7 +712,7 @@ function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange
         ))}
         {value.stroke !== "none" && <input type="color" value={value.stroke} onChange={(e) => set({ stroke: e.target.value.toUpperCase() })} aria-label="테두리색 직접 고르기" className="size-7 cursor-pointer rounded border border-line bg-transparent" />}
       </div>
-      <p className="text-[11px] text-fg-subtle">미리보기는 색만 맞춘 것입니다. 글꼴은 영상에 고른 글꼴로 들어갑니다.</p>
+      <p className="text-[11px] text-fg-subtle">미리보기도 영상과 같은 글꼴 파일로 보여 줍니다. 컷 계획을 만든 뒤에 바꿔도 [영상 만들기]에 그대로 들어갑니다.</p>
     </div>
   );
 }
@@ -709,7 +732,7 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
   return (
     <div className="space-y-2.5 rounded-control border border-line p-3" data-title-style>
       <p className="text-[13px] font-semibold text-fg">상단 제목 스타일</p>
-      <div className="rounded py-2 text-center font-black" style={{ background: value.bar === "none" ? "linear-gradient(#71717a,#3f3f46)" : value.bar }}>
+      <div className="rounded py-2 text-center" style={{ background: value.bar === "none" ? "linear-gradient(#71717a,#3f3f46)" : value.bar, ...previewFont(value.font) }} data-title-preview>
         <p style={{ color: value.line1, textShadow: outline }} className="text-[17px]">
           소니 WH-CH720N
         </p>

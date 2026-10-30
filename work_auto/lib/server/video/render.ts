@@ -25,6 +25,7 @@ import { videoAssets } from "./assets";
 import { mediaDuration, runFfmpeg, videoSize } from "./ffmpeg";
 import { SourceError, fetchSource, type LocalSource } from "./source";
 import { removePauses } from "./pauses";
+import { matchScenes, type SceneWant } from "./scene-match";
 import { TypecastTTSProvider } from "../providers/tts/typecast";
 import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production/voice-split";
 import { parseSilences } from "@/lib/silence-cut";
@@ -222,6 +223,10 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       const z = await videoSize(x.file).catch(() => ({ width: 0, height: 0 }));
       aspects.set(id, z.width && z.height ? z.width / z.height : 9 / 16);
     }));
+    // v0.9.78: 대사와 뜻이 맞는 장면 (AI 글 1회, 장면 설명만). 사람이 고른 클립(pinned)은 그 클립 안에서만
+    const matchable = [...sources.entries()].filter(([id]) => !isAiSource(id)).map(([id, x]) => ({ id, scan: x.scan }));
+    const matched = await matchScenes(scenes.map((s) => s.narration), matchable).catch(() => ({ wants: new Map<number, SceneWant>(), aiCalls: 0 }));
+    aiCalls += matched.aiCalls;
     const usedRanges = new Map<string, [number, number][]>();
     let t = 0;
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number }[] = [];
@@ -243,11 +248,13 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         best = { id: s.sourceVideoId, start: maxStart > 0 ? ((usedRanges.get(s.sourceVideoId) ?? []).length * 1.7) % maxStart : 0, tr: { kind: "clean" } };
       } else {
         // v0.9.67: 대사와 맞는 장면·쓸모 점수 높은 장면 (앞에서부터 차례로가 아니라)
+        const want = matched.wants.get(k);
         best = pickSegment({
           narration: s.narration,
           dur,
           used: usedRanges,
-          sources: candidates.filter((id) => !isAiSource(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === s.sourceVideoId, aspect: aspects.get(id) })),
+          want: want && (!s.pinned || want.id === s.sourceVideoId) ? want : null,
+          sources: candidates.filter((id) => !isAiSource(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === s.sourceVideoId, pinned: Boolean(s.pinned) && id === s.sourceVideoId, aspect: aspects.get(id) })),
         });
       }
       // 샤오홍슈 원본을 하나도 쓸 수 없으면(받기 실패·글자를 못 가림) AI 컷으로 대신

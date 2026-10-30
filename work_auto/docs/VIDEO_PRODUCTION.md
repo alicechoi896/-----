@@ -135,3 +135,8 @@ v0.9.76: 자막·로고는 **확대가 블러보다 먼저**. AI 이미지 검�
 - `TypecastTTSProvider.synthesizeWithTimestamps()` — POST /v1/text-to-speech/with-timestamps?granularity=char → base64 음성 + characters[{text,start,end}초]
 - 줄을 줄바꿈으로 이어 한 번에 (2000자 넘으면 `groupLines()`로 묶음마다 1번). `splitByChars()`: 공백 빼고 글자를 차례로 맞춰 줄 경계 = 앞 줄 마지막 글자 끝과 다음 줄 첫 글자 시작의 가운데. 안 맞으면 `splitBySilence()`(글자 수 비율 근처의 쉼)
 - 자른 조각마다 기존과 같이 `removePauses()` → 속도. 실패하면 다시 부르지 않고 그 묶음은 음성 없이 (OpenAI 는 기존대로 줄마다)
+
+## v0.9.78 글꼴 · 대사와 비슷한 장면
+- [영상 만들기]·[다시 만들기]는 지금 화면의 titleStyle·captionStyle·음성 설정을 계획에 덮어 보낸다 (계획을 만든 뒤 바꿔도 적용)
+- 미리보기 글꼴: `GET /api/video-production/font/:key` (assets/video/fonts 와 같은 파일, 없으면 프리텐다드) → @font-face `vp-{key}`
+- `matchScenes()` (lib/server/video/scene-match.ts): 장면 설명(desc) 목록 + 대본 → AI 글 1회 → 줄마다 {영상, 초}. `pickSegment` 는 그 장면을 품은 구간에 +6, 사람이 고른 클립(pinned)은 +8 이라 그대로. 설명이 없으면 부르지 않음, 실패해도 다시 부르지 않음

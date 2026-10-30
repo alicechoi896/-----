@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["ffmpeg-static", "@napi-rs/canvas"],
   outputFileTracingIncludes: {
     "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/video-production/font/*": ["./assets/video/fonts/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
     "/api/video-jobs": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-jobs/*/rerender": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
   },
