@@ -29,12 +29,25 @@ export const videoStorage = {
     return error ? null : data.signedUrl;
   },
   /** 브라우저가 직접 올릴 주소 (v0.9.70 무음 구간 자르기). 데모는 우리 API 로 */
-  async signedUpload(key: string): Promise<{ url: string; method: "PUT" | "POST" }> {
-    if (inMemory()) return { url: `/api/tools/silence-cut/upload?key=${encodeURIComponent(key)}`, method: "POST" };
+  async signedUpload(key: string, memoryRoute = "/api/tools/silence-cut/upload"): Promise<{ url: string; method: "PUT" | "POST" }> {
+    if (inMemory()) return { url: `${memoryRoute}?key=${encodeURIComponent(key)}`, method: "POST" };
     const db = await createSupabaseServerClient();
     const { data, error } = await db.storage.from("videos").createSignedUploadUrl(key, { upsert: true });
     if (error || !data) throw new Error(`올릴 주소를 만들지 못했습니다 (${error?.message ?? "알 수 없음"}). Supabase 에서 schema.sql 을 다시 실행했는지 확인해 주세요.`);
     return { url: data.signedUrl, method: "PUT" };
+  },
+  /** 여러 파일 주소를 한 번에 (v0.9.81 드라마 스튜디오). 없는 파일은 빠진다 */
+  async urls(keys: string[], seconds = 3600): Promise<Record<string, string>> {
+    const list = [...new Set(keys.filter(Boolean))];
+    if (!list.length) return {};
+    if (inMemory()) return Object.fromEntries(list.filter((k) => mem().has(k)).map((k) => [k, `/api/video-jobs/file?key=${encodeURIComponent(k)}`]));
+    const db = await createSupabaseServerClient();
+    const out: Record<string, string> = {};
+    for (let i = 0; i < list.length; i += 100) {
+      const { data } = await db.storage.from("videos").createSignedUrls(list.slice(i, i + 100), seconds);
+      for (const d of data ?? []) if (d.path && d.signedUrl) out[d.path] = d.signedUrl;
+    }
+    return out;
   },
   async download(key: string): Promise<Buffer | null> {
     if (inMemory()) return mem().get(key) ?? null;
