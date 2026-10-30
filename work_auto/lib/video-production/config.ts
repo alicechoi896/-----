@@ -11,7 +11,7 @@ export const VIDEO_RENDER_CONFIG = {
   fps: 30,
   /** libx264 품질 (낮을수록 고화질·큰 파일) */
   crf: 23,
-  preset: "veryfast",
+  preset: "superfast",
 
   /** 무음 정리: 마디마다 앞뒤 무음을 자르고, 마디 사이는 짧은 호흡만 */
   silenceThresholdDb: -35,
@@ -36,7 +36,14 @@ export const VIDEO_RENDER_CONFIG = {
   sfxClipInterval: 2,
   sfxMaxPerVideo: 8,
 
-  volumes: { narration: 1, bgm: 0.12, sfx: 0.55 },
+  /** v0.9.80: 목소리·배경음악을 같은 크기(-14 LUFS)로 맞춘 뒤 배경음악은 목소리의 15% */
+  volumes: { narration: 1, bgm: 0.15, sfx: 0.55 },
+  /** 받은 원본을 저장해 다시 쓸 최대 크기 (Supabase 무료 50MB 한도 안) */
+  sourceCacheMaxBytes: 45 * 1024 * 1024,
+  /** 원본 저장 기간 */
+  sourceCacheDays: 7,
+  /** 컷 인코딩 동시 수 */
+  encodeParallel: 3,
 
   /** 원본 다운로드 제한 */
   maxSourceBytes: 80 * 1024 * 1024,
@@ -202,7 +209,8 @@ export const VOICE_STYLES = [
 export const voiceInstructions = (style: string | null | undefined) => (VOICE_STYLES.find((v) => v.value === style) ?? VOICE_STYLES[0]).instructions;
 
 /** 음성 속도 (v0.9.66): 만든 음성을 FFmpeg atempo 로 빠르게 (음높이 그대로). 기본 2배 */
-export const VOICE_SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const;
+/** v0.9.80: 0 = 자동(영상 길이에 맞춤). 숫자를 고르면 영상 길이와 상관없이 그 속도 그대로 */
+export const VOICE_SPEEDS = [0, 1, 1.25, 1.5, 1.75, 2] as const;
 export const DEFAULT_VOICE_SPEED = 2;
 export const cleanVoiceSpeed = (v: unknown) => (VOICE_SPEEDS.includes(Number(v) as (typeof VOICE_SPEEDS)[number]) ? Number(v) : DEFAULT_VOICE_SPEED);
 /**
@@ -223,7 +231,8 @@ export function fitTempo(rawSpeech: number, target: number, fixed: number): numb
 /** 실제 음성 배속 = 고른 속도, 목표 길이를 넘으면 맞출 만큼 더 빠르게 (최대 3배) */
 export function playTempo(rawSpeech: number, target: number, fixed: number, speed: unknown): number {
   const chosen = cleanVoiceSpeed(speed);
-  return target ? Math.max(chosen, fitTempo(rawSpeech, target, fixed)) : chosen;
+  if (chosen === 0) return target ? fitTempo(rawSpeech, target, fixed) : 1;
+  return chosen;
 }
 /** 임의 배속 → atempo 사슬 (한 번에 최대 2배) */
 export function atempoFor(tempo: number): string {
@@ -247,7 +256,7 @@ export const cleanPause = (v: unknown) => (PAUSE_OPTIONS.includes(Number(v) as (
 /** ",atempo=2" (atempo 한 번에 0.5~2배) */
 export const atempoChain = (v: unknown) => {
   const s = cleanVoiceSpeed(v);
-  return s === 1 ? "" : `,atempo=${s}`;
+  return s === 1 || s === 0 ? "" : `,atempo=${s}`;
 };
 
 /** 자막 스타일 (v0.9.63): 글꼴·글자색·테두리색·크기를 고른다 */
@@ -319,6 +328,19 @@ export interface TitleStyle {
   bar: string;
 }
 export const DEFAULT_TITLE_STYLE: TitleStyle = { font: "dohyeon", line1: "#FFFFFF", line2: "#C8FF00", accent: "#FFE94D", bar: "#000000" };
+/**
+ * v0.9.80: 2번째 줄에 [ ] 가 없으면 핵심 낱말 하나를 강조 (숫자가 든 낱말 → 가장 긴 낱말). AI 제목에 [ ] 가 없어 강조색이 안 보이던 문제
+ */
+export function autoAccent(text: string): string {
+  if (/\[[^\]]+\]/.test(text)) return text;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return text;
+  const clean = (w: string) => w.replace(/[?!.,~…]+$/, "");
+  const pick = words.find((w) => /\d/.test(w)) ?? [...words].sort((a, b) => clean(b).length - clean(a).length)[0];
+  const core = clean(pick);
+  if (core.length < 2) return text;
+  return text.replace(core, `[${core}]`);
+}
 /** "[강조] 글자" → 조각 (강조 여부). 괄호는 화면에 그리지 않는다 */
 export function accentParts(text: string): { text: string; accent: boolean }[] {
   const out: { text: string; accent: boolean }[] = [];

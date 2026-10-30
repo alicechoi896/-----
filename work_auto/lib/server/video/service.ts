@@ -317,5 +317,10 @@ export const videoJobService = {
       await videoStorage.remove(j.outputPath!).catch(() => undefined);
       await repo.videoJobs.update(j.id, { qa: { ...j.qa, fileDeleted: true }, updatedAt: nowIso() });
     }
+    // v0.9.80: 저장해 둔 원본(다시 쓰기용)은 7일 뒤 지운다
+    const kept = await videoStorage.list(`${userId}/src`).catch(() => []);
+    for (const f of kept) {
+      if (f.createdAt && Date.now() - Date.parse(f.createdAt) > VIDEO_RENDER_CONFIG.sourceCacheDays * 86_400_000) await videoStorage.remove(f.key).catch(() => undefined);
+    }
   },
 };

@@ -69,12 +69,21 @@ describe("영상 길이 맞추기 (v0.9.67)", async () => {
     expect(fitTempo(80, 15, 1)).toBe(3);
     expect(fitTempo(28, 0, 1)).toBe(1);
   });
-  it("v0.9.75: 고른 속도는 항상 쓰고, 목표보다 길 때만 더 빠르게", async () => {
-    const { playTempo, DEFAULT_PAUSE } = await import("@/lib/video-production/config");
+  it("v0.9.80: 숫자로 고른 속도는 그대로, '자동'(0)이면 영상 길이에 맞춤", async () => {
+    const { playTempo, DEFAULT_PAUSE, atempoChain } = await import("@/lib/video-production/config");
     expect(playTempo(8, 15, 1, 1.5)).toBe(1.5);
-    expect(playTempo(28, 15, 1, 1.25)).toBe(2);
-    expect(playTempo(28, 0, 1, 1.25)).toBe(1.25);
+    expect(playTempo(28, 15, 1, 1.25)).toBe(1.25);
+    expect(playTempo(28, 15, 1, 0)).toBe(2);
+    expect(playTempo(28, 0, 1, 0)).toBe(1);
+    expect(atempoChain(0)).toBe("");
     expect(DEFAULT_PAUSE).toBe(0.1);
+  });
+  it("v0.9.80: 제목 2줄에 [ ] 가 없으면 핵심 낱말 하나를 강조", async () => {
+    const { autoAccent } = await import("@/lib/video-production/config");
+    expect(autoAccent("딱 10분이면 청소 끝")).toBe("딱 [10분이면] 청소 끝");
+    expect(autoAccent("스펙보다 먼저 볼 게 있다?")).toBe("[스펙보다] 먼저 볼 게 있다?");
+    expect(autoAccent("이미 [강조] 있음")).toBe("이미 [강조] 있음");
+    expect(autoAccent("한낱말")).toBe("한낱말");
   });
   it("atempo 는 한 번에 최대 2배라 나눠 건다", () => {
     expect(atempoFor(3)).toBe("atempo=2,atempo=1.5000");

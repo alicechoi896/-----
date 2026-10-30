@@ -145,3 +145,9 @@ v0.9.76: 자막·로고는 **확대가 블러보다 먼저**. AI 이미지 검�
 - 원본 받기·글자 검사: 첫 원본 1개(거절 확인) 뒤 8개 동시(작업 큐). 글자 검사 결과는 Storage `{userId}/scan/{videoId}_v{SCAN_VERSION}.json` 에 저장해 다시 씀 (검사가 끝까지 된 것만, 길이가 0.5초 넘게 다르면 다시 검사). 프롬프트를 바꾸면 `SCAN_VERSION` 을 올린다
 - 클립마다 12장을 AI 1회로. 렌더 함수 maxDuration 800초
 - 로그 `[VideoRender]` {sources, audio, match, encode, total(ms), scanCached}
+
+## v0.9.80 음량 · 강조색 · 속도
+- 믹스: 목소리 `loudnorm I=-14`, 배경음악 `loudnorm I=-14` 뒤 `volume=0.15` (`volumes.bgm`), 효과음 0.55, alimiter 0.95
+- 강조색: planner 가 line2 의 핵심 낱말을 [ ] 로. 렌더 때 `autoAccent()` — [ ] 가 없으면 숫자가 든 낱말, 없으면 가장 긴 낱말
+- 말하기 속도 `VOICE_SPEEDS` 에 0(자동) 추가. `playTempo`: 0 → 목표 길이에 맞춤(없으면 1배), 숫자 → 그 속도 그대로
+- 원본 저장·재사용: Storage `{userId}/src/{videoId}.mp4` (≤45MB, `sourceCacheDays` 7일 뒤 cleanup 이 지움). 인코딩 `encodeParallel` 3 (작업 큐), preset superfast

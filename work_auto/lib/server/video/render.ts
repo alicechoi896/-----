@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ReferenceVideo } from "@/lib/types";
@@ -12,6 +12,7 @@ import {
   ENDING_TEMPLATE,
   VIDEO_RENDER_CONFIG as C,
   atempoFor,
+  autoAccent,
   captionChunks,
   cleanPause,
   cleanTarget,
@@ -180,11 +181,29 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     // v0.9.79: 글자 검사 결과를 저장해 두고 다시 쓴다 (같은 원본이면 AI 이미지 읽기를 다시 하지 않음)
     const scanKey = (id: string) => `${job.userId}/scan/${id}_v${SCAN_VERSION}.json`;
     let scanCached = 0;
+    const srcKey = (id: string) => `${job.userId}/src/${id}.mp4`;
+    let srcCached = 0;
     const loadOne = async (id: string, k: number) => {
       const v = byId.get(id);
       if (!v) return;
       try {
-        const src = await fetchSource(v, dir, k);
+        // v0.9.80: 받은 원본을 저장해 다시 쓴다 → 샤오홍슈 주소 찾기(서버가 막혀 매번 TikHub)·다운로드를 건너뜀
+        let src: LocalSource | null = null;
+        const kept = await videoStorage.download(srcKey(id)).catch(() => null);
+        if (kept && kept.length > 1000) {
+          const file = path.join(dir, `src${k}.mp4`);
+          await writeFile(file, kept);
+          const duration = await mediaDuration(file).catch(() => 0);
+          if (duration >= 1) {
+            src = { videoId: id, file, duration, title: v.title };
+            srcCached++;
+          }
+        }
+        if (!src) {
+          src = await fetchSource(v, dir, k);
+          const size = (await stat(src.file).catch(() => null))?.size ?? 0;
+          if (size > 0 && size <= C.sourceCacheMaxBytes) await videoStorage.put(srcKey(id), await readFile(src.file)).catch(() => undefined);
+        }
         let scan: TextScan | null = null;
         const saved = await videoStorage.download(scanKey(id)).catch(() => null);
         if (saved) {
@@ -331,7 +350,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     };
     const titlePng = path.join(dir, "title.png");
     const ts = cleanTitleStyle(job.plan.titleStyle);
-    note(await renderTitleBar(titlePng, job.plan.topLine1, job.plan.topLine2, ts), ts.font);
+    note(await renderTitleBar(titlePng, job.plan.topLine1, autoAccent(job.plan.topLine2), ts), ts.font);
     const cs = cleanCaptionStyle(job.plan.captionStyle);
     const memes = videoAssets.meme();
     const arrow = videoAssets.arrow();
@@ -441,7 +460,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       done++;
       await hooks.stage("rendering", 40 + Math.round((done / picks.length) * 45));
     };
-    for (let i = 0; i < picks.length; i += 2) await Promise.all(picks.slice(i, i + 2).map(encode));
+    // v0.9.80: 3컷씩 (작업 큐로 쉬지 않고)
+    let nextPick = 0;
+    await Promise.all(Array.from({ length: Math.min(C.encodeParallel, picks.length) }, async () => {
+      while (nextPick < picks.length) await encode(picks[nextPick++]);
+    }));
 
     // 5) 이어 붙이기 (다시 인코딩하지 않음) + 소리 섞기: 내레이션 + 배경음악(반복, 작게) + 효과음(컷 시작에)
     const vlist = path.join(dir, "v.txt");
@@ -454,13 +477,14 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     await runFfmpeg(["-f", "concat", "-safe", "0", "-i", alist, "-c", "copy", narration]);
     const inputs: string[] = ["-i", base, "-i", narration];
     let idx = 2;
-    const amix: string[] = ["[1:a]volume=" + C.volumes.narration + "[na]"];
+    // v0.9.80: 목소리는 -14 LUFS 로 크게, 배경음악은 같은 크기로 맞춘 뒤 목소리의 15% (음원마다 크기가 달라 배경음악이 크게 들리던 문제)
+    const amix: string[] = [`[1:a]loudnorm=I=-14:TP=-1.5:LRA=11,volume=${C.volumes.narration}[na]`];
     const mixIns = ["[na]"];
     const bgms = videoAssets.bgm();
     const bgm = bgms.find((f) => path.basename(f).replace(/\.[^.]+$/, "") === job.plan.bgm) ?? bgms[0];
     if (bgm) {
       inputs.push("-stream_loop", "-1", "-i", bgm);
-      amix.push(`[${idx}:a]volume=${C.volumes.bgm},atrim=0:${total.toFixed(3)}[bg]`);
+      amix.push(`[${idx}:a]atrim=0:${total.toFixed(3)},loudnorm=I=-14:TP=-1.5:LRA=11,volume=${C.volumes.bgm}[bg]`);
       mixIns.push("[bg]");
       idx++;
     } else issues.push("배경음악 파일이 없어 넣지 못했습니다 (assets/video/bgm).");
@@ -500,7 +524,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     if (longSilences && tts && job.plan.captions !== false) issues.push(`0.8초 넘는 무음이 ${longSilences}번 있습니다.`);
     if (Math.abs(durationSec - total) > 0.5) issues.push("영상과 음성 길이가 맞지 않을 수 있습니다.");
     timing.total = Date.now() - t0;
-    console.info("[VideoRender]", JSON.stringify({ jobId: job.id, scenes: scenes.length, sources: sources.size, scanCached, ...timing }));
+    console.info("[VideoRender]", JSON.stringify({ jobId: job.id, scenes: scenes.length, sourceCount: sources.size, srcCached, scanCached, ...timing }));
     const qa: VideoQa = {
       checkedAt: new Date().toISOString(),
       durationSec: Number(durationSec.toFixed(2)),

@@ -322,7 +322,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                   </>
                 )}
               </FormField>
-              <FormField label="영상 길이" hint="고른 말하기 속도로 읽고, 그래도 이 길이보다 길면 맞출 만큼 더 빠르게 합니다 (최대 3배). 기본은 대본을 만들 때 고른 길이. 자동 = 고른 속도 그대로." data-target-sec>
+              <FormField label="영상 길이" hint="말하기 속도를 '자동'으로 두면 이 길이에 맞게 속도를 정합니다 (1~3배). 속도를 숫자로 고르면 그 속도 그대로 (길이는 대본에 따라). 기본은 대본을 만들 때 고른 길이." data-target-sec>
                 <SegmentedControl
                   size="sm"
                   value={String(targetSec)}
@@ -377,12 +377,12 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                       </FormField>
                     </>
                   )}
-                  <FormField label="말하기 속도" className="sm:col-span-2" hint={`${ttsEngine === "typecast" ? "타입캐스트" : "OpenAI"} 음성을 이 속도로 빠르게 합니다 (음높이 그대로, 미리 듣기도 같은 속도).${targetSec ? ` 그래도 ${targetSec}초보다 길면 더 빠르게 맞춥니다.` : ""}`} data-voice-speed>
+                  <FormField label="말하기 속도" className="sm:col-span-2" hint={voiceSpeed === 0 ? (targetSec ? `영상 길이 ${targetSec}초에 맞게 속도를 정합니다 (1~3배).` : "영상 길이가 '자동'이라 보통 속도로 읽습니다.") : `${ttsEngine === "typecast" ? "타입캐스트" : "OpenAI"} 음성을 ${voiceSpeed === 1 ? "보통" : `${voiceSpeed}배`} 속도 그대로 씁니다 (음높이 그대로, 미리 듣기도 같은 속도).`} data-voice-speed>
                     <SegmentedControl
                       size="sm"
                       value={String(voiceSpeed)}
                       onChange={(v) => setVoiceSpeed(Number(v))}
-                      options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))}
+                      options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 0 ? "자동" : x === 1 ? "보통" : `${x}배` }))}
                     />
                   </FormField>
                   <div className="sm:col-span-2">

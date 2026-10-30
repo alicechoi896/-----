@@ -87,7 +87,7 @@ async function shortTitles(title: string, productName: string | null, hook: stri
             productName ? `[제품명] ${productName}` : "",
             hook ? `[Hook] ${hook}` : "",
             `line1: 제품명 또는 주제 (${max1}자 이내, 브랜드+모델처럼 짧게)`,
-            `line2: 시청자가 끝까지 보게 만드는 질문·약속 (${max2}자 이내, 제목·Hook 의 의미 그대로)`,
+            `line2: 시청자가 끝까지 보게 만드는 질문·약속 (${max2}자 이내, 제목·Hook 의 의미 그대로). 가장 중요한 낱말 하나(숫자·효과·결과)를 [ ] 로 감싼다 (예: 딱 [10분]이면 끝, [소음] 없는 청소기?). [ ] 는 글자 수에 넣지 않는다`,
           ]
             .filter(Boolean)
             .join("\n"),
