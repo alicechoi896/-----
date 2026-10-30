@@ -12,6 +12,15 @@ type Json = Record<string, unknown>;
 const S = { type: "string" } as const;
 const arr = (items: Json) => ({ type: "array", items });
 const obj = (props: Record<string, Json>) => ({ type: "object", additionalProperties: false, required: Object.keys(props), properties: props });
+/** 스키마 → JSON 모양 안내 (예: {"ideas":[{"title":"…"}]}) */
+function shape(schema: Json): string {
+  const walk = (s: Json): unknown => {
+    if (s.type === "object") return Object.fromEntries(Object.entries((s.properties as Record<string, Json>) ?? {}).map(([k, v]) => [k, walk(v)]));
+    if (s.type === "array") return [walk(s.items as Json)];
+    return s.type === "number" ? 0 : "…";
+  };
+  return JSON.stringify(walk(schema));
+}
 const str = (v: unknown, max = 600) => String(v ?? "").replace(/\s+\n/g, "\n").trim().slice(0, max);
 
 async function ask<T extends Json>(task: string, system: string, user: string, schema: Json, mock: () => T, maxTokens = 8000): Promise<{ data: T; aiCalls: number }> {
@@ -21,7 +30,7 @@ async function ask<T extends Json>(task: string, system: string, user: string, s
     const { data } = await ai.generateStructured<T>({
       task: `drama-studio:${task}`,
       messages: [
-        { role: "system", content: system },
+        { role: "system", content: `${system}\n답은 JSON 객체 하나로만 한다 (설명·마크다운 없이). 형식: ${shape(schema)}` },
         { role: "user", content: user },
       ],
       outputKeys: Object.keys((schema.properties as Json) ?? {}),

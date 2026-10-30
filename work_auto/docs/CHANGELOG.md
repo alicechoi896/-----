@@ -2,6 +2,12 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.83] - 2026-10-30: 드라마 스튜디오 OpenAI 400 오류
+
+### 수정
+- AI 를 OpenAI 로 쓰는 계정에서 드라마 스튜디오 AI 생성이 'OpenAI 호출 실패 (HTTP 400)' 로 끝나던 문제: JSON 응답 모드(response_format json_object)는 메시지에 'json' 이라는 단어가 꼭 있어야 하는데 드라마 스튜디오 프롬프트에 없었다 → 프롬프트에 JSON 형식 안내를 넣고, OpenAI 연결에서도 빠져 있으면 자동으로 붙인다
+- OpenAI 400 등 오류에 OpenAI 가 준 이유를 함께 표시·기록
+
 ## [0.9.82] - 2026-10-30: 영상 자동 제작 — 대본 포맷 말끝·엔터 기준 컷·제목/대본 고치기·3컷마다 화살표·로고 확대
 
 ### 수정

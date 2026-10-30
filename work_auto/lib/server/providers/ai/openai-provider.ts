@@ -51,7 +51,8 @@ export class OpenAIProvider implements AIProvider {
       body: JSON.stringify({
         model: this.model,
         // 이미지 조각은 OpenAI 형식(image_url + data URL)으로 바꾼다
-        messages: request.messages.map((m) => ({
+        // v0.9.83: response_format json_object 는 메시지 어딘가에 'json' 이 있어야 한다 (없으면 HTTP 400)
+        messages: [...(json && !request.messages.some((m) => /json/i.test(typeof m.content === "string" ? m.content : m.content.map((p) => (p.type === "text" ? p.text : "")).join(" "))) ? [{ role: "system" as const, content: "Respond with a single JSON object only." }] : []), ...request.messages].map((m) => ({
           role: m.role,
           content:
             typeof m.content === "string"
@@ -77,7 +78,13 @@ export class OpenAIProvider implements AIProvider {
     if (!res.ok) {
       if (res.status === 401) throw new AppError("AI_KEY", "OpenAI API 키가 올바르지 않습니다. API 연결 센터에서 확인해 주세요.", 400);
       if (res.status === 429) throw new AppError("AI_RATE_LIMIT", "OpenAI 호출 한도 또는 크레딧이 부족합니다. 잠시 후 다시 시도하거나 결제 설정을 확인해 주세요.", 429);
-      throw new AppError("AI_PROVIDER_ERROR", `OpenAI 호출 실패 (HTTP ${res.status})`, 502);
+      // v0.9.83: OpenAI 가 준 이유를 같이 (키·내용은 담기지 않는 오류 문장만)
+      const why = await res
+        .json()
+        .then((b: { error?: { message?: string } }) => String(b?.error?.message ?? "").slice(0, 160))
+        .catch(() => "");
+      console.error("[OpenAI]", JSON.stringify({ status: res.status, task: request.task, error: why }));
+      throw new AppError("AI_PROVIDER_ERROR", `OpenAI 호출 실패 (HTTP ${res.status}${why ? `: ${why}` : ""})`, 502);
     }
     const body = (await res.json()) as {
       choices: { message: { content: string | null } }[];
