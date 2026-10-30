@@ -21,8 +21,11 @@ export interface TextScan {
   interval: number;
 }
 
-const MAX_SAMPLES = 16;
-const PER_CALL = 8;
+// v0.9.79: 클립마다 12장 · AI 1회 (전에는 16장 · 2회) — 영상 만들기가 5분을 넘기던 원인
+const MAX_SAMPLES = 12;
+const PER_CALL = 12;
+/** 검사 결과 저장 버전 (프롬프트를 바꾸면 올린다) */
+export const SCAN_VERSION = 3;
 
 export async function scanText(file: string, duration: number, dir: string, key: string): Promise<{ scan: TextScan; aiCalls: number }> {
   const ai = await getAIProvider();
@@ -31,11 +34,11 @@ export async function scanText(file: string, duration: number, dir: string, key:
   for (let t = Math.min(0.2, duration / 2); t < duration - 0.05 && times.length < MAX_SAMPLES; t += interval) times.push(Number(t.toFixed(2)));
   if (!ai.supportsVision) return { scan: { samples: times.map((t) => ({ t, boxes: [] })), checked: false, interval }, aiCalls: 0 };
   // 프레임 뽑기 (작게, 글자를 읽을 정도)
-  // v0.9.67: 4장씩 동시에
+  // v0.9.67: 4장씩 동시에 → v0.9.79: 6장씩
   const got: ({ t: number; file: string } | null)[] = new Array(times.length).fill(null);
-  for (let i = 0; i < times.length; i += 4) {
+  for (let i = 0; i < times.length; i += 6) {
     await Promise.all(
-      times.slice(i, i + 4).map(async (t, j) => {
+      times.slice(i, i + 6).map(async (t, j) => {
         const out = path.join(dir, `${key}_f${i + j}.jpg`);
         try {
           await runFfmpeg(["-ss", String(t), "-i", file, "-frames:v", "1", "-vf", "scale=-2:640", "-q:v", "4", out], 30_000);

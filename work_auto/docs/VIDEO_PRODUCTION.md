@@ -140,3 +140,8 @@ v0.9.76: 자막·로고는 **확대가 블러보다 먼저**. AI 이미지 검�
 - [영상 만들기]·[다시 만들기]는 지금 화면의 titleStyle·captionStyle·음성 설정을 계획에 덮어 보낸다 (계획을 만든 뒤 바꿔도 적용)
 - 미리보기 글꼴: `GET /api/video-production/font/:key` (assets/video/fonts 와 같은 파일, 없으면 프리텐다드) → @font-face `vp-{key}`
 - `matchScenes()` (lib/server/video/scene-match.ts): 장면 설명(desc) 목록 + 대본 → AI 글 1회 → 줄마다 {영상, 초}. `pickSegment` 는 그 장면을 품은 구간에 +6, 사람이 고른 클립(pinned)은 +8 이라 그대로. 설명이 없으면 부르지 않음, 실패해도 다시 부르지 않음
+
+## v0.9.79 속도
+- 원본 받기·글자 검사: 첫 원본 1개(거절 확인) 뒤 8개 동시(작업 큐). 글자 검사 결과는 Storage `{userId}/scan/{videoId}_v{SCAN_VERSION}.json` 에 저장해 다시 씀 (검사가 끝까지 된 것만, 길이가 0.5초 넘게 다르면 다시 검사). 프롬프트를 바꾸면 `SCAN_VERSION` 을 올린다
+- 클립마다 12장을 AI 1회로. 렌더 함수 maxDuration 800초
+- 로그 `[VideoRender]` {sources, audio, match, encode, total(ms), scanCached}

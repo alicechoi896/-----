@@ -6,7 +6,7 @@ import { videoJobService } from "@/lib/server/video/service";
 import type { VideoPlan } from "@/lib/types/video-production";
 
 /** 렌더는 응답 뒤(after) 같은 함수 안에서 — 최대 실행 시간 (Vercel) */
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 /** GET /api/video-jobs?channelId= — 내 영상 작업 (최근 20개, 오래된 파일 정리) */
 export async function GET(request: Request) {

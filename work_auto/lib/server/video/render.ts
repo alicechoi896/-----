@@ -31,7 +31,8 @@ import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production
 import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
-import { pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { SCAN_VERSION, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { videoStorage } from "./storage";
 import { captionY, endingY, renderCaption, renderEnding, renderSticker, renderTitleBar } from "./text-image";
 
 /**
@@ -60,6 +61,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
   await mkdir(dir, { recursive: true });
   const issues: string[] = [];
   let aiCalls = 0;
+  // v0.9.79: 단계별 걸린 시간 (로그로 느린 곳 찾기)
+  const t0 = Date.now();
+  const timing: Record<string, number> = {};
   try {
     const plan = job.plan;
     const scenes = plan.scenes.map((s) => ({ ...s }));
@@ -173,13 +177,31 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const sources = new Map<string, LocalSource & { scan: TextScan }>();
     const sourceErrors: string[] = [];
     const missing = used.filter((id) => !byId.has(id)).length;
+    // v0.9.79: 글자 검사 결과를 저장해 두고 다시 쓴다 (같은 원본이면 AI 이미지 읽기를 다시 하지 않음)
+    const scanKey = (id: string) => `${job.userId}/scan/${id}_v${SCAN_VERSION}.json`;
+    let scanCached = 0;
     const loadOne = async (id: string, k: number) => {
       const v = byId.get(id);
       if (!v) return;
       try {
         const src = await fetchSource(v, dir, k);
-        const { scan, aiCalls: n } = await scanText(src.file, src.duration, dir, `s${k}`);
-        aiCalls += n;
+        let scan: TextScan | null = null;
+        const saved = await videoStorage.download(scanKey(id)).catch(() => null);
+        if (saved) {
+          try {
+            const j = JSON.parse(saved.toString("utf8")) as TextScan & { duration?: number };
+            if (j.checked && Array.isArray(j.samples) && Math.abs((j.duration ?? src.duration) - src.duration) < 0.5) scan = j;
+          } catch {
+            /* 다시 검사 */
+          }
+        }
+        if (scan) scanCached++;
+        else {
+          const r = await scanText(src.file, src.duration, dir, `s${k}`);
+          aiCalls += r.aiCalls;
+          scan = r.scan;
+          if (scan.checked) await videoStorage.put(scanKey(id), Buffer.from(JSON.stringify({ ...scan, duration: src.duration })), "application/json").catch(() => undefined);
+        }
         sources.set(id, { ...src, scan });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -195,9 +217,16 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         if (e instanceof SourceError && e.stage === "download") stopAll = true;
       });
     }
-    for (let i = 1; !stopAll && i < used.length; i += 3) {
-      await Promise.all(used.slice(i, i + 3).map((id, j) => loadOne(id, i + j).catch(() => undefined)));
-    }
+    // v0.9.79: 3개씩 묶어 가장 느린 것을 기다리지 않고, 8개를 계속 채워 가며 받는다
+    let next = 1;
+    const worker = async () => {
+      while (!stopAll && next < used.length) {
+        const i = next++;
+        await loadOne(used[i], i).catch(() => undefined);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(8, Math.max(0, used.length - 1)) }, worker));
+    timing.sources = Date.now() - t0;
     // AI 컷 (v0.9.60): Kie 결과 영상 — 글자 없는 AI 영상이라 글자 검사(AI 이미지 읽기)를 하지 않는다
     const aiFiles = await aiClipService.download(job.plan, dir, issues);
     for (const [id, f] of aiFiles) sources.set(id, { videoId: id, file: f.file, duration: f.duration, title: f.title, scan: { samples: [], checked: true, interval: 1 } });
@@ -214,6 +243,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     }
 
     const audio = await audioPromise;
+    timing.audio = Date.now() - t0;
     await hooks.stage("editing", 30);
 
     // 3) 컷마다 원본 구간 고르기 (글자 없는 구간 우선, 같은 구간 반복 금지) → 컷 영상
@@ -227,6 +257,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const matchable = [...sources.entries()].filter(([id]) => !isAiSource(id)).map(([id, x]) => ({ id, scan: x.scan }));
     const matched = await matchScenes(scenes.map((s) => s.narration), matchable).catch(() => ({ wants: new Map<number, SceneWant>(), aiCalls: 0 }));
     aiCalls += matched.aiCalls;
+    timing.match = Date.now() - t0;
     const usedRanges = new Map<string, [number, number][]>();
     let t = 0;
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number }[] = [];
@@ -449,6 +480,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     if (!sfxFiles.length) issues.push("효과음 파일이 없어 넣지 못했습니다 (assets/video/sfx).");
     amix.push(`${mixIns.join("")}amix=inputs=${mixIns.length}:normalize=0:duration=first,alimiter=limit=0.95[aout]`);
     const final = path.join(dir, "final.mp4");
+    timing.encode = Date.now() - t0;
     await hooks.stage("rendering", 88);
     await runFfmpeg(
       [...inputs, "-filter_complex", amix.join(";"), "-map", "0:v", "-map", "[aout]", "-t", total.toFixed(3), "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", final],
@@ -467,6 +499,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     if (blackFrames) issues.push(`검은 화면이 ${blackFrames}번 있습니다.`);
     if (longSilences && tts && job.plan.captions !== false) issues.push(`0.8초 넘는 무음이 ${longSilences}번 있습니다.`);
     if (Math.abs(durationSec - total) > 0.5) issues.push("영상과 음성 길이가 맞지 않을 수 있습니다.");
+    timing.total = Date.now() - t0;
+    console.info("[VideoRender]", JSON.stringify({ jobId: job.id, scenes: scenes.length, sources: sources.size, scanCached, ...timing }));
     const qa: VideoQa = {
       checkedAt: new Date().toISOString(),
       durationSec: Number(durationSec.toFixed(2)),

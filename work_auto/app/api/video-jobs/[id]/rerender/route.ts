@@ -4,7 +4,7 @@ import { rateLimit } from "@/lib/server/rate-limit";
 import { videoJobService } from "@/lib/server/video/service";
 import type { VideoPlan } from "@/lib/types/video-production";
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 /** POST /api/video-jobs/:id/rerender { plan? } — 클립 교체 등으로 다시 렌더 (컷 계획 AI 재호출 없음) */
 export async function POST(request: Request, ctx: RouteContext<"/api/video-jobs/[id]/rerender">) {
