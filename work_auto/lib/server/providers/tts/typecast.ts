@@ -9,6 +9,8 @@ import type { TTSProvider } from "./openai-tts";
  *   { voice_id "tc_…"|"uc_…", text ≤2000, model "ssfm-v30", language "kor", prompt { emotion_type "preset", emotion_preset, emotion_intensity }, output { audio_format "mp3" } }
  * - 목소리 목록: GET /v3/voices?model=ssfm-v30 (무료). 목소리에는 '지원 언어' 값이 없고 언어는 모델이 정한다
  *   (ssfm-v30 = 한국어 포함 37개 언어) → v0.9.76: ssfm-v30 모델이 있는 목소리(+내 목소리)만 = 한국어로 읽을 수 있는 것만
+ * - 대본 전체 한 번 (v0.9.77): POST /v1/text-to-speech/with-timestamps?granularity=char → { audio(base64), characters[{text,start,end}초], audio_duration }
+ *   줄마다 따로 부르면 '동시 요청이 너무 많음'(429)이 나서, 영상은 한 번에 만들고 글자 시각으로 줄마다 자른다
  * - 연결 확인: GET /v1/users/me/subscription (무료, 플랜·남은 크레딧)
  * 1글자 = 1크레딧. 무료 플랜은 상업적 사용 불가 (유료 Lite 부터). 키는 헤더로만, 로그·오류에 넣지 않는다.
  */
@@ -76,6 +78,35 @@ export class TypecastTTSProvider implements TTSProvider {
     });
     if (!res.ok) throw errorOf(res.status);
     return Buffer.from(await res.arrayBuffer());
+  }
+
+  /** 대본 전체를 한 번에 + 글자별 시각 (영상 만들기용) */
+  async synthesizeWithTimestamps(text: string, voice: string, opts?: { emotion?: string }): Promise<{ audio: Buffer; format: string; chars: { text: string; start: number; end: number }[]; duration: number }> {
+    if (!TYPECAST_VOICE_ID.test(voice)) throw new Error("타입캐스트 목소리를 골라 주세요.");
+    const emotion = TYPECAST_EMOTIONS.some((e) => e.value === opts?.emotion) ? opts!.emotion! : "normal";
+    const res = await fetch(`${BASE}/v1/text-to-speech/with-timestamps?granularity=char`, {
+      method: "POST",
+      headers: this.headers(true),
+      cache: "no-store",
+      signal: AbortSignal.timeout(120_000),
+      body: JSON.stringify({
+        voice_id: voice,
+        text: text.slice(0, 2000),
+        model: MODEL,
+        language: "kor",
+        prompt: { emotion_type: "preset", emotion_preset: emotion, emotion_intensity: 1 },
+        output: { audio_format: "mp3" },
+      }),
+    });
+    if (!res.ok) throw errorOf(res.status);
+    const j = (await res.json()) as { audio?: string; audio_format?: string; characters?: { text?: string; start?: number; end?: number }[]; audio_duration?: number };
+    if (!j.audio) throw new Error("타입캐스트가 음성을 돌려주지 않았습니다.");
+    return {
+      audio: Buffer.from(j.audio, "base64"),
+      format: j.audio_format === "wav" ? "wav" : "mp3",
+      chars: (j.characters ?? []).map((c) => ({ text: String(c.text ?? ""), start: Number(c.start), end: Number(c.end) })),
+      duration: Number(j.audio_duration) || 0,
+    };
   }
 
   async listVoices(): Promise<TypecastVoice[]> {

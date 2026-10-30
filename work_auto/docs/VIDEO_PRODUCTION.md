@@ -130,3 +130,8 @@ v0.9.76: 자막·로고는 **확대가 블러보다 먼저**. AI 이미지 검�
 - 음성 엔진 기본 = 타입캐스트. 엔진·타입캐스트 목소리·감정·속도·무음 길이는 브라우저 localStorage(`vp-voice-prefs:v1`, 비밀값 아님)에 기억
 - 말 사이 무음 기본 0.1초
 - 말하기 속도는 영상 길이를 골라도 항상 선택 가능: `playTempo()` = max(고른 속도, 목표 길이에 맞는 배속), 최대 3배. 미리 듣기도 같은 속도
+
+## v0.9.77 타입캐스트: 대본 전체 한 번 → 줄마다 자르기
+- `TypecastTTSProvider.synthesizeWithTimestamps()` — POST /v1/text-to-speech/with-timestamps?granularity=char → base64 음성 + characters[{text,start,end}초]
+- 줄을 줄바꿈으로 이어 한 번에 (2000자 넘으면 `groupLines()`로 묶음마다 1번). `splitByChars()`: 공백 빼고 글자를 차례로 맞춰 줄 경계 = 앞 줄 마지막 글자 끝과 다음 줄 첫 글자 시작의 가운데. 안 맞으면 `splitBySilence()`(글자 수 비율 근처의 쉼)
+- 자른 조각마다 기존과 같이 `removePauses()` → 속도. 실패하면 다시 부르지 않고 그 묶음은 음성 없이 (OpenAI 는 기존대로 줄마다)

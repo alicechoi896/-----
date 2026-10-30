@@ -25,6 +25,9 @@ import { videoAssets } from "./assets";
 import { mediaDuration, runFfmpeg, videoSize } from "./ffmpeg";
 import { SourceError, fetchSource, type LocalSource } from "./source";
 import { removePauses } from "./pauses";
+import { TypecastTTSProvider } from "../providers/tts/typecast";
+import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production/voice-split";
+import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
 import { pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
@@ -70,10 +73,50 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     let voiceTempo = 1;
     const audioPromise = (async () => {
     const audio: { file: string; dur: number }[] = new Array(scenes.length);
+    // v0.9.77: 타입캐스트는 대본 전체를 한 번에 만들고(시간표 있는 음성) 글자 시각으로 줄마다 자른다
+    // — 줄마다 동시에 부르면 '동시 요청이 너무 많음'(429). 톤도 컷마다 달라지지 않는다
+    if (tts instanceof TypecastTTSProvider) {
+      for (const g of groupLines(scenes.map((s) => s.narration))) {
+        const lines = g.map((k) => scenes[k].narration);
+        try {
+          const r = await tts.synthesizeWithTimestamps(lines.join("\n"), plan.voice, { emotion: plan.ttsEmotion });
+          aiCalls++;
+          const whole = path.join(dir, `w${g[0]}.${r.format}`);
+          await writeFile(whole, r.audio);
+          const dur = r.duration || (await mediaDuration(whole));
+          let spans = splitByChars(lines, r.chars, dur);
+          if (!spans) {
+            const probe = await runFfmpeg(["-i", whole, "-af", `silencedetect=noise=${C.silenceThresholdDb}dB:d=0.08`, "-f", "null", "-"], 60_000);
+            spans = splitBySilence(lines, parseSilences(probe.stderr, dur), dur);
+          }
+          await Promise.all(
+            g.map(async (k, n) => {
+              const [a, b] = spans![n];
+              const piece = path.join(dir, `a${k}_w.wav`);
+              const out = path.join(dir, `a${k}.wav`);
+              await runFfmpeg(["-i", whole, "-ss", a.toFixed(3), "-to", b.toFixed(3), "-ar", "44100", "-ac", "1", piece]);
+              await removePauses(piece, out, { thresholdDb: C.silenceThresholdDb, maxPause: cleanPause(plan.maxPauseSec), dir, key: `a${k}` });
+              audio[k] = { file: out, dur: await mediaDuration(out) };
+            }),
+          );
+        } catch (e) {
+          issues.push(`타입캐스트 음성(${g[0] + 1}~${g[g.length - 1] + 1}번 컷): ${e instanceof Error ? e.message : String(e)}`);
+          // 같은 오류가 나도 다시 부르지 않는다 (아래에서 음성 없이 자막 시간으로)
+          for (const k of g) audio[k] = audio[k] ?? (await silentScene(k));
+        }
+      }
+    }
+    async function silentScene(k: number) {
+      const out = path.join(dir, `a${k}.wav`);
+      const dur = Math.max(0.7, scenes[k].narration.replace(/\s/g, "").length / C.charsPerSec);
+      await runFfmpeg(["-f", "lavfi", "-i", `anullsrc=r=44100:cl=mono`, "-t", dur.toFixed(2), "-y", out]);
+      return { file: out, dur };
+    }
     for (let i = 0; i < scenes.length; i += 8) {
       await Promise.all(
         scenes.slice(i, i + 8).map(async (s, j) => {
           const k = i + j;
+          if (audio[k]) return;
           const out = path.join(dir, `a${k}.wav`);
           if (tts) {
             try {
