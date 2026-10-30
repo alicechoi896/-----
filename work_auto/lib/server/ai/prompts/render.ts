@@ -5,7 +5,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
+import { endingRule, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -86,6 +86,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
         st.heavy
           ? "대본 3편은 모두 포맷 구조를 따르되, Hook 문장과 강조 포인트만 편마다 다르게 한다 (구조를 새로 만들지 않는다)."
           : "대본 3편은 같은 포맷에서 출발하되 편마다 Hook 방식·전개·강조 포인트·CTA 를 다르게 해서, 사용자가 좋은 부분을 골라 섞을 수 있게 한다.",
+        ...(endingRule(f.examples.map((e) => e.text)) ? [endingRule(f.examples.map((e) => e.text))!] : []),
         "영상 길이와 말투 규칙('~니다.' 금지, 짧은 리듬)은 그대로 지킨다. 가격·할인·배송·순위 주장은 [제품 정보]에 근거가 있을 때만 쓰고, 없으면 '링크에서 확인' 식으로 바꾼다.",
         ...(f.guideline ? f.guideline.split("\n") : ["(가이드라인 없음 — 아래 참고 대본의 구조를 참고한다)"]),
       ]),

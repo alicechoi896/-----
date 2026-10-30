@@ -224,3 +224,48 @@ export function formatViews(n: number | null): string {
   if (n >= 1_000) return `${Math.round(n / 100) / 10}천회`;
   return `${n}회`;
 }
+
+/**
+ * 참고 대본의 말끝 분포 (v0.9.82) — 포맷이 '~요'를 거의 안 쓰는데 결과가 '~요'로 끝나던 문제.
+ * 줄마다 마지막 낱말의 끝으로 나눈다: 요(해요체) · 니다(합니다체) · 다(반말 평서) · 음(음슴체·명사형) · 반말(~어·~지·~야…) · 기타(명사·물음표 등)
+ */
+export type EndingKind = "yo" | "nida" | "da" | "eum" | "banmal" | "other";
+export const ENDING_LABEL: Record<EndingKind, string> = { yo: "'~요'", nida: "'~니다'", da: "'~다'(반말)", eum: "'~음/~함/~임'", banmal: "반말 '~어/~지/~야/~네/~거든'", other: "명사·물음표 등으로 끝" };
+
+export function endingOf(line: string): EndingKind | null {
+  const t = line.replace(/[\s.!?~…·"'”’)\]\-ㅋㅎ😀-🙏]+$/u, "").trim();
+  if (!t) return null;
+  if (/니다$/.test(t)) return "nida";
+  if (/요$/.test(t)) return "yo";
+  if (/(음|함|임|됨|짐|옴|봄|감)$/.test(t)) return "eum";
+  if (/다$/.test(t)) return "da";
+  if (/(어|아|지|야|네|게|거든|잖아|래|대|해|돼|까|봐|와|줘|라|자|해봐)$/.test(t)) return "banmal";
+  return "other";
+}
+
+export function endingProfile(texts: string[]): { total: number; ratios: Record<EndingKind, number> } {
+  const counts: Record<EndingKind, number> = { yo: 0, nida: 0, da: 0, eum: 0, banmal: 0, other: 0 };
+  let total = 0;
+  for (const text of texts)
+    for (const line of text.split(/\n+|(?<=[.?!])\s+/)) {
+      const k = endingOf(line);
+      if (!k) continue;
+      counts[k]++;
+      total++;
+    }
+  const ratios = Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, total ? v / total : 0])) as Record<EndingKind, number>;
+  return { total, ratios };
+}
+
+/** 프롬프트에 넣을 말끝 규칙 (참고 줄이 10줄 미만이면 null) */
+export function endingRule(texts: string[]): string | null {
+  const { total, ratios } = endingProfile(texts);
+  if (total < 10) return null;
+  const pct = (k: EndingKind) => Math.round(ratios[k] * 100);
+  const order = (Object.keys(ratios) as EndingKind[]).filter((k) => ratios[k] >= 0.05).sort((a, b) => ratios[b] - ratios[a]);
+  const dist = order.map((k) => `${ENDING_LABEL[k]} ${pct(k)}%`).join(" · ");
+  const lines = [`말끝 규칙 (가장 중요 — 스타일·기본 말투 규칙보다 우선): 참고 대본 문장 끝은 ${dist}. 대본의 문장 끝도 이 비율을 그대로 따른다.`];
+  if (ratios.yo < 0.3) lines.push(`참고 대본은 '~요'로 거의 끝나지 않는다 (${pct("yo")}%). '~요'·'~거든요'·'~죠'로 끝나는 줄은 전체의 ${Math.max(0, pct("yo") + 5)}% 이하로만 쓴다.`);
+  if (ratios.nida < 0.1) lines.push("'~니다'로 끝내지 않는다.");
+  return lines.join(" ");
+}

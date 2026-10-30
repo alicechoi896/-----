@@ -23,7 +23,7 @@ import {
   type TitleStyle,
 } from "@/lib/video-production/config";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
-import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
+import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { cn, formatRelative } from "@/lib/utils";
 
@@ -42,6 +42,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
   const [loadError, setLoadError] = useState<string | null>(null);
   const [contentId, setContentId] = useState(initialContentId ?? "");
   const [scriptIndex, setScriptIndex] = useState(0);
+  // v0.9.82: 대본 직접 고치기 (null = 고른 원고 그대로). 엔터 = 컷 나누기
+  const [scriptText, setScriptText] = useState<string | null>(null);
   const [videoIds, setVideoIds] = useState<string[]>([]);
   const [voice, setVoice] = useState("onyx");
   // 음성 엔진 (v0.9.73): OpenAI | 타입캐스트. 타입캐스트 목소리는 tc_… id. v0.9.75: 기본 타입캐스트
@@ -71,6 +73,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     const c = o.contents.find((x) => x.id === id);
     setContentId(id);
     setScriptIndex(0);
+    setScriptText(null);
     setPlan(null);
     if (!c) return;
     // 영상 길이 기본값 = 대본을 만들 때 고른 길이
@@ -148,7 +151,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setError(null);
     try {
       // v0.9.71: 고른 샤오홍슈 영상만으로 만든다 (AI 영상 생성 없음)
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle, scriptText: scriptText ?? undefined });
       setPlan(r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
@@ -266,12 +269,24 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                         className={cn("block cursor-pointer rounded-control border px-3 py-2 text-[12.5px]", scriptIndex === i ? "border-brand bg-brand-soft/50" : "border-line hover:bg-subtle")}
                       >
                         <span className="flex items-center gap-2 font-semibold text-fg">
-                          <input type="radio" name="vp-script" checked={scriptIndex === i} onChange={() => setScriptIndex(i)} className="accent-[var(--color-brand)]" />
+                          <input type="radio" name="vp-script" checked={scriptIndex === i} onChange={() => (setScriptIndex(i), setScriptText(null))} className="accent-[var(--color-brand)]" />
                           대본 {i + 1}
                         </span>
                         <span className="mt-1 line-clamp-3 block whitespace-pre-line text-fg-muted">{s}</span>
                       </label>
                     ))}
+                    <label className="block space-y-1" data-script-edit>
+                      <span className="flex items-center gap-2 text-[12px] font-medium text-fg-muted">
+                        대본 직접 고치기 {scriptText !== null && <Badge tone="brand">고침</Badge>}
+                        {scriptText !== null && (
+                          <button type="button" className="text-[11.5px] text-brand hover:underline" onClick={() => setScriptText(null)}>
+                            원래대로
+                          </button>
+                        )}
+                      </span>
+                      <Textarea rows={8} value={scriptText ?? content.scripts[scriptIndex] ?? ""} onChange={(e) => setScriptText(e.target.value)} className="text-[13px] leading-relaxed" />
+                      <span className="block text-[11.5px] text-fg-subtle">엔터 한 번 = 컷 하나 = 자막·음성 한 줄입니다. 줄 중간에서 나누지 않습니다. 고친 대본으로 [컷 계획 만들기]를 합니다.</span>
+                    </label>
                   </div>
                 )}
               </div>
@@ -478,7 +493,7 @@ function PlanEditor({
     <SectionCard
       title={`③ 컷 계획 · ${plan.scenes.length}컷`}
       icon={Clapperboard}
-      description="한 줄 = 한 컷 = 자막 한 줄입니다. 클립은 자동으로 나눠 두었고, 바꿀 수 있습니다. 원본 글자는 렌더할 때 검사해 글자 없는 구간 → 확대 → 블러 → 제외 순으로 처리합니다."
+      description="한 줄 = 한 컷 = 자막·음성 한 줄입니다 (대본의 엔터 기준). 대본·제목·클립 모두 고칠 수 있습니다. 3컷마다 효과음 + 제품 보기 화살표가 들어가고, 원본의 자막·로고는 화면을 확대해 가립니다."
       data-plan-editor
     >
       <div className="mb-4 overflow-hidden rounded-control border border-line">
@@ -487,6 +502,16 @@ function PlanEditor({
           <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-8 border-0 bg-transparent text-center" style={{ color: titleStyle.line2, ...previewFont(titleStyle.font) }} aria-label="상단 제목 2줄" />
         </div>
         <p className="bg-subtle px-3 py-1.5 text-[11.5px] text-fg-subtle">상단 제목 (② 에서 고른 제목 스타일 · 2번째 줄의 [ ] 글자는 강조색). 선택한 제목: {plan.selectedTitle}</p>
+        <div className="grid gap-2 border-t border-line p-3 sm:grid-cols-2" data-title-edit>
+          <label className="space-y-1">
+            <span className="text-[12px] font-medium text-fg-muted">상단 제목 1줄 (고치기)</span>
+            <Input value={plan.topLine1} onChange={(e) => onChange({ ...plan, topLine1: e.target.value })} className="h-9" />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[12px] font-medium text-fg-muted">상단 제목 2줄 — [ ] 로 감싼 글자는 강조색</span>
+            <Input value={plan.topLine2} onChange={(e) => onChange({ ...plan, topLine2: e.target.value })} className="h-9" />
+          </label>
+        </div>
       </div>
       <ol className="space-y-1.5">
         {plan.scenes.map((s, i) => (
@@ -551,6 +576,8 @@ function JobPanel({
   const [note, setNote] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const changed = JSON.stringify(edited.scenes.map((s) => s.sourceVideoId)) !== JSON.stringify(job.plan.scenes.map((s) => s.sourceVideoId));
+  // v0.9.82: 제목·대본을 고쳤는지
+  const textChanged = edited.topLine1 !== job.plan.topLine1 || edited.topLine2 !== job.plan.topLine2 || edited.scenes.some((s, i) => s.narration !== job.plan.scenes[i]?.narration);
   const pool = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) }));
 
   async function download() {
@@ -631,12 +658,22 @@ function JobPanel({
             <p className="text-xs text-fg-subtle">
               길이 {job.qa.durationSec ?? "-"}초{job.qa.targetSec ? ` (목표 ${job.qa.targetSec}초)` : ""}{job.qa.voiceTempo && job.qa.voiceTempo !== 1 ? ` · 음성 ${job.qa.voiceTempo}배` : ""} · 효과음 {job.qa.sfxCount ?? 0}회 · 검은 화면 {job.qa.blackFrames ?? 0} · 긴 무음 {job.qa.longSilences ?? 0} · 음성 {job.qa.voice === "tts" ? "AI" : "없음"}
             </p>
+            <div className="grid gap-2 sm:grid-cols-2" data-job-title>
+              <label className="space-y-1">
+                <span className="text-[11.5px] font-medium text-fg-muted">상단 제목 1줄</span>
+                <Input value={edited.topLine1} onChange={(e) => setEdited({ ...edited, topLine1: e.target.value })} className="h-8 text-[13px]" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11.5px] font-medium text-fg-muted">상단 제목 2줄 ([ ] = 강조색)</span>
+                <Input value={edited.topLine2} onChange={(e) => setEdited({ ...edited, topLine2: e.target.value })} className="h-8 text-[13px]" />
+              </label>
+            </div>
             <ol className="space-y-1" data-job-scenes>
               {edited.scenes.map((s, i) => (
                 <li key={i} className={cn("grid grid-cols-[24px_minmax(0,1fr)_170px] items-center gap-2 rounded-control border px-2 py-1.5 text-[12px]", s.issue ? "border-warning bg-warning-soft/40" : "border-line")}>
                   <span className="tabular text-center text-fg-subtle">{i + 1}</span>
                   <span className="min-w-0">
-                    <span className="block truncate text-fg">{s.narration}</span>
+                    <Input value={s.narration} onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, narration: e.target.value } : x)) })} className="h-7 text-[12.5px]" aria-label={`${i + 1}번 컷 대본`} />
                     <span className="text-[11px] text-fg-subtle">
                       {s.start != null ? `${s.start.toFixed(1)}초 · ` : ""}
                       {TREATMENT_LABEL[s.textTreatment ?? "unchecked"]}
@@ -653,8 +690,8 @@ function JobPanel({
               ))}
             </ol>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button size="sm" variant={changed ? "primary" : "secondary"} icon={RefreshCw} onClick={() => onRerender(edited)}>
-                {changed ? "바꾼 클립으로 다시 만들기" : "다시 만들기"}
+              <Button size="sm" variant={changed || textChanged ? "primary" : "secondary"} icon={RefreshCw} onClick={() => onRerender(edited)}>
+                {textChanged ? "고친 제목·대본으로 다시 만들기" : changed ? "바꾼 클립으로 다시 만들기" : "다시 만들기"}
               </Button>
             </div>
             <p className="text-[11px] text-fg-subtle">원본 {[...new Set(job.plan.scenes.map((s) => s.sourceVideoId))].map(videoTitle).join(", ").slice(0, 120)}</p>

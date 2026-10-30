@@ -151,3 +151,10 @@ v0.9.76: 자막·로고는 **확대가 블러보다 먼저**. AI 이미지 검�
 - 강조색: planner 가 line2 의 핵심 낱말을 [ ] 로. 렌더 때 `autoAccent()` — [ ] 가 없으면 숫자가 든 낱말, 없으면 가장 긴 낱말
 - 말하기 속도 `VOICE_SPEEDS` 에 0(자동) 추가. `playTempo`: 0 → 목표 길이에 맞춤(없으면 1배), 숫자 → 그 속도 그대로
 - 원본 저장·재사용: Storage `{userId}/src/{videoId}.mp4` (≤45MB, `sourceCacheDays` 7일 뒤 cleanup 이 지움). 인코딩 `encodeParallel` 3 (작업 큐), preset superfast
+
+## v0.9.82
+- 대본 → 컷: `splitScript` 는 줄바꿈으로만 (한 줄 = 한 컷 = 음성 한 마디). 화면 ① 의 '대본 직접 고치기' → `plan({ scriptText })`
+- 효과음·화살표: `arrowSceneIndexes` = 2, 5, 8… (마지막 제외), `sfxSceneIndexes` = 0 + 화살표 컷
+- 무음: `PAUSE_OPTIONS` 0.05·0.1·0.2·0.3·0.5, 기본 0.05
+- 글자·로고 가리기: `persistentBoxes(scan)` (영상 전체에서 본 화면 12% 이하 상자) 를 구간 상자에 더해 `decideTreatment`. `maxCropZoom` 1.8
+- 대본 포맷 말끝: `endingRule()` (lib/script-format.ts) 을 포맷 블록 맨 앞 규칙으로

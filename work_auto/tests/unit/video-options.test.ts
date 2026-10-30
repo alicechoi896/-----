@@ -76,7 +76,7 @@ describe("영상 길이 맞추기 (v0.9.67)", async () => {
     expect(playTempo(28, 15, 1, 0)).toBe(2);
     expect(playTempo(28, 0, 1, 0)).toBe(1);
     expect(atempoChain(0)).toBe("");
-    expect(DEFAULT_PAUSE).toBe(0.1);
+    expect(DEFAULT_PAUSE).toBe(0.05);
   });
   it("v0.9.80: 제목 2줄에 [ ] 가 없으면 핵심 낱말 하나를 강조", async () => {
     const { autoAccent } = await import("@/lib/video-production/config");

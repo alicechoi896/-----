@@ -15,20 +15,16 @@ const { sfxSceneIndexes, arrowSceneIndexes } = await import("@/lib/video-product
 const { decideTreatment } = await import("@/lib/server/video/text-scan");
 
 describe("영상 자동 제작", () => {
-  it("대본 → 컷: 한 줄 = 한 컷, 긴 줄은 띄어쓰기에서", () => {
-    const s = splitScript("폰 고를 때 뭐부터 봐야할까요?\n이 3가지만 확인하세요\n먼저 화면이에요. 아이폰17은 120Hz로 화면이 아주 부드럽고 스크롤이 편해요");
-    expect(s[0]).toBe("폰 고를 때 뭐부터 봐야할까요?");
-    expect(s.length).toBeGreaterThanOrEqual(4);
-    expect(s.every((x) => x.length <= 18 || !x.includes(" "))).toBe(true);
+  it("대본 → 컷 (v0.9.82): 엔터로만 나눈다 — 긴 줄도 줄 중간에서 나누지 않음", () => {
+    const s = splitScript("폰 고를 때 뭐부터 봐야할까요?\n\n이 3가지만 확인하세요\n먼저 화면이에요. 아이폰17은 120Hz로 화면이 아주 부드럽고 스크롤이 편해요");
+    expect(s).toEqual(["폰 고를 때 뭐부터 봐야할까요?", "이 3가지만 확인하세요", "먼저 화면이에요. 아이폰17은 120Hz로 화면이 아주 부드럽고 스크롤이 편해요"]);
   });
 
-  it("효과음 약 2컷당 1회·연속 금지, 화살표 4번째 컷", () => {
-    const sfx = sfxSceneIndexes(12, [3, 4, 7]);
-    expect(sfx[0]).toBe(0);
-    expect(sfx.length).toBeGreaterThanOrEqual(5);
-    expect(sfx.length).toBeLessThanOrEqual(6);
-    for (let i = 1; i < sfx.length; i++) expect(sfx[i] - sfx[i - 1]).toBeGreaterThanOrEqual(2);
-    expect(arrowSceneIndexes(12)).toContain(3);
+  it("효과음·제품 보기 화살표 (v0.9.82): 3컷마다 같은 컷에, 첫 컷은 효과음, 마지막(엔딩) 컷은 빼고", () => {
+    expect(arrowSceneIndexes(12)).toEqual([2, 5, 8]);
+    expect(sfxSceneIndexes(12, [3, 4, 7])).toEqual([0, 2, 5, 8]);
+    expect(arrowSceneIndexes(4)).toEqual([2]);
+    expect(arrowSceneIndexes(3)).toEqual([]);
   });
 
   it("원본 글자 (v0.9.76): 자막·로고는 확대로 먼저 가리고, 안 되면 블러, 큰 글자는 제외", () => {
@@ -42,7 +38,9 @@ describe("영상 자동 제작", () => {
     const logo = decideTreatment([{ x: 0.78, y: 0.22, w: 0.18, h: 0.05 }], true);
     expect(logo.kind).toBe("crop");
     // 가운데 작은 글자 → 확대로 못 가려서 블러, 큰 글자 → 제외
-    expect(decideTreatment([{ x: 0.4, y: 0.45, w: 0.2, h: 0.05 }], true).kind).toBe("blur");
+    // v0.9.82: 최대 1.8배라 가운데 작은 글자도 확대로 가린다
+    expect(decideTreatment([{ x: 0.4, y: 0.45, w: 0.2, h: 0.05 }], true).kind).toBe("crop");
+    expect(decideTreatment([{ x: 0.3, y: 0.42, w: 0.4, h: 0.12 }], true).kind).toBe("blur");
     expect(decideTreatment([{ x: 0.05, y: 0.3, w: 0.9, h: 0.4 }], true).kind).toBe("rejected");
     // 상단 띠가 덮음
     expect(decideTreatment([{ x: 0.1, y: 0.02, w: 0.8, h: 0.08 }], true).kind).toBe("clean");

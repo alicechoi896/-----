@@ -262,6 +262,20 @@ export interface SegmentSource {
   /** 원본 가로÷세로 (꽉 채우기에서 잘리는 부분 계산, 없으면 9:16) */
   aspect?: number;
 }
+/**
+ * v0.9.82: 그 영상 어디서든 한 번이라도 보인 작은 글자·로고(화면의 12% 이하)는 모든 구간에 있다고 보고 가린다.
+ * 검사 프레임 사이에만 나타나는 자막·워터마크가 빠져 보이던 문제 (큰 글자 화면은 그 구간에서만)
+ */
+const persistentCache = new WeakMap<TextScan, Box[]>();
+export function persistentBoxes(scan: TextScan): Box[] {
+  const hit = persistentCache.get(scan);
+  if (hit) return hit;
+  const small = scan.samples.flatMap((x) => x.boxes).filter((b) => b.w * b.h <= 0.12 && !(b.w >= 0.99 && b.h >= 0.99));
+  const out = mergeNear(small);
+  persistentCache.set(scan, out);
+  return out;
+}
+
 /** v0.9.78: 대사와 뜻이 맞는 장면(want)을 품은 구간 보너스 */
 const WANT_BONUS = 6;
 export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]>; want?: { id: string; t: number } | null }): { id: string; start: number; tr: Treatment; value: number } | null {
@@ -274,7 +288,7 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
     for (let n = 0; n <= steps; n++) {
       const start = (maxStart * n) / steps;
       if (ranges.some(([a, b]) => start < b && start + input.dur > a)) continue;
-      const tr = decideTreatment(boxesIn(src.scan, start, input.dur), src.scan.checked, src.aspect);
+      const tr = decideTreatment([...boxesIn(src.scan, start, input.dur), ...persistentBoxes(src.scan)], src.scan.checked, src.aspect);
       if (tr.kind === "rejected") continue;
       // 이 구간의 장면들 (없으면 가장 가까운 장면)
       let inRange = src.scan.samples.filter((x) => x.t >= start && x.t <= start + input.dur);

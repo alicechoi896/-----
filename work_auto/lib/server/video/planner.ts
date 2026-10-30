@@ -1,7 +1,7 @@
 import "server-only";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoPlan, VideoScene, VideoSourceMode } from "@/lib/types/video-production";
-import { CAPTION_TEMPLATE, TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, arrowSceneIndexes, attentionSceneIndexes, sfxSceneIndexes } from "@/lib/video-production/config";
+import { TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, arrowSceneIndexes, attentionSceneIndexes, sfxSceneIndexes } from "@/lib/video-production/config";
 import { getAIProvider } from "../providers/registry";
 import { videoAssets, sfxName } from "./assets";
 
@@ -14,55 +14,15 @@ import { videoAssets, sfxName } from "./assets";
  */
 const EMPHASIS = /\d|첫째|둘째|셋째|비교|차이|장점|핵심|가격|할인|최저|무게|배터리|카메라|진짜|꼭|반드시|링크|확인/;
 
-/** 긴 줄 → 비슷한 길이 조각 n 개 (쉼표 뒤를 먼저, 없으면 띄어쓰기) */
-function balancedSplit(line: string, max: number): string[] {
-  const parts = Math.ceil(line.length / max);
-  if (parts <= 1) return [line];
-  const target = line.length / parts;
-  const cuts: number[] = [];
-  for (let k = 1; k < parts; k++) {
-    const ideal = target * k;
-    let best = -1;
-    let bestScore = Infinity;
-    for (let i = 1; i < line.length - 1; i++) {
-      if (line[i] !== " ") continue;
-      // 쉼표 바로 뒤는 자연스러운 끊는 곳 → 조금 더 멀어도 고른다
-      const score = Math.abs(i - ideal) - (/[,，]/.test(line[i - 1]) ? 4 : 0);
-      if (score < bestScore && (cuts.at(-1) ?? 0) < i) {
-        bestScore = score;
-        best = i;
-      }
-    }
-    if (best > 0) cuts.push(best);
-  }
-  const out: string[] = [];
-  let from = 0;
-  for (const c of [...cuts, line.length]) {
-    const piece = line.slice(from, c).trim();
-    if (piece) out.push(piece);
-    from = c;
-  }
-  return out;
-}
-
 export function splitScript(script: string): string[] {
-  const max = CAPTION_TEMPLATE.maxCharsPerLine + 4;
-  const lines = script
+  // v0.9.82: 엔터(줄바꿈)로만 나눈다 — 한 줄 = 한 컷 = 음성 한 마디. 문장부호·길이로 더 쪼개지 않는다
+  // (전에는 긴 줄을 띄어쓰기에서 나눠 '사과인데'가 '사, / 과…'처럼 다른 컷·다른 음성으로 갈라졌다)
+  return script
     .replace(/\r/g, "")
     .split(/\n+/)
-    .flatMap((l) => l.split(/(?<=[.?!。！？])\s+/))
     .map((l) => l.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const out: string[] = [];
-  for (const line of lines) {
-    if (line.length <= max) {
-      out.push(line);
-      continue;
-    }
-    // 띄어쓰기에서 비슷한 길이로 나눈다 ('있어요'·'3가지'처럼 짧은 조각이 따로 남지 않게 쉼표·띄어쓰기 중 가운데에 가까운 곳)
-    out.push(...balancedSplit(line, max));
-  }
-  return out.slice(0, VIDEO_RENDER_CONFIG.maxScenes);
+    .filter(Boolean)
+    .slice(0, VIDEO_RENDER_CONFIG.maxScenes);
 }
 
 /** 화면용 짧은 제목 (AI 1회, 의미를 바꾸지 않는다). 실패하면 규칙으로 자른다 */
@@ -133,11 +93,13 @@ export async function buildPlan(input: {
   voice: string;
   narrationOn?: boolean;
   captions?: boolean;
+  /** v0.9.82: 화면에서 직접 고친 대본 (있으면 원고 대신) */
+  scriptText?: string;
 }): Promise<{ plan: VideoPlan; aiCalls: number }> {
   const { content } = input;
   const scripts = (content.context.userEdits?.script?.value ?? content.output.script) as string[] | string | undefined;
   const list = Array.isArray(scripts) ? scripts : scripts ? [scripts] : [];
-  const script = list[Math.max(0, Math.min(list.length - 1, input.scriptIndex))] ?? "";
+  const script = input.scriptText?.trim() ? input.scriptText.slice(0, 6000) : (list[Math.max(0, Math.min(list.length - 1, input.scriptIndex))] ?? "");
   const phrases = splitScript(script);
   const wf = content.context.workflow;
   const title = wf?.selected?.title || content.headline;

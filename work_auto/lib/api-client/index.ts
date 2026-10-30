@@ -313,6 +313,8 @@ export const api = {
       ttsEmotion?: string;
       captionStyle?: import("@/lib/video-production/config").CaptionStyle;
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
+      /** v0.9.82: 직접 고친 대본 */
+      scriptText?: string;
     }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
     jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),

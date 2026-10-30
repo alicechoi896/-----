@@ -26,7 +26,8 @@ export const VIDEO_RENDER_CONFIG = {
 
   /** 원본 글자 처리 */
   /** v0.9.76: 자막·로고를 확대로 가릴 때 최대 배율 (1.35 → 1.6) */
-  maxCropZoom: 1.6,
+  // v0.9.82: 1.6 → 1.8 (로고·자막은 확대로 가린다)
+  maxCropZoom: 1.8,
   textMaskPadding: 0.04,
   textMaskTimePaddingSec: 0.3,
   /** 원본 글자 검사: 클립마다 몇 장을 볼지 (AI Vision 1회) */
@@ -102,10 +103,10 @@ export const ENDING_ARROW_PLACEMENT: Record<VideoChannel, { x: number; y: number
 
 /** 화살표를 넣을 컷 (0부터): 4번째 컷 + 컷이 10개 이상이면 60% 지점 */
 export function arrowSceneIndexes(count: number): number[] {
-  const out = new Set<number>();
-  if (count >= 5) out.add(3);
-  if (count >= 10) out.add(Math.round(count * 0.6));
-  return [...out].filter((i) => i < count - 1);
+  // v0.9.82: 중간에 3컷마다 1번 (3·6·9…번째 컷), 마지막 엔딩 컷은 빼고
+  const out: number[] = [];
+  for (let i = 2; i < count - 1; i += 3) out.push(i);
+  return out;
 }
 
 /**
@@ -131,12 +132,9 @@ export function attentionSceneIndexes(count: number, sfx: number[], arrows: numb
 
 /** 효과음 넣을 컷: 강조 컷 우선, 약 2컷당 1회, 연속 금지, 첫 컷(Hook)은 항상 */
 export function sfxSceneIndexes(count: number, emphasis: number[]): number[] {
-  const want = Math.min(VIDEO_RENDER_CONFIG.sfxMaxPerVideo, Math.max(1, Math.round(count / VIDEO_RENDER_CONFIG.sfxClipInterval)));
-  const picked: number[] = [0];
-  const ok = (i: number) => i > 0 && i < count && !picked.some((p) => Math.abs(p - i) < 2);
-  for (const i of emphasis) if (picked.length < want && ok(i)) picked.push(i);
-  for (let i = 1; i < count && picked.length < want; i++) if (ok(i)) picked.push(i);
-  return picked.sort((a, b) => a - b);
+  // v0.9.82: 첫 컷(Hook) + 3컷마다 1번 — 제품 보기 화살표가 나오는 컷과 같은 컷
+  void emphasis;
+  return [...new Set([0, ...arrowSceneIndexes(count)])].filter((i) => i < count).sort((a, b) => a - b).slice(0, VIDEO_RENDER_CONFIG.sfxMaxPerVideo + 1);
 }
 
 export const VIDEO_FEATURE_CHANNEL: Record<string, VideoChannel> = {
@@ -249,8 +247,9 @@ export function atempoFor(tempo: number): string {
 /**
  * 말 사이 무음 (v0.9.72): 음성 안의 쉼이 이 길이보다 길면 모두 줄인다 (무음 구간 자르기와 같은 방식). 기본 0.1초 (v0.9.75)
  */
-export const PAUSE_OPTIONS = [0.1, 0.2, 0.3, 0.5] as const;
-export const DEFAULT_PAUSE = 0.1;
+export const PAUSE_OPTIONS = [0.05, 0.1, 0.2, 0.3, 0.5] as const;
+/** v0.9.82: 기본 0.05초 */
+export const DEFAULT_PAUSE = 0.05;
 export const cleanPause = (v: unknown) => (PAUSE_OPTIONS.includes(Number(v) as (typeof PAUSE_OPTIONS)[number]) ? Number(v) : DEFAULT_PAUSE);
 
 /** ",atempo=2" (atempo 한 번에 0.5~2배) */
@@ -278,7 +277,7 @@ export const CAPTION_SIZES = [
  * 너무 짧은 마지막 조각(3자 이하)은 앞 조각에 붙인다.
  */
 export function captionChunks(text: string, max = CAPTION_TEMPLATE.maxCharsPerLine): string[] {
-  const t = text.replace(/s+/g, " ").trim();
+  const t = text.replace(/\s+/g, " ").trim();
   const n = Math.ceil(t.length / max);
   if (n <= 1) return t ? [t] : [text];
   // 비슷한 길이로 n 조각: 각 경계는 이상적인 위치에서 가장 가까운 띄어쓰기
