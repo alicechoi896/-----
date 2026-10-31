@@ -89,6 +89,8 @@ export interface ProductAnalysisDraft {
 export interface ProductAnalysis extends ProductAnalysisContent {
   id: ID;
   productId: ID;
+  /** v0.9.109: 데이터 주인 (제품과 같은 주인 — 관리자 공용 데이터면 공용 주인). 없으면 DB 기본값(저장한 사람) */
+  userId?: ID;
   /** 같은 제품을 재분석하면 version 이 올라간다 */
   version: number;
   meta: AnalysisMeta;
@@ -98,6 +100,8 @@ export interface ProductAnalysis extends ProductAnalysisContent {
 export interface ProductSource {
   id: ID;
   productId: ID;
+  /** v0.9.109: 데이터 주인 (제품과 같은 주인) */
+  userId?: ID;
   type: ProductSourceType;
   raw: RawProductData;
   createdAt: ISODate;

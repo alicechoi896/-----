@@ -73,8 +73,9 @@ export const productService = {
       lastUsedAt: null,
     };
     await repo.products.insert(product);
-    await repo.productSources.insert({ id: createId("psrc"), productId, type: draft.raw.sourceType, raw: compactRaw(draft.raw), createdAt: now });
-    await repo.productAnalyses.insert({ id: analysisId, productId, version: 1, ...a, meta: draft.meta, createdAt: now });
+    // v0.9.109: 분석·수집 원본도 제품과 같은 주인으로 (주인을 빼면 저장한 관리자 개인 것이 되어 다른 관리자에게 '제품 분석을 찾을 수 없습니다')
+    await repo.productSources.insert({ id: createId("psrc"), userId, productId, type: draft.raw.sourceType, raw: compactRaw(draft.raw), createdAt: now });
+    await repo.productAnalyses.insert({ id: analysisId, userId, productId, version: 1, ...a, meta: draft.meta, createdAt: now });
     return product;
   },
 
@@ -93,9 +94,9 @@ export const productService = {
     const a = draft.analysis;
     const versions = await repo.productAnalyses.list((x) => x.productId === productId);
     const analysisId = createId("pan");
-    await repo.productAnalyses.insert({ id: analysisId, productId, version: Math.max(0, ...versions.map((v) => v.version)) + 1, ...a, meta: draft.meta, createdAt: now });
+    await repo.productAnalyses.insert({ id: analysisId, userId: product.userId, productId, version: Math.max(0, ...versions.map((v) => v.version)) + 1, ...a, meta: draft.meta, createdAt: now });
     for (const s of await repo.productSources.list((x) => x.productId === productId)) await repo.productSources.remove(s.id);
-    await repo.productSources.insert({ id: createId("psrc"), productId, type: draft.raw.sourceType, raw: compactRaw(draft.raw), createdAt: now });
+    await repo.productSources.insert({ id: createId("psrc"), userId: product.userId, productId, type: draft.raw.sourceType, raw: compactRaw(draft.raw), createdAt: now });
     await repo.products.update(productId, {
       name: a.basicInfo.name,
       brand: a.basicInfo.brand,
@@ -122,8 +123,13 @@ export const productService = {
     const userId = await getCurrentUserId();
     const product = await repo.products.get(id);
     if (!product || product.userId !== userId) notFound("제품");
-    const analysis = await repo.productAnalyses.get(product.currentAnalysisId);
-    if (!analysis) notFound("제품 분석");
+    let analysis = await repo.productAnalyses.get(product.currentAnalysisId);
+    if (!analysis) {
+      const visible = await repo.productAnalyses.list((x) => x.productId === id);
+      analysis = visible.sort((x, y) => y.version - x.version)[0] ?? null;
+    }
+    if (!analysis)
+      throw new AppError("ANALYSIS_HIDDEN", "이 제품의 분석 기록을 볼 수 없습니다. 다른 관리자 계정으로 학습해 그 계정에만 보이는 기록일 수 있습니다 (관리자에게 데이터 정리를 요청하거나, 학습한 계정으로 다시 열어 주세요).", 404);
     const [source] = await repo.productSources.list((s) => s.productId === id);
     return { product, analysis, source: source ?? null };
   },
