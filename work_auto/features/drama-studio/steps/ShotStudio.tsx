@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Clapperboard, ListPlus, Mic, Plus, ScanFace, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { Badge, Button, Input, Notice, SectionCard, Select, Textarea } from "@/components/ui";
-import { VIDEO_MODELS, MODE_LABEL, estimateImageCredits, videoModel } from "@/lib/drama-studio/models";
+import { VIDEO_MODELS, MODE_LABEL, durationChoices, estimateImageCredits, fitDuration, videoModel } from "@/lib/drama-studio/models";
 import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, approvedShotImage, dialogueFit, emptyShot, shotCode, shotCostSummary, shotsOf } from "@/lib/drama-studio/shots";
 import { buildTimeline } from "@/lib/drama-studio/steps";
 import type { DramaClip, DramaImage, DramaShot, ShotKind } from "@/lib/drama-studio/types";
@@ -32,7 +32,7 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
   /** 이 장면 샷 모델을 한 번에 (해상도·길이·방식은 그 모델이 되는 값으로) */
   const setSceneModel = (modelId: string) => {
     const nm = videoModel(modelId)!;
-    setShots(shots.map((s) => (s.sceneId !== sceneId ? s : { ...s, modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: Math.min(nm.maxSec, Math.max(nm.minSec, s.durationSec)), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" })));
+    setShots(shots.map((s) => (s.sceneId !== sceneId ? s : { ...s, modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: fitDuration(nm, s.durationSec), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" })));
   };
   const [ask, setAsk] = useState<null | { kind: "image"; shotIds: string[] } | { kind: "video"; shotIds: string[] }>(null);
   const [uploading, setUploading] = useState(false);
@@ -122,7 +122,7 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
           <Button variant="primary" icon={Wand2} disabled={!scene || Boolean(ctl.busy)} loading={ctl.busy === "샷 나누기"} onClick={() => void ctl.run("샷 나누기", () => studioApi.generate(p.id, "shots-plan", { sceneId, count, modelId: planModel, replace: list.length > 0 && window.confirm("이미지·영상이 없는 기존 샷은 지우고 새로 나눌까요? (취소 = 기존 샷 뒤에 추가)") }))} data-shot-plan>
             AI 로 샷 나누기 (AI 1회)
           </Button>
-          <Button variant="secondary" icon={Plus} disabled={!scene || list.length >= MAX_SHOTS_PER_SCENE} onClick={() => setShots([...shots, emptyShot(sceneId, list.length, { title: "새 샷", durationSec: DEFAULT_SHOT_SEC, modelId: planModel, resolution: videoModel(planModel)!.defaultResolution })])}>
+          <Button variant="secondary" icon={Plus} disabled={!scene || list.length >= MAX_SHOTS_PER_SCENE} onClick={() => setShots([...shots, emptyShot(sceneId, list.length, { title: "새 샷", durationSec: fitDuration(videoModel(planModel)!, DEFAULT_SHOT_SEC), modelId: planModel, resolution: videoModel(planModel)!.defaultResolution })])}>
             샷 추가
           </Button>
         </div>
@@ -207,10 +207,10 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
                     <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
                       <Select value={s.modelId} options={VIDEO_MODELS.filter((x) => x.family !== "minimax").map((x) => ({ value: x.id, label: x.label }))} onChange={(e) => {
                         const nm = videoModel(e.target.value)!;
-                        setShot(s.id, { modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: Math.min(nm.maxSec, Math.max(nm.minSec, s.durationSec)), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" });
+                        setShot(s.id, { modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: fitDuration(nm, s.durationSec), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" });
                       }} className="h-8 w-40" aria-label="영상 모델" />
                       <Select value={s.resolution} options={(m?.resolutions ?? []).map((r) => ({ value: r, label: r }))} onChange={(e) => setShot(s.id, { resolution: e.target.value })} className="h-8 w-20" aria-label="해상도" />
-                      <Select value={String(s.durationSec)} options={Array.from({ length: (m?.maxSec ?? 15) - (m?.minSec ?? 4) + 1 }, (_, i) => (m?.minSec ?? 4) + i).map((n) => ({ value: String(n), label: `${n}초` }))} onChange={(e) => setShot(s.id, { durationSec: Number(e.target.value) })} className="h-8 w-20" aria-label="길이" />
+                      <Select value={String(s.durationSec)} options={(m ? durationChoices(m) : [5]).map((n) => ({ value: String(n), label: `${n}초` }))} onChange={(e) => setShot(s.id, { durationSec: Number(e.target.value) })} className="h-8 w-20" aria-label="길이" />
                       <Select value={s.mode} options={(["first_frame", "first_last", "reference"] as const).filter((x) => m?.modes.includes(x)).map((x) => ({ value: x, label: x === "first_last" ? "시작+끝 프레임 (끝 = 다음 샷 이미지)" : MODE_LABEL[x].split(" (")[0] }))} onChange={(e) => setShot(s.id, { mode: e.target.value as DramaShot["mode"], continueFromPrev: e.target.value === "first_frame" ? s.continueFromPrev : false })} className="h-8 w-56" aria-label="입력 방식" />
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-[12px]">

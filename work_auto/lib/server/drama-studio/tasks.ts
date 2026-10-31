@@ -10,7 +10,7 @@ import { safeFetch } from "../security/safe-url";
 import { runFfmpeg, mediaDuration } from "../video/ffmpeg";
 import { videoStorage } from "../video/storage";
 import { projectDir } from "./store";
-import { buildVideoInput, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { buildVideoInput, kieModelOf, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt, sceneCast } from "@/lib/drama-studio/prompts";
 import { markNewResult, newId, swapIntoTimeline } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaShot, DramaTask, SheetKind } from "@/lib/drama-studio/types";
@@ -462,7 +462,7 @@ export async function createVideoTasks(owner: string, p: DramaProject, jobs: Vid
     await submit(
       prov,
       tasks.filter((t) => !t.dependsOn),
-      (t) => videoModel(t.modelId)!.model,
+      (t) => kieModelOf(t.modelId, t.mode),
       (t) => videoInput(p, t),
     );
     return tasks;
@@ -652,7 +652,7 @@ async function releaseWaiting(prov: VideoAIProvider, p: DramaProject): Promise<b
     const anchor = p.tasks.find((a) => a.id === t.dependsOn)!;
     const frame = await lastFrameOf(anchor.storedKey!);
     // 마지막 프레임을 못 뽑으면 그 장면 스토리보드에서 시작 (스토리보드도 없으면 실패 — 비용 없음)
-    await submit(prov, [t], (x) => videoModel(x.modelId)!.model, (x) => videoInput(p, x, frame ?? undefined));
+    await submit(prov, [t], (x) => kieModelOf(x.modelId, x.mode), (x) => videoInput(p, x, frame ?? undefined));
   }
   go.splice(0, go.length, ...go.filter((t) => t.kind !== "video"));
   if (go.length) {

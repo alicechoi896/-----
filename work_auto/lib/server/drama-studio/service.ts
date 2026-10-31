@@ -11,7 +11,7 @@ import { renderDrama } from "./render";
 import { faceCheck } from "./face";
 import { isProjectId, loadProject, ownsKey, projectDir, readIndex, saveProject, withUrls } from "./store";
 import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob, createMusicTask } from "./tasks";
-import { DEFAULT_SHOT_MODEL, IMAGE_MODELS, VIDEO_MODELS, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { DEFAULT_SHOT_MODEL, IMAGE_MODELS, VIDEO_MODELS, fitDuration, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, emptyShot } from "@/lib/drama-studio/shots";
 import { videoAssets } from "../video/assets";
 import {
@@ -174,7 +174,7 @@ function cleanShots(p: DramaProject, value: unknown): DramaShot[] {
         camera: str(x.camera, 300),
         dialogue: str(x.dialogue, 800),
         characterIds: (Array.isArray(x.characterIds) ? x.characterIds.map(String) : []).filter((id) => chars.has(id)).slice(0, 8),
-        durationSec: Math.min(m.maxSec, Math.max(m.minSec, Math.round(Number(x.durationSec) || DEFAULT_SHOT_SEC))),
+        durationSec: fitDuration(m, Number(x.durationSec) || DEFAULT_SHOT_SEC),
         modelId: m.id,
         resolution: m.resolutions.includes(String(x.resolution)) ? String(x.resolution) : m.defaultResolution,
         mode: m.modes.includes(mode) ? mode : "first_frame",
@@ -545,7 +545,7 @@ export const dramaStudioService = {
         const start = keep.filter((x) => x.sceneId === sceneId).length;
         // 새 샷 기본 모델 (Seedance 2.0 Mini 기본, Fast 등 고를 수 있음)
         const pm = videoModel(String(body.modelId ?? "")) ?? videoModel(DEFAULT_SHOT_MODEL)!;
-        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: Math.min(pm.maxSec, Math.max(pm.minSec, x.durationSec)) }))];
+        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: fitDuration(pm, x.durationSec) }))];
         break;
       }
       case "restore-version": {

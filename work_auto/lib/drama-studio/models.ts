@@ -13,7 +13,13 @@ export interface VideoModel {
   label: string;
   /** Kie model 값 */
   model: string;
-  family: "seedance" | "kling" | "minimax";
+  family: "seedance" | "kling" | "minimax" | "veo" | "grok" | "pixverse";
+  /** v0.9.106: 방식마다 Kie model 이 다를 때 (PixVerse 이미지→영상 / 글→영상) */
+  modelByMode?: Partial<Record<GenMode, string>>;
+  /** v0.9.106: 고를 수 있는 길이가 정해진 값뿐일 때 (Veo 4·6·8초) */
+  durations?: number[];
+  /** Veo: input.model 값 (veo3_lite 등) */
+  subModel?: string;
   modes: GenMode[];
   /** 한 번에 만들 수 있는 길이 (초) */
   minSec: number;
@@ -154,6 +160,90 @@ export const VIDEO_MODELS: VideoModel[] = [
     note: "참고 이미지만 · 소리 항상 · 4~15초",
   },
 ];
+/**
+ * v0.9.106 비교용 모델 (docs.kie.ai 2026-11-01 확인)
+ * - Veo 3.1 Lite: model 'veo-3-1' + input.model 'veo3_lite', generation_type TEXT_2_VIDEO / FIRST_AND_LAST_FRAMES_2_VIDEO(image_urls 1~2장), 4·6·8초, 720p/1080p, 소리 항상
+ * - Grok Imagine Video 1.5 Preview: 'grok-imagine-video-1-5-preview', first_frame_url·last_frame_url 또는 image_urls(참고 1장), 1~15초, 480p/720p/1080p, 소리 끌 수 없음
+ * - PixVerse V6 Max: 'pixverse-v6-max/image-to-video'(image_urls 1장, 비율은 이미지 따라감) · 'pixverse-v6-max/text-to-video', quality 360p~1080p, 1~15초, 소리 선택
+ */
+VIDEO_MODELS.push(
+  {
+    id: "veo-3-1-lite",
+    label: "Veo 3.1 Lite",
+    model: "veo-3-1",
+    subModel: "veo3_lite",
+    family: "veo",
+    modes: ["first_frame", "first_last", "text"],
+    minSec: 4,
+    maxSec: 8,
+    durations: [4, 6, 8],
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "720p",
+    aspects: ["9:16", "16:9"],
+    audio: "always",
+    maxReferenceImages: 0,
+    supportsLastFrame: true,
+    multiShot: null,
+    minCreditsPerSec: null,
+    priceNote: "영상 1개 단위 가격 (정확한 값 확인 안 됨 — 끝난 뒤 실제 크레딧 표시)",
+    note: "Google · 4·6·8초 · 소리 항상",
+  },
+  {
+    id: "grok-imagine-1-5",
+    label: "Grok Imagine Video 1.5",
+    model: "grok-imagine-video-1-5-preview",
+    family: "grok",
+    modes: ["first_frame", "first_last", "reference", "text"],
+    minSec: 1,
+    maxSec: 15,
+    resolutions: ["480p", "720p", "1080p"],
+    defaultResolution: "720p",
+    aspects: ["9:16", "16:9"],
+    audio: "always",
+    maxReferenceImages: 1,
+    supportsLastFrame: true,
+    multiShot: null,
+    minCreditsPerSec: 2.4,
+    priceNote: "2.4 크레딧/초부터 (해상도별 값 확인 안 됨)",
+    note: "Preview · 1~15초 · 소리 항상",
+  },
+  {
+    id: "pixverse-v6-max",
+    label: "PixVerse V6 Max",
+    model: "pixverse-v6-max/image-to-video",
+    modelByMode: { first_frame: "pixverse-v6-max/image-to-video", text: "pixverse-v6-max/text-to-video" },
+    family: "pixverse",
+    modes: ["first_frame", "text"],
+    minSec: 1,
+    maxSec: 15,
+    resolutions: ["540p", "720p", "1080p"],
+    defaultResolution: "720p",
+    aspects: ["9:16", "16:9"],
+    audio: "toggle",
+    maxReferenceImages: 0,
+    supportsLastFrame: false,
+    multiShot: null,
+    minCreditsPerSec: 4.8,
+    creditsPerSecByRes: { "720p": 12, "1080p": 22.4 },
+    priceNote: "360p 4.8 · 720p 12 · 1080p 22.4 크레딧/초 (소리 포함 값)",
+    note: "1~15초 · 첫 프레임(비율은 이미지 따라감)",
+  },
+);
+
+/** 길이를 모델이 받는 값으로 (범위 안 · 정해진 값이 있으면 가장 가까운 값) */
+export function fitDuration(m: Pick<VideoModel, "minSec" | "maxSec" | "durations">, sec: number): number {
+  const s = Math.min(m.maxSec, Math.max(m.minSec, Math.round(sec)));
+  return m.durations?.length ? m.durations.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a)) : s;
+}
+/** 고를 수 있는 길이 목록 */
+export const durationChoices = (m: Pick<VideoModel, "minSec" | "maxSec" | "durations">) => m.durations ?? Array.from({ length: m.maxSec - m.minSec + 1 }, (_, i) => m.minSec + i);
+
+/** Kie 에 보낼 model 값 (방식마다 다른 모델) */
+export const kieModelOf = (modelId: string, mode: GenMode) => {
+  const m = videoModel(modelId);
+  return m?.modelByMode?.[mode] ?? m?.model ?? modelId;
+};
+
 export const DEFAULT_VIDEO_MODEL = "seedance-2-fast";
 /** v0.9.104: 샷 단위 영상 기본 (720p · 5초) */
 export const DEFAULT_SHOT_MODEL = "seedance-2-mini";
@@ -218,6 +308,8 @@ export function validateVideo(o: VideoOptions, refs: { first?: boolean; last?: b
       const total = shots.reduce((a, b) => a + b, 0);
       if (total < m.minSec || total > m.maxSec) errs.push(`멀티 샷 전체 길이(${total}초)는 ${m.minSec}~${m.maxSec}초여야 합니다.`);
     }
+  } else if (m.durations && !m.durations.includes(o.durationSec)) {
+    errs.push(`${m.label} 길이는 ${m.durations.join("·")}초 중 하나입니다 (지금 ${o.durationSec}초).`);
   } else if (!Number.isInteger(o.durationSec) || o.durationSec < m.minSec || o.durationSec > m.maxSec) {
     errs.push(`${m.label} 은 한 번에 ${m.minSec}~${m.maxSec}초까지 만들 수 있습니다 (지금 ${o.durationSec}초). 더 길면 장면을 나눠 만든 뒤 이어 붙여 주세요.`);
   }
@@ -288,6 +380,27 @@ export function buildVideoInput(
     if (o.mode === "first_frame") base.image_urls = [x.firstUrl];
     if (o.mode === "first_last") base.image_urls = [x.firstUrl, x.lastUrl];
     if (o.mode === "reference") base.kling_elements = (x.elements ?? []).slice(0, 3).map((e) => ({ name: e.name, description: e.description.slice(0, 100), element_input_urls: e.urls.slice(0, 4) }));
+    return base;
+  }
+  if (m.family === "veo") {
+    const base: Record<string, unknown> = { model: m.subModel, prompt: x.prompt.slice(0, 5000), aspect_ratio: o.aspect, duration: o.durationSec, resolution: o.resolution };
+    if (o.mode === "first_frame") Object.assign(base, { generation_type: "FIRST_AND_LAST_FRAMES_2_VIDEO", image_urls: [x.firstUrl] });
+    else if (o.mode === "first_last") Object.assign(base, { generation_type: "FIRST_AND_LAST_FRAMES_2_VIDEO", image_urls: [x.firstUrl, x.lastUrl] });
+    else base.generation_type = "TEXT_2_VIDEO";
+    return base;
+  }
+  if (m.family === "grok") {
+    const base: Record<string, unknown> = { prompt: x.prompt.slice(0, 4096), aspect_ratio: o.aspect, resolution: o.resolution, duration: o.durationSec };
+    if (o.mode === "first_frame") base.first_frame_url = x.firstUrl;
+    if (o.mode === "first_last") Object.assign(base, { first_frame_url: x.firstUrl, last_frame_url: x.lastUrl });
+    if (o.mode === "reference") base.image_urls = (x.referenceUrls ?? []).slice(0, 1);
+    return base;
+  }
+  if (m.family === "pixverse") {
+    const base: Record<string, unknown> = { prompt: x.prompt.slice(0, 5000), quality: o.resolution, duration: o.durationSec, generate_audio_switch: o.audio };
+    // 이미지→영상은 비율이 이미지를 따라가 aspect_ratio 를 보내지 않는다
+    if (o.mode === "first_frame") base.image_urls = [x.firstUrl];
+    else base.aspect_ratio = o.aspect;
     return base;
   }
   // MiniMax H3 reference-to-video

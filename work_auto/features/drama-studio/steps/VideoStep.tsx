@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
-import { MODE_LABEL, VIDEO_MODELS, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { MODE_LABEL, VIDEO_MODELS, fitDuration, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { sceneCast, videoPrompt } from "@/lib/drama-studio/prompts";
 import { buildTimeline, fitDurations, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
@@ -54,7 +54,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
     const allowed = modesFor(pl);
     if (!allowed.includes(mode)) setMode(allowed[0] ?? "reference");
   };
-  const clampSec = (s: number) => Math.min(m.maxSec, Math.max(m.minSec, Math.round(s)));
+  const clampSec = (s: number) => fitDuration(m, s);
   const optFor = (s: DramaScene): VideoOptions => ({ modelId, mode, durationSec: clampSec(secs[s.id] ?? s.durationSec), resolution, aspect: p.settings.aspect, audio });
   const shotSecs = pickedScenes.map((s) => Math.max(m.multiShot?.minShotSec ?? 1, Math.min(m.multiShot?.maxShotSec ?? 12, Math.round(s.durationSec))));
   const batchOpt: VideoOptions = { modelId, mode, durationSec: mode === "multi_shot" ? shotSecs.reduce((a, b) => a + b, 0) : batchSec, resolution, aspect: p.settings.aspect, audio, shotSecs: mode === "multi_shot" ? shotSecs : undefined };
@@ -181,7 +181,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
             )}
           </div>
           <p className="text-[12px] text-fg-subtle">
-            {m.label}: 한 번에 {m.minSec}~{m.maxSec}초 · {m.resolutions.join("/")} · 참고 이미지 최대 {m.maxReferenceImages}장 · {m.priceNote}. 첫 프레임·첫+끝 프레임·참고 이미지는 서로 섞지 않고 하나만 보냅니다.
+            {m.label}: 한 번에 {m.durations ? `${m.durations.join("·")}` : `${m.minSec}~${m.maxSec}`}초 · {m.resolutions.join("/")} · 참고 이미지 최대 {m.maxReferenceImages}장 · {m.priceNote}. 첫 프레임·첫+끝 프레임·참고 이미지는 서로 섞지 않고 하나만 보냅니다.
             {mode === "first_last" && " 끝 프레임은 다음 장면의 승인 이미지를 씁니다."}
             {mode === "multi_shot" && ` 멀티 샷은 최대 ${m.multiShot?.maxShots}장면, 첫 장면 이미지만 첫 프레임으로 씁니다.`}
           </p>

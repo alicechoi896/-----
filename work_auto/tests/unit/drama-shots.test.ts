@@ -104,3 +104,30 @@ describe("샷 병합: 올린 음성 + 효과음 (FFmpeg)", () => {
     await fs.rm(dir, { recursive: true, force: true });
   }, 180_000);
 });
+
+describe("v0.9.106 비교 모델: Veo 3.1 Lite · Grok Imagine 1.5 · PixVerse V6 Max", async () => {
+  const { buildVideoInput, fitDuration, hasConflictingInputs, kieModelOf, validateVideo, videoModel } = await import("@/lib/drama-studio/models");
+  const o = (modelId: string, mode: "first_frame" | "first_last" | "text" | "reference", durationSec = 6, resolution = "720p") => ({ modelId, mode, durationSec, resolution, aspect: "9:16" as const, audio: true });
+  it("Veo: veo-3-1 + veo3_lite, 시작 프레임 = FIRST_AND_LAST_FRAMES_2_VIDEO, 4·6·8초만", () => {
+    const i = buildVideoInput(o("veo-3-1-lite", "first_frame"), { prompt: "p", firstUrl: "https://a/1.png" });
+    expect(kieModelOf("veo-3-1-lite", "first_frame")).toBe("veo-3-1");
+    expect(i).toMatchObject({ model: "veo3_lite", generation_type: "FIRST_AND_LAST_FRAMES_2_VIDEO", image_urls: ["https://a/1.png"], duration: 6 });
+    expect(validateVideo(o("veo-3-1-lite", "first_frame", 5), { first: true, references: 0, scenes: 1 }).join()).toContain("4·6·8초");
+    expect(fitDuration(videoModel("veo-3-1-lite")!, 5)).toBe(4);
+    expect(fitDuration(videoModel("veo-3-1-lite")!, 7)).toBe(6);
+  });
+  it("Grok 1.5: first_frame_url / 참고는 image_urls 1장", () => {
+    expect(buildVideoInput(o("grok-imagine-1-5", "first_frame"), { prompt: "p", firstUrl: "https://a/1.png" })).toMatchObject({ first_frame_url: "https://a/1.png", duration: 6, resolution: "720p" });
+    const r = buildVideoInput(o("grok-imagine-1-5", "reference"), { prompt: "p", referenceUrls: ["https://a/1.png", "https://a/2.png"] });
+    expect(r.image_urls).toEqual(["https://a/1.png"]);
+    expect(hasConflictingInputs(r)).toBe(false);
+  });
+  it("PixVerse V6 Max: 방식마다 모델이 다르고, 이미지→영상은 비율을 보내지 않는다", () => {
+    expect(kieModelOf("pixverse-v6-max", "first_frame")).toBe("pixverse-v6-max/image-to-video");
+    expect(kieModelOf("pixverse-v6-max", "text")).toBe("pixverse-v6-max/text-to-video");
+    const i = buildVideoInput(o("pixverse-v6-max", "first_frame"), { prompt: "p", firstUrl: "https://a/1.png" });
+    expect(i).toMatchObject({ image_urls: ["https://a/1.png"], quality: "720p", generate_audio_switch: true });
+    expect(i.aspect_ratio).toBeUndefined();
+    expect(buildVideoInput(o("pixverse-v6-max", "text"), { prompt: "p" }).aspect_ratio).toBe("9:16");
+  });
+});

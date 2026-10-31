@@ -2,6 +2,14 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.106] - 2026-11-01: 드라마 — 비교 모델 3개 추가
+
+### 추가
+- 영상 모델 (장면 단위·샷 단위 모두, docs.kie.ai 확인): **Veo 3.1 Lite** (veo-3-1 + veo3_lite, 시작/시작+끝 프레임·글, 4·6·8초, 720p/1080p, 소리 항상, 가격은 영상 단위라 끝난 뒤 실제 크레딧), **Grok Imagine Video 1.5 Preview** (시작/시작+끝/참고 1장·글, 1~15초, 480~1080p, 소리 항상, 2.4크레딧/초부터), **PixVerse V6 Max** (이미지→영상·글→영상 모델 따로, 1~15초, 540~1080p, 소리 선택, 720p 12·1080p 22.4크레딧/초)
+- 길이가 정해진 모델은 고를 수 있는 값만 (fitDuration·durationChoices)
+- 이미 있던 MiniMax H3·Seedance 2.0 Mini·Fast·Kling 3.0 은 그대로
+- '모델 비교 시험' 탭(인물 참고 사진 방식)은 참고 사진을 받지 않는 Veo Lite·PixVerse 와 맞지 않아 그대로 두고, 스튜디오에서 같은 장면·샷을 모델만 바꿔 비교
+
 ## [0.9.105] - 2026-11-01: 드라마 샷 — Seedance 2.0 Fast 고르기 쉽게
 
 ### 추가
