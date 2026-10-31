@@ -548,6 +548,29 @@ export const dramaStudioService = {
         p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: fitDuration(pm, x.durationSec), mode: (((["first_frame", "first_last", "reference"] as const).find((x) => pm.modes.includes(x))) ?? "first_frame") }))];
         break;
       }
+      case "shots-plan-all": {
+        // v0.9.129: 샷이 없는 장면을 한 번에 (장면마다 AI 1회, 3개씩 동시에). 이미 샷이 있는 장면은 그대로
+        requireStep(p, "video");
+        const pm = videoModel(String(body.modelId ?? "")) ?? videoModel(DEFAULT_SHOT_MODEL)!;
+        const todo = p.scenario.scenes.filter((s) => !(p.shots ?? []).some((x) => x.sceneId === s.id)).slice(0, 30);
+        if (!todo.length) throw new AppError("VALIDATION", "샷이 없는 장면이 없습니다.");
+        const made: DramaShot[] = [];
+        let failed = 0;
+        for (let i = 0; i < todo.length; i += 3) {
+          const part = await Promise.all(todo.slice(i, i + 3).map((s) => ai.genShots(p, s.id, Number(body.count) || 3).then((r) => ({ s, r })).catch(() => null)));
+          for (const x of part) {
+            if (!x) {
+              failed++;
+              continue;
+            }
+            aiCalls += x.r.aiCalls;
+            made.push(...x.r.shots.map((y, k) => emptyShot(x.s.id, k, { ...y, modelId: pm.id, resolution: pm.defaultResolution, durationSec: fitDuration(pm, y.durationSec), mode: (["first_frame", "first_last", "reference"] as const).find((m) => pm.modes.includes(m)) ?? "first_frame" })));
+          }
+        }
+        p.shots = [...(p.shots ?? []), ...made];
+        extra = { scenes: todo.length - failed, failed };
+        break;
+      }
       case "restore-version": {
         const v = p.scenarioVersions.find((x) => x.id === body.versionId);
         if (!v) throw new AppError("NOT_FOUND", "버전을 찾지 못했습니다.", 404);

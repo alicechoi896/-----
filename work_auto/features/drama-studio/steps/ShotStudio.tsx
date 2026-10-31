@@ -58,6 +58,11 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
   const running = (pred: (t: (typeof p.tasks)[number]) => boolean) => p.tasks.some((t) => pred(t) && (t.status === "generating" || t.status === "requesting" || (t.status === "queued" && Boolean(t.dependsOn))));
   const shotTasks = (id: string) => (t: (typeof p.tasks)[number]) => (t.target.type === "shot" && t.target.shotId === id) || (t.target.type === "clip" && t.target.shotId === id);
   const lastFail = (id: string) => [...p.tasks].reverse().find((t) => shotTasks(id)(t) && t.status === "fail" && !p.tasks.some((x) => shotTasks(id)(x) && x.createdAt > t.createdAt && x.status !== "fail"));
+  // v0.9.129: 모든 장면 한 번에
+  const isReady = (s: DramaShot) => s.approved && (approvedShotImage(s) || (s.continueFromPrev && s.order > 0)) && !running(shotTasks(s.id));
+  const allReady = shots.filter(isReady);
+  const allNeedImage = shots.filter((s) => s.approved && !approvedShotImage(s) && !running(shotTasks(s.id)));
+  const noShotScenes = scenes.filter((s) => !shots.some((x) => x.sceneId === s.id));
   const readyForVideo = list.filter((s) => s.approved && (approvedShotImage(s) || (s.continueFromPrev && s.order > 0)) && !running(shotTasks(s.id)));
   const needImage = list.filter((s) => s.approved && !approvedShotImage(s) && !running(shotTasks(s.id)));
 
@@ -86,7 +91,7 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
         }),
       );
   }
-  const costShots = ask?.kind === "video" ? list.filter((s) => ask.shotIds.includes(s.id)) : [];
+  const costShots = ask?.kind === "video" ? shots.filter((s) => ask.shotIds.includes(s.id)) : [];
   const cost = shotCostSummary(costShots);
 
   /** 이 장면 샷들의 최신 클립을 승인하고 타임라인을 샷 순서대로 */
@@ -106,6 +111,22 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
       data-shot-studio
     >
       <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand/5 p-2" data-shot-all>
+          <span className="text-[12.5px] font-semibold">모든 장면 한 번에</span>
+          <Button size="sm" variant="primary" icon={Wand2} disabled={!noShotScenes.length || Boolean(ctl.busy)} loading={ctl.busy === "모든 장면 샷 나누기"} onClick={() => window.confirm(`샷이 없는 장면 ${noShotScenes.length}개를 장면마다 ${count}개 샷으로 나눕니다 (AI ${noShotScenes.length}회, 이미 샷이 있는 장면은 그대로). 진행할까요?`) && void ctl.run("모든 장면 샷 나누기", () => studioApi.generate(p.id, "shots-plan-all", { count, modelId: planModel }))} data-shot-plan-all>
+            샷 없는 장면 모두 샷 나누기 ({noShotScenes.length}장면 · AI {noShotScenes.length}회)
+          </Button>
+          <Button size="sm" variant="secondary" icon={Check} disabled={!shots.length || shots.every((s) => s.approved)} onClick={() => setShots(shots.map((s) => ({ ...s, approved: true })))}>
+            모든 샷 승인
+          </Button>
+          <Button size="sm" variant="secondary" icon={Sparkles} disabled={!allNeedImage.length || Boolean(ctl.busy)} onClick={() => setAsk({ kind: "image", shotIds: allNeedImage.slice(0, 30).map((s) => s.id) })}>
+            기준 이미지 없는 샷 모두 만들기 ({allNeedImage.length})
+          </Button>
+          <Button size="sm" variant="primary" icon={Clapperboard} disabled={!allReady.length || Boolean(ctl.busy)} onClick={() => setAsk({ kind: "video", shotIds: allReady.slice(0, 30).map((s) => s.id) })}>
+            준비된 샷 영상 모두 만들기 ({allReady.length})
+          </Button>
+          <span className="text-[11.5px] text-fg-subtle">샷 수·기본 모델은 아래 칸 값을 씁니다. 이미지·영상은 확인 창에서 비용을 본 뒤에만 (한 번에 최대 30개).</span>
+        </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="space-y-1">
             <span className="text-[12px] font-medium text-fg-muted">스토리보드 (장면)</span>
