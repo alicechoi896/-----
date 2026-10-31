@@ -9,7 +9,7 @@ import { productService } from "../services/products";
 import { videoStorage } from "../video/storage";
 import { renderFeed, renderReels, readyLooks } from "./render";
 import { fashionDir, isFashionId, loadFashion, ownsFashionKey, readFashionIndex, removeFashionFromIndex, saveFashion, withFashionUrls } from "./store";
-import { createFashionImages, createFashionMusic, IMAGE_CREDITS, syncFashion, type FashionImageJob } from "./tasks";
+import { createFashionClips, createFashionImages, createFashionMusic, IMAGE_CREDITS, syncFashion, type FashionImageJob } from "./tasks";
 
 /** AI 패션 피드·릴스 서비스 (v0.9.103). docs/FASHION.md */
 const now = () => new Date().toISOString();
@@ -37,6 +37,15 @@ function mergeImages(server: FashionImage[], client: unknown): FashionImage[] {
   // 승인은 1장만 (마지막으로 승인한 것)
   const ok = kept.filter((i) => i.approved);
   if (ok.length > 1) for (const i of ok.slice(0, -1)) i.approved = false;
+  return kept;
+}
+
+/** 룩 영상: 화면은 승인·지우기만 */
+function mergeClips(server: NonNullable<FashionLook["clips"]>, client: unknown): NonNullable<FashionLook["clips"]> {
+  const edits = new Map((Array.isArray(client) ? (client as { id?: string; approved?: boolean; removed?: boolean }[]) : []).map((x) => [String(x.id), x]));
+  const kept = server.filter((c) => !edits.get(c.id)?.removed).map((c) => (edits.has(c.id) ? { ...c, approved: Boolean(edits.get(c.id)!.approved) } : c));
+  const ok = kept.filter((c) => c.approved);
+  for (const c of ok.slice(0, -1)) c.approved = false;
   return kept;
 }
 
@@ -100,6 +109,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
           caption: str(x.caption, 60),
           pose: str(x.pose, 200),
           images: old ? mergeImages(old.images, x.images) : [],
+          clips: old?.clips ? mergeClips(old.clips, (x as { clips?: unknown }).clips) : [],
         };
       });
       return;
@@ -112,12 +122,25 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
 
 /** 작업 결과를 최신 문서에 합쳐 저장 (그 사이 화면 저장을 덮어쓰지 않게) */
 /** 문서 안 이미지·음악 id (작업 전후를 비교해 새로 생긴 것만 합친다 — 그 사이 지운 것을 되살리지 않게) */
-const assetIds = (p: FashionProject) => new Set([...p.model.images.map((i) => i.id), ...p.looks.flatMap((l) => l.images.map((i) => i.id)), ...p.tracks.map((t) => t.id)]);
+const assetIds = (p: FashionProject) => new Set([...p.model.images.map((i) => i.id), ...p.looks.flatMap((l) => [...l.images.map((i) => i.id), ...(l.clips ?? []).map((c) => c.id)]), ...p.tracks.map((t) => t.id)]);
+
+/** 같은 작업의 두 상태 중 worked 를 쓸지: 끝난 상태를 '진행 중'으로 되돌리지 않고, 같으면 더 늦게 바뀐 쪽 */
+const DONE = new Set(["success", "fail"]);
+function newer(w: { status: string; updatedAt: string }, f: { status: string; updatedAt: string } | undefined): boolean {
+  if (!f) return true;
+  if (DONE.has(f.status) && !DONE.has(w.status)) return false;
+  if (DONE.has(w.status) && !DONE.has(f.status)) return true;
+  return w.updatedAt >= f.updatedAt;
+}
+
+/** 결과물이 이 시간 넘게 '만드는 중'이면 멈춘 것으로 본다 (실제로는 수십 초~몇 분) */
+const STALE_RENDER_MS = 15 * 60_000;
 
 async function saveMerged(owner: string, worked: FashionProject, fresh_ids: Set<string> = new Set()): Promise<FashionProject> {
   const fresh = await loadFashion(owner, worked.id);
+  // v0.9.120: 더 늦게 바뀐 쪽이 이긴다 — 동시에 돈 확인 저장이 끝난 결과(성공)를 예전 '만드는 중'으로 덮어쓰던 문제
   const tasks = new Map(fresh.tasks.map((t) => [t.id, t]));
-  for (const t of worked.tasks) tasks.set(t.id, t);
+  for (const t of worked.tasks) if (newer(t, tasks.get(t.id))) tasks.set(t.id, t);
   fresh.tasks = [...tasks.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-300);
   const addNew = (to: FashionImage[], from: FashionImage[]) => {
     const have = new Set(to.map((i) => i.id));
@@ -127,13 +150,17 @@ async function saveMerged(owner: string, worked: FashionProject, fresh_ids: Set<
   for (const l of fresh.looks) {
     const w = worked.looks.find((x) => x.id === l.id);
     if (w) addNew(l.images, w.images);
+    if (w?.clips?.length) {
+      const have = new Set((l.clips ?? []).map((c) => c.id));
+      for (const c of w.clips) if (!have.has(c.id) && fresh_ids.has(c.id)) (l.clips ??= []).push({ ...c, approved: c.approved && !(l.clips ?? []).some((x) => x.approved) });
+    }
   }
   const haveTr = new Set(fresh.tracks.map((t) => t.id));
   const newTracks = worked.tracks.filter((t) => !haveTr.has(t.id) && fresh_ids.has(t.id));
   fresh.tracks.push(...newTracks);
   if (!fresh.bgmKey && newTracks.length) fresh.bgmKey = newTracks[0].key;
   const rs = new Map(fresh.renders.map((r) => [r.id, r]));
-  for (const r of worked.renders) rs.set(r.id, r);
+  for (const r of worked.renders) if (newer(r, rs.get(r.id))) rs.set(r.id, r);
   fresh.renders = [...rs.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-20);
   return saveFashion(owner, fresh, now());
 }
@@ -225,7 +252,7 @@ export const fashionService = {
       fresh.looks = p.looks.map((l) => {
         const f = byId.get(l.id);
         const sent = ((body.value as Partial<FashionLook>[]) ?? []).find((x) => x.id === l.id);
-        return f ? { ...l, images: mergeImages(f.images, sent?.images) } : l;
+        return f ? { ...l, images: mergeImages(f.images, sent?.images), clips: f.clips ? mergeClips(f.clips, (sent as { clips?: unknown } | undefined)?.clips) : l.clips } : l;
       });
     } else (fresh as unknown as Record<string, unknown>)[section] = (p as unknown as Record<string, unknown>)[section];
     if (section === "items") for (const l of fresh.looks) l.itemIds = l.itemIds.filter((x) => fresh.items.some((i) => i.id === x));
@@ -278,7 +305,7 @@ export const fashionService = {
       }
       case "delete-render": {
         const ids = body.all === true ? p.renders.map((r) => r.id) : [String(body.renderId ?? "")];
-        const gone = p.renders.filter((r) => ids.includes(r.id) && r.status !== "running");
+        const gone = p.renders.filter((r) => ids.includes(r.id) && (r.status !== "running" || Date.now() - Date.parse(r.updatedAt) >= STALE_RENDER_MS));
         if (!gone.length) throw new AppError("VALIDATION", "지울 결과물이 없습니다 (만드는 중인 것은 지울 수 없습니다).");
         p.renders = p.renders.filter((r) => !gone.includes(r));
         for (const k of gone.flatMap((r) => r.keys)) await videoStorage.remove(k).catch(() => undefined);
@@ -310,6 +337,17 @@ export const fashionService = {
     p.tasks = [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks];
     const saved = await saveMerged(owner, p);
     return { ...(await withFashionUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
+  },
+
+  /** v0.9.120 릴스 (나) 룩 영상 만들기 (Kie Seedance 2.0 Mini, 룩 1개 = 1회 과금, 확인 후에만) */
+  async clips(id: string, body: { lookIds?: unknown; clientRequestId?: unknown; confirmed?: unknown }) {
+    if (body.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "비용이 드는 작업입니다. 확인 창에서 [만들기]를 눌러 주세요.", 409);
+    const requestId = str(body.clientRequestId, 80);
+    if (requestId.length < 8) throw new AppError("VALIDATION", "요청 번호가 없습니다.");
+    const { owner, p } = await open(id);
+    const tasks = await createFashionClips(p, (Array.isArray(body.lookIds) ? body.lookIds : []).map(String), requestId);
+    p.tasks = [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks];
+    return { ...(await withFashionUrls(await saveMerged(owner, p))), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
   },
 
   /** 음악 만들기 (Kie Suno, 1회 과금, 확인 후에만) */
@@ -396,8 +434,8 @@ export const fashionService = {
     const { owner, p } = await open(id);
     const kind = body.kind === "reels" ? "reels" : "feed";
     if (!readyLooks(p).length) throw new AppError("VALIDATION", "④ 룩 이미지를 1개 이상 승인해 주세요.");
-    if (kind === "reels" && p.settings.reelStyle === "b") throw new AppError("VALIDATION", "릴스 (나) AI 영상은 다음 업데이트에서 열립니다. 지금은 (가) 사진 + 움직임으로 만들어 주세요.");
-    if (p.renders.some((r) => r.status === "running" && Date.now() - Date.parse(r.updatedAt) < 15 * 60_000)) throw new AppError("BUSY", "결과물을 만드는 중입니다. 끝난 뒤 다시 눌러 주세요.", 409);
+    if (kind === "reels" && p.settings.reelStyle === "b" && !readyLooks(p).some((l) => (l.clips ?? []).some((c) => c.approved))) throw new AppError("VALIDATION", "릴스 (나): 룩 영상을 먼저 만들어 주세요 (영상이 없는 룩은 사진 + 움직임으로 들어갑니다).");
+    if (p.renders.some((r) => r.kind === kind && r.status === "running" && Date.now() - Date.parse(r.updatedAt) < STALE_RENDER_MS)) throw new AppError("BUSY", "결과물을 만드는 중입니다. 끝난 뒤 다시 눌러 주세요.", 409);
     const at = now();
     const r: FashionRender = { id: newFashionId("fr"), kind, status: "running", keys: [], totalSec: null, error: null, createdAt: at, updatedAt: at };
     p.renders.push(r);

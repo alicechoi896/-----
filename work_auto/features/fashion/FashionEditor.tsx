@@ -294,7 +294,9 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
   const p = ctl.project!;
   const s = p.settings;
   const ready = p.looks.filter((l) => approvedOf(l.images));
-  const rendering = p.renders.some((r) => r.status === "running");
+  // v0.9.120: 피드·릴스는 서로 막지 않는다 (피드 없이 릴스만 만들어도 됨)
+  const renderingOf = (kind: "feed" | "reels") => p.renders.some((r) => r.kind === kind && r.status === "running");
+  const rendering = renderingOf("feed") && renderingOf("reels");
   const musicBusy = p.tasks.some((t) => t.kind === "music" && (t.status === "generating" || t.status === "requesting"));
   const musicFail = p.tasks.filter((t) => t.kind === "music" && t.status === "fail").slice(-1);
   return (
@@ -302,17 +304,17 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2 rounded-control border border-line p-3">
           <p className="text-[13px] font-semibold">피드 카드</p>
-          <Button variant="primary" icon={ImageIcon} disabled={!ready.length || rendering || Boolean(ctl.busy)} onClick={() => void ctl.run("피드 만들기", () => fashionApi.render(p.id, "feed"))} data-render-feed>
+          <Button variant="primary" icon={ImageIcon} disabled={!ready.length || renderingOf("feed") || Boolean(ctl.busy)} onClick={() => void ctl.run("피드 만들기", () => fashionApi.render(p.id, "feed"))} data-render-feed>
             피드 카드 만들기 ({ready.length + (ready.length ? 1 : 0)}장)
           </Button>
         </div>
         <div className="space-y-2 rounded-control border border-line p-3">
           <p className="text-[13px] font-semibold">릴스</p>
-          <SegmentedControl value={s.reelStyle} onChange={(v) => ctl.edit("settings", { ...s, reelStyle: v as "a" | "b" })} options={[{ value: "a", label: "(가) 사진 + 움직임 · 저렴" }, { value: "b", label: "(나) AI 영상 · 준비 중" }]} />
-          {s.reelStyle === "b" && <p className="text-[12px] text-fg-subtle">(나)는 룩마다 Seedance 로 2~4초 움직이는 영상을 만들어 잇는 방식입니다. 다음 업데이트에서 열립니다.</p>}
+          <SegmentedControl value={s.reelStyle} onChange={(v) => ctl.edit("settings", { ...s, reelStyle: v as "a" | "b" })} options={[{ value: "a", label: "(가) 사진 + 움직임 · 무료" }, { value: "b", label: "(나) AI 영상 · 룩마다 약 $0.16" }]} />
+          {s.reelStyle === "b" && <LookClips ctl={ctl} />}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={String(s.secPerLook)} options={[1.5, 2, 2.5, 3].map((x) => ({ value: String(x), label: `룩마다 ${x}초` }))} onChange={(e) => ctl.edit("settings", { ...s, secPerLook: Number(e.target.value) })} className="h-9 w-32" aria-label="룩 길이" />
-            <Button variant="primary" icon={Clapperboard} disabled={!ready.length || rendering || s.reelStyle === "b" || Boolean(ctl.busy)} onClick={() => void ctl.run("릴스 만들기", () => fashionApi.render(p.id, "reels"))} data-render-reels>
+            <Button variant="primary" icon={Clapperboard} disabled={!ready.length || renderingOf("reels") || Boolean(ctl.busy)} onClick={() => void ctl.run("릴스 만들기", () => fashionApi.render(p.id, "reels"))} data-render-reels>
               릴스 만들기 (약 {Math.round(ready.length * s.secPerLook + 2.5)}초)
             </Button>
           </div>
@@ -405,6 +407,59 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
         </p>
       )}
     </SectionCard>
+  );
+}
+
+/** v0.9.120 릴스 (나): 룩마다 AI 영상 (Seedance 2.0 Mini 4초, 시작 화면 = 고른 룩 이미지) */
+function LookClips({ ctl }: { ctl: FashionCtl }) {
+  const p = ctl.project!;
+  const [ask, setAsk] = useState<string[] | null>(null);
+  const ready = p.looks.filter((l) => approvedOf(l.images));
+  const busyLook = (id: string) => p.tasks.some((t) => t.target.type === "lookclip" && t.target.lookId === id && (t.status === "generating" || t.status === "requesting"));
+  const failOf = (id: string) => [...p.tasks].reverse().find((t) => t.target.type === "lookclip" && t.target.lookId === id && t.status === "fail");
+  const todo = ready.filter((l) => !(l.clips ?? []).length && !busyLook(l.id));
+  const setClips = (lookId: string, clips: NonNullable<FashionLook["clips"]>) => ctl.edit("looks", p.looks.map((l) => (l.id === lookId ? { ...l, clips } : l)));
+  return (
+    <div className="space-y-2 rounded-control border border-line p-2" data-look-clips>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="primary" icon={Sparkles} disabled={!todo.length || Boolean(ctl.busy)} onClick={() => setAsk(todo.map((l) => l.id))} data-make-clips>
+          영상 없는 룩 모두 만들기 ({todo.length}개 × 4초 ≈ ${"$"}{(todo.length * 4 * 8.2 * 0.005).toFixed(2)})
+        </Button>
+        <span className="text-[11.5px] text-fg-subtle">Seedance 2.0 Mini 720p · 룩 이미지에서 시작해 같은 얼굴·옷으로 움직임 · 영상이 없는 룩은 사진 + 움직임으로 들어갑니다</span>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {ready.map((l) => {
+          const clip = (l.clips ?? []).find((c) => c.approved) ?? (l.clips ?? [])[0];
+          const fail = failOf(l.id);
+          return (
+            <div key={l.id} className="w-[130px] shrink-0 space-y-1 text-[11.5px]">
+              <p className="font-medium">{l.name}</p>
+              {clip && ctl.urls[clip.key] ? <video src={ctl.urls[clip.key]} muted loop autoPlay playsInline className="aspect-[9/16] w-full rounded bg-black object-cover" /> : <div className="flex aspect-[9/16] items-center justify-center rounded bg-subtle text-fg-subtle">{busyLook(l.id) ? "만드는 중…" : "영상 없음"}</div>}
+              {(l.clips ?? []).length > 1 && (
+                <Select value={clip?.id ?? ""} options={(l.clips ?? []).map((c, i) => ({ value: c.id, label: `버전 ${i + 1}` }))} onChange={(e) => setClips(l.id, (l.clips ?? []).map((c) => ({ ...c, approved: c.id === e.target.value })))} className="h-7 text-[11px]" aria-label="영상 버전" />
+              )}
+              <Button size="sm" variant="ghost" className="h-7 w-full px-1 text-[11px]" disabled={busyLook(l.id) || Boolean(ctl.busy)} onClick={() => setAsk([l.id])}>
+                {(l.clips ?? []).length ? "다시 만들기" : "영상 만들기"}
+              </Button>
+              {fail && <p className="text-danger">실패: {fail.error}</p>}
+            </div>
+          );
+        })}
+      </div>
+      <CostConfirm
+        open={Boolean(ask)}
+        title="룩 AI 영상 만들기"
+        items={ask ? [{ label: "Seedance 2.0 Mini 720p 4초 (시작 화면 = 룩 이미지)", count: ask.length, credits: Math.round(ask.length * 4 * 8.2) }] : []}
+        notes={["룩 1개 = Kie 요청 1번. 자동으로 다시 보내지 않습니다. 끝나면 8초마다 확인해 미리보기에 나옵니다."]}
+        onCancel={() => setAsk(null)}
+        onConfirm={() => {
+          const ids = ask ?? [];
+          setAsk(null);
+          void ctl.run("룩 영상", () => fashionApi.clips(p.id, { lookIds: ids, clientRequestId: newRequestId() }));
+        }}
+        busy={ctl.busy === "룩 영상"}
+      />
+    </div>
   );
 }
 

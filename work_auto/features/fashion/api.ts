@@ -41,6 +41,7 @@ export const fashionApi = {
   action: (id: string, action: string, extra: Record<string, unknown> = {}) => post<FashionLoaded & { aiCalls: number }>(`/api/fashion/${id}/action`, { action, clientRequestId: newRequestId(), ...extra }),
   images: (id: string, body: { jobs: ImageJob[]; clientRequestId: string }) => post<FashionLoaded & { created: number; failed: number }>(`/api/fashion/${id}/images`, { ...body, confirmed: true }),
   music: (id: string, body: { note: string; clientRequestId: string }) => post<FashionLoaded>(`/api/fashion/${id}/music`, { ...body, confirmed: true }),
+  clips: (id: string, body: { lookIds: string[]; clientRequestId: string }) => post<FashionLoaded & { created: number; failed: number }>(`/api/fashion/${id}/clips`, { ...body, confirmed: true }),
   sync: (id: string) => post<FashionLoaded & { changed: boolean }>(`/api/fashion/${id}/sync`),
   render: (id: string, kind: "feed" | "reels") => post<FashionLoaded>(`/api/fashion/${id}/render`, { kind }),
   /** 파일 올리기: 서명 주소로 Storage 에 바로 → 잇기 */

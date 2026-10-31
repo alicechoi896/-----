@@ -228,14 +228,57 @@ function decide(boxes: Box[], checked: boolean, aspect: number): Treatment {
   if (full) return { kind: "clean" };
   const crop = findCrop(padded, aspect);
   if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect) };
-  // 확대로 안 되면 블러 (상자마다 따로, 상단 띠가 덮는 것은 빼고). 합계가 너무 크면 사용 안 함
+  // v0.9.120: 확대로 다 못 가리면 — 글자가 가장 적게 보이는 확대 창 + 그래도 보이는 글자만 블러. 블러가 너무 크면 사용 안 함
+  const tr = coverAll(boxes, aspect);
+  return tr.kind === "blur" && blurShare(tr) <= MAX_BLUR_AREA ? tr : { kind: "rejected" };
+}
+
+/** 블러가 화면(확대 창 기준)에서 차지하는 비율 */
+function blurShare(tr: Treatment): number {
+  const s = tr.crop ? tr.crop.w * tr.crop.h : 1;
+  return (tr.blurs ?? []).reduce((n, b) => n + b.w * b.h, 0) / s;
+}
+
+/**
+ * v0.9.120: 반드시 가리기 — 글자·로고가 가장 적게 보이는 확대 창(최대 maxCropZoom)을 고르고, 그 창에 남는 글자는 블러.
+ * 확대 비용을 조금 더해 같은 효과면 덜 확대한다. 블러 상자는 원본 좌표(0~1).
+ * '가릴 수 없음'으로 끝나던 컷(검수 필요)에도 이걸 써서 자막·로고가 그대로 보이지 않게 한다.
+ */
+export function coverAll(boxes: Box[], aspect = OUT_ASPECT): Treatment {
+  const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
   const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
-  const blurs = mergeNear(boxes)
-    .map((b) => clampBox({ x: b.x - pad, y: b.y - pad * 0.6, w: b.w + pad * 2, h: b.h + pad * 1.2 }))
-    .filter((b) => b.y + b.h > barFrac);
-  const area = blurs.reduce((n, b) => n + b.w * b.h, 0);
-  if (blurs.length && area <= MAX_BLUR_AREA) return { kind: "blur", blur: blurs[0], blurs };
-  return { kind: "rejected" };
+  const marks = mergeNear(boxes.filter((b) => !(b.w >= 0.99 && b.h >= 0.99)))
+    .map((b) => clampBox({ x: b.x - pad, y: b.y - pad * 0.6, w: b.w + pad * 2, h: b.h + pad * 1.2 }));
+  if (!marks.length) return { kind: "clean" };
+  const step = 0.02;
+  let best: { win: Box; cost: number } | null = null;
+  for (let s = 1; s >= 1 / VIDEO_RENDER_CONFIG.maxCropZoom - 1e-9; s -= step) {
+    const room = Math.max(0, 1 - s);
+    const n = Math.round(room / step);
+    for (let i = 0; i <= n; i++) {
+      for (let j = 0; j <= n; j++) {
+        const win = { x: n ? (room * j) / n : 0, y: n ? (room * i) / n : 0, w: s, h: s };
+        const ex = exposed(win, aspect, barFrac);
+        const seen = marks.reduce((sum, b) => sum + overlap(b, ex), 0) / (s * s);
+        const cost = seen + 0.012 * (1 / s - 1) + 0.002 * (Math.abs(win.x + s / 2 - 0.5) + Math.abs(win.y + s / 2 - 0.5));
+        if (!best || cost < best.cost - 1e-9) best = { win, cost };
+      }
+    }
+  }
+  const win = best!.win;
+  const ex = exposed(win, aspect, barFrac);
+  const blurs = marks.filter((b) => overlap(b, ex) > 0.00002).map((b) => intersect(b, win)).filter((b): b is Box => Boolean(b));
+  const crop = win.w < 0.999 ? { x: Number(win.x.toFixed(4)), y: Number(win.y.toFixed(4)), w: Number(win.w.toFixed(4)), h: Number(win.h.toFixed(4)) } : undefined;
+  if (!blurs.length) return crop ? { kind: "crop", crop } : { kind: "clean" };
+  return { kind: "blur", crop, blur: blurs[0], blurs };
+}
+
+function intersect(a: Box, b: Box): Box | null {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const w = Math.min(a.x + a.w, b.x + b.w) - x;
+  const h = Math.min(a.y + a.h, b.y + b.h) - y;
+  return w > 0 && h > 0 ? { x, y, w, h } : null;
 }
 
 /** 찾은 창을 조금 더 확대 (가운데 기준). 그래도 글자가 안 보이고 최대 배율 안이면 그 창, 아니면 원래 창 */

@@ -9,6 +9,7 @@ import {
   CAPTION_TEMPLATE,
   ENDING_ARROW_PLACEMENT,
   ATTENTION_CONFIG,
+  GIF_CONFIG,
   ENDING_TEMPLATE,
   VIDEO_RENDER_CONFIG as C,
   atempoFor,
@@ -32,7 +33,7 @@ import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production
 import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
-import { SCAN_VERSION, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { SCAN_VERSION, boxesIn, coverAll, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
 import { isGiphyUrl } from "../providers/giphy";
 import { safeFetch } from "../security/safe-url";
@@ -323,8 +324,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       if (!best || best.tr.kind === "rejected") {
         // 모든 원본이 안 되면 첫 원본을 반복 없이 못 쓰므로 검수 필요로 (가장 덜 나쁜 구간)
         const id = candidates[0] ?? [...sources.keys()][0];
-        best = { id, start: 0, tr: { kind: "rejected" } };
-        s.issue = "원본 글자를 확실히 가리지 못했습니다. 다른 클립으로 바꿔 주세요.";
+        // v0.9.120: 그래도 그대로 두지 않는다 — 글자가 가장 적게 보이게 확대하고 남은 글자는 블러
+        const fb = sources.get(id);
+        const tr = fb?.scan.checked ? coverAll([...boxesIn(fb.scan, 0, dur), ...persistentBoxes(fb.scan)], aspects.get(id)) : null;
+        best = { id, start: 0, tr: tr && tr.kind !== "clean" ? { ...tr, kind: "rejected" } : { kind: "rejected" } };
+        s.issue = "원본 글자가 많아 확대·블러로 최대한 가렸습니다. 다른 클립으로 바꾸면 더 깔끔합니다.";
       }
       const src = sources.get(best.id)!;
       usedRanges.set(best.id, [...(usedRanges.get(best.id) ?? []), [best.start, best.start + dur]]);
@@ -376,6 +380,24 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const endPng = path.join(dir, "ending.png");
     if (job.plan.ending) note(await renderEnding(endPng), ENDING_TEMPLATE.font);
     let attnTurn = 0;
+    // v0.9.120: GIF 는 컷 앞에서 GIF_CONFIG.showSec 동안, 컷이 짧으면 남은 시간은 다음 컷 앞부분에 (같은 GIF 이어서)
+    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number }[]>();
+    {
+      let turn = 0;
+      for (const { k, s, dur } of picks) {
+        if (!s.attention || k === scenes.length - 1) continue;
+        const file = gifFiles.get(s.index) ?? (memes.length ? memes[turn % memes.length] : null);
+        turn++;
+        if (!file) continue;
+        const first = Math.min(GIF_CONFIG.showSec, dur);
+        gifShow.set(k, [...(gifShow.get(k) ?? []), { file, from: 0, to: first, offset: 0 }]);
+        const rest = GIF_CONFIG.showSec - first;
+        const next = picks.find((x) => x.k === k + 1);
+        if (rest > 0.3 && next && !(job.plan.ending && next.k === scenes.length - 1) && !next.s.attention) {
+          gifShow.set(next.k, [...(gifShow.get(next.k) ?? []), { file, from: 0, to: Math.min(rest, next.dur), offset: first }]);
+        }
+      }
+    }
     const sceneFiles: string[] = new Array(picks.length);
     const sceneAudio: string[] = new Array(picks.length);
     let done = 0;
@@ -398,14 +420,21 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       const blurBoxes = best.tr.blurs ?? (best.tr.blur ? [best.tr.blur] : []);
       if (blurBoxes.length && size.width) {
         // 블러 상자를 출력 좌표로 (원본 → 꽉 채우기 비율). 상자마다 따로 (v0.9.66)
-        const scale = Math.max(W / size.width, H / size.height);
-        const ox = (size.width * scale - W) / 2;
-        const oy = (size.height * scale - H) / 2;
-        for (const [n, b] of blurBoxes.entries()) {
-          const bx = Math.max(0, Math.round(b.x * size.width * scale - ox));
-          const by = Math.max(0, Math.round(b.y * size.height * scale - oy));
-          const bw = Math.min(W - bx, Math.round(b.w * size.width * scale));
-          const bh = Math.min(H - by, Math.round(b.h * size.height * scale));
+        // v0.9.120: 확대 창이 있으면 그 창 기준 좌표로 바꾼다
+        const c = best.tr.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+        const sw = size.width * c.w;
+        const sh = size.height * c.h;
+        const scale = Math.max(W / sw, H / sh);
+        const ox = (sw * scale - W) / 2;
+        const oy = (sh * scale - H) / 2;
+        for (const [n, raw] of blurBoxes.entries()) {
+          const b = { x: (raw.x - c.x) / c.w, y: (raw.y - c.y) / c.h, w: raw.w / c.w, h: raw.h / c.h };
+          const bx0 = Math.round(b.x * sw * scale - ox);
+          const by0 = Math.round(b.y * sh * scale - oy);
+          const bx = Math.max(0, bx0);
+          const by = Math.max(0, by0);
+          const bw = Math.min(W - bx, Math.round(b.w * sw * scale) + Math.min(0, bx0));
+          const bh = Math.min(H - by, Math.round(b.h * sh * scale) + Math.min(0, by0));
           if (bw <= 8 || bh <= 8) continue;
           filter += `;[${cur}]split[p${n}][q${n}];[q${n}]crop=${bw}:${bh}:${bx}:${by},boxblur=36:4[bl${n}];[p${n}][bl${n}]overlay=${bx}:${by}[m${n}]`;
           cur = `m${n}`;
@@ -434,16 +463,19 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           at = end;
         }
       }
-      // 주목 효과: 컷 앞 1.4초, 통통 튀게 (meme GIF → 없으면 스티커)
-      if (s.attention && !isLast) {
+      // 주목 효과: GIF 는 화면 가운데에 크게 (v0.9.120), GIF 가 없으면 컷 앞 1.4초 통통 튀는 스티커
+      for (const [g, show] of (gifShow.get(k) ?? []).entries()) {
+        const boxH = GIF_CONFIG.bottom - GIF_CONFIG.top;
+        const cy = Math.round((GIF_CONFIG.top + GIF_CONFIG.bottom) / 2);
+        const trim = show.offset > 0 ? `trim=start=${show.offset.toFixed(3)},setpts=PTS-STARTPTS,` : "";
+        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,scale=${GIF_CONFIG.maxWidth}:${boxH}:force_original_aspect_ratio=decrease[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=(W-w)/2:${cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
+      }
+      if (s.attention && !isLast && !gifShow.has(k)) {
         const a = ATTENTION_CONFIG;
         const t1 = Math.min(a.showSec, dur);
         const bounce = `${a.y}-18*abs(sin(9*t))`;
         const n = attnTurn++;
-        const pickedGif = gifFiles.get(s.index);
-        if (pickedGif || memes.length) {
-          add(["-ignore_loop", "0", "-i", pickedGif ?? memes[n % memes.length]], (i, from) => `[${i}:v]format=rgba,scale=${a.width}:-1[mm${k}];[${from}][mm${k}]overlay=${a.x}:'${bounce}':shortest=0:eof_action=pass:enable='between(t,0,${t1.toFixed(3)})'[at${k}]`, `at${k}`);
-        } else {
+        {
           const png = path.join(dir, `st${k}.png`);
           await renderSticker(png, a.words[(s.index + n) % a.words.length], n % 2 ? 7 : -8);
           add(["-loop", "1", "-i", png], (i, from) => `[${from}][${i}:v]overlay=${a.x}:'${bounce}':shortest=1:enable='between(t,0,${t1.toFixed(3)})'[at${k}]`, `at${k}`);

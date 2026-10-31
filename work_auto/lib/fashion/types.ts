@@ -61,6 +61,16 @@ export interface FashionLook {
   /** 자세 (영어 또는 한국어) */
   pose: string;
   images: FashionImage[];
+  /** v0.9.120 릴스 (나): 룩 이미지에서 시작하는 AI 영상 (Seedance 2.0 Mini 4초). 승인 1개를 릴스에 쓴다 */
+  clips?: FashionClip[];
+}
+
+export interface FashionClip {
+  id: string;
+  key: string;
+  durationSec: number;
+  createdAt: string;
+  approved: boolean;
 }
 
 export interface FashionSettings {
@@ -86,8 +96,8 @@ export type FashionTaskStatus = "queued" | "requesting" | "generating" | "succes
 
 export interface FashionTask {
   id: string;
-  kind: "image" | "music";
-  target: { type: "model" } | { type: "look"; lookId: string } | { type: "bgm" };
+  kind: "image" | "music" | "video";
+  target: { type: "model" } | { type: "look"; lookId: string } | { type: "bgm" } | { type: "lookclip"; lookId: string };
   modelId: string;
   prompt: string;
   /** 실제로 보낸 input (참고 이미지는 Storage 키로) */

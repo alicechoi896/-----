@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Copy, FileText, FileUp, Pencil, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
 import type { ChannelId, ScriptExample, ScriptFormat, ScriptFormatInput, ScriptFormatType } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -29,7 +29,8 @@ const FORMAT_CHANNELS: { id: ChannelId; name: string }[] = [
 ];
 const typeLabel = (t: ScriptFormatType) => SCRIPT_FORMAT_TYPES.find((x) => x.value === t)?.label ?? t;
 
-type Editing = { mode: "create"; contentType: ScriptFormatType } | { mode: "edit"; format: ScriptFormat };
+/** v0.9.120: copy = 기존 포맷 내용을 그대로 담아 새 포맷으로 (조금만 바꿔 쓰는 경우) */
+type Editing = { mode: "create"; contentType: ScriptFormatType } | { mode: "edit" | "copy"; format: ScriptFormat };
 
 /**
  * 대본 포맷 (docs/SCRIPT_FORMATS.md) — 영상 대본의 "구조".
@@ -71,7 +72,7 @@ export function ScriptFormatTab() {
 
       {editing && (
         <ScriptFormatForm
-          key={editing.mode === "edit" ? editing.format.id : `new-${editing.contentType}`}
+          key={editing.mode === "create" ? `new-${editing.contentType}` : `${editing.mode}-${editing.format.id}`}
           editing={editing}
           onCancel={() => setEditing(null)}
           onSaved={() => {
@@ -127,6 +128,7 @@ export function ScriptFormatTab() {
                           <IconButton icon={Star} label="기본 포맷으로" size="sm" disabled={busy === f.id} onClick={() => void run(f.id, () => api.scriptFormats.setDefault(f.id))} />
                         )}
                         <IconButton icon={Pencil} label="수정" size="sm" disabled={Boolean(editing)} onClick={() => setEditing({ mode: "edit", format: f })} />
+                        <IconButton icon={Copy} label="복사해서 새 포맷" size="sm" disabled={Boolean(editing)} onClick={() => setEditing({ mode: "copy", format: f })} />
                         <IconButton
                           icon={Trash2}
                           label="삭제"
@@ -158,14 +160,14 @@ const VISIBLE_EXAMPLES = 3;
 
 function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; onCancel: () => void; onSaved: () => void }) {
   const initial: ScriptFormatInput =
-    editing.mode === "edit"
+    editing.mode !== "create"
       ? {
-          name: editing.format.name,
+          name: editing.mode === "copy" ? `${editing.format.name} 복사`.slice(0, 60) : editing.format.name,
           contentType: editing.format.contentType,
           channelIds: editing.format.channelIds,
           examples: editing.format.examples,
           guideline: editing.format.guideline,
-          isDefault: editing.format.isDefault,
+          isDefault: editing.mode === "edit" && editing.format.isDefault,
           hooks: editing.format.hooks ?? [],
           ctas: editing.format.ctas ?? [],
           titlePatterns: editing.format.titlePatterns ?? [],
@@ -283,7 +285,7 @@ function ScriptFormatForm({ editing, onCancel, onSaved }: { editing: Editing; on
 
   return (
     <SectionCard
-      title={editing.mode === "edit" ? `대본 포맷 수정: ${editing.format.name}` : "새 대본 포맷"}
+      title={editing.mode === "edit" ? `대본 포맷 수정: ${editing.format.name}` : editing.mode === "copy" ? `새 대본 포맷 (${editing.format.name} 복사)` : "새 대본 포맷"}
       description="① 참고 대본을 넣고 → ② AI 로 포맷을 만든 뒤 → ③ 가이드라인을 고쳐 저장합니다."
       footer={
         <div className="flex flex-wrap items-center justify-end gap-3">

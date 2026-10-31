@@ -74,12 +74,16 @@ export function fashionKeys(p: FashionProject): string[] {
     ...p.items.map((i) => i.imageKey ?? ""),
     p.model.photoKey ?? "",
     ...p.model.images.map((i) => i.key),
-    ...p.looks.flatMap((l) => l.images.map((i) => i.key)),
+    ...p.looks.flatMap((l) => [...l.images.map((i) => i.key), ...(l.clips ?? []).map((c) => c.key)]),
     ...p.renders.flatMap((r) => r.keys),
     ...p.tracks.map((t) => t.key),
   ].filter(Boolean);
 }
 
 export async function withFashionUrls(p: FashionProject): Promise<{ project: FashionProject; urls: Record<string, string> }> {
+  // v0.9.120: 15분 넘게 '만드는 중'인 결과물은 멈춘 것 → 실패로 보여 준다 (버튼이 계속 막히지 않게)
+  for (const r of p.renders) {
+    if (r.status === "running" && Date.now() - Date.parse(r.updatedAt) >= 15 * 60_000) Object.assign(r, { status: "fail", error: "중간에 멈췄습니다. 다시 만들어 주세요." });
+  }
   return { project: p, urls: await videoStorage.urls(fashionKeys(p), 3600).catch(() => ({})) };
 }

@@ -28,7 +28,8 @@ export const VIDEO_RENDER_CONFIG = {
   /** v0.9.76: 자막·로고를 확대로 가릴 때 최대 배율 (1.35 → 1.6) */
   // v0.9.82: 1.6 → 1.8 (로고·자막은 확대로 가린다)
   // v0.9.85: 1.8 → 2.0 (자막·로고가 있으면 더 확대)
-  maxCropZoom: 2.0,
+  // v0.9.120: 2.0 → 2.4 (자막·로고가 보이면 블러보다 확대가 먼저)
+  maxCropZoom: 2.4,
   textMaskPadding: 0.04,
   textMaskTimePaddingSec: 0.3,
   /** 원본 글자 검사: 클립마다 몇 장을 볼지 (AI Vision 1회) */
@@ -114,6 +115,16 @@ export function arrowSceneIndexes(count: number): number[] {
  * 주목 효과 (v0.9.64): 강조 컷에 통통 튀는 스티커 (직접 그림 — 저작권 걱정 없음).
  * assets/video/meme 에 GIF 가 있으면 그 GIF 를 먼저 쓴다. 화면 오른쪽 위 (상단 제목 아래), 컷 앞 1.4초
  */
+/** v0.9.120: GIF(GIPHY·밈)는 화면 가운데에 크게 (상단 제목 띠와 자막 사이), 컷이 짧으면 다음 컷까지 이어서 */
+export const GIF_CONFIG = {
+  /** 보여 줄 시간(초). 컷이 이보다 짧으면 남은 시간은 다음 컷 앞부분에 */
+  showSec: 2.6,
+  maxWidth: 960,
+  /** 위·아래 경계 (1080×1920 기준). 제목 띠 아래 ~ 자막 위 */
+  top: 350,
+  bottom: 1000,
+} as const;
+
 export const ATTENTION_CONFIG = {
   maxPerVideo: 4,
   showSec: 1.4,

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { approvedOf, fashionMusicPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
-import type { FashionImage, FashionProject, FashionTask } from "@/lib/fashion/types";
+import type { FashionImage, FashionLook, FashionProject, FashionTask } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getVideoAIProvider } from "../providers/registry";
 import { VideoAIError, type VideoAIProvider } from "../providers/video-ai/kie";
@@ -118,6 +118,40 @@ export async function createFashionImages(p: FashionProject, jobs: FashionImageJ
   return run;
 }
 
+/* ───── v0.9.120 릴스 (나): 룩마다 AI 영상 (Seedance 2.0 Mini, 시작 프레임 = 승인 룩 이미지) ───── */
+export const CLIP = { model: "bytedance/seedance-2-mini", modelId: "seedance-2-mini", sec: 4, resolution: "720p", creditsPerSec: 8.2 } as const;
+export const clipPrompt = (p: FashionProject, look: FashionLook) =>
+  [
+    "Vertical 9:16 fashion lookbook reel, photorealistic. Start exactly from the provided first frame and keep EXACTLY the same woman (face, hair, body), the same outfit (every item, color and detail) and the same background for the whole clip.",
+    `Motion: ${look.pose.trim() || "she shifts her weight, turns slightly to show the outfit, then looks at the camera with a light smile"}. Natural, elegant, model-like movement; the camera stays still or slowly pushes in; the whole outfit stays visible.`,
+    "No text, no logo, no watermark, no cuts, no extra people. No speech.",
+  ].join("\n");
+
+export async function createFashionClips(p: FashionProject, lookIds: string[], requestId: string): Promise<FashionTask[]> {
+  const dup = p.tasks.filter((t) => t.requestId === requestId);
+  if (dup.length) return dup;
+  const key = `${p.id}:${requestId}`;
+  if (inFlight.has(key)) return inFlight.get(key)!;
+  const run = (async () => {
+    const looks = lookIds.slice(0, MAX_TASKS).map((id) => p.looks.find((l) => l.id === id)).filter((l): l is FashionLook => Boolean(l));
+    if (!looks.length) throw new AppError("VALIDATION", "영상으로 만들 룩을 골라 주세요.");
+    for (const l of looks) if (!approvedOf(l.images)) throw new AppError("VALIDATION", `${l.name} 이미지를 먼저 고르세요 (그 이미지가 영상의 시작 화면).`);
+    const tasks = looks.map((l) => baseTask({ kind: "video", target: { type: "lookclip", lookId: l.id }, modelId: CLIP.modelId, prompt: clipPrompt(p, l), requestId }));
+    const prov = await provider();
+    await submit(prov, tasks, () => CLIP.model, async (t) => {
+      const lookId = (t.target as { lookId: string }).lookId;
+      const img = approvedOf(p.looks.find((l) => l.id === lookId)!.images)!.key;
+      const url = (await videoStorage.urls([img], 86_400))[img];
+      if (!url) throw new AppError("VALIDATION", "룩 이미지 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      t.request = { first: img, duration: CLIP.sec, resolution: CLIP.resolution };
+      return { prompt: t.prompt, first_frame_url: url, resolution: CLIP.resolution, aspect_ratio: "9:16", duration: CLIP.sec, generate_audio: false };
+    });
+    return tasks;
+  })().finally(() => inFlight.delete(key));
+  inFlight.set(key, run);
+  return run;
+}
+
 /** 음악 만들기 (Suno V6, 1회 = 곡 2개 정도) */
 export async function createFashionMusic(p: FashionProject, note: string, requestId: string): Promise<FashionTask[]> {
   const dup = p.tasks.filter((t) => t.requestId === requestId);
@@ -160,6 +194,17 @@ function demoImage(label: string): Buffer {
   return c.toBuffer("image/png");
 }
 
+async function demoClip(): Promise<Buffer> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "fs_clip_"));
+  try {
+    const out = path.join(dir, "a.mp4");
+    await runFfmpeg(["-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=24:duration=4", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out], 60_000);
+    return await readFile(out);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function demoMusic(): Promise<Buffer> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "fs_bgm_"));
   try {
@@ -192,6 +237,20 @@ export async function syncFashion(owner: string, p: FashionProject): Promise<boo
       changed = true;
       if (s.state === "fail" || !s.resultUrl) {
         Object.assign(t, { status: "fail", error: (s.error ?? "만들지 못했습니다.").replace("AI 컷을", "Kie 가"), credits: s.credits, updatedAt: now() });
+        continue;
+      }
+      if (t.kind === "video" && t.target.type === "lookclip") {
+        const lookId = t.target.lookId;
+        const buf = demo ? await demoClip() : await fetchFile(s.resultUrl, 45 * 1024 * 1024);
+        const key = `${fashionDir(owner, p.id)}/clip/${t.id}.mp4`;
+        await videoStorage.put(key, buf, "video/mp4");
+        t.storedKey = key;
+        const look = p.looks.find((l) => l.id === lookId);
+        if (look) {
+          const list = (look.clips ??= []);
+          list.push({ id: newFashionId("lc"), key, durationSec: CLIP.sec, createdAt: now(), approved: !list.some((c) => c.approved) });
+        }
+        Object.assign(t, { status: "success", credits: s.credits, error: null, updatedAt: now() });
         continue;
       }
       if (t.kind === "music") {

@@ -238,8 +238,23 @@ export async function renderReels(owner: string, p: FashionProject, r: FashionRe
   try {
     const segs: string[] = [];
     const parts = [...looks.map((l, i) => ({ look: l as FashionLook | null, i, sec })), { look: null, i: looks.length, sec: ctaSec }];
+    const useClips = p.settings.reelStyle === "b";
     for (const part of parts) {
       const src = part.look ?? looks[looks.length - 1];
+      const clip = useClips && part.look ? (part.look.clips ?? []).find((c) => c.approved) : null;
+      const clipBuf = clip ? await videoStorage.download(clip.key).catch(() => null) : null;
+      if (clip && clipBuf) {
+        // v0.9.120 릴스 (나): 룩 AI 영상 앞부분 N초 + 같은 문구
+        const cf = path.join(dir, `clip${part.i}.mp4`);
+        await writeFile(cf, clipBuf);
+        const ovFile = path.join(dir, `ov${part.i}.png`);
+        await writeFile(ovFile, reelOverlay(p, part.look, part.i, W, H));
+        const out = path.join(dir, `seg${part.i}.mp4`);
+        const frames = Math.round(part.sec * FPS);
+        await runFfmpeg(["-y", "-i", cf, "-i", ovFile, "-filter_complex", `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS},tpad=stop_mode=clone:stop_duration=${part.sec},format=yuv420p[bg];[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]`, "-map", "[v]", "-frames:v", String(frames), "-r", String(FPS), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out], 180_000);
+        segs.push(out);
+        continue;
+      }
       const imgFile = path.join(dir, `in${part.i}.png`);
       await writeFile(imgFile, (await videoStorage.download(approvedOf(src.images)!.key))!);
       const ovFile = path.join(dir, `ov${part.i}.png`);
