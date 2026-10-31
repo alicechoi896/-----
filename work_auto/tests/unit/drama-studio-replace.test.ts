@@ -80,3 +80,53 @@ describe("영상 교체 (v0.9.90)", () => {
     expect(p.clips.some((c) => c.id === first.id)).toBe(true);
   }, 60_000);
 });
+
+describe("최종 영상 자막·로고 (v0.9.92)", () => {
+  it("장면 대사 자막 + 직접 쓴 자막 + 왼쪽 위 로고를 넣어 병합한다", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const ff = (await import("ffmpeg-static")).default as unknown as string;
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const mp4 = (color: string) => spawnSync(ff, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", `color=c=${color}:s=360x640:d=2`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "-"], { maxBuffer: 1 << 24 }).stdout;
+    const { project } = await svc.create({ title: "자막 로고", startStep: "storyboard" });
+    const id = project.id;
+    let p = (await upload(id, "scene_01.png", { type: "frame" })).project;
+    p = (await upload(id, "scene_02.png", { type: "frame" })).project;
+    const [s1, s2] = p.scenario.scenes;
+    p = (await svc.patch(id, { section: "scenario", value: { ...p.scenario, scenes: [{ ...s1, dialogue: "서윤: 이게 왜 지금 와?\n도현: 나도 몰라" }, s2] } })).project;
+    const put = async (sceneId: string, color: string) => {
+      const up = await svc.uploadUrl(id, { kind: "video", fileName: `${color}.mp4`, size: 10 });
+      const buf = mp4(color);
+      await svc.uploadMemory(up.key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      return (await svc.register(id, { key: up.key, kind: "video", fileName: `${color}.mp4`, target: { type: "clip", sceneIds: [sceneId] } })).project;
+    };
+    await put(s1.id, "gray");
+    p = await put(s2.id, "navy");
+    // 로고
+    const c = createCanvas(200, 80);
+    const g = c.getContext("2d");
+    g.fillStyle = "#ff0066";
+    g.fillRect(0, 0, 200, 80);
+    const logoBuf = c.toBuffer("image/png");
+    const up = await svc.uploadUrl(id, { kind: "image", fileName: "logo.png", size: logoBuf.length });
+    await svc.uploadMemory(up.key, logoBuf.buffer.slice(logoBuf.byteOffset, logoBuf.byteOffset + logoBuf.byteLength));
+    p = (await svc.register(id, { key: up.key, kind: "image", fileName: "logo.png", target: { type: "logo" } })).project;
+    expect(p.renderSettings.logoKey).toBe(up.key);
+    p = (await svc.patch(id, { section: "timeline", value: p.clips.map((cl, i) => ({ id: `tl_${i}`, clipId: cl.id, trimStart: 0, trimEnd: 0, audio: true, subtitle: i === 1 ? "직접 쓴 자막입니다" : null })) })).project;
+    p = (await svc.patch(id, { section: "renderSettings", value: { ...p.renderSettings, subtitles: true, subtitleSize: "m" } })).project;
+    expect(p.renderSettings.subtitles).toBe(true);
+    await svc.approve(id, { step: "storyboard" });
+    const { run } = await svc.startRender(id);
+    await run();
+    const done = await svc.get(id);
+    const r = done.project.renders.at(-1)!;
+    expect(r.status).toBe("success");
+    expect(r.totalSec).toBeGreaterThan(3.5);
+    // 확인용 프레임 (0.5초: 1번 자막·로고)
+    const { videoStorage } = await import("@/lib/server/video/storage");
+    const out = await videoStorage.download(r.key!);
+    const fs = await import("node:fs");
+    const tmp = `${process.env.TEMP ?? "/tmp"}/ds_sub_check.mp4`;
+    fs.writeFileSync(tmp, out!);
+    if (process.env.FRAME_OUT) spawnSync(ff, ["-y", "-ss", "0.5", "-i", tmp, "-frames:v", "1", process.env.FRAME_OUT]);
+  }, 120_000);
+});

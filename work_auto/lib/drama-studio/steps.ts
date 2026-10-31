@@ -218,3 +218,14 @@ export function swapIntoTimeline(p: DramaProject, clip: { id: string; sceneIds: 
   if (swapped) p.clips = p.clips.map((c) => (c.id === clip.id ? { ...c, approved: true } : c));
   return swapped;
 }
+
+/** v0.9.92: 클립 자막 자동 — 클립 장면들의 대사에서 말한 사람 이름('이름:')을 뺀 줄 */
+export function autoSubtitle(p: DramaProject, sceneIds: string[]): string {
+  return sceneIds
+    .map((id) => p.scenario.scenes.find((s) => s.id === id)?.dialogue ?? "")
+    .join("\n")
+    .split(/\n+/)
+    .map((l) => l.replace(/^[^:：]{1,12}[:：]\s*/, "").replace(/^["'“”]|["'“”]$/g, "").trim())
+    .filter(Boolean)
+    .join("\n");
+}

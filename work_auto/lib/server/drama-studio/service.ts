@@ -169,12 +169,12 @@ function cleanSection(p: DramaProject, section: EditableSection, value: unknown)
       p.timeline = (Array.isArray(value) ? (value as DramaProject["timeline"]) : [])
         .filter((t) => ids.has(t.clipId))
         .slice(0, 120)
-        .map((t) => ({ id: String(t.id || newId("tl")), clipId: t.clipId, trimStart: Math.max(0, Number(t.trimStart) || 0), trimEnd: Math.max(0, Number(t.trimEnd) || 0), audio: t.audio !== false }));
+        .map((t) => ({ id: String(t.id || newId("tl")), clipId: t.clipId, trimStart: Math.max(0, Number(t.trimStart) || 0), trimEnd: Math.max(0, Number(t.trimEnd) || 0), audio: t.audio !== false, subtitle: typeof t.subtitle === "string" ? t.subtitle.slice(0, 1000) : null }));
       return;
     }
     case "renderSettings": {
       const r = (value ?? {}) as Partial<DramaProject["renderSettings"]>;
-      p.renderSettings = { ...p.renderSettings, transition: r.transition === "fade" ? "fade" : "none", bgmVolume: Math.min(1, Math.max(0, Number(r.bgmVolume) || 0)), title: String(r.title ?? "").slice(0, 80), ...(r.bgmKey === null ? { bgmKey: null, bgmName: null } : {}) };
+      p.renderSettings = { ...p.renderSettings, transition: r.transition === "fade" ? "fade" : "none", bgmVolume: Math.min(1, Math.max(0, Number(r.bgmVolume) || 0)), title: String(r.title ?? "").slice(0, 80), subtitles: r.subtitles === true, subtitleSize: r.subtitleSize === "s" || r.subtitleSize === "l" ? r.subtitleSize : "m", ...(r.bgmKey === null ? { bgmKey: null, bgmName: null } : {}), ...(r.logoKey === null ? { logoKey: null, logoName: null } : {}) };
       return;
     }
   }
@@ -522,6 +522,8 @@ export const dramaStudioService = {
       markEdited(p, "video");
     } else if (target.type === "bgm") {
       p.renderSettings = { ...p.renderSettings, bgmKey: key, bgmName: fileName };
+    } else if (target.type === "logo") {
+      p.renderSettings = { ...p.renderSettings, logoKey: key, logoName: fileName };
     } else throw new AppError("VALIDATION", "어디에 쓸 파일인지 알 수 없습니다.");
     return withUrls(await saveProject(owner, p, at));
   },

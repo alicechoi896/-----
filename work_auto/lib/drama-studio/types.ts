@@ -204,6 +204,8 @@ export interface TimelineItem {
   trimStart: number;
   trimEnd: number;
   audio: boolean;
+  /** v0.9.92: 이 클립 자막 (한 줄씩). null·없음 = 장면 대사에서 자동 */
+  subtitle?: string | null;
 }
 
 export interface RenderSettings {
@@ -212,6 +214,12 @@ export interface RenderSettings {
   bgmName: string | null;
   bgmVolume: number;
   title: string;
+  /** v0.9.92: 자막 넣기 (장면 대사 → 화면 아래) */
+  subtitles?: boolean;
+  subtitleSize?: "s" | "m" | "l";
+  /** v0.9.92: 왼쪽 위 로고 (올린 이미지) */
+  logoKey?: string | null;
+  logoName?: string | null;
 }
 
 export interface DramaRender {

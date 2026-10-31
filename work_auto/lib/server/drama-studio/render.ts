@@ -4,8 +4,72 @@ import os from "node:os";
 import path from "node:path";
 import { runFfmpeg } from "../video/ffmpeg";
 import { videoStorage } from "../video/storage";
+import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
+import { videoAssets } from "../video/assets";
 import { projectDir } from "./store";
+import { autoSubtitle } from "@/lib/drama-studio/steps";
 import type { DramaProject, DramaRender } from "@/lib/drama-studio/types";
+
+/* ───── v0.9.92 자막·로고 (투명 PNG 를 영상 위에 얹는다) ───── */
+let fontName: string | null = null;
+function subtitleFont(): string {
+  if (fontName) return fontName;
+  const f = videoAssets.font("jua");
+  GlobalFonts.registerFromPath(f.file, "ds_sub");
+  fontName = "ds_sub";
+  return fontName;
+}
+const SUB_SIZES = { s: 0.042, m: 0.05, l: 0.06 } as const;
+
+/** 자막 한 줄(길면 두 줄) — 화면 아래 15% 위치, 흰 글자 + 검은 테두리 */
+async function subtitlePng(file: string, text: string, W: number, H: number, size: "s" | "m" | "l"): Promise<void> {
+  const c = createCanvas(W, H);
+  const g = c.getContext("2d");
+  const fam = subtitleFont();
+  let px = Math.round(Math.min(W, H * 0.5625) * SUB_SIZES[size] * (W > H ? 1.4 : 1.6));
+  const maxW = W * 0.88;
+  // 너무 길면 띄어쓰기에서 두 줄로, 그래도 넘치면 글자 크기를 줄인다
+  let lines = [text];
+  g.font = `${px}px ${fam}`;
+  if (g.measureText(text).width > maxW && text.includes(" ")) {
+    const words = text.split(" ");
+    let best = 1;
+    let bestDiff = Infinity;
+    for (let k = 1; k < words.length; k++) {
+      const d = Math.abs(g.measureText(words.slice(0, k).join(" ")).width - g.measureText(words.slice(k).join(" ")).width);
+      if (d < bestDiff) (bestDiff = d), (best = k);
+    }
+    lines = [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+  }
+  while (px > 14 && Math.max(...lines.map((l) => g.measureText(l).width)) > maxW) {
+    px -= 2;
+    g.font = `${px}px ${fam}`;
+  }
+  g.textAlign = "center";
+  g.textBaseline = "bottom";
+  g.lineJoin = "round";
+  const bottom = H * 0.86;
+  lines.forEach((l, k) => {
+    const y = bottom - (lines.length - 1 - k) * px * 1.25;
+    g.lineWidth = Math.max(4, px * 0.16);
+    g.strokeStyle = "rgba(0,0,0,0.9)";
+    g.strokeText(l, W / 2, y);
+    g.fillStyle = "#ffffff";
+    g.fillText(l, W / 2, y);
+  });
+  await writeFile(file, c.toBuffer("image/png"));
+}
+
+/** 로고: 왼쪽 위, 화면 짧은 변의 18% 너비 */
+async function logoPng(file: string, buf: Buffer, W: number, H: number): Promise<void> {
+  const img = await loadImage(buf);
+  const w = Math.round(Math.min(W, H) * 0.18);
+  const h = Math.round((img.height / img.width) * w);
+  const c = createCanvas(W, H);
+  const m = Math.round(Math.min(W, H) * 0.04);
+  c.getContext("2d").drawImage(img, m, m, w, h);
+  await writeFile(file, c.toBuffer("image/png"));
+}
 
 /**
  * 최종 병합 (v0.9.81) — 타임라인 순서대로 승인한 클립을 하나의 MP4 로.
@@ -39,6 +103,17 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
   const dir = await mkdtemp(path.join(os.tmpdir(), "ds_render_"));
   try {
     const parts: string[] = [];
+    // 로고 (한 번만 그린다)
+    let logo: string | null = null;
+    if (p.renderSettings.logoKey) {
+      const lb = await videoStorage.download(p.renderSettings.logoKey);
+      if (lb) {
+        logo = path.join(dir, "logo.png");
+        await logoPng(logo, lb, W, H).catch(() => {
+          logo = null;
+        });
+      }
+    }
     let total = 0;
     for (const [i, { t, clip }] of items.entries()) {
       const buf = await videoStorage.download(clip.key);
@@ -55,12 +130,41 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
       const vf = [`scale=${W}:${H}:force_original_aspect_ratio=decrease`, `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`, `fps=${FPS}`, "setsar=1", "format=yuv420p", ...(fade ? [`fade=t=in:st=0:d=${fd}`, `fade=t=out:st=${(dur - fd).toFixed(3)}:d=${fd}`] : [])].join(",");
       const af = ["aresample=44100", "aformat=channel_layouts=stereo", ...(fade ? [`afade=t=in:st=0:d=${fd}`, `afade=t=out:st=${(dur - fd).toFixed(3)}:d=${fd}`] : [])].join(",");
       const out = path.join(dir, `p${i}.mp4`);
+      // 자막 줄: 직접 쓴 것 → 없으면 장면 대사. 줄 길이 비율로 시간을 나눈다
+      const overlays: { file: string; from: number; to: number }[] = [];
+      if (p.renderSettings.subtitles) {
+        const text = (t.subtitle ?? "").trim() || autoSubtitle(p, clip.sceneIds);
+        const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+        const totalChars = lines.reduce((n, l) => n + Math.max(4, l.length), 0);
+        let at = 0;
+        for (const [k, line] of lines.entries()) {
+          const len = (dur * Math.max(4, line.length)) / totalChars;
+          const f = path.join(dir, `s${i}_${k}.png`);
+          await subtitlePng(f, line, W, H, p.renderSettings.subtitleSize ?? "m");
+          overlays.push({ file: f, from: at, to: at + len });
+          at += len;
+        }
+      }
+      const extra = [...overlays.map((o) => o.file), ...(logo ? [logo] : [])];
+      const firstExtra = audioIn ? 1 : 2;
+      let graph = `[0:v]${vf}[v0]`;
+      let cur = "v0";
+      overlays.forEach((o, k) => {
+        graph += `;[${cur}][${firstExtra + k}:v]overlay=0:0:enable='between(t,${o.from.toFixed(3)},${o.to.toFixed(3)})'[o${k}]`;
+        cur = `o${k}`;
+      });
+      if (logo) {
+        graph += `;[${cur}][${firstExtra + overlays.length}:v]overlay=0:0[lg]`;
+        cur = "lg";
+      }
+      graph += `;[${audioIn ? "0:a:0" : "1:a:0"}]${af}[aout]`;
       await runFfmpeg(
         [
           "-ss", start.toFixed(3), "-t", dur.toFixed(3), "-i", src,
           ...(audioIn ? [] : ["-f", "lavfi", "-t", dur.toFixed(3), "-i", "anullsrc=r=44100:cl=stereo"]),
-          "-map", "0:v:0", "-map", audioIn ? "0:a:0" : "1:a:0",
-          "-vf", vf, "-af", af,
+          ...extra.flatMap((f) => ["-loop", "1", "-t", dur.toFixed(3), "-i", f]),
+          "-filter_complex", graph,
+          "-map", `[${cur}]`, "-map", "[aout]",
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "2M", "-bufsize", "4M", "-r", String(FPS),
           "-c:a", "aac", "-b:a", "128k", "-t", dur.toFixed(3), out,
         ],

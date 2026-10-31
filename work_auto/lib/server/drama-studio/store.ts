@@ -87,6 +87,7 @@ export function projectKeys(p: DramaProject): string[] {
     ...p.clips.map((c) => c.key),
     ...p.renders.map((r) => r.key ?? ""),
     p.renderSettings.bgmKey ?? "",
+    p.renderSettings.logoKey ?? "",
   ].filter(Boolean);
 }
 

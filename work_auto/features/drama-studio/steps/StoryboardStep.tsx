@@ -92,13 +92,14 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
       setUploading(null);
     }
   }
-  function onDrop(to: number) {
+  /** v0.9.92: 끄는 동안 지나가는 자리로 바로 옮긴다 */
+  function moveTo(to: number) {
     if (drag === null || drag === to) return;
     const list = [...scenes];
     const [it] = list.splice(drag, 1);
     list.splice(to, 0, it);
     ctl.edit("scenario", { ...p.scenario, scenes: list });
-    setDrag(null);
+    setDrag(to);
   }
 
   const card = (s: DramaScene, i: number, big = false) => {
@@ -109,10 +110,21 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
       <div
         key={s.id}
         draggable={!big}
-        onDragStart={() => setDrag(i)}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={() => onDrop(i)}
-        className={cn("rounded-card border bg-canvas p-2.5", a ? "border-success" : "border-line", drag === i && "opacity-50")}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", s.id);
+          setDrag(i);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          moveTo(i);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDrag(null);
+        }}
+        onDragEnd={() => setDrag(null)}
+        className={cn("rounded-card border bg-canvas p-2.5", a ? "border-success" : "border-line", drag === i && "ring-2 ring-brand")}
         data-frame={s.id}
       >
         <div className="mb-1.5 flex items-center gap-1.5">
@@ -124,7 +136,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
         </div>
         {shown && ctl.urls[shown.key] ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={ctl.urls[shown.key]} alt={s.title} className={cn("w-full rounded bg-subtle object-cover", p.settings.aspect === "9:16" ? "aspect-[9/16]" : "aspect-video", !big && "max-h-72")} loading="lazy" />
+          <img src={ctl.urls[shown.key]} alt={s.title} draggable={false} className={cn("w-full rounded bg-subtle object-cover", p.settings.aspect === "9:16" ? "aspect-[9/16]" : "aspect-video", !big && "max-h-72")} loading="lazy" />
         ) : (
           <div className={cn("flex w-full items-center justify-center rounded bg-subtle text-[11px] text-fg-subtle", p.settings.aspect === "9:16" ? "aspect-[9/16] max-h-72" : "aspect-video")}>이미지 없음</div>
         )}
