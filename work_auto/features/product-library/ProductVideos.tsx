@@ -32,7 +32,40 @@ export function ProductVideos({ productId }: { productId: string }) {
   const xhsVideos = videos.filter((v) => canDirectDownload(v.platform));
   // v0.9.113: 샤오홍슈 공유 링크(xhslink)는 몇 년이 지나도 열려 영상 제작·새벽 자동 제작에 그대로 쓴다. 검색으로 가져온 긴 주소는 열쇠가 만료된다
   const isShort = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*xhslink\.com\//i.test(url);
-  const expiring = videos.filter((v) => v.platform === "xiaohongshu" && !isShort(v.url));
+  const linkOf = (v: ReferenceVideo) => v.shareUrl || v.url;
+  const expiring = videos.filter((v) => v.platform === "xiaohongshu" && !isShort(linkOf(v)));
+  // v0.9.114: TikHub 상세 1회(약 $0.01)로 영구 공유 링크 찾기 — 확인 후, 하루 한도
+  const [tk, setTk] = useState<{ busy: string | null; usage: { calls: number; limit: number } | null; note: string | null }>({ busy: null, usage: null, note: null });
+  async function viaTikhub(targets: ReferenceVideo[]) {
+    if (!targets.length) return;
+    const usd = (targets.length * 0.01).toFixed(2);
+    if (!window.confirm(`TikHub 로 영구 공유 링크를 찾습니다: ${targets.length}개 × 약 $0.01 = 약 ${usd} (하루 한도 $0.5 = 50회, 넘으면 멈춤). 진행할까요?`)) return;
+    let ok = 0;
+    let firstMiss: string | null = null;
+    for (const [i, v] of targets.entries()) {
+      setTk((s) => ({ ...s, busy: v.id, note: `TikHub 로 찾는 중 ${i + 1}/${targets.length}…` }));
+      try {
+        const r = await api.videos.shareLinkViaTikhub(v.id);
+        setTk((s) => ({ ...s, usage: r.usage }));
+        if (r.saved) {
+          ok++;
+          list.setData((prev) => prev?.map((x) => (x.id === v.id ? { ...x, shareUrl: r.saved } : x)) ?? null);
+          setRelinkMsg((m) => ({ ...m, [v.id]: { ok: true, text: "영구 링크를 받았습니다 (TikHub)" } }));
+        } else {
+          firstMiss ??= r.others.length ? `TikHub 응답에 xhslink 가 없었습니다. 받은 공유 관련 값: ${r.others.join(" / ")}` : "TikHub 응답에 공유 링크가 없었습니다.";
+          setRelinkMsg((m) => ({ ...m, [v.id]: { ok: false, text: "TikHub 응답에 영구 링크가 없습니다" } }));
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "실패";
+        setRelinkMsg((m) => ({ ...m, [v.id]: { ok: false, text: msg } }));
+        if (/한도|BUDGET|연결되어 있지/.test(msg)) {
+          firstMiss = msg;
+          break;
+        }
+      }
+    }
+    setTk((s) => ({ ...s, busy: null, note: `${ok}/${targets.length}개 영구 링크를 받았습니다.${firstMiss ? ` ${firstMiss}` : ""}` }));
+  }
   const [relink, setRelink] = useState<{ id: string; url: string } | null>(null);
   const [relinkBusy, setRelinkBusy] = useState(false);
   const [relinkMsg, setRelinkMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
@@ -153,13 +186,16 @@ export function ProductVideos({ productId }: { productId: string }) {
                   <XhsJobStatus job={xhs.jobs[v.id]} />
                   {v.platform === "xiaohongshu" && (
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]" data-xhs-link>
-                      {isShort(v.url) ? (
+                      {isShort(linkOf(v)) ? (
                         <Badge tone="success">영구 링크 ✓ (xhslink)</Badge>
                       ) : (
                         <>
                           <Badge tone="warning">만료되는 링크</Badge>
                           <Button size="sm" variant="ghost" icon={Link2} className="h-7 px-2 text-[12px]" onClick={() => setRelink({ id: v.id, url: "" })} data-xhs-relink>
-                            공유 링크로 바꾸기
+                            공유 링크 직접 넣기
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-[12px]" loading={tk.busy === v.id} disabled={Boolean(tk.busy)} onClick={() => void viaTikhub([v])} data-xhs-tikhub>
+                            영구 링크 받기 (TikHub ≈$0.01)
                           </Button>
                         </>
                       )}
@@ -210,6 +246,17 @@ export function ProductVideos({ productId }: { productId: string }) {
             );
           })}
         </ul>
+      )}
+      {expiring.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-2.5">
+          <Button size="sm" variant="secondary" loading={Boolean(tk.busy)} disabled={Boolean(tk.busy)} onClick={() => void viaTikhub(expiring)} data-xhs-tikhub-all>
+            만료 링크 {expiring.length}개 모두 영구 링크 받기 (TikHub ≈${(expiring.length * 0.01).toFixed(2)})
+          </Button>
+          <span className="text-[12px] text-fg-subtle">
+            {tk.usage ? `오늘 TikHub ${tk.usage.calls}/${tk.usage.limit}회` : "하루 한도 $0.5 (50회)"}
+            {tk.note ? ` · ${tk.note}` : ""}
+          </span>
+        </div>
       )}
       {expiring.length > 0 && (
         <p className="border-t border-line px-5 py-2 text-[12px] text-warning">

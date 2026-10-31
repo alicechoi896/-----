@@ -39,7 +39,7 @@ export function useXhsDownloads() {
     const set = (job: XhsJob) => setJobs((prev) => ({ ...prev, [v.id]: job }));
     try {
       const onStage = (stage: XhsStage, progress?: number) => set({ stage, progress });
-      const out = await downloadXhsMuted(v.url, onStage);
+      const out = await downloadXhsMuted(v.shareUrl || v.url, onStage);
       if (save) downloadBlob(out.blob, out.name);
       const kind = v.platform === "douyin" ? "도우인 영상을" : "워터마크 없는 원본을";
       set({ stage: "done", note: save ? `${kind} 소리 없이 저장했습니다` : "받았습니다 (ZIP 에 담는 중)" });

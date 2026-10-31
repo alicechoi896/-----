@@ -35,6 +35,8 @@ export interface XiaohongshuSearchProvider extends BaseProvider {
   searchVideos(params: XhsSearchParams): Promise<XhsSearchPage>;
   /** 상세 (상세보기를 누를 때만) */
   getVideoDetail(noteId: string, xsecToken?: string | null): Promise<XhsNote | null>;
+  /** v0.9.114 상세 응답 원본 (영구 공유 링크 찾기). TikHub 1회 */
+  getVideoDetailRaw?(noteId: string): Promise<unknown>;
 }
 
 /** 업체 오류 (TikHub 공용 오류를 그대로 쓴다) */

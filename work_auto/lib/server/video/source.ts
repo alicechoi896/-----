@@ -54,7 +54,7 @@ export async function fetchSource(video: ReferenceVideo, dir: string, index: num
   if (video.platform !== "xiaohongshu") throw new SourceError("resolve", `${name} 는 샤오홍슈 영상이 아니라 자동 제작에 쓰지 못했습니다 (V1 은 샤오홍슈만).`);
   let resolved: Awaited<ReturnType<typeof resolveXiaohongshuWithFallback>>;
   try {
-    resolved = await resolveXiaohongshuWithFallback(video.url);
+    resolved = await resolveXiaohongshuWithFallback(video.shareUrl || video.url);
   } catch (e) {
     throw new SourceError("resolve", `${name} 재생 주소를 받지 못했습니다 (${e instanceof Error ? e.message : String(e)})`);
   }

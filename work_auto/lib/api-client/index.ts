@@ -447,6 +447,9 @@ export const api = {
   videos: {
     /** v0.9.113 같은 영상의 샤오홍슈 공유 링크(xhslink, 영구)로 바꾸기 */
     relink: (videoId: string, url: string) => request<ReferenceVideo>("/api/videos/vault", { method: "POST", body: json({ videoId, url }) }),
+    /** v0.9.114 TikHub 상세 1회로 영구 공유 링크 찾기 (확인 후) */
+    shareLinkViaTikhub: (videoId: string) => request<{ saved: string | null; found: string[]; others: string[]; usage: { calls: number; limit: number } }>("/api/videos/vault", { method: "POST", body: json({ videoId, tikhub: true, confirmed: true }) }),
+    tikhubUsage: () => request<{ calls: number; limit: number }>("/api/videos/vault"),
     /** productId: 특정 제품 / "none" = 제품 연결 안 됨 / 생략 = 전체 */
     list: (productId?: string) => request<ReferenceVideo[]>(`/api/videos${qs({ productId })}`),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),

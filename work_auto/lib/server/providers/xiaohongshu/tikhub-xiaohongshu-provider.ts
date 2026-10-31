@@ -55,6 +55,10 @@ export class TikHubXiaohongshuProvider implements XiaohongshuSearchProvider {
     return parseNote((d?.data as unknown) ?? d) ?? null;
   }
 
+  async getVideoDetailRaw(noteId: string): Promise<unknown> {
+    return this.get("/api/v1/xiaohongshu/app_v2/get_video_note_detail", { note_id: noteId });
+  }
+
   async testConnection(): Promise<ConnectionTestResult> {
     const testedAt = new Date().toISOString();
     try {

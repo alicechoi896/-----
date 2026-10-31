@@ -305,6 +305,9 @@ create table if not exists public.reference_videos (
   unique (user_id, url)
 );
 
+-- v0.9.114: 샤오홍슈 영구 공유 링크 (xhslink). 추가만 — 처음 가져온 url 은 그대로
+alter table public.reference_videos add column if not exists share_url text;
+
 -- v0.9.2: 참고 영상 ↔ 연관 제품 (선택). 제품을 지우면 연결만 풀린다
 alter table public.reference_videos add column if not exists product_id text references public.products (id) on delete set null;
 

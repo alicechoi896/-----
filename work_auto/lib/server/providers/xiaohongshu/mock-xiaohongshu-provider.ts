@@ -4,6 +4,11 @@ import { xhsNoteUrl, type XhsNote, type XhsSearchPage, type XhsSearchParams, typ
 
 /** 데모 모드용 가짜 검색 결과 (외부 호출 없음). 노트 ID 는 검색어로 만든 가짜 값이라 가져오기는 실패할 수 있다 */
 export class MockXiaohongshuProvider implements XiaohongshuSearchProvider {
+  /** 데모: 공유 정보가 들어 있는 상세 (실제 TikHub 응답 모양은 다를 수 있다) */
+  async getVideoDetailRaw(noteId: string): Promise<unknown> {
+    return { data: { note_list: [{ id: noteId, share_info: { link: `http://xhslink.com/o/demo${noteId.slice(-6)}` } }] } };
+  }
+
   readonly id = "mock-xiaohongshu";
   readonly label = "데모 샤오홍슈";
 

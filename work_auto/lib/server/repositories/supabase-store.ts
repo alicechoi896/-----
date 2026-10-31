@@ -49,6 +49,7 @@ const PENDING_COLUMNS: Record<string, string[]> = {
   script_formats: ["hooks", "ctas", "title_patterns", "preferred_types", "bad_examples", "captions", "thumbnail_titles"], // v0.9.37, v0.9.54, v0.9.55
   saved_trends: ["folder", "meta"], // v0.9.54 트렌드 스크랩
   content_profiles: ["audience"], // v0.9.37
+  reference_videos: ["share_url"], // v0.9.114 영구 공유 링크
 };
 
 async function writeWithPendingColumns<R>(

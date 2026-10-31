@@ -88,6 +88,8 @@ export interface ReferenceVideo {
   note: string | null;
   /** 연관 제품 (선택). '제품 홍보 영상 만들기'에서 참고 영상을 고를 때 함께 보인다 */
   productId?: ID | null;
+  /** v0.9.114: 샤오홍슈 영구 공유 링크 (xhslink.com/…). 있으면 url 대신 이것으로 받는다 (url 은 처음 가져온 주소 그대로) */
+  shareUrl?: string | null;
   createdAt: ISODate;
 }
 
