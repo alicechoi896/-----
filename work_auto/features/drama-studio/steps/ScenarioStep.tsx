@@ -58,6 +58,19 @@ export function ScenarioStep({ ctl }: { ctl: ProjectCtl }) {
           <span className="text-[12px] text-fg-subtle">
             {p.settings.genre} · {p.settings.mood} · {p.settings.aspect} · 목표 {p.settings.targetSec}초
           </span>
+          {sc.scenes.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[12px] font-medium text-fg-muted">
+                장면 길이 합계 <b className={Math.abs(total - p.settings.targetSec) > 3 ? "text-warning" : "text-success"}>{total}초</b> / 목표 {p.settings.targetSec}초
+              </span>
+              <Button size="sm" variant={Math.abs(total - p.settings.targetSec) > 3 ? "primary" : "secondary"} onClick={() => set({ scenes: fitDurations(sc.scenes, p.settings.targetSec) })} data-fit-durations>
+                목표 {p.settings.targetSec}초에 맞추기
+              </Button>
+              {sc.scenes.length * 15 < p.settings.targetSec && (
+                <span className="block text-[11.5px] text-warning">장면 {sc.scenes.length}개로는 최대 {sc.scenes.length * 15}초입니다 (장면당 최대 15초). {p.settings.targetSec}초를 채우려면 장면을 {Math.ceil(p.settings.targetSec / 15)}개 이상으로 늘려 주세요.</span>
+              )}
+            </div>
+          )}
           <Button variant="primary" icon={Sparkles} className="ml-auto" disabled={Boolean(ctl.busy)} loading={ctl.busy === "시나리오 작성"} onClick={() => void ctl.run("시나리오 작성", () => studioApi.generate(p.id, "scenario", { sceneCount: sc.sceneCount || defaultSceneCount(p.settings.targetSec), style: sc.style, endingType: sc.endingType }))} data-gen-scenario>
             {sc.scenes.length ? "전체 다시 쓰기" : "AI 로 시나리오 쓰기"}
           </Button>
@@ -96,11 +109,6 @@ export function ScenarioStep({ ctl }: { ctl: ProjectCtl }) {
             icon={LayoutGrid}
             actions={
               <span className="flex items-center gap-1.5">
-                {Math.abs(total - p.settings.targetSec) > 3 && (
-                  <Button size="sm" variant="subtle" onClick={() => set({ scenes: fitDurations(sc.scenes, p.settings.targetSec) })} data-fit-durations>
-                    목표 {p.settings.targetSec}초에 맞추기
-                  </Button>
-                )}
                 <SegmentedControl size="sm" value={view} onChange={setView} options={[{ value: "cards", label: "장면 카드" }, { value: "read", label: "전체 읽기" }]} />
                 <Button size="sm" variant="ghost" icon={Save} disabled={Boolean(ctl.busy)} onClick={() => void ctl.run("버전 저장", () => studioApi.generate(p.id, "save-version", { label: `버전 ${p.scenarioVersions.length + 1}` }))}>
                   버전 저장

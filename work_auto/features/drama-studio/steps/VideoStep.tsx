@@ -5,7 +5,7 @@ import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanF
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { MODE_LABEL, VIDEO_MODELS, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { videoPrompt } from "@/lib/drama-studio/prompts";
-import { buildTimeline, newId } from "@/lib/drama-studio/steps";
+import { buildTimeline, fitDurations, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
 import { newRequestId, studioApi } from "../api";
@@ -183,6 +183,18 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               <span className="text-[12.5px] font-medium text-fg">
                 장면 고르기 ({picked.length}개{plan === "single" && picked.length ? ` · 합계 ${pickedScenes.reduce((n, s) => n + clampSec(secs[s.id] ?? s.durationSec), 0)}초` : ""} / 전체 장면 ${scenes.reduce((n, s) => n + s.durationSec, 0)}초 · 목표 ${p.settings.targetSec}초)
               </span>
+              <Button
+                size="sm"
+                variant={Math.abs(scenes.reduce((n, s) => n + s.durationSec, 0) - p.settings.targetSec) > 3 ? "subtle" : "ghost"}
+                onClick={() => {
+                  // 장면 길이를 목표에 맞추고, 장면마다 직접 고친 길이는 지운다
+                  ctl.edit("scenario", { ...p.scenario, scenes: fitDurations(scenes, p.settings.targetSec) });
+                  setSecs({});
+                }}
+                data-fit-durations-video
+              >
+                장면 길이를 목표 {p.settings.targetSec}초에 맞추기
+              </Button>
               <Button size="sm" variant="ghost" onClick={() => setPicked(scenes.filter((s) => !p.clips.some((c) => c.approved && c.sceneIds.includes(s.id))).map((s) => s.id))}>
                 영상 없는 장면 모두
               </Button>
