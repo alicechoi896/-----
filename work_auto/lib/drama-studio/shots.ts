@@ -20,6 +20,20 @@ export const shotKindLabel = (k: ShotKind) => SHOT_KINDS.find((x) => x.value ===
 const kindEn = (k: ShotKind) => SHOT_KINDS.find((x) => x.value === k)?.en ?? "";
 
 export const MAX_SHOTS_PER_SCENE = 6;
+
+/**
+ * v0.9.116 인물 목소리 기본 추천 (AI 호출 없이 성별·나이·말투로). 직접 쓴 값이 있으면 그것을 쓴다.
+ * AI 영상 모델이 소리를 만들 때 프롬프트에 넣는다 — 모델이 클립마다 목소리를 새로 만들어 '완전히 같은 목소리'는 보장되지 않는다.
+ */
+export function recommendedVoice(c: Pick<DramaCharacter, "gender" | "age" | "personality" | "speech">): string {
+  const g = /여|female|woman/i.test(c.gender ?? "") ? "female" : /남|male|man/i.test(c.gender ?? "") ? "male" : "";
+  const n = Number((c.age ?? "").match(/\d+/)?.[0] ?? "");
+  const age = n ? (n < 20 ? "teen" : `in ${g === "female" ? "her" : g === "male" ? "his" : "their"} ${Math.floor(n / 10) * 10}s`) : /10대/.test(c.age ?? "") ? "teen" : "";
+  const t = `${c.personality ?? ""} ${c.speech ?? ""}`;
+  const tone = /차분|침착|냉정|calm/.test(t) ? "calm, steady" : /밝|활발|명랑|cheer/.test(t) ? "bright, energetic" : /장난|유쾌/.test(t) ? "playful, light" : /무뚝뚝|퉁명|차갑/.test(t) ? "low, blunt" : /부드|다정|따뜻/.test(t) ? "soft, warm" : "natural, clear";
+  return [tone, g ? `${g} voice` : "voice", age, "natural Korean speech"].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+export const voiceOf = (c: Pick<DramaCharacter, "voice" | "gender" | "age" | "personality" | "speech">) => c.voice?.trim() || recommendedVoice(c);
 export const DEFAULT_SHOT_SEC = 5;
 
 /** 장면의 샷 (순서대로) */
@@ -115,7 +129,7 @@ export function shotVideoPrompt(p: DramaProject, scene: DramaScene, shot: DramaS
     ? dialogueLines(shot.dialogue, 4).map((d) => {
         const c = cast.find((x) => isCharacter(x, d.speaker)) ?? p.characters.find((x) => isCharacter(x, d.speaker));
         const b = c ? blocks.find((x) => x.name === c.name) : null;
-        return `${c ? who(c) : d.speaker}${b && blocks.length > 1 ? ` (${b.position})` : ""}${c?.voice ? ` [voice: ${c.voice}]` : ""} says in Korean: "${d.line}"`;
+        return `${c ? who(c) : d.speaker}${b && blocks.length > 1 ? ` (${b.position})` : ""}${c ? ` [voice: ${voiceOf(c)}]` : ""} says in Korean: "${d.line}"`;
       })
     : [];
   const refs =

@@ -1,6 +1,6 @@
 # AI 패션 피드·릴스 (v0.9.103)
 
-Instagram › AI 패션 피드·릴스 (`/instagram/fashion`, 기능 id `ig-fashion`).
+AI 패션 사진·영상 메뉴 (v0.9.116 부터 따로 메뉴, 주소는 그대로 `/instagram/fashion`, 기능 id `ig-fashion`).
 
 ## 레퍼런스 분석 (reference/fashion — 남의 릴스라 저장소·배포에서 제외)
 - 릴스 20개: 대부분 10~15초, **같은 모델·같은 배경·같은 자리에서 옷만 바뀜** (LOOK1~6, 룩마다 1.5~3초, 하드 컷)

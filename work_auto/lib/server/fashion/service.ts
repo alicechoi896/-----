@@ -158,11 +158,11 @@ async function writeCopy(p: FashionProject, regroup: boolean): Promise<{ title: 
     messages: [
       {
         role: "system",
-        content: `당신은 한국 인스타그램 패션 릴스·피드 기획자다. 레퍼런스 공식: 같은 모델·같은 배경에서 옷만 바뀌는 LOOK1~6, 위쪽에 끝까지 고정되는 공감 한 줄('POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나' 같은), 룩마다 짧은 한 줄. 한국어로 쓴다. 답은 JSON 객체 하나로만 (설명·마크다운 없이). 형식: {"title":"…","pov":"…","cta":"…","looks":[{"items":[1,2],"caption":"…","pose":"…"}]}`,
+        content: `당신은 한국 인스타그램 패션 릴스·피드 기획자다. 레퍼런스 공식: 같은 모델·같은 배경에서 옷만 바뀌는 LOOK1~6, 위쪽에 끝까지 고정되는 공감 한 줄('POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나' 같은), 룩마다 짧은 한 줄. title·pov·cta·caption 은 반드시 한국어로만 쓴다 (영어 문장 금지, 상품명의 영문 브랜드만 그대로). pose 만 영어. 답은 JSON 객체 하나로만 (설명·마크다운 없이). 형식: {"title":"…","pov":"…","cta":"…","looks":[{"items":[1,2],"caption":"…","pose":"…"}]}`,
       },
       {
         role: "user",
-        content: `[주제] ${p.settings.theme}\n[배경] ${backgroundEn(p.settings)}\n[상품 목록]\n${items || "(없음)"}\n${!regroup && p.looks.length ? `[지금 룩 묶음 — 그대로 두고 문구만]\n${current}\n` : ""}\n만들 것:\n- title: 프로젝트 제목 (20자 안)\n- pov: 위쪽 고정 공감 문구, 'POV:' 로 시작, 35자 안, 상황·감정이 보이게\n- cta: 마지막 댓글 안내 (예: 댓글에 '링크' 남기면 DM 으로 보내드려요), 35자 안\n- looks: ${!regroup && p.looks.length ? `지금 룩 ${p.looks.length}개 순서 그대로 (items 는 지금 번호 그대로)` : "상품 번호로 룩 3~6개 묶기 (한 룩 = 상의/원피스 + 하의 + 신발·가방 등 함께 입을 것, 같은 상품을 여러 룩에 써도 됨)"}, caption = 룩 한 줄 (15자 안, 예: '하객룩은 차분하게'), pose = 영어 자세 한 문장 (룩마다 조금씩 다르게, 전신이 보이게)`,
+        content: `[주제] ${p.settings.theme}\n[배경] ${backgroundEn(p.settings)}\n[상품 목록]\n${items || "(없음)"}\n${!regroup && p.looks.length ? `[지금 룩 묶음 — 그대로 두고 문구만]\n${current}\n` : ""}\n만들 것:\n- title: 프로젝트 제목 (20자 안)\n- pov: 위쪽 고정 공감 문구, 'POV:' 로 시작, 35자 안, 상황·감정이 보이게\n- cta: 마지막 댓글 안내 (예: 댓글에 '링크' 남기면 DM 으로 보내드려요), 35자 안\n- looks: ${!regroup && p.looks.length ? `지금 룩 ${p.looks.length}개 순서 그대로 (items 는 지금 번호 그대로)` : "상품 번호로 룩 3~6개 묶기 (한 룩 = 상의/원피스 + 하의 + 신발·가방 등 함께 입을 것, 같은 상품을 여러 룩에 써도 됨)"}, caption = 룩 한 줄 (15자 안, 예: '하객룩은 차분하게'), pose = 영어 자세 한 문장 (룩마다 조금씩 다르게, 전신이 보이게)\n\n중요: title·pov·cta·caption 은 모두 한국어 (예: 'POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나', '하객룩은 차분하게').`,
       },
     ],
     outputKeys: ["title", "pov", "cta", "looks"],

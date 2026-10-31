@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Clapperboard, ListPlus, Mic, Plus, ScanFace, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { Badge, Button, Input, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import { VIDEO_MODELS, MODE_LABEL, durationChoices, modelOptionLabel, estimateImageCredits, fitDuration, videoModel } from "@/lib/drama-studio/models";
-import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, approvedShotImage, dialogueFit, emptyShot, shotCode, shotCostSummary, shotsOf } from "@/lib/drama-studio/shots";
+import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, recommendedVoice, approvedShotImage, dialogueFit, emptyShot, shotCode, shotCostSummary, shotsOf } from "@/lib/drama-studio/shots";
 import { buildTimeline } from "@/lib/drama-studio/steps";
 import type { DramaClip, DramaImage, DramaShot, ShotKind } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
@@ -354,15 +354,16 @@ function CharacterVoices({ ctl }: { ctl: ProjectCtl }) {
   return (
     <div className="rounded-control border border-line p-2" data-character-voices>
       <button type="button" className="flex w-full items-center gap-1.5 text-left text-[12.5px] font-medium" onClick={() => setOpen((x) => !x)}>
-        <Mic className="size-3.5" /> 인물 목소리 설정 ({p.characters.filter((c) => c.voice?.trim()).length}/{p.characters.length}) {open ? "▲" : "▼"}
+        <Mic className="size-3.5" /> 인물 목소리 설정 (직접 고친 인물 {p.characters.filter((c) => c.voice?.trim()).length}/{p.characters.length} · 나머지는 추천 목소리) {open ? "▲" : "▼"}
       </button>
       {open && (
         <div className="mt-2 space-y-1.5">
-          <Notice tone="info">AI 음성(영상과 함께 생성)에 들어갈 목소리 설명입니다. 별도 음성 파일은 샷마다 [음성: 올린 파일]로 넣습니다. 따로 립싱크 API 는 쓰지 않고, 대사 샷은 영상을 보고 [싱크 확인함]을 체크합니다.</Notice>
+          <Notice tone="info">AI 영상 모델이 대사 소리를 만들 때 넣는 목소리 설명입니다 (비워 두면 성별·나이·말투로 고른 추천 목소리). 모델이 클립마다 목소리를 새로 만들어 완전히 같은 목소리는 보장되지 않습니다. 별도 음성 파일은 샷마다 [음성: 올린 파일]로 넣습니다. 따로 립싱크 API 는 쓰지 않고, 대사 샷은 영상을 보고 [싱크 확인함]을 체크합니다.</Notice>
           {p.characters.map((c) => (
             <label key={c.id} className="flex items-center gap-2 text-[12.5px]">
               <span className="w-20 shrink-0 truncate font-medium">{c.name}</span>
-              <Input value={c.voice ?? ""} onChange={(e) => ctl.edit("characters", p.characters.map((x) => (x.id === c.id ? { ...x, voice: e.target.value.slice(0, 120) } : x)))} placeholder="예: low calm male voice in his 30s, slightly husky" className="h-8 flex-1 text-[12.5px]" />
+              <Input value={c.voice ?? recommendedVoice(c)} onChange={(e) => ctl.edit("characters", p.characters.map((x) => (x.id === c.id ? { ...x, voice: e.target.value.slice(0, 120) } : x)))} placeholder={recommendedVoice(c)} className="h-8 flex-1 text-[12.5px]" />
+              {!c.voice?.trim() && <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] text-brand">추천</span>}
             </label>
           ))}
         </div>

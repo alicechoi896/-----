@@ -136,9 +136,10 @@ describe("v0.9.108 모델 최대 길이 표시", async () => {
   const { VIDEO_MODELS, lengthLabel, modelOptionLabel, videoModel } = await import("@/lib/drama-studio/models");
   it("7개 비교 모델이 모두 있고 최대 길이를 붙인다", () => {
     for (const id of ["veo-3-1-lite", "grok-imagine-1-5", "minimax-h3", "pixverse-v6-max", "seedance-2-mini", "seedance-2-fast", "kling-3"]) expect(VIDEO_MODELS.some((m) => m.id === id)).toBe(true);
-    expect(modelOptionLabel(videoModel("veo-3-1-lite")!)).toBe("Veo 3.1 Lite · 최대 8초");
+    expect(modelOptionLabel(videoModel("veo-3-1-lite")!)).toBe("Veo 3.1 Lite · 최대 8초 · 가격 확인 안 됨");
+    expect(modelOptionLabel(videoModel("seedance-2-mini")!)).toBe("Seedance 2.0 Mini · 최대 15초 · 5초 약 41크레딧($0.21)");
     expect(lengthLabel(videoModel("veo-3-1-lite")!)).toBe("4·6·8초");
-    expect(modelOptionLabel(videoModel("seedance-2-5")!)).toBe("Seedance 2.5 · 최대 30초");
+    expect(modelOptionLabel(videoModel("seedance-2-5")!)).toContain("Seedance 2.5 · 최대 30초 · 5초 약 85크레딧");
     expect(lengthLabel(videoModel("kling-3")!)).toBe("3~15초");
   });
 });

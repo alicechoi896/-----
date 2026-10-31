@@ -241,7 +241,12 @@ export const durationChoices = (m: Pick<VideoModel, "minSec" | "maxSec" | "durat
 /** 한 번에 만들 수 있는 길이 글 (예: '최대 15초', '4·6·8초') */
 export const lengthLabel = (m: Pick<VideoModel, "minSec" | "maxSec" | "durations">) => (m.durations ? `${m.durations.join("·")}초` : `${m.minSec}~${m.maxSec}초`);
 /** 모델 고르기 칸 글: 이름 · 최대 길이 */
-export const modelOptionLabel = (m: VideoModel) => `${m.label} · 최대 ${m.durations ? Math.max(...m.durations) : m.maxSec}초`;
+export const modelOptionLabel = (m: VideoModel) => {
+  const per = m.creditsPerSecByRes?.[m.defaultResolution] ?? m.minCreditsPerSec;
+  const sec = m.durations ? Math.min(...m.durations.filter((d) => d >= 5), Math.max(...m.durations)) : 5;
+  const cost = per ? ` · ${sec}초 약 ${Math.round(per * sec)}크레딧($${(per * sec * CREDIT_USD).toFixed(2)})${m.creditsPerSecByRes ? "" : "~"}` : " · 가격 확인 안 됨";
+  return `${m.label} · 최대 ${m.durations ? Math.max(...m.durations) : m.maxSec}초${cost}`;
+};
 
 /** Kie 에 보낼 model 값 (방식마다 다른 모델) */
 export const kieModelOf = (modelId: string, mode: GenMode) => {

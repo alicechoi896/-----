@@ -2,7 +2,7 @@
 
 같은 인물 사진·같은 장면을 여러 AI 영상 모델로 만들어 **인물 유지 · 한국어 대사 · 움직임**을 비교한다. 결과를 보고 드라마 모드에 쓸 모델을 고른다.
 
-- 화면: 공통 도구 › AI 드라마 시험 `/tools/drama-test` (`features/drama-test/DramaTestWorkspace.tsx`), 기능 id `drama-test`
+- 화면: AI 드라마 › AI 드라마 스튜디오 › [모델 비교 시험] 탭 `/tools/drama-test` (v0.9.116 부터 AI 드라마 메뉴) (`features/drama-test/DramaTestWorkspace.tsx`), 기능 id `drama-test`
 - 서버: `lib/server/drama/service.ts` · 프롬프트 `lib/drama/prompt.ts` · 모델·가격 `lib/drama/config.ts` · Provider `lib/server/providers/video-ai/kie.ts` (`uploadImage`, `createTask`)
 
 ## 흐름

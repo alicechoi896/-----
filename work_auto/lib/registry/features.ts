@@ -203,9 +203,9 @@ export const FEATURES: FeatureDef[] = [
   },
   {
     id: "ig-fashion",
-    channelId: "instagram",
-    order: 2,
-    title: "AI 패션 피드·릴스",
+    channelId: "fashion",
+    order: 1,
+    title: "AI 패션 사진·영상",
     description: "쿠팡 상품(링크·사진·제품 라이브러리)으로 AI 모델이 입은 룩을 만들어, 같은 모델·같은 배경에서 옷만 바뀌는 릴스(LOOK1~6, 위쪽 POV 문구)와 '착용 사진 + 제품 사진' 피드 카드를 만듭니다. 실제 사진은 살짝 다른 얼굴로 바꿔 씁니다.",
     href: "/instagram/fashion",
     icon: Shirt,
@@ -347,8 +347,8 @@ export const FEATURES: FeatureDef[] = [
   },
   {
     id: "drama-test",
-    channelId: "tools",
-    order: 5,
+    channelId: "drama",
+    order: 1,
     title: "AI 드라마 스튜디오",
     description: "아이디어만 넣으면 아이디어 20개 → 선택 → 로그라인 → 등장인물 → 캐릭터 시트 → 시나리오 → 스토리보드 → 영상 제작·편집·병합까지 8단계로 쇼츠 드라마를 만듭니다. 단계마다 검토·수정·승인하고, 프로젝트로 저장돼 이어서 작업합니다. [모델 비교 시험] 탭에서 기존 AI 드라마 시험도 쓸 수 있습니다.",
     href: "/tools/drama-test",
