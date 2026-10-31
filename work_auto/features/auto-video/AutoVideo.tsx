@@ -20,6 +20,7 @@ interface Item {
   keyword: string;
   reason: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
+  source?: "schedule" | "test";
   videos?: number;
   step?: string;
   error?: string | null;
@@ -39,7 +40,7 @@ interface Data {
   dates: string[];
   date: string;
   today: string;
-  run: { date: string; createdAt: string; items: Item[]; note?: string | null } | null;
+  run: { date: string; createdAt: string; items: Item[]; note?: string | null; scheduledAt?: string | null } | null;
   urls: Record<string, string>;
   limits: { maxCount: number; repeatDays: number; minVideos: number };
   eligibility: { total: number; eligible: number; noVideo: number; fewVideo: number; recent: number } | null;
@@ -177,6 +178,10 @@ export function AutoVideo() {
         }
         data-auto-report
       >
+        <p className="mb-3 text-[12.5px] text-fg-muted" data-auto-scheduled>
+          새벽 자동 실행 (05:00): {data.run?.scheduledAt ? <b className="text-success">이날 실행함 ({new Date(data.run.scheduledAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})</b> : data.date === data.today ? <b>{s.enabled ? "아직 안 함 (05:00 에 실행 — 시험 실행과 따로)" : "꺼져 있음"}</b> : "이날은 실행하지 않음"}
+          {" · "}새벽 자동 {items.filter((x) => x.source === "schedule").length}개 · 시험 실행 {items.filter((x) => x.source !== "schedule").length}개
+        </p>
         {data.run?.note && <Notice tone="info" className="mb-3">{data.run.note}</Notice>}
         {!items.length ? (
           <EmptyState compact title="이날 만든 영상이 없습니다" description={s.enabled ? "매일 05:00 에 시작합니다. 지금 보려면 [지금 시험 실행]을 눌러 주세요." : "자동 제작을 켜면 매일 05:00 에 시작합니다."} />
@@ -193,7 +198,7 @@ export function AutoVideo() {
         open={ask}
         onClose={() => setAsk(false)}
         title="지금 시험 실행"
-        description="오늘 남은 항목이 있으면 그중 1개를, 없으면 새 제품을 골라(오늘·최근 7일 안에 만든 제품 제외) 1개를 바로 만듭니다 (5~10분). AI 글·AI 음성 비용이 듭니다. 자동으로 다시 시도하지 않습니다."
+        description="새 제품을 골라(오늘·최근 7일 안에 만든 제품 제외) 1개를 바로 만듭니다 (5~10분). '시험 실행'으로 따로 표시되고, 새벽 자동 실행(05:00)은 이것과 상관없이 설정한 개수를 따로 고릅니다. AI 글·AI 음성 비용이 듭니다."
         footer={
           <>
             <Button variant="secondary" onClick={() => setAsk(false)}>
@@ -209,7 +214,7 @@ export function AutoVideo() {
           새로 고를 제품 수 (남은 항목이 없을 때)
           <Select value={String(testCount)} options={[1, 2, 3, 5, 10].map((n) => ({ value: String(n), label: `${n}개` }))} onChange={(e) => setTestCount(Number(e.target.value))} className="h-8 w-20" />
         </label>
-        <p className="mt-2 text-[12px] text-fg-subtle">지금은 1개만 만들고, 남은 항목은 다시 누르거나 새벽 자동 실행(켜져 있으면 내일)에서 이어집니다.</p>
+        <p className="mt-2 text-[12px] text-fg-subtle">지금은 1개만 만들고, 남은 시험 항목은 다시 누르면 이어서 만듭니다. 시험으로 만든 제품은 7일 동안 새벽 자동에서 다시 고르지 않습니다 (같은 제품 중복 방지).</p>
       </Modal>
     </div>
   );
@@ -235,6 +240,7 @@ function ReportItem({ it, k, url, date, onDone, onError }: { it: Item; k: number
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
         <span className="tabular font-semibold text-fg-subtle">{k + 1}</span>
         <Badge tone={st.tone}>{st.label}</Badge>
+        <Badge tone={it.source === "schedule" ? "brand" : "neutral"}>{it.source === "schedule" ? "새벽 자동" : "시험 실행"}</Badge>
         <span className="font-semibold">{it.productName}</span>
         <span className="text-fg-subtle">키워드 {it.keyword}</span>
         {it.videos != null && <span className="text-fg-subtle">· 샤오홍슈 영상 {it.videos}개</span>}

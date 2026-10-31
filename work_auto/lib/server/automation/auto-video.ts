@@ -39,6 +39,8 @@ export interface AutoItem {
   keyword: string;
   reason: string;
   status: AutoItemStatus;
+  /** v0.9.111: 새벽 자동(schedule) / [지금 시험 실행](test) — 서로 영향을 주지 않는다 */
+  source?: "schedule" | "test";
   /** 고를 때 연결돼 있던 샤오홍슈 영상 수 */
   videos?: number;
   step?: string;
@@ -60,6 +62,8 @@ export interface AutoItem {
 export interface AutoRun {
   date: string;
   createdAt: string;
+  /** v0.9.111: 이날 새벽 자동 실행(05:00)이 제품을 골랐는가 — 시험 실행만 있었으면 false */
+  scheduledAt?: string | null;
   items: AutoItem[];
   note?: string | null;
 }
@@ -211,20 +215,28 @@ export async function chooseProducts(count: number, exclude: Set<string> = new S
   }
 }
 
-/** 오늘 실행 만들기 (이미 있으면 그대로) */
-export async function startRun(date = kstDate(), countOverride?: number): Promise<AutoRun> {
+/**
+ * 오늘 실행 만들기.
+ * - source "schedule"(새벽 05:00): 이날 새벽 자동이 아직 안 골랐으면 설정한 개수를 고른다. [지금 시험 실행]으로 생긴 항목이 먼저 있어도 따로 더한다
+ *   (시험 실행 때문에 새벽 자동이 건너뛰어지지 않게). 이미 골랐으면 그대로 (크론이 두 번 불려도 한 번만)
+ * - source "test"([지금 시험 실행]): 실행이 없을 때만 새로 만든다
+ */
+export async function startRun(date = kstDate(), countOverride?: number, source: "schedule" | "test" = "schedule"): Promise<AutoRun> {
   const existing = await readRun(date);
-  if (existing) return existing;
+  if (existing && (source === "test" || existing.scheduledAt)) return existing;
   const settings = await readSettings();
-  const { picks, note } = await chooseProducts(countOverride ?? settings.count);
+  const count = countOverride ?? settings.count;
+  const base: AutoRun = existing ?? { date, createdAt: now(), items: [], note: null, scheduledAt: null };
+  const { picks, note } = await chooseProducts(count, new Set(base.items.map((x) => x.productId)));
+  const start = base.items.length;
   const run: AutoRun = {
-    date,
-    createdAt: now(),
+    ...base,
     note,
-    items: picks.map((x, i) => ({ id: `ai_${date.replace(/-/g, "")}_${i + 1}`, ...x, status: "pending" })),
+    scheduledAt: source === "schedule" ? now() : (base.scheduledAt ?? null),
+    items: [...base.items, ...picks.map((x, i) => ({ id: `ai_${date.replace(/-/g, "")}_${start + i + 1}`, ...x, source, status: "pending" as const }))],
   };
   await saveRun(run);
-  console.info("[AutoVideo] start", JSON.stringify({ date, items: run.items.length, note }));
+  console.info("[AutoVideo] start", JSON.stringify({ date, source, added: picks.length, total: run.items.length, note }));
   return run;
 }
 
@@ -232,12 +244,12 @@ export async function startRun(date = kstDate(), countOverride?: number): Promis
  * v0.9.110 [지금 시험 실행]은 언제든: 오늘 실행에 남은 항목이 없으면 새 제품을 골라 덧붙인다
  * (오늘 이미 고른 제품·최근 7일 안에 만든 제품은 빼고, 샤오홍슈 영상 연결 조건 그대로)
  */
-export async function addItems(date: string, count: number): Promise<AutoRun> {
-  const run = (await readRun(date)) ?? { date, createdAt: now(), items: [], note: null };
+export async function addItems(date: string, count: number, source: "schedule" | "test" = "test"): Promise<AutoRun> {
+  const run: AutoRun = (await readRun(date)) ?? { date, createdAt: now(), items: [], note: null, scheduledAt: null };
   const { picks, note } = await chooseProducts(count, new Set(run.items.map((x) => x.productId)));
   if (!picks.length) throw new AppError("NO_PRODUCT", note ?? "지금 만들 수 있는 제품이 없습니다.", 409);
   const start = run.items.length;
-  run.items.push(...picks.map((x, i) => ({ id: `ai_${date.replace(/-/g, "")}_${start + i + 1}`, ...x, status: "pending" as const })));
+  run.items.push(...picks.map((x, i) => ({ id: `ai_${date.replace(/-/g, "")}_${start + i + 1}`, ...x, source, status: "pending" as const })));
   run.note = note;
   await saveRun(run);
   return run;
@@ -364,7 +376,7 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
 }
 
 /** 5분마다: 진행 중인 것이 없으면 다음 1개를 만든다. 오래 멈춘 것은 실패로 */
-export async function tick(date = kstDate()): Promise<{ did: string | null; left: number }> {
+export async function tick(date = kstDate(), source?: "schedule" | "test"): Promise<{ did: string | null; left: number }> {
   const run = await readRun(date);
   if (!run) return { did: null, left: 0 };
   const running = run.items.find((x) => x.status === "running");
@@ -372,7 +384,10 @@ export async function tick(date = kstDate()): Promise<{ did: string | null; left
     if (Date.now() - Date.parse(running.startedAt ?? run.createdAt) < AUTO_LIMITS.staleMs) return { did: null, left: run.items.filter((x) => x.status === "pending").length };
     await patchItem(date, running.id, { status: "failed", error: "시간 안에 끝나지 않았습니다 (다음 항목으로 넘어감).", finishedAt: now() });
   }
-  const next = run.items.find((x) => x.status === "pending");
+  const pending = run.items.filter((x) => x.status === "pending");
+  // 새벽: 새벽 자동 항목 먼저 / 시험: 시험 항목 먼저 (없으면 남은 것)
+  // 구분값이 없는 예전 항목은 시험 실행으로 본다 (v0.9.111 전에는 새벽 자동이 돈 적이 없음)
+  const next = pending.find((x) => (x.source ?? "test") === (source ?? "schedule")) ?? pending[0];
   if (!next) return { did: null, left: 0 };
   await produceItem(date, next.id);
   const after = await readRun(date);

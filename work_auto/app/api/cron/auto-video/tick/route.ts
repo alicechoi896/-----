@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const r = await runAsAutomation(async () => {
       const s = await readSettings();
       if (!s.enabled) return { skipped: "꺼져 있음" };
-      return tick();
+      return tick(undefined, "schedule");
     });
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {
