@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AiOptionsCard } from "./AiOptionsCard";
 import { BarChart3, Compass, FileText, GraduationCap, Hash, History, MessageSquare, Package, Palette, Plus } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -56,6 +57,7 @@ export function AiLearningCenter({
 
   return (
     <div className="space-y-6">
+      <AiOptionsCard />
       <section className="rounded-card border border-line bg-subtle/70 px-5 py-4">
         <p className="text-[13px] font-semibold text-fg">AI 생성 흐름</p>
         <p className="mt-0.5 text-xs text-fg-subtle">AI는 아무 정보 없이 호출되지 않습니다. 생성할 때마다 아래 데이터를 불러와 Context로 함께 전달합니다.</p>

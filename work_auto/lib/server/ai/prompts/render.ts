@@ -1,4 +1,5 @@
 import "server-only";
+import { PSYCHOLOGY_GUIDE } from "../../settings/ai-options";
 import { HONESTY_RULE_TEXT } from "@/lib/domain/honesty";
 import type { GeneratorConfig, OutputSection } from "@/lib/generators/types";
 import type { RawProductData } from "@/lib/types";
@@ -285,6 +286,7 @@ export function renderContentPrompt(
     ...contextBlocks(ctx),
     block("사용자 입력", userInput),
     outputFormat(config.outputs),
+    ctx.psychology ? block("마케팅 심리 원칙 (켜져 있음 — 대본 포맷·말끝 규칙이 우선)", PSYCHOLOGY_GUIDE) : "",
     ending ? block("마지막 확인 — 대본 말끝 (가장 중요)", [ending, "출력하기 전에 대본의 줄마다 말끝을 다시 보고, 규칙과 다르면 내용은 그대로 두고 말끝만 고친다. Hook·CTA·제목도 같은 말끝으로."]) : "",
   ]
     .filter(Boolean)

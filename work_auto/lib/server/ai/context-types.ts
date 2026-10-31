@@ -44,6 +44,8 @@ export interface GenerationContext {
   scriptFormat: ScriptFormat | null;
   /** full: 영상·클립 (대본 구조 + 제목) / titles: 블로그 (잘된 제목만 제목 패턴으로) */
   scriptFormatUse: "full" | "titles";
+  /** v0.9.118 마케팅 심리 원칙 적용 (AI 학습 관리에서 켜고 끔) */
+  psychology?: boolean;
   /** Keyword Intelligence (v0.9.40): 1단계·블로그 생성 직전에 모은 실제 플랫폼 키워드 후보. 2단계는 1단계 것을 재사용 */
   keywordIntel?: KeywordIntelligence | null;
   /** 정직성 가드레일 활성화 여부 (실제 경험 미입력) */
