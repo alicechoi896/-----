@@ -740,7 +740,7 @@ function JobPanel({
 }
 
 /** 자막 글꼴·글자색·테두리색·크기 (v0.9.63) — 영상에는 서버가 같은 값으로 그린다 */
-function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange: (v: CaptionStyle) => void }) {
+export function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange: (v: CaptionStyle) => void }) {
   const set = (patch: Partial<CaptionStyle>) => onChange({ ...value, ...patch });
   const shadow = value.stroke === "none" ? "none" : [-3, 3].flatMap((x) => [-3, 3].map((y) => `${x}px ${y}px 0 ${value.stroke}`)).join(",");
   return (
@@ -788,7 +788,7 @@ function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange
 }
 
 /** 상단 제목 스타일 (v0.9.64): 글꼴·1줄 색·2줄 색·띠 색 */
-function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v: TitleStyle) => void }) {
+export function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v: TitleStyle) => void }) {
   const set = (patch: Partial<TitleStyle>) => onChange({ ...value, ...patch });
   const swatches = (key: "line1" | "line2") => (
     <>
@@ -848,7 +848,7 @@ function TitleStylePicker({ value, onChange }: { value: TitleStyle; onChange: (v
 }
 
 /** 타입캐스트 목소리 고르기 (v0.9.73): 목록(무료, 1시간 기억)에서 이름으로 찾아 샘플을 듣고 고르거나, 목소리 ID 를 직접 넣는다 */
-function TypecastVoicePicker({
+export function TypecastVoicePicker({
   channelId,
   ready,
   value,

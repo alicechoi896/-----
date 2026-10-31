@@ -4,12 +4,30 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, CalendarPlus, Play, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { Badge, Button, CopyButton, EmptyState, ErrorState, Input, LoadingState, Modal, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { api, type VideoProductionOptions } from "@/lib/api-client";
+import { DEFAULT_CAPTION_STYLE, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
+import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker } from "@/features/video-production/VideoProductionWorkspace";
+
+/** v0.9.121: 자동 제작 목소리·자막·제목 스타일 (영상 제작 화면과 같은 항목) */
+interface AutoStyle {
+  voice?: string;
+  ttsEngine?: "openai" | "typecast";
+  ttsEmotion?: string;
+  voiceStyle?: string;
+  voiceSpeed?: number;
+  maxPauseSec?: number;
+  captionStyle?: CaptionStyle;
+  titleStyle?: TitleStyle;
+  narrationOn?: boolean;
+  captions?: boolean;
+}
 
 /** 제품 홍보 영상 자동 제작 (v0.9.107) — 설정 + 아침 보고 (영상·제목·설명·키워드·태그 → 업로드 관리 예약) */
 interface Settings {
   enabled: boolean;
   count: number;
   length: "15s" | "30s";
+  style?: AutoStyle | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -147,7 +165,7 @@ export function AutoVideo() {
   return (
     <div className="space-y-6" data-auto-video>
       {error && <Notice tone="warning">{error}</Notice>}
-      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 가장 최근에 직접 만든 영상 설정을 따릅니다. 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
+      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-[14px] font-medium">
             <input type="checkbox" checked={s.enabled} disabled={Boolean(busy)} onChange={(e) => void save({ enabled: e.target.checked })} className="size-4 accent-[var(--color-brand)]" data-auto-enabled />
@@ -183,6 +201,8 @@ export function AutoVideo() {
         )}
         <p className="mt-3 text-[12px] text-fg-subtle">비용(영상 1개): AI 글 약 4~5회 + AI 음성 1편 + 샤오홍슈 글자 확인(AI 이미지 읽기, 처음 쓰는 영상만). YouTube 검색은 무료 한도 안. 완성 영상 파일은 7일 동안 보관됩니다 (받으면 1시간 뒤 지움).</p>
       </SectionCard>
+
+      <AutoStyleCard saved={s.style ?? null} busy={Boolean(busy)} onSave={(style) => save({ style })} />
 
       <SectionCard
         title={`${data.date === data.today ? "오늘" : data.date} 결과 · ${items.filter((x) => x.status === "done").length}/${items.length}개 완성`}
@@ -303,6 +323,82 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove }: { it: Item;
         </div>
       )}
     </li>
+  );
+}
+
+/** 영상 스타일 (v0.9.121): 영상 제작 화면과 같은 항목 — [저장]을 누르면 새벽 자동·시험 실행에 적용 */
+function AutoStyleCard({ saved, busy, onSave }: { saved: AutoStyle | null; busy: boolean; onSave: (s: AutoStyle) => Promise<void> }) {
+  const [opts, setOpts] = useState<VideoProductionOptions | null>(null);
+  const [st, setSt] = useState<AutoStyle>(() => saved ?? {});
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    void api.videoProduction.options("youtube").then(setOpts).catch(() => setOpts(null));
+  }, []);
+  const set = (patch: Partial<AutoStyle>) => {
+    setSt((x) => ({ ...x, ...patch }));
+    setDirty(true);
+  };
+  const engine = st.ttsEngine ?? "typecast";
+  const narrationOn = st.narrationOn !== false;
+  const captionsOn = st.captions !== false;
+  const speed = st.voiceSpeed ?? DEFAULT_VOICE_SPEED;
+  const pause = st.maxPauseSec ?? DEFAULT_PAUSE;
+  return (
+    <SectionCard
+      title="영상 스타일"
+      icon={Settings2}
+      description={saved ? "저장한 목소리·자막·제목 스타일로 자동 제작합니다." : "아직 저장 안 함 — 지금은 가장 최근에 직접 만든 영상 설정을 씁니다. 고른 뒤 [스타일 저장]을 눌러 주세요."}
+      actions={
+        <Button size="sm" variant="primary" disabled={busy || !dirty || (narrationOn && engine === "typecast" && !st.voice)} onClick={() => void onSave({ ...st, ttsEngine: engine, narrationOn, captions: captionsOn, voiceSpeed: speed, maxPauseSec: pause }).then(() => setDirty(false))} data-auto-style-save>
+          스타일 저장
+        </Button>
+      }
+      data-auto-style
+    >
+      {!opts ? (
+        <LoadingState label="목소리 목록 준비 중…" />
+      ) : (
+        <div className="space-y-4 text-[13px]">
+          <div className="space-y-1">
+            <span className="text-[12px] font-medium text-fg-muted">말 사이 무음 없애기</span>
+            <SegmentedControl size="sm" value={String(pause)} onChange={(v) => set({ maxPauseSec: Number(v) })} options={PAUSE_OPTIONS.map((x) => ({ value: String(x), label: `${x}초 넘으면` }))} />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input type="checkbox" checked={narrationOn} onChange={(e) => set({ narrationOn: e.target.checked })} className="accent-[var(--color-brand)]" />
+              AI 음성 넣기
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input type="checkbox" checked={captionsOn} onChange={(e) => set({ captions: e.target.checked })} className="accent-[var(--color-brand)]" />
+              자막 넣기
+            </label>
+          </div>
+          {narrationOn && (
+            <>
+              <div className="space-y-1">
+                <span className="text-[12px] font-medium text-fg-muted">음성 엔진</span>
+                <SegmentedControl size="sm" value={engine} onChange={(v) => set({ ttsEngine: v as "openai" | "typecast", voice: undefined })} options={[{ value: "openai", label: "OpenAI" }, { value: "typecast", label: "타입캐스트" }]} />
+              </div>
+              {engine === "typecast" ? (
+                <TypecastVoicePicker channelId="youtube" ready={opts.ready.typecast} value={st.voice ?? ""} onChange={(id) => set({ voice: id })} emotion={st.ttsEmotion ?? "normal"} onEmotion={(v) => set({ ttsEmotion: v })} emotions={opts.typecastEmotions} />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Select value={st.voice ?? opts.voices[0]?.value ?? ""} options={opts.voices.map((v) => ({ value: v.value, label: v.label }))} onChange={(e) => set({ voice: e.target.value })} aria-label="AI 음성 목소리" />
+                  <Select value={st.voiceStyle ?? "shorts"} options={opts.voiceStyles} onChange={(e) => set({ voiceStyle: e.target.value })} aria-label="말투" />
+                </div>
+              )}
+              <div className="space-y-1">
+                <span className="text-[12px] font-medium text-fg-muted">말하기 속도</span>
+                <SegmentedControl size="sm" value={String(speed)} onChange={(v) => set({ voiceSpeed: Number(v) })} options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 0 ? "자동" : x === 1 ? "보통" : `${x}배` }))} />
+              </div>
+            </>
+          )}
+          <TitleStylePicker value={st.titleStyle ?? DEFAULT_TITLE_STYLE} onChange={(v) => set({ titleStyle: v })} />
+          {captionsOn && <CaptionStylePicker value={st.captionStyle ?? DEFAULT_CAPTION_STYLE} onChange={(v) => set({ captionStyle: v })} />}
+          {narrationOn && engine === "typecast" && !st.voice && <p className="text-xs text-warning">타입캐스트 목소리를 골라야 저장할 수 있습니다.</p>}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 

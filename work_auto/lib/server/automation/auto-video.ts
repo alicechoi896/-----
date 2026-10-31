@@ -29,10 +29,34 @@ export interface AutoVideoSettings {
   count: number;
   /** 원고 길이 (15s · 30s) */
   length: "15s" | "30s";
+  /** v0.9.121: 자동 제작에 쓸 목소리·자막·제목 스타일 (없으면 가장 최근에 직접 만든 영상 설정) */
+  style?: AutoVideoStyle | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }
-export const DEFAULT_AUTO_SETTINGS: AutoVideoSettings = { enabled: false, count: 3, length: "30s", updatedAt: null, updatedBy: null };
+export type AutoVideoStyle = Pick<VideoPlan, "voice" | "ttsEngine" | "ttsEmotion" | "voiceStyle" | "voiceSpeed" | "maxPauseSec" | "captionStyle" | "titleStyle" | "narrationOn" | "captions">;
+export const DEFAULT_AUTO_SETTINGS: AutoVideoSettings = { enabled: false, count: 3, length: "30s", style: null, updatedAt: null, updatedBy: null };
+
+/** 저장 전 정리 (값 검사는 컷 계획에서 한 번 더 — cleanCaptionStyle 등) */
+function cleanStyle(v: unknown): AutoVideoStyle | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const str = (x: unknown, n = 80) => (typeof x === "string" ? x.slice(0, n) : undefined);
+  const num = (x: unknown) => (Number.isFinite(Number(x)) ? Number(x) : undefined);
+  const obj = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? (JSON.parse(JSON.stringify(x).slice(0, 2000)) as never) : undefined);
+  return {
+    voice: str(o.voice),
+    ttsEngine: o.ttsEngine === "openai" ? "openai" : "typecast",
+    ttsEmotion: str(o.ttsEmotion, 30),
+    voiceStyle: str(o.voiceStyle, 30),
+    voiceSpeed: num(o.voiceSpeed),
+    maxPauseSec: num(o.maxPauseSec),
+    captionStyle: obj(o.captionStyle),
+    titleStyle: obj(o.titleStyle),
+    narrationOn: o.narrationOn !== false,
+    captions: o.captions !== false,
+  } as AutoVideoStyle;
+}
 
 export type AutoItemStatus = "pending" | "running" | "done" | "failed" | "skipped";
 export interface AutoItem {
@@ -133,6 +157,7 @@ export async function saveSettings(v: Partial<AutoVideoSettings>, by: string): P
     enabled: v.enabled ?? cur.enabled,
     count: Math.min(AUTO_LIMITS.maxCount, Math.max(1, Math.round(Number(v.count ?? cur.count) || 1))),
     length: v.length === "15s" ? "15s" : v.length === "30s" ? "30s" : cur.length,
+    style: v.style === undefined ? (cur.style ?? null) : cleanStyle(v.style),
     updatedAt: now(),
     updatedBy: by,
   };
@@ -461,7 +486,8 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
     await step("AI 가 대본 고르는 중", { contentId: s2.id, title });
     const pick2 = await pickBest("pick2", `제목 '${title}' 에 가장 잘 맞고 끝까지 보게 만드는 대본을 고른다.`, { script: scripts });
     await step("컷 계획 (샤오홍슈 영상 매칭·주목 효과·GIF)");
-    const voice = await lastVoiceSettings(owner);
+    // v0.9.121: 자동 제작 화면에서 저장한 스타일이 먼저, 없으면 가장 최근에 직접 만든 영상 설정
+    const voice: Partial<VideoPlan> = settings.style ?? (await lastVoiceSettings(owner));
     // 보관 파일이 있는 영상만 (링크가 만료돼도 그 파일로)
     const videoIds = (await usableVideoIds(owner)).get(item.productId) ?? [];
     // v0.9.117: 대본이 한 덩어리면 컷이 1개라 6초짜리가 나왔다 → 문장마다 줄을 나눠 컷으로
