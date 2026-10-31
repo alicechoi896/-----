@@ -450,6 +450,10 @@ export const api = {
     /** v0.9.114 TikHub 상세 1회로 영구 공유 링크 찾기 (확인 후) */
     shareLinkViaTikhub: (videoId: string) => request<{ saved: string | null; found: string[]; others: string[]; usage: { calls: number; limit: number } }>("/api/videos/vault", { method: "POST", body: json({ videoId, tikhub: true, confirmed: true }) }),
     tikhubUsage: () => request<{ calls: number; limit: number }>("/api/videos/vault"),
+    /** v0.9.134 원본 보관 현황 (보관한 영상 id) */
+    vaultStatus: () => request<{ calls: number; limit: number; stored: string[] }>("/api/videos/vault"),
+    /** v0.9.134 원본 받아 보관 (무료 경로만) */
+    keepSource: (videoId: string) => request<{ kept: boolean; reason?: string }>("/api/videos/vault", { method: "POST", body: json({ videoId, keep: true }) }),
     /** productId: 특정 제품 / "none" = 제품 연결 안 됨 / 생략 = 전체 */
     list: (productId?: string) => request<ReferenceVideo[]>(`/api/videos${qs({ productId })}`),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),

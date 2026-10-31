@@ -5,6 +5,11 @@ import { runWithoutPaidFallback } from "../automation/context";
 import { resolveXiaohongshu, xhsNoteOf } from "../providers/video/xiaohongshu-resolver";
 import { getCurrentUserId, getRepositories } from "../repositories";
 import { videoStorage } from "./storage";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { VIDEO_RENDER_CONFIG } from "@/lib/video-production/config";
+import { fetchSource } from "./source";
 
 /**
  * 샤오홍슈 영구 링크 (v0.9.113) — 앱 [공유] 의 단축 링크 xhslink.com/… 는 몇 년이 지나도 살아 있고,
@@ -144,3 +149,60 @@ export async function fetchShareLinkViaTikhub(videoId: string): Promise<{ saved:
   return { saved, found: short, others, usage: { calls: usage.calls + 1, limit: usage.limit } };
 }
 
+
+/* ───── v0.9.134 원본 계속 보관 (영상을 가져올 때 받아 둔다 — 링크가 만료돼도 영상 제작·새벽 자동 제작에 쓴다) ───── */
+export const srcKeyOf = (owner: string, videoId: string) => `${owner}/src/${videoId}.mp4`;
+
+/** 샤오홍슈 영상 원본을 받아 Storage 에 보관 (무료 경로만, TikHub 안 씀). 이미 있으면 건너뜀. 성공하면 true */
+export async function keepSource(videoId: string): Promise<{ kept: boolean; reason?: string }> {
+  const owner = await getCurrentUserId();
+  const video = await getRepositories().videos.get(String(videoId));
+  if (!video || video.userId !== owner) return { kept: false, reason: "영상을 찾지 못했습니다." };
+  if (video.platform !== "xiaohongshu") return { kept: false, reason: "샤오홍슈 영상만 보관합니다." };
+  if ((await storedVideoIds(owner)).has(video.id)) return { kept: true };
+  const dir = await mkdtemp(path.join(os.tmpdir(), "keep_"));
+  try {
+    const src = await runWithoutPaidFallback(() => fetchSource(video, dir, 0));
+    const size = (await stat(src.file).catch(() => null))?.size ?? 0;
+    if (!size) return { kept: false, reason: "원본을 받지 못했습니다." };
+    if (size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) return { kept: false, reason: "원본이 너무 큽니다 (45MB 초과)." };
+    await videoStorage.put(srcKeyOf(owner, video.id), await readFile(src.file), "video/mp4");
+    console.info("[XhsKeep]", JSON.stringify({ videoId: video.id, bytes: size }));
+    await enforceSourceQuota(owner).catch(() => undefined);
+    return { kept: true };
+  } catch (e) {
+    const reason = (e instanceof Error ? e.message : "받지 못했습니다.").slice(0, 160);
+    console.warn("[XhsKeep] fail", JSON.stringify({ videoId: video.id, reason }));
+    return { kept: false, reason };
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/** 보관한 원본 합계가 한도를 넘으면 오래된 것부터 지운다 */
+export async function enforceSourceQuota(owner?: string): Promise<{ total: number; removed: number }> {
+  const o = owner ?? (await getCurrentUserId());
+  const all: { key: string; createdAt: string | null; size?: number }[] = [];
+  for (let offset = 0; offset < 20000; offset += 1000) {
+    const rows = await videoStorage.list(`${o}/src`, { limit: 1000, offset }).catch(() => []);
+    all.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  let total = all.reduce((n, f) => n + (f.size ?? 0), 0);
+  let removed = 0;
+  const limit = VIDEO_RENDER_CONFIG.sourceKeepMaxBytes;
+  if (total <= limit) return { total, removed };
+  for (const f of [...all].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))) {
+    if (total <= limit * 0.9) break;
+    await videoStorage.remove(f.key).catch(() => undefined);
+    total -= f.size ?? 0;
+    removed++;
+  }
+  console.info("[XhsKeep] quota", JSON.stringify({ removed, total }));
+  return { total, removed };
+}
+
+/** 여러 영상을 차례로 보관 (가져오기 뒤 응답 다음에) */
+export async function keepSources(videoIds: string[]): Promise<void> {
+  for (const id of videoIds.slice(0, 40)) await keepSource(id);
+}

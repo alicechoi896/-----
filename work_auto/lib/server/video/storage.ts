@@ -57,15 +57,15 @@ export const videoStorage = {
     return error || !data ? null : Buffer.from(await data.arrayBuffer());
   },
   /** 폴더 안 파일 (이름·만든 시각) */
-  async list(folder: string, opts?: { desc?: boolean; limit?: number; offset?: number }): Promise<{ key: string; createdAt: string | null }[]> {
+  async list(folder: string, opts?: { desc?: boolean; limit?: number; offset?: number }): Promise<{ key: string; createdAt: string | null; size?: number }[]> {
     if (inMemory()) {
       const keys = [...mem().keys()].filter((k) => k.startsWith(`${folder}/`) && !k.slice(folder.length + 1).includes("/")).sort();
       if (opts?.desc) keys.reverse();
-      return keys.slice(opts?.offset ?? 0, (opts?.offset ?? 0) + (opts?.limit ?? 100)).map((key) => ({ key, createdAt: null }));
+      return keys.slice(opts?.offset ?? 0, (opts?.offset ?? 0) + (opts?.limit ?? 100)).map((key) => ({ key, createdAt: null, size: mem().get(key)?.length ?? 0 }));
     }
     const db = await createSupabaseServerClient();
     const { data } = await db.storage.from("videos").list(folder, { limit: opts?.limit ?? 100, offset: opts?.offset ?? 0, ...(opts?.desc ? { sortBy: { column: "name", order: "desc" } } : {}) });
-    return (data ?? []).filter((f) => f.id).map((f) => ({ key: `${folder}/${f.name}`, createdAt: f.created_at ?? null }));
+    return (data ?? []).filter((f) => f.id).map((f) => ({ key: `${folder}/${f.name}`, createdAt: f.created_at ?? null, size: Number((f.metadata as { size?: number } | null)?.size ?? 0) }));
   },
   memoryFile(key: string): Buffer | null {
     return inMemory() ? (mem().get(key) ?? null) : null;

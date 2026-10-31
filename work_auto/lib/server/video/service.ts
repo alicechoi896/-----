@@ -1,4 +1,5 @@
 import { isGiphyUrl, type GiphyItem } from "../providers/giphy";
+import { enforceSourceQuota } from "./vault";
 import "server-only";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -341,10 +342,8 @@ export const videoJobService = {
       await videoStorage.remove(j.outputPath!).catch(() => undefined);
       await repo.videoJobs.update(j.id, { qa: { ...j.qa, fileDeleted: true }, updatedAt: nowIso() });
     }
-    // v0.9.80: 저장해 둔 원본(다시 쓰기용)은 7일 뒤 지운다 (v0.9.113: 영구 보관 대신 xhslink 공유 링크로 매번 새로 받는다)
-    const kept = await videoStorage.list(`${userId}/src`, { limit: 1000 }).catch(() => []);
-    for (const f of kept) {
-      if (f.createdAt && Date.now() - Date.parse(f.createdAt) > VIDEO_RENDER_CONFIG.sourceCacheDays * 86_400_000) await videoStorage.remove(f.key).catch(() => undefined);
-    }
+    // v0.9.134: 원본은 계속 보관하고, 합계가 한도(30GB)를 넘을 때만 오래된 것부터 지운다 (전에는 7일 뒤 지움)
+    void userId;
+    await enforceSourceQuota().catch(() => undefined);
   },
 };

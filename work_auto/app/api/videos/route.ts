@@ -1,4 +1,7 @@
 import { requireAccess } from "@/lib/server/auth";
+import { after } from "next/server";
+import { captureUserRunner } from "@/lib/server/automation/context";
+import { keepSources } from "@/lib/server/video/vault";
 import { handle, readJson } from "@/lib/server/http";
 import { videoService } from "@/lib/server/services/videos";
 
@@ -12,6 +15,11 @@ export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("video-import");
     const { url, note } = await readJson<{ url: string; note?: string }>(request);
-    return videoService.import(url, note);
+    const v = await videoService.import(url, note);
+    if (v.platform === "xiaohongshu") {
+      const runAs = await captureUserRunner();
+      after(() => runAs(() => keepSources([v.id])).catch(() => undefined));
+    }
+    return v;
   });
 }

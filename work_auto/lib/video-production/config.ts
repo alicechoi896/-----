@@ -43,8 +43,10 @@ export const VIDEO_RENDER_CONFIG = {
   volumes: { narration: 1, bgm: 0.15, sfx: 0.55 },
   /** 받은 원본을 저장해 다시 쓸 최대 크기 (Supabase 무료 50MB 한도 안) */
   sourceCacheMaxBytes: 45 * 1024 * 1024,
-  /** 원본 저장 기간 */
+  /** 원본 저장 기간 (v0.9.134 부터 쓰지 않음 — 영상을 가져올 때 받아 계속 보관, 아래 한도를 넘으면 오래된 것부터 지움) */
   sourceCacheDays: 7,
+  /** v0.9.134 원본 보관 한도 (사용자별 합계). 넘으면 오래된 원본부터 지운다 */
+  sourceKeepMaxBytes: 30 * 1024 * 1024 * 1024,
   /** 컷 인코딩 동시 수 */
   encodeParallel: 3,
 

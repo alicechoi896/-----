@@ -1,7 +1,7 @@
 import { requireAccess } from "@/lib/server/auth";
 import { AppError, handle, readJson } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/rate-limit";
-import { relinkVideo, tikhubUsageToday } from "@/lib/server/video/vault";
+import { keepSource, relinkVideo, storedVideoIds, tikhubUsageToday } from "@/lib/server/video/vault";
 
 export const maxDuration = 60;
 
@@ -9,7 +9,7 @@ export const maxDuration = 60;
 export async function GET() {
   return handle(async () => {
     await requireAccess("video-import");
-    return tikhubUsageToday();
+    return { ...(await tikhubUsageToday()), stored: [...(await storedVideoIds())] };
   });
 }
 
@@ -21,6 +21,8 @@ export async function POST(request: Request) {
     await requireAccess("video-import");
     const b = await readJson<{ videoId?: string; url?: string; tikhub?: boolean; confirmed?: boolean }>(request);
     // v0.9.127: TikHub 로 영구 링크 받기는 뺐다 (응답에 xhslink 가 없음 — 비용만 들었다)
+    // v0.9.134: 원본 받아 보관 (무료 경로만)
+    if ((b as { keep?: boolean }).keep) return keepSource(String(b.videoId ?? ""));
     if (b.tikhub) throw new AppError("NOT_SUPPORTED", "TikHub 로는 영구 링크를 받을 수 없어 이 기능을 뺐습니다. 샤오홍슈 앱의 [공유] → 링크 복사 주소를 [공유 링크 직접 넣기]로 넣어 주세요.", 410);
     await rateLimit("video-import");
     return relinkVideo(String(b.videoId ?? ""), String(b.url ?? ""));

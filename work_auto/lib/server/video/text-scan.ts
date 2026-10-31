@@ -218,7 +218,6 @@ function decide(boxes: Box[], checked: boolean, aspect: number): Treatment {
     return crop ? { kind: "unchecked", crop } : { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
   }
   if (!boxes.length) return { kind: "clean" };
-  const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
   // 상단 제목 띠가 이미 덮는 글자(띠 안에 끝나는 것)는 여유를 넓히기 전에 뺀다
   const bar = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
   const visible = boxes.filter((b) => b.y + b.h + 0.02 > bar);
