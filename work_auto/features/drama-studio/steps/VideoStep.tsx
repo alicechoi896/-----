@@ -109,6 +109,25 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
       setUploading(false);
     }
   }
+  /** v0.9.88: 클립 모두 승인 — 같은 장면 묶음마다 가장 최근 클립 (이미 승인한 묶음은 그대로) → 원하면 타임라인에도 장면 순서대로 */
+  const approveAllClips = (alsoTimeline: boolean) => {
+    const groups = new Map<string, DramaClip[]>();
+    for (const c of p.clips) groups.set(c.sceneIds.join(",") || c.id, [...(groups.get(c.sceneIds.join(",") || c.id) ?? []), c]);
+    const pick = new Set<string>();
+    for (const list of groups.values()) {
+      if (list.some((c) => c.approved)) continue;
+      pick.add(list[list.length - 1].id);
+    }
+    const clips = p.clips.map((c) => (pick.has(c.id) ? { ...c, approved: true } : c));
+    ctl.edit("clips", clips);
+    if (alsoTimeline) {
+      const have = new Set(p.timeline.map((t) => t.clipId));
+      const order = (c: DramaClip) => Math.min(...c.sceneIds.map((id) => scenes.findIndex((x) => x.id === id)).filter((n) => n >= 0), 9999);
+      const add = clips.filter((c) => c.approved && !have.has(c.id)).sort((a, b) => order(a) - order(b));
+      if (add.length) ctl.edit("timeline", [...p.timeline, ...add.map((c) => ({ id: newId("tl"), clipId: c.id, trimStart: 0, trimEnd: 0, audio: true }))]);
+    }
+  };
+  const unapprovedClips = p.clips.filter((c) => !c.approved).length;
   const sceneLabel = (ids: string[]) => (ids.length ? ids.map((id) => `#${scenes.findIndex((s) => s.id === id) + 1}`).join("·") : "장면 없음");
 
   return (
@@ -270,7 +289,23 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
         </SectionCard>
       )}
 
-      <SectionCard title={`클립 · ${p.clips.length}개`} icon={Video} description="같은 장면을 여러 번 만들면 모두 남겨 비교할 수 있습니다. 승인한 클립만 타임라인에 넣을 수 있습니다.">
+      <SectionCard
+        title={`클립 · ${p.clips.length}개`}
+        icon={Video}
+        description="같은 장면을 여러 번 만들면 모두 남겨 비교할 수 있습니다. 승인한 클립만 타임라인에 넣을 수 있습니다. [모두 승인]은 장면마다 가장 최근 클립을 승인합니다."
+        actions={
+          p.clips.length > 0 && (
+            <span className="flex gap-1.5">
+              <Button size="sm" variant="secondary" icon={Check} disabled={!unapprovedClips} onClick={() => approveAllClips(false)} data-approve-all-clips>
+                모두 승인
+              </Button>
+              <Button size="sm" variant="primary" icon={ListPlus} onClick={() => approveAllClips(true)} data-approve-all-timeline>
+                모두 승인 + 타임라인에 순서대로
+              </Button>
+            </span>
+          )
+        }
+      >
         {!p.clips.length ? (
           <EmptyState compact title="아직 클립이 없습니다" description="위에서 영상을 만들거나 영상 파일을 올려 주세요." />
         ) : (

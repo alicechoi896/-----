@@ -12,7 +12,7 @@ import { videoStorage } from "../video/storage";
 import { projectDir } from "./store";
 import { buildVideoInput, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt } from "@/lib/drama-studio/prompts";
-import { markEdited, newId } from "@/lib/drama-studio/steps";
+import { markNewResult, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaTask, SheetKind } from "@/lib/drama-studio/types";
 
 /**
@@ -404,18 +404,18 @@ function attachResult(p: DramaProject, t: DramaTask, key: string, demoSec: numbe
     const img: DramaImage = { id: newId("im"), key, prompt: t.prompt, modelId: t.modelId, source: "ai", createdAt: at, version, approved: false, kind: t.target.sheetKind };
     list.push(img);
     t.assetId = img.id;
-    markEdited(p, "sheets");
+    markNewResult(p, "sheets");
   } else if (t.target.type === "frame") {
     const list = (p.storyboard[t.target.sceneId] ??= []);
     const img: DramaImage = { id: newId("im"), key, prompt: t.prompt, modelId: t.modelId, source: "ai", createdAt: at, version: list.length + 1, approved: false };
     list.push(img);
     t.assetId = img.id;
-    markEdited(p, "storyboard");
+    markNewResult(p, "storyboard");
   } else {
     const clip: DramaClip = { id: newId("cl"), sceneIds: t.target.sceneIds, key, source: "ai", modelId: t.modelId, mode: t.mode, prompt: t.prompt, durationSec: demoSec ?? t.durationSec ?? 5, createdAt: at, approved: false, taskId: t.id };
     p.clips.push(clip);
     t.assetId = clip.id;
-    markEdited(p, "video");
+    markNewResult(p, "video");
   }
 }
 

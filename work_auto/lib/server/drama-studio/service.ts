@@ -23,6 +23,7 @@ import {
   emptyScene,
   markDownstreamReview,
   markEdited,
+  markNewResult,
   newId,
   passed,
   snapshotOf,
@@ -68,13 +69,13 @@ async function saveMerged(owner: string, worked: DramaProject, extra?: (fresh: D
     }
     return added;
   };
-  if (union(fresh.sheets, worked.sheets)) markEdited(fresh, "sheets");
-  if (union(fresh.storyboard, worked.storyboard)) markEdited(fresh, "storyboard");
+  if (union(fresh.sheets, worked.sheets)) markNewResult(fresh, "sheets");
+  if (union(fresh.storyboard, worked.storyboard)) markNewResult(fresh, "storyboard");
   const haveClips = new Set(fresh.clips.map((c) => c.id));
   const newClips = worked.clips.filter((c) => !haveClips.has(c.id));
   if (newClips.length) {
     fresh.clips.push(...newClips);
-    markEdited(fresh, "video");
+    markNewResult(fresh, "video");
   }
   extra?.(fresh);
   return saveProject(owner, fresh, now());

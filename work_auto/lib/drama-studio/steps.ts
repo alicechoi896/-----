@@ -192,3 +192,11 @@ export function chosenLogline(s: DramaStory): string {
 
 /** 장면 번호 (순서대로 1부터) */
 export const sceneNo = (p: DramaProject, sceneId: string) => p.scenario.scenes.findIndex((s) => s.id === sceneId) + 1;
+
+/**
+ * v0.9.88: 새 결과(AI 이미지·클립)가 들어왔을 때 — 아직 시작 전이면 '작업 중'으로만. 승인한 단계는 그대로 둔다
+ * (새 이미지가 오는 것만으로는 고정·승인한 내용이 바뀌지 않으므로 승인을 풀거나 뒤 단계를 '재검토'로 만들지 않는다)
+ */
+export function markNewResult(p: DramaProject, step: StepKey): void {
+  if (p.steps[step].status === "empty") p.steps[step] = { ...p.steps[step], status: "draft" };
+}

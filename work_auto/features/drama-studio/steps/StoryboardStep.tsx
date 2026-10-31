@@ -38,6 +38,19 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
   const lastFail = (id: string) => [...tasks].reverse().find((t) => t.target.type === "frame" && t.target.sceneId === id);
   const setFrames = (id: string, list: DramaImage[]) => ctl.edit("storyboard", { ...p.storyboard, [id]: list });
   const approve = (id: string, img: DramaImage) => setFrames(id, frames(id).map((f) => ({ ...f, approved: f.id === img.id ? !img.approved : false })));
+  /** v0.9.88: 한 번에 승인 — 장면마다 가장 최근 이미지 (이미 승인한 장면은 그대로). ids 를 주면 그 장면만 */
+  const approveAll = (ids?: string[]) => {
+    const next = { ...p.storyboard };
+    for (const sc of scenes) {
+      if (ids && !ids.includes(sc.id)) continue;
+      const list = next[sc.id] ?? [];
+      if (!list.length || list.some((x) => x.approved)) continue;
+      const last = list[list.length - 1];
+      next[sc.id] = list.map((x) => ({ ...x, approved: x.id === last.id }));
+    }
+    ctl.edit("storyboard", next);
+  };
+  const unapproved = scenes.filter((sc) => frames(sc.id).length && !approvedOf(sc.id));
   const setScene = (id: string, patch: Partial<DramaScene>) => ctl.edit("scenario", { ...p.scenario, scenes: scenes.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
   const noRefs = useMemo(() => p.characters.filter((c) => !(p.sheets[c.id] ?? []).some((i) => i.approved)).map((c) => c.name), [p.characters, p.sheets]);
   const done = scenes.filter((s) => approvedOf(s.id)).length;
@@ -186,12 +199,18 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           <Button variant="primary" icon={Sparkles} disabled={Boolean(ctl.busy)} onClick={() => setConfirm((picked.length ? picked : scenes.filter((s) => !approvedOf(s.id)).map((s) => s.id)).map((sceneId) => ({ sceneId })))} data-gen-frames>
             {picked.length ? `고른 ${picked.length}장면 만들기` : "승인 안 된 장면 모두 만들기"}
           </Button>
+          <Button variant="secondary" icon={Check} disabled={!unapproved.length} onClick={() => approveAll(picked.length ? picked : undefined)} data-approve-all-frames>
+            {picked.length ? `고른 ${picked.length}장면 승인` : `이미지 있는 장면 모두 승인 (${unapproved.length})`}
+          </Button>
+          <Button variant="ghost" onClick={() => setPicked(picked.length === scenes.length ? [] : scenes.map((sc) => sc.id))} data-pick-all-frames>
+            {picked.length === scenes.length ? "전체 해제" : "전체 선택"}
+          </Button>
           <UploadButton accept="image/png,image/jpeg,image/webp" multiple onFiles={startBulk} disabled={Boolean(uploading)}>
             여러 장 한 번에 올리기
           </UploadButton>
           <SegmentedControl size="sm" className="ml-auto" value={view} onChange={setView} options={[{ value: "grid", label: "전체 보기", icon: LayoutGrid }, { value: "single", label: "한 장씩", icon: Square }]} />
         </div>
-        <p className="mt-2 text-[12px] text-fg-subtle">장면마다 이미지 1장 = 작업 1개 (콜라주로 묶지 않음). {m.note}. 카드를 끌어 놓으면 장면 순서가 바뀝니다. {scenes.some((s) => !s.en) ? "[영어 프롬프트 만들기]를 먼저 하면 한국어 시나리오를 영어 프롬프트로 바꿔 더 정확해집니다." : ""}</p>
+        <p className="mt-2 text-[12px] text-fg-subtle">장면마다 이미지 1장 = 작업 1개 (콜라주로 묶지 않음). {m.note}. 카드를 끌어 놓으면 장면 순서가 바뀝니다. [모두 승인]은 장면마다 가장 최근 이미지를 승인합니다 (다른 버전을 쓰려면 [한 장씩]에서 고르기). {scenes.some((s) => !s.en) ? "[영어 프롬프트 만들기]를 먼저 하면 한국어 시나리오를 영어 프롬프트로 바꿔 더 정확해집니다." : ""}</p>
         {noRefs.length > 0 && <Notice tone="warning" className="mt-2">기준 이미지를 고정하지 않은 인물({noRefs.join(", ")})은 글로만 그려져 얼굴이 달라질 수 있습니다. 05 캐릭터 시트에서 고정해 주세요.</Notice>}
         {uploading && <p className="mt-2 text-[12px] text-brand">{uploading}</p>}
       </SectionCard>
