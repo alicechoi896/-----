@@ -46,7 +46,7 @@ export const FEATURES: FeatureDef[] = [
     id: "yt-trends",
     channelId: "youtube",
     order: 1,
-    title: "YouTube 트렌드 찾기",
+    title: "유튜브 트렌드 찾기",
     description: "국가·카테고리·게시일·구독자·조회수 조건으로 잘되는 영상을 찾고, 추천 키워드·주제와 잘된 이유를 확인합니다.",
     href: "/youtube/trends",
     icon: TrendingUp,

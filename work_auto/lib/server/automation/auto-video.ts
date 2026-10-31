@@ -88,6 +88,8 @@ export interface AutoItem {
   hook?: string | null;
   cta?: string | null;
   script?: string | null;
+  /** v0.9.131 섬네일 제목 (대본 포맷 참고 후보 중 AI 가 고름, 영상 상단 제목 2번째 줄에도) */
+  thumbnailTitle?: string | null;
   publicationId?: string | null;
 }
 export interface AutoRun {
@@ -379,6 +381,45 @@ export function splitScriptLines(text: string): string {
     .filter(Boolean)
     .join("\n");
 }
+/** v0.9.131 원고 길이별 대본 글자 수 상한 (공백 제외, 보통 속도 기준 — 넘으면 줄인다) */
+export const SCRIPT_CHAR_LIMIT: Record<"15s" | "30s", number> = { "15s": 110, "30s": 220 };
+const charCount = (t: string) => t.replace(/\s+/g, "").length;
+
+/** 대본이 목표 길이보다 15% 넘게 길면 AI 1회로 줄인다 (첫 줄 Hook·마지막 CTA 그대로, 말끝 그대로). 실패하면 원래 대본 */
+async function fitScriptLength(script: string, length: "15s" | "30s"): Promise<{ text: string; note: string | null }> {
+  const limit = SCRIPT_CHAR_LIMIT[length];
+  const n = charCount(script);
+  if (n <= limit * 1.15) return { text: script, note: null };
+  try {
+    const ai = await getAIProvider();
+    if (ai.id === "mock") return { text: script, note: null };
+    const { data } = await ai.generateStructured<{ script?: unknown }>({
+      task: "auto-video:fit-length",
+      messages: [
+        { role: "system", content: "당신은 한국어 쇼츠 대본 편집자다. 대본을 정해진 길이로 줄인다. JSON 으로만 답한다." },
+        {
+          role: "user",
+          content: [
+            `아래 대본을 ${length === "15s" ? "15초" : "30초"} 분량으로 줄인다: 공백 제외 ${limit}자 이하, ${length === "15s" ? "6~8" : "10~14"}줄.`,
+            "첫 줄(Hook)과 마지막 줄(CTA)은 그대로 둔다. 가운데 제품 설명은 가장 중요한 구매 포인트만 남긴다. 말끝·말투(존댓말)는 바꾸지 않고, 줄마다 줄바꿈한다. 새 내용을 지어내지 않는다.",
+            "[대본]",
+            script,
+            '형식: {"script":"줄인 대본"}',
+          ].join("\n"),
+        },
+      ],
+      outputKeys: ["script"],
+      jsonSchema: { type: "object", additionalProperties: false, required: ["script"], properties: { script: { type: "string" } } },
+      variables: { script },
+    });
+    const out = String(data.script ?? "").trim();
+    if (!out || charCount(out) >= n) return { text: script, note: null };
+    return { text: out, note: `대본이 길어(공백 제외 ${n}자) 목표 길이에 맞게 줄였습니다 (${charCount(out)}자).` };
+  } catch {
+    return { text: script, note: null };
+  }
+}
+
 /** 설명: 문장마다 줄을 나누고, 해시태그는 맨 아래 한 줄로 */
 export function tidyDescription(text: string): string {
   const tags = (text.match(/#[^\s#]+/g) ?? []).join(" ");
@@ -502,8 +543,15 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
     // 보관 파일이 있는 영상만 (링크가 만료돼도 그 파일로)
     const videoIds = (await usableVideoIds(owner)).get(item.productId) ?? [];
     // v0.9.117: 대본이 한 덩어리면 컷이 1개라 6초짜리가 나왔다 → 문장마다 줄을 나눠 컷으로
-    const scriptText = splitScriptLines(scripts[pick2.script] ?? "");
+    // v0.9.131: 목표 길이(15초 등)보다 길면 줄인다 ('3배 속도로도 목표보다 깁니다'가 자주 나오던 문제)
+    const fitted = await fitScriptLength(splitScriptLines(scripts[pick2.script] ?? ""), settings.length);
+    const scriptText = splitScriptLines(fitted.text);
+    // v0.9.131: 섬네일 제목 — 대본 포맷(⑦ 섬네일 제목)을 참고해 만든 후보 중 AI 가 고른다 → 영상 상단 제목 2번째 줄에도
+    const thumbs = (Array.isArray(s2.output.thumbnailTitles) ? s2.output.thumbnailTitles : []).map(String).filter(Boolean).slice(0, 10);
+    const pick3 = thumbs.length ? await pickBest("pick3", `제목 '${title}' 영상의 섬네일에 크게 넣을 문구로 클릭을 가장 부르는 것을 고른다.`, { thumb: thumbs }) : { thumb: 0 };
+    const thumbnailTitle = thumbs[pick3.thumb] ?? thumbs[0] ?? null;
     const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, scriptText, ...voice });
+    if (thumbnailTitle && thumbnailTitle.replace(/\s+/g, "").length <= 18) plan.topLine2 = thumbnailTitle;
     await addGifs(plan);
     (plan as VideoPlan & { auto?: boolean }).auto = true;
     await step("영상 만드는 중 (음성·자막·컷 편집)");
@@ -525,6 +573,8 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
       hook,
       cta,
       script: scriptText,
+      thumbnailTitle,
+      ...(fitted.note ? { issues: [fitted.note, ...(done.qa?.issues ?? [])] } : {}),
       description: tidyDescription(String(out2.description ?? "")).slice(0, 5000),
       keywords: list(out2.keywords).slice(0, 30),
       tags: list(out2.tags).slice(0, 30),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endingTarget, guidelineBansYo, yoRatio } from "@/lib/script-format";
+import { banmalRatio, endingOf, endingTarget, guidelineBansYo, yoRatio } from "@/lib/script-format";
 
 /** v0.9.90: 대본 포맷 말끝 — 가이드라인의 '~요 금지'를 강한 규칙으로, 결과 검사 */
 describe("대본 포맷 말끝", () => {
@@ -16,7 +16,7 @@ describe("대본 포맷 말끝", () => {
     expect(endingTarget({ examples: yo, guideline: "" }).maxYo).toBeNull();
     expect(endingTarget(null)).toEqual({ maxYo: null, maxBanmal: null, rule: null });
     // v0.9.125: 참고 대본에 반말이 없으면 반말 금지 + 고칠 대상
-    const plain = Array.from({ length: 4 }, () => "이거 미쳤다\n진짜 편함\n가성비 최고다").map((text) => ({ text }));
+    const plain = Array.from({ length: 4 }, () => "진짜 편함\n가성비 최고임\n이거 대박").map((text) => ({ text }));
     const t = endingTarget({ examples: plain, guideline: "" });
     expect(t.maxBanmal).toBeCloseTo(0.05, 2);
     expect(t.rule).toContain("반말");
@@ -24,5 +24,14 @@ describe("대본 포맷 말끝", () => {
   });
   it("대본의 '~요' 줄 비율", () => {
     expect(yoRatio("이거 좋아요\n진짜 미쳤다\n써봐\n편해요")).toBe(0.5);
+  });
+});
+
+describe("v0.9.131 이어지는 말끝", () => {
+  it("'~고·~인데·~거나'로 끝나는 줄은 반말로 센다", () => {
+    expect(endingOf("이거 하나면 되는데")).toBe("link");
+    expect(endingOf("가볍고")).toBe("link");
+    expect(endingOf("이거 하나면 되는데요")).toBe("yo");
+    expect(banmalRatio("가볍고\n작은데\n좋아요\n편해요")).toBe(0.5);
   });
 });

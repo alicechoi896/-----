@@ -9,8 +9,8 @@ import type { ChannelDef, StandalonePageDef } from "./types";
 export const CHANNELS: ChannelDef[] = [
   {
     id: "youtube",
-    name: "YouTube",
-    hubTitle: "YouTube 자동화",
+    name: "유튜브",
+    hubTitle: "유튜브 자동화",
     description: "영상 소재 조사부터 제목, 대본, 설명글, 키워드 생성까지",
     hubDescription: "트렌드를 찾고, 제품 홍보 영상과 정보성 영상의 원고를 만듭니다.",
     href: "/youtube",
@@ -20,8 +20,8 @@ export const CHANNELS: ChannelDef[] = [
   },
   {
     id: "naver-clip",
-    name: "NAVER 클립",
-    hubTitle: "NAVER 클립 자동화",
+    name: "네이버 클립",
+    hubTitle: "네이버 클립 자동화",
     description: "네이버 검색 데이터를 활용한 클립 콘텐츠 제작 자동화",
     hubDescription: "네이버 검색·쇼핑 트렌드를 기반으로 숏폼 클립 원고를 만듭니다.",
     href: "/naver-clip",
@@ -31,8 +31,8 @@ export const CHANNELS: ChannelDef[] = [
   },
   {
     id: "naver-blog",
-    name: "NAVER 블로그",
-    hubTitle: "NAVER 블로그 자동화",
+    name: "네이버 블로그",
+    hubTitle: "네이버 블로그 자동화",
     description: "키워드 조사부터 제품글·정보글 자동 작성까지",
     hubDescription: "키워드를 조사하고 제품 글, 정보 글, 자동 글쓰기로 블로그 원고를 만듭니다.",
     href: "/naver-blog",
@@ -42,8 +42,8 @@ export const CHANNELS: ChannelDef[] = [
   },
   {
     id: "instagram",
-    name: "Instagram",
-    hubTitle: "Instagram 자동화",
+    name: "인스타그램",
+    hubTitle: "인스타그램 자동화",
     description: "인스타그램 릴스 트렌드 찾기",
     hubDescription: "인스타그램에서 잘되는 릴스를 찾습니다. 릴스 영상은 YouTube 영상과 같이 쓰므로, 찾은 소재로 YouTube 영상 원고를 바로 만들 수 있습니다.",
     href: "/instagram",

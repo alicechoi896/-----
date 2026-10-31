@@ -54,6 +54,7 @@ interface Item {
   hook?: string | null;
   cta?: string | null;
   script?: string | null;
+  thumbnailTitle?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
 }
@@ -324,6 +325,7 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, ma
           <div className="min-w-0 space-y-2 text-[13px]">
             {it.issues && it.issues.length > 0 && <Notice tone="warning">{it.issues.slice(0, 3).join(" · ")}</Notice>}
             <Field label="업로드 제목" value={it.title ?? ""} />
+            {it.thumbnailTitle && <Field label="섬네일 제목 (대본 포맷 참고 · 영상 상단 제목 2번째 줄)" value={it.thumbnailTitle} />}
             {it.script && <Field label={`대본 (${it.script.split("\n").filter(Boolean).length}줄 = 컷)`} value={it.script} multiline />}
             {(it.hook || it.cta) && <Field label="Hook · CTA (대본 포맷에서 고름)" value={[it.hook ? `Hook: ${it.hook}` : "", it.cta ? `CTA: ${it.cta}` : ""].filter(Boolean).join("\n")} multiline />}
             <Field label="설명 (YouTube 설명란)" value={it.description ?? ""} multiline />

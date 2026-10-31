@@ -229,8 +229,10 @@ export function formatViews(n: number | null): string {
  * 참고 대본의 말끝 분포 (v0.9.82) — 포맷이 '~요'를 거의 안 쓰는데 결과가 '~요'로 끝나던 문제.
  * 줄마다 마지막 낱말의 끝으로 나눈다: 요(해요체) · 니다(합니다체) · 다(반말 평서) · 음(음슴체·명사형) · 반말(~어·~지·~야…) · 기타(명사·물음표 등)
  */
-export type EndingKind = "yo" | "nida" | "da" | "eum" | "banmal" | "other";
-export const ENDING_LABEL: Record<EndingKind, string> = { yo: "'~요'", nida: "'~니다'", da: "'~다'(반말)", eum: "'~음/~함/~임'", banmal: "반말 '~어/~지/~야/~네/~거든'", other: "명사·물음표 등으로 끝" };
+export type EndingKind = "yo" | "nida" | "da" | "eum" | "banmal" | "link" | "other";
+export const ENDING_LABEL: Record<EndingKind, string> = { yo: "'~요'", nida: "'~니다'", da: "'~다'(반말)", eum: "'~음/~함/~임'", banmal: "반말 '~어/~지/~야/~네/~거든'", link: "이어지는 반말 '~고/~인데/~거나/~해서'", other: "명사·물음표 등으로 끝" };
+/** v0.9.131: 반말로 읽히는 말끝 (반말·'~다'·'~고/~인데' 같은 연결형) */
+const CASUAL: EndingKind[] = ["banmal", "link", "da"];
 
 export function endingOf(line: string): EndingKind | null {
   const t = line.replace(/[\s.!?~…·"'”’)\]\-ㅋㅎ😀-🙏]+$/u, "").trim();
@@ -239,12 +241,14 @@ export function endingOf(line: string): EndingKind | null {
   if (/요$/.test(t)) return "yo";
   if (/(음|함|임|됨|짐|옴|봄|감)$/.test(t)) return "eum";
   if (/다$/.test(t)) return "da";
+  // v0.9.131: 줄이 '~고·~인데·~거나·~해서'로 끝나면 자막 한 줄로는 반말로 읽힌다
+  if (/(고|는데|인데|은데|던데|거나|해서|라서|지만|면서|니까|는데도|든지)$/.test(t)) return "link";
   if (/(어|아|지|야|네|게|거든|잖아|래|대|해|돼|까|봐|와|줘|라|자|해봐)$/.test(t)) return "banmal";
   return "other";
 }
 
 export function endingProfile(texts: string[]): { total: number; ratios: Record<EndingKind, number> } {
-  const counts: Record<EndingKind, number> = { yo: 0, nida: 0, da: 0, eum: 0, banmal: 0, other: 0 };
+  const counts: Record<EndingKind, number> = { yo: 0, nida: 0, da: 0, eum: 0, banmal: 0, link: 0, other: 0 };
   let total = 0;
   for (const text of texts)
     for (const line of text.split(/\n+|(?<=[.?!])\s+/)) {
@@ -267,8 +271,9 @@ export function endingRule(texts: string[]): string | null {
   const lines = [`말끝 규칙 (가장 중요 — 스타일·기본 말투 규칙보다 우선): 참고 대본 문장 끝은 ${dist}. 대본의 문장 끝도 이 비율을 그대로 따른다.`];
   if (ratios.yo < 0.3) lines.push(`참고 대본은 '~요'로 거의 끝나지 않는다 (${pct("yo")}%). '~요'·'~거든요'·'~죠'로 끝나는 줄은 전체의 ${Math.max(0, pct("yo") + 5)}% 이하로만 쓴다.`);
   if (ratios.nida < 0.1) lines.push("'~니다'로 끝내지 않는다.");
-  // v0.9.125: '~요'를 줄이라고 하면 AI 가 반말로 바꾸던 문제 — 참고 대본에 반말이 거의 없으면 반말 금지를 분명히
-  if (ratios.banmal < 0.05) lines.push(`반말(~어·~아·~야·~지·~해·~거든·~잖아·~네·~래 등)로 끝내지 않는다 — 참고 대본에 반말이 거의 없다 (${pct("banmal")}%). '~요'를 줄일 때는 반말 대신 참고 대본처럼 '~다'·명사·'~음'으로 끝낸다.`);
+  // v0.9.125/131: 참고 대본에 반말이 거의 없으면 반말 금지를 분명히 ('~다'·'~고/~인데' 같은 연결형도 반말로 읽힌다)
+  const casual = CASUAL.reduce((n, k) => n + ratios[k], 0);
+  if (casual < 0.1) lines.push(`반말로 줄을 끝내지 않는다 — '~어·~야·~지·~해·~거든·~잖아·~네', '~다', 그리고 '~고·~인데·~거나·~해서·~지만'처럼 이어지는 말로 끝나는 줄도 반말로 읽힌다 (참고 대본 ${Math.round(casual * 100)}%). 이어서 말할 때도 '~는데요·~고요·~거든요'처럼 '요'로 끝낸다.`);
   return lines.join(" ");
 }
 
@@ -282,7 +287,7 @@ export function guidelineBansYo(text: string): boolean {
 /** v0.9.125: 대본 한 편에서 반말로 끝나는 줄 비율 */
 export function banmalRatio(script: string): number {
   const ks = script.split(/\n+/).map(endingOf).filter((k): k is EndingKind => Boolean(k));
-  return ks.length ? ks.filter((k) => k === "banmal").length / ks.length : 0;
+  return ks.length ? ks.filter((k) => CASUAL.includes(k)).length / ks.length : 0;
 }
 
 export function yoRatio(script: string): number {
@@ -299,7 +304,8 @@ export function endingTarget(f: { examples?: { text: string }[]; guideline?: str
   // v0.9.125: 참고 대본에 반말이 거의 없으면 반말도 고칠 대상 (가이드라인이 반말을 직접 요구하면 제외)
   const wantsBanmal = /반말\s*(?:로|으로|만|사용|쓴다|위주)/.test((f.guideline ?? "").replace(/\s+/g, " "));
   // v0.9.128: 참고 대본이 적어도(10줄 미만) 반말을 원하지 않으면 반말은 10%까지만 (스타일 표현을 따라 반말이 나오던 문제)
-  const maxBanmal = wantsBanmal ? null : total >= 10 ? (ratios.banmal < 0.05 ? ratios.banmal + 0.05 : null) : 0.1;
+  const casual = CASUAL.reduce((n, k) => n + ratios[k], 0);
+  const maxBanmal = wantsBanmal ? null : total >= 10 ? (casual < 0.1 ? casual + 0.05 : null) : 0.1;
   if (guidelineBansYo(f.guideline ?? "")) {
     const ends = wantsBanmal || (total >= 10 && ratios.banmal >= 0.05) ? "'~다'·반말·'~음'·명사" : "'~다'·'~음'·명사 (반말 금지)";
     return {
@@ -309,6 +315,6 @@ export function endingTarget(f: { examples?: { text: string }[]; guideline?: str
     };
   }
   if (total >= 10 && ratios.yo < 0.3) return { maxYo: ratios.yo + 0.05, maxBanmal, rule: fromExamples };
-  const noBanmal = maxBanmal !== null && total < 10 ? "말끝 규칙: 반말(~해·~야·~지·~어·~거든·~잖아·~네)로 끝내지 않는다. '~요' 존댓말로 끝낸다 ('~니다' 금지)." : null;
+  const noBanmal = maxBanmal !== null && total < 10 ? "말끝 규칙: 반말로 줄을 끝내지 않는다 ('~해·~야·~지·~어·~거든·~잖아·~네', '~다', '~고·~인데·~거나·~해서' 같은 이어지는 말 포함). 줄마다 '~요' 존댓말로 끝낸다 — 이어서 말할 때도 '~는데요·~고요·~거든요' ('~니다' 금지)." : null;
   return { maxYo: null, maxBanmal, rule: fromExamples ?? noBanmal };
 }
