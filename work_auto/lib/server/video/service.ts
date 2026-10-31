@@ -1,3 +1,4 @@
+import { isGiphyUrl, type GiphyItem } from "../providers/giphy";
 import "server-only";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -8,7 +9,7 @@ import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/t
 import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
-import { getAIProvider, getTTSProvider, getTypecastProvider } from "../providers/registry";
+import { getAIProvider, getTTSProvider, getTypecastProvider, getGiphyProvider } from "../providers/registry";
 import { TYPECAST_EMOTIONS, TYPECAST_VOICE_ID, type TypecastVoice } from "../providers/tts/typecast";
 import { getActorId, getCurrentUserId, getRepositories } from "../repositories";
 import { sfxName, videoAssets } from "./assets";
@@ -49,6 +50,8 @@ async function myVideos(userId: string, productId: string | null): Promise<Refer
   return rows.sort((a, b) => Number(b.productId === productId) - Number(a.productId === productId) || b.createdAt.localeCompare(a.createdAt));
 }
 
+const giphyCache = new Map<string, { at: number; list: GiphyItem[] }>();
+
 export const videoJobService = {
   /** 화면 준비: 고를 수 있는 대본(2단계 결과)·영상 소재·자료 상태 */
   async options(channelId: VideoChannel) {
@@ -74,7 +77,7 @@ export const videoJobService = {
       })),
       videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null })),
       assets: videoAssets.summary(),
-      ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, typecast: Boolean(typecast) },
+      ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, typecast: Boolean(typecast), giphy: Boolean(await getGiphyProvider().catch(() => null)) },
       typecastEmotions: TYPECAST_EMOTIONS,
       voices: VOICE_OPTIONS,
       voiceStyles: VOICE_STYLES.map((v) => ({ value: v.value, label: v.label })),
@@ -111,6 +114,26 @@ export const videoJobService = {
   },
 
   /** 계획 검사 (사용자가 고친 계획을 그대로 믿지 않는다) */
+  /** v0.9.102 GIPHY 검색 (버튼 1번 = 1회, 무료). 같은 검색어는 10분 기억 */
+  async giphySearch(q: string, type: string): Promise<GiphyItem[]> {
+    await getCurrentUserId();
+    const query = q.replace(/\s+/g, " ").trim().slice(0, 50);
+    if (!query) throw new AppError("VALIDATION", "검색어를 넣어 주세요.");
+    const kind = type === "gifs" ? "gifs" : "stickers";
+    const key = `${kind}:${query}`;
+    const hit = giphyCache.get(key);
+    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.list;
+    const g = await getGiphyProvider();
+    if (!g) throw new AppError("GIPHY_NOT_CONNECTED", "GIPHY 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 GIPHY 키를 넣어 주세요.", 409);
+    const list = await g.search(query, kind, 18).catch((e: Error) => {
+      throw new AppError("GIPHY_ERROR", e.message, 502);
+    });
+    giphyCache.set(key, { at: Date.now(), list });
+    if (giphyCache.size > 200) giphyCache.delete(giphyCache.keys().next().value!);
+    console.info("[Giphy]", JSON.stringify({ kind, q: query.slice(0, 20), n: list.length }));
+    return list;
+  },
+
   /** 타입캐스트 목소리 목록 (무료, 1시간 기억) */
   async typecastVoices(): Promise<TypecastVoice[]> {
     await getCurrentUserId();
@@ -161,6 +184,7 @@ export const videoJobService = {
       sfx: typeof s.sfx === "string" && sfxNames.has(s.sfx) ? s.sfx : null,
       arrow: Boolean(s.arrow),
       attention: Boolean(s.attention),
+      gif: s.gif && isGiphyUrl(String(s.gif.url)) && isGiphyUrl(String(s.gif.preview)) ? { id: String(s.gif.id).slice(0, 40), url: String(s.gif.url), preview: String(s.gif.preview), title: String(s.gif.title ?? "").slice(0, 80) } : null,
       sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null,
       pinned: Boolean(s.pinned),
     }));

@@ -34,6 +34,8 @@ import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
 import { SCAN_VERSION, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
+import { isGiphyUrl } from "../providers/giphy";
+import { safeFetch } from "../security/safe-url";
 import { captionY, endingY, renderCaption, renderEnding, renderSticker, renderTitleBar } from "./text-image";
 
 /**
@@ -353,6 +355,21 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     note(await renderTitleBar(titlePng, job.plan.topLine1, autoAccent(job.plan.topLine2), ts), ts.font);
     const cs = cleanCaptionStyle(job.plan.captionStyle);
     const memes = videoAssets.meme();
+    // v0.9.102: 컷마다 고른 GIPHY GIF 받아 두기 (GIPHY 파일 서버만, 6MB 이하). 못 받으면 원래 효과로
+    const gifFiles = new Map<number, string>();
+    for (const s of scenes.filter((x) => x.attention && x.gif?.url && isGiphyUrl(x.gif.url)).slice(0, 12)) {
+      try {
+        const res = await safeFetch(s.gif!.url, { signal: AbortSignal.timeout(20_000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 6 * 1024 * 1024 || buf.subarray(0, 3).toString() !== "GIF") throw new Error("GIF 아님");
+        const f = path.join(dir, `giphy${s.index}.gif`);
+        await writeFile(f, buf);
+        gifFiles.set(s.index, f);
+      } catch {
+        issues.push(`${s.index + 1}번 컷 GIPHY GIF 를 받지 못해 기본 주목 효과로 넣었습니다.`);
+      }
+    }
     const arrow = videoAssets.arrow();
     const endingGif = videoAssets.ending();
     if (!arrow && scenes.some((x) => x.arrow)) issues.push("화살표 GIF 가 없어 넣지 못했습니다 (assets/video/arrow).");
@@ -423,8 +440,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const t1 = Math.min(a.showSec, dur);
         const bounce = `${a.y}-18*abs(sin(9*t))`;
         const n = attnTurn++;
-        if (memes.length) {
-          add(["-ignore_loop", "0", "-i", memes[n % memes.length]], (i, from) => `[${i}:v]format=rgba,scale=${a.width}:-1[mm${k}];[${from}][mm${k}]overlay=${a.x}:'${bounce}':shortest=0:eof_action=pass:enable='between(t,0,${t1.toFixed(3)})'[at${k}]`, `at${k}`);
+        const pickedGif = gifFiles.get(s.index);
+        if (pickedGif || memes.length) {
+          add(["-ignore_loop", "0", "-i", pickedGif ?? memes[n % memes.length]], (i, from) => `[${i}:v]format=rgba,scale=${a.width}:-1[mm${k}];[${from}][mm${k}]overlay=${a.x}:'${bounce}':shortest=0:eof_action=pass:enable='between(t,0,${t1.toFixed(3)})'[at${k}]`, `at${k}`);
         } else {
           const png = path.join(dir, `st${k}.png`);
           await renderSticker(png, a.words[(s.index + n) % a.words.length], n % 2 ? 7 : -8);

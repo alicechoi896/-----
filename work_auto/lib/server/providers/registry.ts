@@ -4,6 +4,7 @@ import { GraphInstagramProvider, MockMetaInstagramProvider, type MetaInstagramPr
 import { KieVideoProvider, MockVideoAIProvider, type VideoAIProvider } from "./video-ai/kie";
 import { OpenAITTSProvider, type TTSProvider } from "./tts/openai-tts";
 import { TypecastTTSProvider } from "./tts/typecast";
+import { GiphyProvider, MockGiphyProvider } from "./giphy";
 import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/lib/types";
 import { serverConfig } from "../config";
 import { AppError } from "../http";
@@ -132,6 +133,13 @@ export async function getVideoAIProvider(): Promise<VideoAIProvider | null> {
   return cred ? new KieVideoProvider(cred.apiKey) : null;
 }
 
+/** GIPHY (v0.9.102): 연결되어 있지 않으면 null. 데모는 빈 결과 */
+export async function getGiphyProvider(): Promise<Pick<GiphyProvider, "search"> | null> {
+  if (serverConfig.providerMode !== "live") return new MockGiphyProvider();
+  const cred = await loadCredentials("giphy");
+  return cred ? new GiphyProvider(cred.apiKey) : null;
+}
+
 /** TikHub 가 연결되어 있는지만 (호출 없음) */
 export async function hasTikHub(): Promise<boolean> {
   if (serverConfig.providerMode !== "live") return true;
@@ -222,6 +230,8 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new TypecastTTSProvider((cred as ProviderCredentialMap["typecast"]).apiKey) as unknown as BaseProvider;
     case "kie":
       return new KieVideoProvider((cred as ProviderCredentialMap["kie"]).apiKey);
+    case "giphy":
+      return new GiphyProvider((cred as ProviderCredentialMap["giphy"]).apiKey) as unknown as BaseProvider;
     case "meta-instagram": {
       const c = cred as ProviderCredentialMap["meta-instagram"];
       return new GraphInstagramProvider(c.apiKey, c.igUserId);

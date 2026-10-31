@@ -25,6 +25,7 @@ import {
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
+import { GiphyPicker } from "./GiphyPicker";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
@@ -431,6 +432,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
               onRender={() => void render(plan)}
               error={error}
               titleStyle={titleStyle}
+              channelId={channelId}
+              giphyReady={Boolean(opts.ready.giphy)}
             />
           ) : (
             <SectionCard>
@@ -478,6 +481,8 @@ function PlanEditor({
   onRender,
   error,
   titleStyle,
+  channelId,
+  giphyReady,
 }: {
   plan: VideoPlan;
   onChange: (p: VideoPlan) => void;
@@ -486,7 +491,11 @@ function PlanEditor({
   error: string | null;
   /** 지금 고른 제목 스타일 (계획을 만든 뒤 바꿔도 미리보기에 반영) */
   titleStyle: TitleStyle;
+  channelId: VideoChannel;
+  /** GIPHY 연결됨 (v0.9.102) */
+  giphyReady: boolean;
 }) {
+  const [gifFor, setGifFor] = useState<number | null>(null);
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => onChange({ ...plan, scenes: plan.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
   const clipOptions = videos.map((v) => ({ value: v.id, label: v.title.slice(0, 22) }));
   return (
@@ -513,6 +522,7 @@ function PlanEditor({
           </label>
         </div>
       </div>
+      <GiphyPicker open={gifFor !== null} onClose={() => setGifFor(null)} channelId={channelId} sceneText={gifFor !== null ? plan.scenes[gifFor]?.narration ?? "" : ""} onPick={(g) => gifFor !== null && setScene(gifFor, { gif: g, attention: true })} />
       <ol className="space-y-1.5">
         {plan.scenes.map((s, i) => (
           <li key={i} className="grid grid-cols-[28px_minmax(0,1fr)_200px] items-center gap-2 rounded-control border border-line px-2 py-1.5 text-[12.5px]" data-plan-scene>
@@ -532,6 +542,29 @@ function PlanEditor({
                   >
                     {s.attention ? "✨ 주목 효과" : "+ 주목 효과"}
                   </button>
+                )}
+                {s.attention && i < plan.scenes.length - 1 && (
+                  <span className="inline-flex items-center gap-1">
+                    {s.gif && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.gif.preview} alt={s.gif.title} className="h-6 w-6 rounded object-contain ring-1 ring-line" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setGifFor(i)}
+                      disabled={!giphyReady}
+                      title={giphyReady ? "GIPHY 에서 이 컷의 주목 GIF 고르기" : "설정 › API 연결 센터에서 GIPHY 키를 넣으면 쓸 수 있습니다"}
+                      className="rounded-full px-2 py-0.5 text-[11px] text-brand ring-1 ring-inset ring-brand/40 hover:bg-brand-soft disabled:cursor-not-allowed disabled:text-fg-subtle disabled:ring-line"
+                      data-giphy-open
+                    >
+                      {s.gif ? "GIF 바꾸기" : "GIF 고르기"}
+                    </button>
+                    {s.gif && (
+                      <button type="button" onClick={() => setScene(i, { gif: null })} className="text-[11px] text-fg-subtle hover:text-danger" aria-label="GIF 빼기">
+                        ✕
+                      </button>
+                    )}
+                  </span>
                 )}
                 {i === plan.scenes.length - 1 && plan.ending && <Badge tone="danger">최저가 구매링크</Badge>}
               </span>

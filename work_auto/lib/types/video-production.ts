@@ -21,6 +21,8 @@ export interface VideoScene {
   arrow: boolean;
   /** 주목 효과 스티커 (v0.9.64) */
   attention?: boolean;
+  /** v0.9.102: 주목 효과에 쓸 GIPHY GIF (없으면 자료 폴더 GIF → 직접 그린 스티커) */
+  gif?: { id: string; url: string; preview: string; title: string } | null;
   /** 원본 영상 (reference_videos.id) */
   sourceVideoId: string | null;
   /** 사람이 고른 클립이면 자동 배치가 바꾸지 않는다 */

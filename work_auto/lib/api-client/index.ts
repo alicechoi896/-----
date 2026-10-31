@@ -325,6 +325,8 @@ export const api = {
     download: (id: string) => request<{ url: string }>(`/api/video-jobs/${id}/download`, { method: "POST" }),
     /** 목소리 미리 듣기 (OpenAI TTS 1회) → mp3 */
     /** 타입캐스트 목소리 목록 */
+    giphy: (q: string, type: "stickers" | "gifs", channelId: VideoChannel) =>
+      request<{ id: string; title: string; url: string; preview: string; width: number; height: number }[]>(`/api/video-production/giphy?q=${encodeURIComponent(q)}&type=${type}&channelId=${channelId}`),
     typecastVoices: (channelId: VideoChannel) =>
       request<{ id: string; name: string; gender: string | null; age: string | null; useCases: string[]; previewUrl: string | null; emotions: string[]; custom: boolean; korean: boolean }[]>(`/api/video-production/typecast-voices?channelId=${channelId}`),
     voicePreview: async (body: { voice: string; voiceStyle: string; voiceSpeed?: number; text?: string; channelId: VideoChannel; ttsEngine?: "openai" | "typecast"; ttsEmotion?: string }): Promise<Blob> => {
@@ -517,7 +519,7 @@ export interface VideoProductionOptions {
   contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
-  ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean };
+  ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean; giphy?: boolean };
   typecastEmotions: readonly { value: string; label: string }[];
   voices: readonly { value: string; label: string }[];
   voiceStyles: { value: string; label: string }[];

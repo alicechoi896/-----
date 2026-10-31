@@ -50,4 +50,6 @@ export interface ProviderCredentialMap {
   kie: { apiKey: string };
   /** AI 음성 (v0.9.73, 타입캐스트). 1글자 = 1크레딧 */
   typecast: { apiKey: string };
+  /** 주목 효과 GIF 검색 (v0.9.102, GIPHY — 무료, 시간당 한도) */
+  giphy: { apiKey: string };
 }

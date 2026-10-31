@@ -99,6 +99,15 @@ const PROVIDERS: ProviderMeta[] = [
     docsUrl: "https://typecast.ai/docs/quickstart",
   },
   {
+    id: "giphy",
+    name: "GIPHY (주목 GIF)",
+    description: "영상 자동 제작 › 컷 계획 › 주목 효과에 넣을 GIF·스티커 검색. [GIF 고르기]에서 검색할 때만 1번 호출 (무료, 키마다 시간당 한도). GIF 저작권은 원작자에게 있어 수익 영상에는 주의 · [테스트]는 검색 1회",
+    usages: ["영상 주목 효과 GIF"],
+    icon: Sparkles,
+    fields: [{ name: "apiKey", label: "API Key", placeholder: "GIPHY API Key", hint: "developers.giphy.com → Create an API Key (API). 키는 서버에만 암호화해 저장합니다" }],
+    docsUrl: "https://developers.giphy.com/dashboard/",
+  },
+  {
     id: "kie",
     name: "Kie AI (AI 영상)",
     description: "공통 도구 › AI 드라마 시험 (MiniMax H3 · Seedance 2.0 Mini · Kling 3.0 비교). [시험 만들기]를 누를 때만 장면 × 모델 수만큼 호출하고, 자동 재시도하지 않습니다 · [테스트]는 무료(잔액 확인)",
