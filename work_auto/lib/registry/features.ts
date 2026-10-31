@@ -20,6 +20,7 @@ import {
   Users,
   Wand2,
   Shirt,
+  CalendarClock,
 } from "lucide-react";
 import type { MemberTier } from "@/lib/types";
 import type { FeatureDef } from "./types";
@@ -166,6 +167,22 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: ["openai"],
     inputs: ["2단계 대본 (제목·Hook·CTA·대본 1편)", "샤오홍슈 영상 (제품 연결)", "음성·자막·제목 스타일"],
     outputs: ["9:16 mp4 (1080×1920)", "컷 계획", "자동 품질 검사"],
+  },
+
+  {
+    id: "yt-auto-video",
+    channelId: "youtube",
+    order: 9,
+    title: "제품 영상 자동 제작",
+    description: "매일 05:00 AI 가 키워드·제품 데이터로 제품을 골라(7일 안에 만든 제품 제외) 원고(제목·대본·키워드)를 고르고, 연결된 샤오홍슈 영상으로 제품 홍보 영상을 자동으로 만듭니다. 출근하면 영상·제목·설명·키워드·태그를 확인하고 업로드 관리에 예약합니다.",
+    href: "/youtube/auto-video",
+    icon: CalendarClock,
+    kind: "tool",
+    status: "live",
+    defaultTiers: [],
+    requiredProviders: ["openai"],
+    inputs: ["하루 개수 (1~10)", "원고 길이", "제품·키워드 데이터 · 제품에 연결된 샤오홍슈 영상"],
+    outputs: ["9:16 mp4", "업로드 제목·설명·키워드·태그", "업로드 관리 예약"],
   },
 
   // ───────── Instagram ─────────

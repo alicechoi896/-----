@@ -386,6 +386,34 @@ export const SHOTS = [
     },
   },
   {
+    id: "05-auto-video",
+    url: "/youtube/auto-video",
+    viewport: { width: 1280, height: 1500 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const products = (await (await p.request.get(abs("/api/products"))).json()).data ?? [];
+      for (const [i, pr] of products.slice(0, 2).entries()) {
+        await p.request.post(abs("/api/videos/batch"), { data: { productId: pr.id, urls: [1, 2, 3].map((k) => `https://www.xiaohongshu.com/explore/68000000000000000000${i}${k}aa`) } });
+      }
+      await p.request.patch(abs("/api/auto-video"), { data: { enabled: true, count: 2, length: "30s" } });
+      await p.request.post(abs("/api/auto-video/run-now"), { data: { confirmed: true, count: 2 } });
+      for (let k = 0; k < 40; k++) {
+        const d = (await (await p.request.get(abs("/api/auto-video"))).json()).data;
+        if (d?.run?.items?.some((x) => x.status === "done")) break;
+        await p.waitForTimeout(2000);
+      }
+      await p.reload();
+      await p.locator("[data-auto-item]").first().waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(800);
+    },
+    marks: {
+      1: (p) => p.getByRole("heading", { name: "자동 제작 설정" }).locator("xpath=ancestor::section[1]"),
+      2: (p) => p.locator("[data-auto-run-now]"),
+      3: (p) => p.locator("[data-auto-item]").first(),
+      4: (p) => p.locator("[data-auto-schedule]").first(),
+    },
+  },
+  {
     id: "04-ig-fashion",
     url: "/instagram/fashion",
     viewport: { width: 1280, height: 1650 },

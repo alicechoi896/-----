@@ -30,6 +30,9 @@ const nextConfig: NextConfig = {
     "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/font/*": ["./assets/video/fonts/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
     "/api/video-jobs": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
+    // 제품 홍보 영상 자동 제작 (v0.9.107)
+    "/api/cron/auto-video/tick": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/auto-video/run-now": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-jobs/*/rerender": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
   },
   async headers() {

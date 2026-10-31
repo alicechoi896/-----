@@ -1,5 +1,6 @@
 import "server-only";
 import { AppError } from "../../http";
+import { noPaidFallback } from "../../automation/context";
 import { getXiaohongshuSearchProvider } from "../registry";
 import { resolveXiaohongshu, xhsNoteOf, type XhsVideo } from "./xiaohongshu-resolver";
 
@@ -18,6 +19,8 @@ export async function resolveXiaohongshuWithFallback(input: string): Promise<Xhs
     return await resolveXiaohongshu(input);
   } catch (e) {
     if (!(e instanceof AppError) || !["XHS_BLOCKED", "XHS_PARSE"].includes(e.code)) throw e;
+    // v0.9.107: 새벽 자동 제작은 TikHub(유료)로 넘어가지 않는다 — 그 영상은 건너뛴다
+    if (noPaidFallback()) throw e;
     const { noteId, token } = await xhsNoteOf(input);
     const hit = fallbackCache.get(noteId);
     const value =

@@ -2,6 +2,15 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.107] - 2026-11-01: 제품 영상 자동 제작 (매일 새벽)
+
+### 추가
+- YouTube › **제품 영상 자동 제작** (관리자, docs/AUTO_VIDEO.md): 매일 05:00 KST 제품 N개(1~10) 선정(7일 안 제작 제외, AI 1회) → 05:05~07:55 5분마다 1개: 원고 1단계 → AI 제목·Hook·CTA 선택 → 2단계 → AI 대본 선택 → 컷 계획(최근 직접 만든 영상 스타일 + GIPHY 주목 스티커) → 렌더
+- 아침 보고 화면: 영상·업로드 제목·설명·키워드·태그(복사), 날짜별 기록, [업로드 관리에 예약], [지금 시험 실행]
+- 자동 실행 권한: 자동화 계정(AUTOMATION_EMAIL·AUTOMATION_PASSWORD) anon 로그인 클라이언트를 AsyncLocalStorage 로 — RLS·관리자 공용 데이터 그대로, service_role 안 씀. Vercel Cron + CRON_SECRET
+- 자동 실행 중에는 샤오홍슈 TikHub 대체 경로를 쓰지 않음 (무료 경로만)
+- DB 변경 없음 (Storage JSON)
+
 ## [0.9.106] - 2026-11-01: 드라마 — 비교 모델 3개 추가
 
 ### 추가
