@@ -334,11 +334,21 @@ export function persistentBoxes(scan: TextScan): Box[] {
   const hit = persistentCache.get(scan);
   if (hit) return hit;
   // v0.9.85: 두 줄 자막도 (12% → 20%). 아래쪽(자막 자리) 글자는 줄마다 길이가 달라 화면 폭 전체로 넓혀 가린다
-  const small = scan.samples
-    .flatMap((x) => x.boxes)
-    .filter((b) => b.w * b.h <= 0.2 && !(b.w >= 0.99 && b.h >= 0.99))
+  const all = scan.samples.flatMap((x) => x.boxes).filter((b) => !(b.w >= 0.99 && b.h >= 0.99));
+  // v0.9.130: 아래쪽 절반에 한 번이라도 나온 글자(자막)는 크기와 상관없이 '자막 띠' 하나로 — 그 높이 전체를 영상 내내 가린다.
+  // 검사 프레임 사이에 바뀐 자막 줄·크게 잡힌 자막이 다른 구간에서 그대로 보이던 문제 (확대로 띠를 피하고, 안 되면 블러)
+  const lower = all.filter((b) => b.y + b.h / 2 > 0.5 && b.h < 0.35);
+  const band: Box[] = lower.length
+    ? (() => {
+        const y1 = Math.max(0, Math.min(...lower.map((b) => b.y)) - 0.01);
+        const y2 = Math.min(1, Math.max(...lower.map((b) => b.y + b.h)) + 0.01);
+        return y2 - y1 <= 0.45 ? [{ x: 0, y: y1, w: 1, h: y2 - y1 }] : lower.map((b) => ({ x: 0, y: b.y, w: 1, h: b.h }));
+      })()
+    : [];
+  const small = all
+    .filter((b) => !lower.includes(b) && b.w * b.h <= 0.2)
     .map((b) => (b.y + b.h / 2 > 0.55 ? { x: 0.02, y: b.y, w: 0.96, h: b.h } : b));
-  const out = mergeNear(small);
+  const out = [...band, ...mergeNear(small)];
   persistentCache.set(scan, out);
   return out;
 }
