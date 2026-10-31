@@ -16,9 +16,7 @@ describe("대본 포맷 말끝", () => {
     expect(endingTarget({ examples: yo, guideline: "" }).maxYo).toBeNull();
     expect(endingTarget(null)).toEqual({ maxYo: null, maxBanmal: null, rule: null });
     // v0.9.125: 참고 대본에 반말이 없으면 반말 금지 + 고칠 대상
-    const plain = Array.from({ length: 4 }, () => "이거 미쳤다
-진짜 편함
-가성비 최고다").map((text) => ({ text }));
+    const plain = Array.from({ length: 4 }, () => "이거 미쳤다\n진짜 편함\n가성비 최고다").map((text) => ({ text }));
     const t = endingTarget({ examples: plain, guideline: "" });
     expect(t.maxBanmal).toBeCloseTo(0.05, 2);
     expect(t.rule).toContain("반말");
