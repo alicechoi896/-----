@@ -130,7 +130,17 @@ export async function fetchShareLinkViaTikhub(videoId: string): Promise<{ saved:
     saved = link;
     break;
   }
-  console.info("[XhsLink] tikhub", JSON.stringify({ videoId: video.id, noteId: note.noteId, found: short.length, saved: Boolean(saved) }));
+  // v0.9.123: 응답 모양(키 이름)과 공유 관련 값도 남긴다 (열쇠 값은 가림) — 영구 링크가 어디 오는지 찾기
+  const keys: string[] = [];
+  const walkKeys = (x: unknown, pre: string, depth: number) => {
+    if (depth > 4 || !x || typeof x !== "object" || keys.length > 80) return;
+    for (const [k, v] of Object.entries(Array.isArray(x) ? (x[0] ?? {}) : x)) {
+      keys.push(pre + k);
+      walkKeys(v, `${pre}${k}.`, depth + 1);
+    }
+  };
+  walkKeys(body, "", 0);
+  console.info("[XhsLink] tikhub", JSON.stringify({ videoId: video.id, noteId: note.noteId, found: short.length, saved: Boolean(saved), others, keys: keys.filter((k) => /share|link|url|token/i.test(k)).slice(0, 40) }));
   return { saved, found: short, others, usage: { calls: usage.calls + 1, limit: usage.limit } };
 }
 

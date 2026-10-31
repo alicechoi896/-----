@@ -35,6 +35,8 @@ export function XhsPermanentLinks() {
     let ok = 0;
     let miss = 0;
     let stop: string | null = null;
+    let streak = 0;
+    let lastOthers: string[] = [];
     const saved = new Map<string, string>();
     for (const [i, v] of todo.slice(0, n).entries()) {
       setNote(`TikHub 로 찾는 중 ${i + 1}/${n}… (받음 ${ok})`);
@@ -42,15 +44,26 @@ export function XhsPermanentLinks() {
         const r = await api.videos.shareLinkViaTikhub(v.id);
         if (r.saved) {
           ok++;
+          streak = 0;
           saved.set(v.id, r.saved);
-        } else miss++;
+        } else {
+          miss++;
+          streak++;
+          lastOthers = r.others;
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "실패";
         miss++;
+        streak++;
         if (/한도|BUDGET|연결되어 있지/.test(msg)) {
           stop = msg;
           break;
         }
+      }
+      // v0.9.123: 비용 보호 — 첫 1개가 안 되거나 3번 연속 안 되면 바로 멈춘다 (전에는 50번을 끝까지 보냈다)
+      if ((i === 0 && !ok) || streak >= 3) {
+        stop = `${i + 1}번째에서 멈췄습니다 — TikHub 응답에 영구 링크(xhslink)가 없어 더 보내지 않았습니다.${lastOthers.length ? ` 받은 공유 관련 값: ${lastOthers.join(" / ")}` : ""}`;
+        break;
       }
     }
     list.setData((prev) => prev?.map((x): ReferenceVideo => (saved.has(x.id) ? { ...x, shareUrl: saved.get(x.id)! } : x)) ?? null);
