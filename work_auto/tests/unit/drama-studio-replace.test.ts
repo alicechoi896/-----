@@ -65,7 +65,7 @@ describe("영상 교체 (v0.9.90)", () => {
     const put = async (name: string, color: string) => {
       const up = await svc.uploadUrl(id, { kind: "video", fileName: name, size: 10 });
       const buf = mp4(color);
-      await svc.uploadMemory(up.key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      await svc.uploadMemory(up.key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
       return (await svc.register(id, { key: up.key, kind: "video", fileName: name, target: { type: "clip", sceneIds: [sceneId] } })).project;
     };
     p = await put("a.mp4", "red");
@@ -96,7 +96,7 @@ describe("최종 영상 자막·로고 (v0.9.92)", () => {
     const put = async (sceneId: string, color: string) => {
       const up = await svc.uploadUrl(id, { kind: "video", fileName: `${color}.mp4`, size: 10 });
       const buf = mp4(color);
-      await svc.uploadMemory(up.key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      await svc.uploadMemory(up.key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
       return (await svc.register(id, { key: up.key, kind: "video", fileName: `${color}.mp4`, target: { type: "clip", sceneIds: [sceneId] } })).project;
     };
     await put(s1.id, "gray");
@@ -108,7 +108,7 @@ describe("최종 영상 자막·로고 (v0.9.92)", () => {
     g.fillRect(0, 0, 200, 80);
     const logoBuf = c.toBuffer("image/png");
     const up = await svc.uploadUrl(id, { kind: "image", fileName: "logo.png", size: logoBuf.length });
-    await svc.uploadMemory(up.key, logoBuf.buffer.slice(logoBuf.byteOffset, logoBuf.byteOffset + logoBuf.byteLength));
+    await svc.uploadMemory(up.key, logoBuf.buffer.slice(logoBuf.byteOffset, logoBuf.byteOffset + logoBuf.byteLength) as ArrayBuffer);
     p = (await svc.register(id, { key: up.key, kind: "image", fileName: "logo.png", target: { type: "logo" } })).project;
     expect(p.renderSettings.logoKey).toBe(up.key);
     p = (await svc.patch(id, { section: "timeline", value: p.clips.map((cl, i) => ({ id: `tl_${i}`, clipId: cl.id, trimStart: 0, trimEnd: 0, audio: true, subtitle: i === 1 ? "직접 쓴 자막입니다" : null })) })).project;
