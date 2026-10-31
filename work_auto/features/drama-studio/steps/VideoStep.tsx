@@ -102,7 +102,8 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   async function uploadClips(files: File[], sceneIds: string[]) {
     setUploading(true);
     try {
-      for (const f of files) ctl.apply(await studioApi.upload(p.id, f, "video", { type: "clip", sceneIds }));
+      await ctl.flush();
+      for (const f of files) ctl.apply(await ctl.enqueue(() => studioApi.upload(p.id, f, "video", { type: "clip", sceneIds })));
     } catch (e) {
       ctl.setError(e instanceof Error ? e.message : "올리지 못했습니다.");
     } finally {

@@ -150,6 +150,6 @@ export function useProject(id: string) {
 
   const approve = useCallback((step: StepKey) => run("승인", () => studioApi.approve(id, step)), [id, run]);
 
-  return { project, urls, saveState, error, setError, busy, edit, flush, run, approve, reload: load, apply };
+  return { project, urls, saveState, error, setError, busy, edit, flush, run, approve, reload: load, apply, enqueue };
 }
 export type ProjectCtl = ReturnType<typeof useProject>;

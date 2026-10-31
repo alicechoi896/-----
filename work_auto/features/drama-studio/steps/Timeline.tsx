@@ -42,7 +42,8 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
   async function uploadBgm(files: File[]) {
     setUploading(true);
     try {
-      ctl.apply(await studioApi.upload(p.id, files[0], "audio", { type: "bgm" }));
+      await ctl.flush();
+      ctl.apply(await ctl.enqueue(() => studioApi.upload(p.id, files[0], "audio", { type: "bgm" })));
     } catch (e) {
       ctl.setError(e instanceof Error ? e.message : "올리지 못했습니다.");
     } finally {

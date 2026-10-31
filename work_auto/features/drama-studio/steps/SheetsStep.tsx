@@ -61,7 +61,8 @@ export function SheetsStep({ ctl }: { ctl: ProjectCtl }) {
   async function upload(c: DramaCharacter, kind: SheetKind, files: File[]) {
     setUploading(true);
     try {
-      for (const f of files) ctl.apply(await studioApi.upload(p.id, f, "image", { type: "sheet", charId: c.id, sheetKind: kind }));
+      await ctl.flush();
+      for (const f of files) ctl.apply(await ctl.enqueue(() => studioApi.upload(p.id, f, "image", { type: "sheet", charId: c.id, sheetKind: kind })));
     } catch (e) {
       ctl.setError(e instanceof Error ? e.message : "올리지 못했습니다.");
     } finally {
@@ -95,7 +96,7 @@ export function SheetsStep({ ctl }: { ctl: ProjectCtl }) {
       </SectionCard>
 
       {p.characters.map((c) => {
-        const list = p.sheets[c.id] ?? [];
+        const list = (p.sheets[c.id] ?? []).filter((i) => !i.removed);
         const running = tasks.filter((t) => t.target.type === "sheet" && t.target.charId === c.id && (t.status === "generating" || t.status === "requesting" || (t.status === "queued" && t.dependsOn)));
         const failed = tasks.filter((t) => t.target.type === "sheet" && t.target.charId === c.id && t.status === "fail").slice(-3);
         return (
@@ -137,7 +138,7 @@ export function SheetsStep({ ctl }: { ctl: ProjectCtl }) {
                     {imgs.length ? (
                       <div className="grid grid-cols-3 gap-1.5">
                         {imgs.map((img) => (
-                          <ImageCard key={img.id} img={img} url={ctl.urls[img.key]} label={`${c.name} ${k.label}`} onApprove={() => toggle(c, img)} onRemove={() => setSheet(c.id, list.filter((i) => i.id !== img.id))} />
+                          <ImageCard key={img.id} img={img} url={ctl.urls[img.key]} label={`${c.name} ${k.label}`} onApprove={() => toggle(c, img)} onRemove={() => setSheet(c.id, (p.sheets[c.id] ?? []).map((i) => (i.id === img.id ? { ...i, removed: true, approved: false } : i)))} />
                         ))}
                       </div>
                     ) : (

@@ -87,8 +87,8 @@ function mergeImages(server: Record<string, DramaImage[]>, client: unknown, sing
   const out: Record<string, DramaImage[]> = {};
   for (const [k, list] of Object.entries(server)) {
     const edits = new Map((Array.isArray(c[k]) ? c[k] : []).map((x) => [String(x.id), x]));
-    // 화면에서 지운 이미지는 목록에서만 뺀다 (파일은 남김)
-    const keep = Array.isArray(c[k]) ? list.filter((i) => edits.has(i.id)) : list;
+    // v0.9.89: 화면 목록에 없는 이미지(그 사이 교체·업로드·AI 결과)는 그대로 둔다. [목록에서 빼기] 표시(removed)한 것만 뺀다 (파일은 남김)
+    const keep = list.filter((i) => !edits.get(i.id)?.removed);
     out[k] = keep.map((i) => {
       const e = edits.get(i.id);
       return e ? { ...i, approved: Boolean(e.approved), prompt: typeof e.prompt === "string" ? e.prompt.slice(0, 6000) : i.prompt } : i;
@@ -109,10 +109,10 @@ function mergeImages(server: Record<string, DramaImage[]>, client: unknown, sing
 function mergeClips(p: DramaProject, client: unknown): DramaClip[] {
   const edits = new Map((Array.isArray(client) ? (client as Partial<DramaClip>[]) : []).map((x) => [String(x.id), x]));
   const sceneIds = new Set(p.scenario.scenes.map((s) => s.id));
-  return p.clips
-    .filter((c) => edits.has(c.id))
-    .map((c) => {
-      const e = edits.get(c.id)!;
+  // v0.9.89: 화면 목록에 없는 클립은 그대로 (지우지 않음)
+  return p.clips.map((c) => {
+      const e = edits.get(c.id);
+      if (!e) return c;
       const ids = Array.isArray(e.sceneIds) ? e.sceneIds.map(String).filter((x) => sceneIds.has(x)) : c.sceneIds;
       return { ...c, approved: Boolean(e.approved), sceneIds: ids };
     });
@@ -386,6 +386,14 @@ export const dramaStudioService = {
         const r = await ai.genEnglishPrompts(p, ids);
         for (const s of p.scenario.scenes) if (r.prompts.has(s.id)) s.en = r.prompts.get(s.id)!;
         aiCalls = r.aiCalls;
+        break;
+      }
+      // v0.9.89: '재검토 필요' 알림 닫기 — 확인만 하고 넘어갈 때 (이전에 승인했던 단계는 승인으로, 아니면 작업 중으로)
+      case "ack-review": {
+        const st = String(body.step) as StepKey;
+        if (!STEP_KEYS.includes(st)) throw new AppError("VALIDATION", "단계를 알 수 없습니다.");
+        const cur = p.steps[st];
+        if (cur.status === "review") p.steps[st] = { ...cur, status: cur.version > 0 ? "approved" : "draft" };
         break;
       }
       case "save-version": {

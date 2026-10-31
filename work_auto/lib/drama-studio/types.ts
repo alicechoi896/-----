@@ -105,6 +105,8 @@ export interface DramaImage {
   /** 캐릭터 시트 종류 */
   kind?: SheetKind;
   fileName?: string;
+  /** v0.9.89: 화면에서 [목록에서 빼기] — 서버는 이 표시가 있을 때만 뺀다 (목록에 없다고 지우지 않음) */
+  removed?: boolean;
 }
 
 export interface SceneEnPrompt {

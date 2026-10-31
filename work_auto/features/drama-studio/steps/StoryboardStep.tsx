@@ -31,21 +31,24 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const m = imageModel(modelId)!;
-  const frames = (id: string) => p.storyboard[id] ?? [];
+  const frames = (id: string) => (p.storyboard[id] ?? []).filter((f) => !f.removed);
   const approvedOf = (id: string) => frames(id).find((f) => f.approved) ?? null;
   const tasks = p.tasks.filter((t) => t.kind === "image" && t.target.type === "frame");
   const running = (id: string) => tasks.some((t) => t.target.type === "frame" && t.target.sceneId === id && (t.status === "generating" || t.status === "requesting"));
   const lastFail = (id: string) => [...tasks].reverse().find((t) => t.target.type === "frame" && t.target.sceneId === id);
   const setFrames = (id: string, list: DramaImage[]) => ctl.edit("storyboard", { ...p.storyboard, [id]: list });
-  const approve = (id: string, img: DramaImage) => setFrames(id, frames(id).map((f) => ({ ...f, approved: f.id === img.id ? !img.approved : false })));
+  /** 올리기도 저장과 같은 줄에 (앞 저장이 끝난 뒤 올리고, 결과를 바로 반영) */
+  const queued = <T,>(fn: () => Promise<T>) => ctl.flush().then(() => ctl.enqueue(fn));
+  const approve = (id: string, img: DramaImage) => setFrames(id, (p.storyboard[id] ?? []).map((f) => ({ ...f, approved: f.id === img.id ? !img.approved : false })));
   /** v0.9.88: 한 번에 승인 — 장면마다 가장 최근 이미지 (이미 승인한 장면은 그대로). ids 를 주면 그 장면만 */
   const approveAll = (ids?: string[]) => {
     const next = { ...p.storyboard };
     for (const sc of scenes) {
       if (ids && !ids.includes(sc.id)) continue;
       const list = next[sc.id] ?? [];
-      if (!list.length || list.some((x) => x.approved)) continue;
-      const last = list[list.length - 1];
+      const live = list.filter((x) => !x.removed);
+      if (!live.length || live.some((x) => x.approved)) continue;
+      const last = live[live.length - 1];
       next[sc.id] = list.map((x) => ({ ...x, approved: x.id === last.id }));
     }
     ctl.edit("storyboard", next);
@@ -63,7 +66,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
     }
   }
   async function uploadOne(sceneId: string | undefined, file: File, title?: string) {
-    return studioApi.upload(p.id, file, "image", { type: "frame", sceneId, newSceneTitle: title });
+    return queued(() => studioApi.upload(p.id, file, "image", { type: "frame", sceneId, newSceneTitle: title }));
   }
   function startBulk(files: File[]) {
     const sorted = [...files].sort((a, b) => (numberOf(a.name) ?? 1e9) - (numberOf(b.name) ?? 1e9) || a.name.localeCompare(b.name));
@@ -159,7 +162,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
                 <p className="mb-1 text-[12px] font-medium text-fg-muted">버전 (눌러서 승인할 이미지 고르기)</p>
                 <div className="grid grid-cols-4 gap-1.5 md:grid-cols-6">
                   {frames(s.id).map((img) => (
-                    <ImageCard key={img.id} img={img} url={ctl.urls[img.key]} onApprove={() => approve(s.id, img)} approveLabel="이 이미지 승인" onRemove={() => setFrames(s.id, frames(s.id).filter((x) => x.id !== img.id))} />
+                    <ImageCard key={img.id} img={img} url={ctl.urls[img.key]} onApprove={() => approve(s.id, img)} approveLabel="이 이미지 승인" onRemove={() => setFrames(s.id, (p.storyboard[s.id] ?? []).map((x) => (x.id === img.id ? { ...x, removed: true, approved: false } : x)))} />
                   ))}
                 </div>
               </div>

@@ -7,6 +7,7 @@ import { STEPS, STEP_STATUS_LABEL, canEnter, progressOf, stepIndex } from "@/lib
 import type { StepKey } from "@/lib/drama-studio/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { useProject, type ProjectCtl } from "./useProject";
+import { studioApi } from "./api";
 import { IdeasStep } from "./steps/IdeasStep";
 import { SelectStep } from "./steps/SelectStep";
 import { StoryStep } from "./steps/StoryStep";
@@ -77,7 +78,14 @@ export function StudioShell({ id, onClose }: { id: string; onClose: () => void }
         })}
       </nav>
 
-      {st.status === "review" && <Notice tone="warning">앞 단계가 바뀌었습니다. 이 단계 결과를 확인하고 다시 승인해 주세요 (결과는 지우지 않았습니다).</Notice>}
+      {st.status === "review" && (
+        <Notice tone="warning">
+          앞 단계가 바뀌었습니다. 이 단계 결과가 바뀐 내용과 맞는지 확인해 주세요 (결과는 지우지 않았습니다). 이 알림이 있어도 작업은 계속할 수 있습니다.{" "}
+          <Button size="sm" variant="secondary" className="ml-1" disabled={Boolean(busy)} onClick={() => void ctl.run("확인", () => studioApi.generate(p.id, "ack-review", { step }))} data-ack-review>
+            확인했어요
+          </Button>
+        </Notice>
+      )}
       {error && (
         <Notice tone="warning">
           {error}{" "}
