@@ -298,7 +298,8 @@ export function endingTarget(f: { examples?: { text: string }[]; guideline?: str
   const { total, ratios } = endingProfile(texts);
   // v0.9.125: 참고 대본에 반말이 거의 없으면 반말도 고칠 대상 (가이드라인이 반말을 직접 요구하면 제외)
   const wantsBanmal = /반말\s*(?:로|으로|만|사용|쓴다|위주)/.test((f.guideline ?? "").replace(/\s+/g, " "));
-  const maxBanmal = total >= 10 && ratios.banmal < 0.05 && !wantsBanmal ? ratios.banmal + 0.05 : null;
+  // v0.9.128: 참고 대본이 적어도(10줄 미만) 반말을 원하지 않으면 반말은 10%까지만 (스타일 표현을 따라 반말이 나오던 문제)
+  const maxBanmal = wantsBanmal ? null : total >= 10 ? (ratios.banmal < 0.05 ? ratios.banmal + 0.05 : null) : 0.1;
   if (guidelineBansYo(f.guideline ?? "")) {
     const ends = wantsBanmal || (total >= 10 && ratios.banmal >= 0.05) ? "'~다'·반말·'~음'·명사" : "'~다'·'~음'·명사 (반말 금지)";
     return {
@@ -308,5 +309,6 @@ export function endingTarget(f: { examples?: { text: string }[]; guideline?: str
     };
   }
   if (total >= 10 && ratios.yo < 0.3) return { maxYo: ratios.yo + 0.05, maxBanmal, rule: fromExamples };
-  return { maxYo: null, maxBanmal, rule: fromExamples };
+  const noBanmal = maxBanmal !== null && total < 10 ? "말끝 규칙: 반말(~해·~야·~지·~어·~거든·~잖아·~네)로 끝내지 않는다. '~요' 존댓말로 끝낸다 ('~니다' 금지)." : null;
+  return { maxYo: null, maxBanmal, rule: fromExamples ?? noBanmal };
 }

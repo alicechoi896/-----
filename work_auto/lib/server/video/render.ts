@@ -431,12 +431,21 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           const b = { x: (raw.x - c.x) / c.w, y: (raw.y - c.y) / c.h, w: raw.w / c.w, h: raw.h / c.h };
           const bx0 = Math.round(b.x * sw * scale - ox);
           const by0 = Math.round(b.y * sh * scale - oy);
-          const bx = Math.max(0, bx0);
-          const by = Math.max(0, by0);
-          const bw = Math.min(W - bx, Math.round(b.w * sw * scale) + Math.min(0, bx0));
-          const bh = Math.min(H - by, Math.round(b.h * sh * scale) + Math.min(0, by0));
-          if (bw <= 8 || bh <= 8) continue;
-          filter += `;[${cur}]split[p${n}][q${n}];[q${n}]crop=${bw}:${bh}:${bx}:${by},boxblur=36:4[bl${n}];[p${n}][bl${n}]overlay=${bx}:${by}[m${n}]`;
+          let bx = Math.max(0, bx0);
+          let by = Math.max(0, by0);
+          let bw = Math.min(W - bx, Math.round(b.w * sw * scale) + Math.min(0, bx0));
+          let bh = Math.min(H - by, Math.round(b.h * sh * scale) + Math.min(0, by0));
+          if (bw <= 0 || bh <= 0) continue;
+          // v0.9.128: 화면 가장자리에 걸친 글자는 블러 영역이 아주 가늘어진다 → 최소 48px 로 넓히고(가운데 기준), 블러 세기는 영역 크기 안으로
+          // (전에는 boxblur=36 이 좁은 영역에서 Invalid argument 로 영상 편집이 멈췄다)
+          const MIN = 48;
+          if (bw < MIN) { bx = Math.max(0, Math.min(W - MIN, bx - Math.round((MIN - bw) / 2))); bw = MIN; }
+          if (bh < MIN) { by = Math.max(0, Math.min(H - MIN, by - Math.round((MIN - bh) / 2))); bh = MIN; }
+          bw -= bw % 2;
+          bh -= bh % 2;
+          const lr = Math.max(1, Math.min(36, Math.floor(Math.min(bw, bh) / 2) - 1));
+          const cr = Math.max(1, Math.min(lr, Math.floor(Math.min(bw, bh) / 4) - 1));
+          filter += `;[${cur}]split[p${n}][q${n}];[q${n}]crop=${bw}:${bh}:${bx}:${by},boxblur=${lr}:4:${cr}:4[bl${n}];[p${n}][bl${n}]overlay=${bx}:${by}[m${n}]`;
           cur = `m${n}`;
         }
       }
