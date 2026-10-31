@@ -1,10 +1,11 @@
 import { dialogueLines } from "@/lib/drama/prompt";
 import { videoModel, type VideoOptions } from "./models";
-import type { Aspect, DramaCharacter, DramaScene, SheetKind } from "./types";
+import type { Aspect, DramaCharacter, DramaScene, SceneBlocking, SheetKind } from "./types";
 
 /**
  * 이미지·영상 영어 프롬프트 (v0.9.81). docs/DRAMA_STUDIO.md
- * 틀: [FORMAT] [REFERENCES] [SUBJECT] [ACTION] [ENVIRONMENT] [CAMERA] [LIGHTING] [COLOR & TEXTURE] [CONSTRAINTS]
+ * 틀: [FORMAT] [REFERENCES] [SUBJECT] [BLOCKING] [KEY MOMENT 또는 ACTION] [ENVIRONMENT] [CAMERA] [LIGHTING] [COLOR & TEXTURE] [CONSTRAINTS]
+ * v0.9.99: 인물마다 화면 위치·자세·구별 특징을 적고(인물 바꿔 잡기 방지), 스토리보드는 대표 한순간 하나만, 영상은 동작 순서대로
  * 참고 이미지 가리키기는 모델마다 다르다:
  * - Kling 3.0 인물 요소: 문서에 있는 @이름 문법 (kling_elements.name)
  * - Seedance·MiniMax·Nano Banana: 문서에 참조 문법(@Image1 등)이 없어 'reference image N' 처럼 글로 설명한다
@@ -56,6 +57,30 @@ function sceneParts(s: DramaScene) {
   };
 }
 
+const SIDES = [["frame center"], ["frame left", "frame right"], ["frame left", "frame center", "frame right"]];
+
+/** 인물 배치: AI 가 만든 배치가 없으면 등장 순서대로 왼쪽→오른쪽 */
+export function blockingOf(s: DramaScene, people: DramaCharacter[]): SceneBlocking[] {
+  const given = s.en?.blocking ?? [];
+  return people.map((c, k) => {
+    const b = given.find((x) => x.name === c.name);
+    return { name: c.name, position: b?.position || (SIDES[Math.min(people.length, 3) - 1]?.[k] ?? "background"), pose: b?.pose || "", cue: b?.cue || characterLine(c) };
+  });
+}
+
+function blockingLine(list: SceneBlocking[], name: (n: string) => string, opening = false): string {
+  if (!list.length) return "";
+  const n = list.length;
+  return `[BLOCKING] Exactly ${n} ${n === 1 ? "person" : "people"} in frame${opening ? " (opening positions, as in the first frame)" : ""}: ${list
+    .map((b) => `${name(b.name)} — ${b.position}${b.pose ? `, ${b.pose}` : ""} (recognizable by: ${b.cue})`)
+    .join("; ")}.`;
+}
+
+/** 한국어 행동에서 마지막 단계 (예: 'A → B → C' 의 C) */
+const lastStep = (t: string) => t.split(/→|->|\n/).map((x) => x.trim()).filter(Boolean).pop() ?? t;
+
+const NO_SWAP = "Each person stays in the stated position with their own face, hairstyle and outfit — never swap identities or positions between people, never merge two people into one, no duplicate of the same person, no extra people.";
+
 /** 스토리보드 이미지 프롬프트. refs = 넣는 기준 이미지의 주인 (순서대로 reference image 1, 2…) */
 export function framePrompt(s: DramaScene, cast: DramaCharacter[], aspect: Aspect, refs: DramaCharacter[]): string {
   if (s.imagePrompt.trim()) return s.imagePrompt.trim();
@@ -65,12 +90,17 @@ export function framePrompt(s: DramaScene, cast: DramaCharacter[], aspect: Aspec
     `[FORMAT] Single storyboard frame for a Korean live-action short drama, ${aspect} ${aspect === "9:16" ? "vertical" : "horizontal"}, cinematic still, one moment only (not a collage, no panels).`,
     refs.length ? `[REFERENCES] ${refs.map((c, i) => `${c.name} = the person in reference image ${i + 1}`).join("; ")}. Draw these SAME people: identical face shape, eyes, eyebrows, nose, lips, skin tone, age, hairstyle and outfit as their reference images — do not redesign or beautify the faces.` : "",
     `[SUBJECT] ${people.length ? people.map((c) => `${c.name} (${characterLine(c)})`).join("; ") + ". " : ""}${p.subject}`,
-    p.action ? `[ACTION] ${p.action}` : "",
+    blockingLine(blockingOf(s, people), (n) => n),
+    s.en?.keyMoment
+      ? `[KEY MOMENT] ${s.en.keyMoment} — show only this single frozen instant, not a sequence of actions.`
+      : p.action
+        ? `[KEY MOMENT] Show only the single decisive final instant of this action, frozen (not a sequence): ${s.en?.action ? p.action : lastStep(p.action)}`
+        : "",
     p.environment ? `[ENVIRONMENT] ${p.environment}` : "",
     p.camera ? `[CAMERA] ${p.camera}` : "",
     p.lighting ? `[LIGHTING] ${p.lighting}` : "",
     p.color ? `[COLOR & TEXTURE] ${p.color}` : "",
-    `[CONSTRAINTS] ${CONSTRAINTS}`,
+    `[CONSTRAINTS] ${people.length ? NO_SWAP + " " : ""}${CONSTRAINTS}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -99,14 +129,21 @@ export function videoPrompt(scenes: DramaScene[], cast: DramaCharacter[], o: Vid
   const one = (s: DramaScene, i?: number) => {
     const p = sceneParts(s);
     const people = cast.filter((c) => s.characterIds.includes(c.id));
+    const blocks = blockingOf(s, people);
+    const whoName = (n: string) => {
+      const c = cast.find((x) => x.name === n);
+      return c ? who(c) : n;
+    };
     const lines = dialogueLines(s.dialogue, 4).map((d) => {
-      const c = cast.find((x) => x.name === d.speaker);
-      return d.speaker ? `${c ? who(c) : d.speaker} says in Korean: "${d.line}"` : `"${d.line}"`;
+      const b = blocks.find((x) => x.name === d.speaker);
+      return d.speaker ? `${whoName(d.speaker)}${b && blocks.length > 1 ? ` (${b.position})` : ""} says in Korean: "${d.line}"` : `"${d.line}"`;
     });
     return [
       i !== undefined ? `Shot ${i + 1}${s.durationSec ? ` (~${s.durationSec}s)` : ""}:` : "",
       `[SUBJECT] ${people.length ? people.map((c) => `${who(c)} (${characterLine(c)})`).join("; ") + ". " : ""}${p.subject}`,
-      p.action ? `[ACTION] ${p.action}` : "",
+      blockingLine(blocks, whoName, true),
+      s.en?.motion ? `[ACTION] In this order: ${s.en.motion}` : p.action ? `[ACTION] ${p.action}` : "",
+      s.en?.keyMoment ? `[END ON] ${s.en.keyMoment}` : "",
       lines.length ? `[DIALOGUE] ${lines.join(" ")} (natural Korean speech with matching lip movement)` : "",
       p.environment ? `[ENVIRONMENT] ${p.environment}` : "",
       p.camera ? `[CAMERA] ${p.camera}` : "",
@@ -124,7 +161,7 @@ export function videoPrompt(scenes: DramaScene[], cast: DramaCharacter[], o: Vid
       : [`${scenes.length} consecutive shots in this exact order, with clear cuts between them:`, ...scenes.map((s, i) => one(s, i))].join("\n\n");
   // v0.9.93: 장면 하나는 컷 없이 한 번에, 행동은 클립 안에서 처음부터 끝까지 (결과만 보여 주고 끝나지 않게)
   const single = scenes.length === 1 ? "[SHOT] One continuous shot with no cuts, no scene changes and no time jumps. Show the entire action from its beginning to its end within this clip at a natural pace; do not end before the key action happens." : "";
-  return [fmt, refs, single, body, `[CONSTRAINTS] The same characters with identical faces, hairstyles and outfits in every frame. ${CONSTRAINTS}`].filter(Boolean).join("\n").slice(0, kling ? 2500 : 6000);
+  return [fmt, refs, single, body, `[CONSTRAINTS] The same characters with identical faces, hairstyles and outfits in every frame. ${NO_SWAP} ${CONSTRAINTS}`].filter(Boolean).join("\n").slice(0, kling ? 2500 : 6000);
 }
 
 /** Kling 멀티 샷: 컷마다 500자 이내 프롬프트 */

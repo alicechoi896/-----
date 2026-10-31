@@ -635,7 +635,7 @@ export const dramaStudioService = {
         `- 화면: ${s.visual}`,
         s.imagePrompt ? `- 이미지 프롬프트: ${s.imagePrompt}` : "",
         s.videoPrompt ? `- 영상 프롬프트: ${s.videoPrompt}` : "",
-        s.en ? `- 영어 조각: ${Object.values(s.en).join(" | ")}` : "",
+        s.en ? `- 영어 조각: ${Object.values(s.en).map((x) => (Array.isArray(x) ? x.map((b) => `${b.name}: ${b.position}, ${b.pose}, ${b.cue}`).join("; ") : x)).filter(Boolean).join(" | ")}` : "",
         "",
       ]),
       "## 생성 작업 프롬프트",

@@ -125,6 +125,22 @@ export interface SceneEnPrompt {
   camera: string;
   lighting: string;
   color: string;
+  /** v0.9.99: 인물마다 화면 위치·몸 방향·자세·구별되는 외모 (Seedance 가 인물을 바꿔 잡지 않게) */
+  blocking?: SceneBlocking[];
+  /** v0.9.99: 스토리보드 이미지 = 장면의 대표 한순간 하나 (동작 여러 개를 넣지 않는다) */
+  keyMoment?: string;
+  /** v0.9.99: 영상 = 첫 장면에서 시작하는 동작 순서 (1) 2) 3)) */
+  motion?: string;
+}
+
+export interface SceneBlocking {
+  name: string;
+  /** 화면 위치: frame left / center / right, foreground / background */
+  position: string;
+  /** 몸 방향·자세·손에 든 것 */
+  pose: string;
+  /** 다른 인물과 구별되는 외모 (머리·옷 색) */
+  cue: string;
 }
 
 export interface DramaScene {

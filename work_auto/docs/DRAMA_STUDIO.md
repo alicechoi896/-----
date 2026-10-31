@@ -52,7 +52,7 @@
 - **입력 방식은 서로 배타적**: 첫 프레임 / 첫+끝 프레임 / 참고 이미지는 한 요청에 하나만 (`buildVideoInput`, 보내기 전 `hasConflictingInputs` 재확인). 화면과 서버가 같은 `validateVideo` 를 쓴다.
 - 한 요청 길이는 모델 최대를 넘지 않는다. 긴 드라마는 장면별 요청 → 타임라인 병합.
 - **묶음 생성**: Kling 3.0 멀티 샷(최대 5장면, 컷 1~12초, 합 3~15초, 첫 장면 이미지만 첫 프레임)만 순서대로 만든다. 다른 모델의 '참고 이미지' 묶음은 "장면 순서와 컷 전환을 보장하지 않음"을 표시.
-- 프롬프트(`lib/drama-studio/prompts.ts`): `[FORMAT] [REFERENCES] [SUBJECT] [ACTION] [DIALOGUE] [ENVIRONMENT] [CAMERA] [LIGHTING] [COLOR & TEXTURE] [SOUND] [CONSTRAINTS]`. Kling 인물 요소만 문서에 있는 `@이름` 문법, 나머지는 문서에 참조 문법이 없어 "reference image N" 으로 글로 설명 (`@Image1` 쓰지 않음). 한국어 시나리오 → 영어 조각은 `generate en-prompts` (AI 글).
+- 프롬프트(`lib/drama-studio/prompts.ts`): `[FORMAT] [REFERENCES] [SUBJECT] [BLOCKING] [ACTION] [END ON] [DIALOGUE] [ENVIRONMENT] [CAMERA] [LIGHTING] [COLOR & TEXTURE] [SOUND] [CONSTRAINTS]` (스토리보드 이미지는 `[ACTION]` 대신 `[KEY MOMENT]` 한순간만). v0.9.99: 영어 조각 `en.blocking`(인물별 position·pose·cue)·`keyMoment`·`motion` — 인물이 바뀌지 않게 위치 고정, 없으면 등장 순서대로 왼쪽→오른쪽. Kling 인물 요소만 문서에 있는 `@이름` 문법, 나머지는 문서에 참조 문법이 없어 "reference image N" 으로 글로 설명 (`@Image1` 쓰지 않음). 한국어 시나리오 → 영어 조각은 `generate en-prompts` (AI 글).
 
 ## 비용·호출 규칙
 

@@ -210,7 +210,8 @@ const SCENE_GUIDE =
 2) 이야기의 중요한 순간(발견·변신·고백·반전·결정)은 반드시 화면에 직접 보이게 한 장면을 준다. 결과만 다음 장면에 보여 주지 않는다.
 3) 같은 장소가 이어지면 앞 장면의 마지막 모습(자세·위치·들고 있는 물건)에서 다음 장면이 시작되게 쓴다. 장소가 바뀌는 장면은 location 을 분명히 바꿔 쓴다.
 4) 등장인물의 외모·머리·의상은 처음부터 끝까지 절대 바꾸지 않는다 (상처·젖음 같은 변화는 continuity 에 적고 이어지게). 같은 인물을 다른 모습으로 묘사하지 않는다.
-5) 한 장면에 장소 이동·시간 점프를 넣지 않는다.`;
+5) 한 장면에 장소 이동·시간 점프를 넣지 않는다.
+6) 인물이 둘 이상이면 visual 에 누가 화면 어디에 있는지 적는다 (예: '도현은 화면 왼쪽 소파에 앉아 있고, 서준은 오른쪽 문가에 서 있다'). 같은 장소가 이어지면 위치를 바꾸지 않는다.`;
 
 function toScene(r: Json, cast: DramaCharacter[]): DramaScene {
   const names = Array.isArray(r.characters) ? (r.characters as unknown[]).map((x) => str(x, 20)) : [];
@@ -322,7 +323,8 @@ export async function genParseScenario(p: DramaProject, text: string) {
 }
 
 /* ───── 영어 프롬프트 조각 (이미지·영상용) ───── */
-const EN = obj({ id: S, subject: S, action: S, environment: S, camera: S, lighting: S, color: S });
+const BLOCK = obj({ name: S, position: S, pose: S, cue: S });
+const EN = obj({ id: S, subject: S, blocking: arr(BLOCK), keyMoment: S, motion: S, action: S, environment: S, camera: S, lighting: S, color: S });
 export async function genEnglishPrompts(p: DramaProject, sceneIds: string[]) {
   const scenes = p.scenario.scenes.filter((s) => sceneIds.includes(s.id));
   const chunks: DramaScene[][] = [];
@@ -333,9 +335,17 @@ export async function genEnglishPrompts(p: DramaProject, sceneIds: string[]) {
       ask<{ scenes: Json[] }>(
         "scenario-en",
         "You write concise English prompts for AI image and video generation from Korean drama scenes. Keep Korean character names as written. Be concrete and visual.",
-        `Characters:\n${p.characters.map((c) => `- ${c.name}: ${c.appearanceEn || c.appearance}`).join("\n")}\n\nScenes (Korean):\n${list.map((s) => JSON.stringify({ id: s.id, title: s.title, location: s.location, time: s.timeOfDay, characters: s.characterIds.map(name), action: s.action, emotion: s.emotion, camera: s.camera, visual: s.visual })).join("\n")}\n\nFor each scene return: id (same), subject (who is in frame and how they look, 1 sentence), action (every visible step of the action in order, concrete hands/objects/gaze/expression — keep all steps from the Korean action, 2-4 sentences), environment (place and time), camera (shot size and movement), lighting, color (color grade and texture). English only.`,
+        `Characters:\n${p.characters.map((c) => `- ${c.name}: ${c.appearanceEn || c.appearance}`).join("\n")}\n\nScenes (Korean):\n${list.map((s) => JSON.stringify({ id: s.id, title: s.title, location: s.location, time: s.timeOfDay, characters: s.characterIds.map(name), action: s.action, emotion: s.emotion, camera: s.camera, visual: s.visual })).join("\n")}\n\nFor each scene return:
+- id (same)
+- subject: who is in frame and how they look, 1 sentence
+- blocking: one entry per character in the scene (use the Korean name exactly). position = exact place in the frame (frame left / center / frame right, foreground / background, distance between them); pose = body direction, standing/sitting, where they look, what is in their hands; cue = 2-3 visual traits that tell this person apart from the others (hair, outfit color). Give different people clearly different sides of the frame and keep the sides consistent with the previous scene at the same location.
+- keyMoment: the ONE frozen instant that best represents the scene, for a still image — usually the climax or final result of the action (e.g. "his hand grips the brass lamp as blue smoke bursts from its spout"). One sentence, present tense, a single moment only: no sequences, no "then", no arrows.
+- motion: the movement for a video clip as ordered beats "1) ... 2) ... 3) ..." (2-4 beats), each beat says who (name + position) does what with hands/objects/gaze/expression; the first beat starts from the opening pose, the last beat ends on the keyMoment. Nobody changes sides unless the Korean action says so.
+- action: every visible step of the action in order, 2-4 sentences
+- environment (place and time), camera (shot size and movement), lighting, color (color grade and texture).
+English only (names stay in Korean).`,
         obj({ scenes: arr(EN) }),
-        () => ({ scenes: list.map((s) => ({ id: s.id, subject: "A Korean woman in a beige trench coat", action: "She looks at her phone in shock", environment: "dark apartment living room at night", camera: "close-up, slow push-in", lighting: "phone screen light on her face", color: "cool teal tones, film grain" })) }),
+        () => ({ scenes: list.map((s) => ({ id: s.id, subject: "A Korean woman in a beige trench coat", blocking: s.characterIds.map((id, k) => ({ name: name(id), position: k ? "frame right, mid-ground" : "frame left, foreground", pose: "standing, facing the other person", cue: "short black bob, beige trench coat" })), keyMoment: "She stares at her phone screen in shock", motion: "1) She lifts the phone 2) She reads the message 3) Her face freezes in shock", action: "She looks at her phone in shock", environment: "dark apartment living room at night", camera: "close-up, slow push-in", lighting: "phone screen light on her face", color: "cool teal tones, film grain" })) }),
         8000,
       ),
     ),
@@ -343,7 +353,8 @@ export async function genEnglishPrompts(p: DramaProject, sceneIds: string[]) {
   const out = new Map<string, SceneEnPrompt>();
   for (const r of parts.flatMap((x) => x.data.scenes ?? [])) {
     const id = str(r.id, 40);
-    if (scenes.some((s) => s.id === id)) out.set(id, { subject: str(r.subject, 400), action: str(r.action, 600), environment: str(r.environment, 300), camera: str(r.camera, 200), lighting: str(r.lighting, 200), color: str(r.color, 200) });
+    const blocking = (Array.isArray(r.blocking) ? (r.blocking as Json[]) : []).slice(0, 8).map((b) => ({ name: str(b.name, 20), position: str(b.position, 120), pose: str(b.pose, 200), cue: str(b.cue, 160) })).filter((b) => b.name);
+    if (scenes.some((s) => s.id === id)) out.set(id, { subject: str(r.subject, 400), blocking, keyMoment: str(r.keyMoment, 300), motion: str(r.motion, 700), action: str(r.action, 600), environment: str(r.environment, 300), camera: str(r.camera, 200), lighting: str(r.lighting, 200), color: str(r.color, 200) });
   }
   return { prompts: out, aiCalls: parts.reduce((n, x) => n + x.aiCalls, 0) };
 }

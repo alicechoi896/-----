@@ -79,6 +79,24 @@ describe("프롬프트", () => {
     expect(t.indexOf("Shot 1")).toBeLessThan(t.indexOf("Shot 2"));
     for (const s of shotPrompts(two, cast, opt({ modelId: "kling-3", mode: "multi_shot", shotSecs: [3, 4] }))) expect(s.prompt.length).toBeLessThanOrEqual(500);
   });
+  it("v0.9.99: 인물 위치 고정 + 스토리보드는 대표 한순간만, 영상은 동작 순서", () => {
+    const two = emptyScene({ title: "소파", characterIds: ["c_aaa111", "c_bbb222"], action: "친구들이 다가온다 → 고개를 끄덕인다 → 일어난다", dialogue: "도현: 가자" });
+    const f = framePrompt(two, cast, "9:16", []);
+    expect(f).toContain("Exactly 2 people");
+    expect(f).toContain("서윤 — frame left");
+    expect(f).toContain("도현 — frame right");
+    expect(f).toContain("[KEY MOMENT]");
+    expect(f).toContain("일어난다");
+    expect(f).not.toContain("고개를 끄덕인다");
+    expect(f).toContain("never swap identities");
+    const en = { subject: "", action: "", environment: "", camera: "", lighting: "", color: "", keyMoment: "도현 rises from the sofa", motion: "1) 도현 nods 2) 도현 stands up", blocking: [{ name: "도현", position: "frame left, on the sofa", pose: "sitting", cue: "grey hoodie" }, { name: "서윤", position: "frame right, by the door", pose: "standing", cue: "beige coat" }] };
+    const v = videoPrompt([{ ...two, en }], cast, opt({ mode: "first_frame" }));
+    expect(v).toContain("도현 — frame left, on the sofa, sitting (recognizable by: grey hoodie)");
+    expect(v).toContain("[ACTION] In this order: 1) 도현 nods");
+    expect(v).toContain("[END ON] 도현 rises from the sofa");
+    expect(v).toContain('도현 (frame left, on the sofa) says in Korean: "가자"');
+    expect(framePrompt({ ...two, en }, cast, "9:16", [])).toContain("[KEY MOMENT] 도현 rises from the sofa — show only this single frozen instant");
+  });
   it("직접 고친 프롬프트가 있으면 그대로", () => {
     expect(videoPrompt([{ ...scene, videoPrompt: "MY PROMPT" }], cast, opt())).toBe("MY PROMPT");
   });
