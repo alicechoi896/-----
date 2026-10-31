@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
+import { Check, Clapperboard, Download, Film, ListPlus, Mic, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { MODE_LABEL, VIDEO_MODELS, fitDuration, modelOptionLabel, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { sceneCast, videoPrompt } from "@/lib/drama-studio/prompts";
@@ -37,6 +37,10 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   const [chain, setChain] = useState(true);
   // v0.9.91: 클립 프롬프트 고쳐 다시 만들기
   const [promptClip, setPromptClip] = useState<DramaClip | null>(null);
+  // v0.9.122 립싱크 시험: 샷에 올린 목소리가 있는 클립만
+  const [lipsync, setLipsync] = useState<DramaClip | null>(null);
+  const lipsyncBusy = p.tasks.some((t) => t.mode === "lipsync" && (t.status === "generating" || t.status === "requesting"));
+  const lipsyncReady = (c: DramaClip) => Boolean(c.shotId && (p.shots ?? []).find((x) => x.id === c.shotId)?.voiceKey);
 
   const frameOf = (id: string) => (p.storyboard[id] ?? []).find((f) => f.approved) ?? null;
   const refChars = (list: DramaScene[]): DramaCharacter[] => [...new Set(list.flatMap((s) => sceneCast(s, p.characters)))].filter((c) => (p.sheets[c.id] ?? []).some((i) => i.approved));
@@ -384,7 +388,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                 </p>
                 {c.faceCheck && !c.faceCheck.ok && <p className="text-[11px] text-danger">{c.faceCheck.note || "기준 이미지와 다른 사람처럼 보입니다"} — [프롬프트 고쳐 다시 만들기]로 다시 만들어 주세요.</p>}
                 <p className="text-[11px] text-fg-subtle">
-                  {c.source === "upload" ? `업로드 ${c.fileName ?? ""}` : `${videoModel(c.modelId)?.label ?? c.modelId} · ${MODE_LABEL[c.mode as GenMode]?.split(" (")[0] ?? c.mode}`}
+                  {c.mode === "lipsync" ? "립싱크 시험 결과 (올린 목소리 입힘)" : c.source === "upload" ? `업로드 ${c.fileName ?? ""}` : `${videoModel(c.modelId)?.label ?? c.modelId} · ${MODE_LABEL[c.mode as GenMode]?.split(" (")[0] ?? c.mode}`}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   <Button size="sm" variant={c.approved ? "primary" : "secondary"} icon={Check} onClick={() => setClips(p.clips.map((x) => (x.id === c.id ? { ...x, approved: !x.approved } : x)))}>
@@ -407,6 +411,11 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                   {c.sceneIds.length > 0 && (
                     <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setPromptClip(c)} data-clip-prompt>
                       프롬프트 고쳐 다시 만들기
+                    </Button>
+                  )}
+                  {c.shotId && c.mode !== "lipsync" && (
+                    <Button size="sm" variant="ghost" icon={Mic} disabled={!lipsyncReady(c) || lipsyncBusy} title={lipsyncReady(c) ? undefined : "07 샷에서 '음성: 올린 파일'로 목소리를 올리면 쓸 수 있습니다"} onClick={() => setLipsync(c)} data-clip-lipsync>
+                      립싱크 시험
                     </Button>
                   )}
                   <Button size="sm" variant="ghost" icon={Trash2} onClick={() => window.confirm(`${sceneLabel(c.sceneIds)} 클립을 지울까요?${inTimeline.has(c.id) ? " 타임라인에서도 빠집니다." : ""}`) && removeClips([c.id])} data-clip-delete>
@@ -457,6 +466,19 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
           />
         );
       })()}
+      <CostConfirm
+        open={Boolean(lipsync)}
+        title="립싱크 시험"
+        items={lipsync ? [{ label: "Volcengine 립싱크 Lite (Kie) · 클립 + 샷에 올린 목소리", count: 1, credits: null }] : []}
+        notes={["Kie 요청 1번. 가격이 공개되지 않아 예상 크레딧을 모릅니다 — 끝난 뒤 실제 사용 크레딧이 작업 목록에 남습니다.", "원본 클립은 그대로 두고, 결과는 같은 샷의 새 버전 클립으로 들어옵니다. 자동으로 다시 보내지 않습니다."]}
+        onCancel={() => setLipsync(null)}
+        onConfirm={() => {
+          const c = lipsync!;
+          setLipsync(null);
+          void ctl.run("립싱크", () => studioApi.lipsync(p.id, { clipId: c.id, clientRequestId: newRequestId() }));
+        }}
+        busy={ctl.busy === "립싱크"}
+      />
       <CostConfirm
         open={Boolean(confirm)}
         title={confirm && "retry" in confirm ? "실패한 영상 다시 만들기" : "AI 영상 만들기"}

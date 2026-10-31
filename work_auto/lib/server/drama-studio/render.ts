@@ -151,7 +151,8 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
       const shot = clip.shotId ? (p.shots ?? []).find((x) => x.id === clip.shotId) : null;
       const audioFiles: string[] = [];
       let voiceFile: string | null = null;
-      if (shot?.voiceSource === "upload" && shot.voiceKey) {
+      // v0.9.122: 립싱크 클립은 목소리가 이미 들어 있어 다시 얹지 않는다
+      if (shot?.voiceSource === "upload" && shot.voiceKey && clip.mode !== "lipsync") {
         const vb = await videoStorage.download(shot.voiceKey).catch(() => null);
         if (vb) {
           voiceFile = path.join(dir, `voice${i}${path.extname(shot.voiceKey) || ".mp3"}`);

@@ -740,6 +740,11 @@ function JobPanel({
 }
 
 /** 자막 글꼴·글자색·테두리색·크기 (v0.9.63) — 영상에는 서버가 같은 값으로 그린다 */
+/** v0.9.122: 미리보기 글꼴 (영상과 같은 파일) — 이 부품을 다른 화면에서 쓸 때도 함께 넣는다 */
+export function VideoFontFaces() {
+  return <style>{FONT_FACES}</style>;
+}
+
 export function CaptionStylePicker({ value, onChange }: { value: CaptionStyle; onChange: (v: CaptionStyle) => void }) {
   const set = (patch: Partial<CaptionStyle>) => onChange({ ...value, ...patch });
   const shadow = value.stroke === "none" ? "none" : [-3, 3].flatMap((x) => [-3, 3].map((y) => `${x}px ${y}px 0 ${value.stroke}`)).join(",");

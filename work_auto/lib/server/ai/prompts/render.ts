@@ -47,6 +47,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
         `핵심 특징: ${a.summary.keyFeatures.join(", ")}`,
         `핵심 장점: ${a.summary.keyBenefits.join(", ")}`,
         `차별점: ${a.summary.differentiators.join(", ")}`,
+        a.summary.buyingPoints?.length ? `구매 포인트 (제품 라이브러리에서 학습): ${a.summary.buyingPoints.join(" / ")}` : "",
         `추천 대상: ${a.summary.targetAudience.join(", ")}`,
         `주의할 점: ${a.summary.cautions.join(", ")}`,
         `영상 강조 포인트: ${a.contentData.videoPoints.join(", ")}`,
@@ -251,6 +252,11 @@ export function renderContentPrompt(
   // 콘텐츠 스타일을 여러 개 고르면 후보·대본을 그 유형들로 섞는다 (v0.9.41)
   if (Array.isArray(input.style) && input.style.length > 1)
     userInput.push(`스타일 섞기: 고른 스타일 ${input.style.length}가지(${input.style.map((x) => optionLabel("style", x)).join(" / ")})를 골고루 섞는다 — 제목·Hook·CTA 후보는 유형별로 나눠 만들고, 대본(또는 본문)도 편마다 다른 유형을 따른다.`);
+
+  // v0.9.122: 제품 영상 대본의 제품 장점·설명 부분은 제품 라이브러리에서 학습한 구매 포인트로 (지어낸 장점 대신)
+  const buying = ctx.product?.analysis.summary.buyingPoints?.filter(Boolean) ?? [];
+  if (buying.length && config.outputs.some((o) => o.key === "script"))
+    userInput.push(`제품 설명 구성: 대본에서 제품 장점·설명 부분은 '구매 포인트'(${buying.join(" / ")})로 구성한다 — 포인트마다 한 줄(한 컷)씩, 시청자 말투로 풀어 쓰되 내용은 바꾸거나 지어내지 않는다. 포인트가 많으면 Hook·제목과 가장 잘 맞는 것부터 고른다. 구매 포인트에 없는 장점·숫자는 넣지 않는다.`);
 
   // 제목 후보 구성: AI 추천 · 내 대본 포맷 패턴 · 실제 플랫폼 트렌드 (v0.9.50)
   const titleSec = config.outputs.find((o) => o.key === "titles");

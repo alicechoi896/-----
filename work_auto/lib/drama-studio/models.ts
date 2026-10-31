@@ -244,7 +244,11 @@ export const MODE_LABEL: Record<GenMode, string> = {
   reference: "참고 이미지 (인물·장면 외형 참고)",
   multi_shot: "여러 장면 순서대로 (멀티 샷)",
   text: "글만 (이미지 없이)",
+  lipsync: "립싱크 시험 (만든 클립에 올린 목소리를 입힘)",
 };
+
+/** v0.9.122 립싱크 시험: Kie volcengine 영상→영상 립싱크 (가격 미공개 — 확인 창에서 '모름'으로) */
+export const LIPSYNC_MODEL = { id: "volcengine-lipsync", model: "volcengine/video-to-video-lip-sync", mode: "lite", label: "립싱크 (Volcengine Lite)" } as const;
 
 export interface ImageModel {
   id: string;

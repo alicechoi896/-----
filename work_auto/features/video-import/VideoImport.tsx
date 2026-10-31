@@ -27,6 +27,7 @@ import {
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatRelative } from "@/lib/utils";
 import { XhsJobStatus, useXhsDownloads } from "./useXhsDownloads";
+import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
 import { SocialSearchPanel } from "./SocialSearchPanel";
 
 const MAX_BATCH = 20;
@@ -270,6 +271,7 @@ export function VideoImport() {
 
   return (
     <div className="space-y-5">
+      <XhsPermanentLinks />
       <SectionCard
         title="영상 가져오기"
         icon={ListPlus}

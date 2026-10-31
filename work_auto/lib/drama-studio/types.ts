@@ -183,7 +183,7 @@ export interface DramaScenario {
   rev?: number;
 }
 
-export type GenMode = "first_frame" | "first_last" | "reference" | "multi_shot" | "text";
+export type GenMode = "first_frame" | "first_last" | "reference" | "multi_shot" | "text" | "lipsync";
 
 export type TaskStatus = "queued" | "requesting" | "generating" | "success" | "fail";
 

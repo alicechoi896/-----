@@ -62,6 +62,8 @@ export interface FeatureDef {
   adminOnly?: boolean;
   /** 카드에 보조로 표시할 태그 */
   tags?: string[];
+  /** v0.9.122: 메뉴·허브 카드에 보이지 않음 (다른 화면의 버튼으로만 들어감, 권한·주소는 그대로) */
+  hideInMenu?: boolean;
 }
 
 /** 채널에 속하지 않는 단독 페이지 (사이드바 노출용) */

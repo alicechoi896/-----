@@ -10,7 +10,7 @@ import * as ai from "./ai";
 import { renderDrama } from "./render";
 import { faceCheck } from "./face";
 import { isProjectId, loadProject, ownsKey, projectDir, readIndex, saveProject, withUrls } from "./store";
-import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob, createMusicTask } from "./tasks";
+import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob, createMusicTask, createLipsyncTask } from "./tasks";
 import { DEFAULT_SHOT_MODEL, IMAGE_MODELS, VIDEO_MODELS, fitDuration, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, emptyShot } from "@/lib/drama-studio/shots";
 import { videoAssets } from "../video/assets";
@@ -600,11 +600,23 @@ export const dramaStudioService = {
     // 실패한 작업만 다시: 같은 장면·설정·프롬프트로 새 작업
     if (Array.isArray(body.retryTaskIds) && body.retryTaskIds.length) {
       jobs = p.tasks
-        .filter((t) => (body.retryTaskIds as unknown[]).includes(t.id) && t.kind === "video" && t.status === "fail")
+        .filter((t) => (body.retryTaskIds as unknown[]).includes(t.id) && t.kind === "video" && t.mode !== "lipsync" && t.status === "fail")
         .map((t) => ((t.request as { shotId?: string }).shotId ? { shotId: (t.request as { shotId: string }).shotId, sceneIds: [], options: (t.request as { options: VideoOptions }).options } : { sceneIds: (t.target as { sceneIds: string[] }).sceneIds, options: (t.request as { options: VideoOptions }).options, prompt: t.prompt, lastSceneId: (t.request as { lastSceneId?: string }).lastSceneId ?? undefined }));
       if (!jobs.length) throw new AppError("VALIDATION", "다시 만들 실패 작업이 없습니다.");
     }
     const tasks = await createVideoTasks(owner, p, jobs, requestId, body.chain === true);
+    const saved = await saveMerged(owner, { ...p, tasks: [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks] });
+    return { ...(await withUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
+  },
+
+  /** v0.9.122 립싱크 시험 (Kie 1회, 확인 후에만) */
+  async lipsync(id: string, body: { clipId?: unknown; clientRequestId?: unknown; confirmed?: unknown }) {
+    if (body.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "비용이 드는 작업입니다. 확인 창에서 [만들기]를 눌러 주세요.", 409);
+    const requestId = String(body.clientRequestId ?? "").slice(0, 80);
+    if (requestId.length < 8) throw new AppError("VALIDATION", "요청 번호가 없습니다.");
+    const { owner, p } = await open(id);
+    requireStep(p, "video");
+    const tasks = await createLipsyncTask(p, String(body.clipId ?? ""), requestId);
     const saved = await saveMerged(owner, { ...p, tasks: [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks] });
     return { ...(await withUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
   },

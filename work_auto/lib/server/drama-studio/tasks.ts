@@ -10,7 +10,7 @@ import { safeFetch } from "../security/safe-url";
 import { runFfmpeg, mediaDuration } from "../video/ffmpeg";
 import { videoStorage } from "../video/storage";
 import { projectDir } from "./store";
-import { buildVideoInput, kieModelOf, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { buildVideoInput, kieModelOf, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions, LIPSYNC_MODEL } from "@/lib/drama-studio/models";
 import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt, sceneCast } from "@/lib/drama-studio/prompts";
 import { markNewResult, newId, swapIntoTimeline } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaShot, DramaTask, SheetKind } from "@/lib/drama-studio/types";
@@ -466,6 +466,34 @@ export async function createVideoTasks(owner: string, p: DramaProject, jobs: Vid
       (t) => videoInput(p, t),
     );
     return tasks;
+  })().finally(() => inFlight.delete(key));
+  inFlight.set(key, run);
+  return run;
+}
+
+/* ───── v0.9.122 립싱크 시험 (Kie volcengine/video-to-video-lip-sync) ───── */
+/** 만든 클립 + 그 샷에 올린 목소리 파일 → 입 모양을 맞춘 새 클립 (원본은 그대로, 결과는 새 버전) */
+export async function createLipsyncTask(p: DramaProject, clipId: string, requestId: string): Promise<DramaTask[]> {
+  const dup = existing(p, requestId);
+  if (dup.length) return dup;
+  const clip = p.clips.find((c) => c.id === clipId && !c.removed);
+  if (!clip) throw new AppError("VALIDATION", "클립을 찾지 못했습니다. 화면을 새로고침해 주세요.");
+  const shot = clip.shotId ? (p.shots ?? []).find((x) => x.id === clip.shotId) : null;
+  const audioKey = shot?.voiceKey ?? null;
+  if (!audioKey) throw new AppError("VALIDATION", "이 클립의 샷에 올린 목소리 파일이 없습니다. 07 샷에서 '음성: 올린 파일'로 목소리를 올린 뒤 눌러 주세요.");
+  if (p.tasks.some((t) => t.mode === "lipsync" && (t.status === "generating" || t.status === "requesting"))) throw new AppError("BUSY", "립싱크를 만드는 중입니다. 끝난 뒤 다시 눌러 주세요.", 409);
+  const key = `lipsync:${p.id}:${requestId}`;
+  if (inFlight.has(key)) return (await inFlight.get(key)) as DramaTask[];
+  const run = (async () => {
+    const prov = await provider();
+    const t = baseTask({ kind: "video", target: { type: "clip", sceneIds: clip.sceneIds, shotId: clip.shotId ?? undefined }, modelId: LIPSYNC_MODEL.id, mode: "lipsync", prompt: `립싱크: ${clip.id} + 올린 목소리`, requestId, durationSec: clip.durationSec, estimatedCredits: null });
+    await submit(prov, [t], () => LIPSYNC_MODEL.model, async (x) => {
+      const urls = await signed([clip.key, audioKey]);
+      if (!urls[clip.key] || !urls[audioKey]) throw new AppError("VALIDATION", "클립·목소리 파일 주소를 만들지 못했습니다.");
+      x.request = { lipsyncOf: clip.id, audioKey, mode: LIPSYNC_MODEL.mode };
+      return { video_url: urls[clip.key], audio_url: urls[audioKey], mode: LIPSYNC_MODEL.mode };
+    });
+    return [t];
   })().finally(() => inFlight.delete(key));
   inFlight.set(key, run);
   return run;

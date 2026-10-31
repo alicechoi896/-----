@@ -16,7 +16,7 @@ export function getHomeChannels(): ChannelDef[] {
 }
 
 export function getFeaturesByChannel(id: HubId): FeatureDef[] {
-  return FEATURES.filter((f) => f.channelId === id).sort((a, b) => a.order - b.order);
+  return FEATURES.filter((f) => f.channelId === id && !f.hideInMenu).sort((a, b) => a.order - b.order);
 }
 
 export function getFeature(id: string): FeatureDef {

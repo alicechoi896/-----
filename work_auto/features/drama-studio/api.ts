@@ -41,6 +41,7 @@ export const studioApi = {
   images: (id: string, body: { jobs: { target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string } | { type: "shot"; shotId: string }; prompt?: string }[]; modelId: string; clientRequestId: string }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/images`, { ...body, confirmed: true }),
   music: (id: string, body: { note: string; clientRequestId: string }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/music`, { ...body, confirmed: true }),
   videos: (id: string, body: { jobs?: { shotId?: string; sceneIds: string[]; options: VideoOptions; prompt?: string }[]; retryTaskIds?: string[]; clientRequestId: string; chain?: boolean }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/videos`, { ...body, confirmed: true }),
+  lipsync: (id: string, body: { clipId: string; clientRequestId: string }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/lipsync`, { ...body, confirmed: true }),
   sync: (id: string) => post<Loaded & { changed: boolean }>(`/api/drama-studio/${id}/sync`),
   render: (id: string) => post<Loaded>(`/api/drama-studio/${id}/render`),
   /** 파일 올리기: 서명 주소로 Storage 에 바로 → 단계에 잇기 */

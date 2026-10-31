@@ -6,7 +6,8 @@ import { Badge, Button, CopyButton, EmptyState, ErrorState, Input, LoadingState,
 import { cn } from "@/lib/utils";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { DEFAULT_CAPTION_STYLE, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
-import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker } from "@/features/video-production/VideoProductionWorkspace";
+import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
+import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker, VideoFontFaces } from "@/features/video-production/VideoProductionWorkspace";
 
 /** v0.9.121: 자동 제작 목소리·자막·제목 스타일 (영상 제작 화면과 같은 항목) */
 interface AutoStyle {
@@ -165,7 +166,7 @@ export function AutoVideo() {
   return (
     <div className="space-y-6" data-auto-video>
       {error && <Notice tone="warning">{error}</Notice>}
-      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
+      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만들어 결과가 남아 있거나 업로드 관리에 등록한 제품 제외 — 결과를 지우면 다시 고를 수 있음) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-[14px] font-medium">
             <input type="checkbox" checked={s.enabled} disabled={Boolean(busy)} onChange={(e) => void save({ enabled: e.target.checked })} className="size-4 accent-[var(--color-brand)]" data-auto-enabled />
@@ -196,9 +197,12 @@ export function AutoVideo() {
               {" "}
               (제외: 공유 링크(xhslink) 영상 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
             </span>
-            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, [만료되는 링크]는 [공유 링크로 바꾸기]로 xhslink 주소를 넣어 주세요.</span>}
+            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, 만료되는 링크는 아래 [모든 영상 영구 링크 받기]로 한 번에 바꿀 수 있습니다.</span>}
           </p>
         )}
+        <div className="mt-3">
+          <XhsPermanentLinks />
+        </div>
         <p className="mt-3 text-[12px] text-fg-subtle">비용(영상 1개): AI 글 약 4~5회 + AI 음성 1편 + 샤오홍슈 글자 확인(AI 이미지 읽기, 처음 쓰는 영상만). YouTube 검색은 무료 한도 안. 완성 영상 파일은 7일 동안 보관됩니다 (받으면 1시간 뒤 지움).</p>
       </SectionCard>
 
@@ -331,9 +335,10 @@ function AutoStyleCard({ saved, busy, onSave }: { saved: AutoStyle | null; busy:
   const [opts, setOpts] = useState<VideoProductionOptions | null>(null);
   const [st, setSt] = useState<AutoStyle>(() => saved ?? {});
   const [dirty, setDirty] = useState(false);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    void api.videoProduction.options("youtube").then(setOpts).catch(() => setOpts(null));
-  }, []);
+    if (open && !opts) void api.videoProduction.options("youtube").then(setOpts).catch(() => setOpts(null));
+  }, [open, opts]);
   const set = (patch: Partial<AutoStyle>) => {
     setSt((x) => ({ ...x, ...patch }));
     setDirty(true);
@@ -349,16 +354,24 @@ function AutoStyleCard({ saved, busy, onSave }: { saved: AutoStyle | null; busy:
       icon={Settings2}
       description={saved ? "저장한 목소리·자막·제목 스타일로 자동 제작합니다." : "아직 저장 안 함 — 지금은 가장 최근에 직접 만든 영상 설정을 씁니다. 고른 뒤 [스타일 저장]을 눌러 주세요."}
       actions={
-        <Button size="sm" variant="primary" disabled={busy || !dirty || (narrationOn && engine === "typecast" && !st.voice)} onClick={() => void onSave({ ...st, ttsEngine: engine, narrationOn, captions: captionsOn, voiceSpeed: speed, maxPauseSec: pause }).then(() => setDirty(false))} data-auto-style-save>
-          스타일 저장
+        <span className="flex items-center gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)} data-auto-style-toggle>
+          {open ? "접기" : "펼치기"}
         </Button>
+        {open && <Button size="sm" variant="primary" disabled={busy || !dirty || (narrationOn && engine === "typecast" && !st.voice)} onClick={() => void onSave({ ...st, ttsEngine: engine, narrationOn, captions: captionsOn, voiceSpeed: speed, maxPauseSec: pause }).then(() => setDirty(false))} data-auto-style-save>
+          스타일 저장
+        </Button>}
+        </span>
       }
       data-auto-style
     >
-      {!opts ? (
+      {!open ? (
+        <p className="text-[12.5px] text-fg-muted">{saved ? `저장한 스타일: 음성 ${saved.narrationOn === false ? "끔" : saved.ttsEngine === "openai" ? "OpenAI" : "타입캐스트"} · 자막 ${saved.captions === false ? "끔" : "켬"} · 속도 ${saved.voiceSpeed === 0 ? "자동" : `${saved.voiceSpeed ?? 1}배`} · 무음 ${saved.maxPauseSec ?? "-"}초 넘으면 줄임` : "저장한 스타일이 없습니다."} [펼치기]로 바꿉니다.</p>
+      ) : !opts ? (
         <LoadingState label="목소리 목록 준비 중…" />
       ) : (
         <div className="space-y-4 text-[13px]">
+          <VideoFontFaces />
           <div className="space-y-1">
             <span className="text-[12px] font-medium text-fg-muted">말 사이 무음 없애기</span>
             <SegmentedControl size="sm" value={String(pause)} onChange={(v) => set({ maxPauseSec: Number(v) })} options={PAUSE_OPTIONS.map((x) => ({ value: String(x), label: `${x}초 넘으면` }))} />

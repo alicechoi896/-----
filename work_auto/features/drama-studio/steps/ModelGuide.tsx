@@ -5,7 +5,7 @@ import { Film } from "lucide-react";
 import { VIDEO_MODELS, lengthLabel } from "@/lib/drama-studio/models";
 import type { GenMode } from "@/lib/drama-studio/types";
 
-const MODE_SHORT: Record<GenMode, string> = { first_frame: "시작 프레임", first_last: "시작+끝", reference: "참고 이미지", multi_shot: "멀티 샷", text: "글만" };
+const MODE_SHORT: Record<GenMode, string> = { first_frame: "시작 프레임", first_last: "시작+끝", reference: "참고 이미지", multi_shot: "멀티 샷", text: "글만", lipsync: "립싱크" };
 
 /** v0.9.108 영상 모델 한눈에 보기: 한 번에 만들 수 있는 길이·해상도·방식·소리·가격 (docs.kie.ai · kie.ai 2026-11-01 확인) */
 export function ModelGuide() {

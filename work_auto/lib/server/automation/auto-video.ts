@@ -194,10 +194,21 @@ async function patchItem(date: string, id: string, patch: Partial<AutoItem>): Pr
 }
 
 /* ───── 1) 제품 고르기 ───── */
+/**
+ * 최근 repeatDays 일 안에 '만든' 제품 (v0.9.122): 자동 제작 결과에 남아 있는 항목(지운 것·실패는 빼고) + 업로드 관리에 등록한 제품.
+ * 전에는 원고 기록으로 셌는데, 결과를 지워도 원고 기록은 남아 계속 제외되던 문제
+ */
 async function recentProductIds(owner: string): Promise<Set<string>> {
   const since = Date.now() - AUTO_LIMITS.repeatDays * 86400_000;
-  const contents = await getRepositories().contents.list((c) => c.userId === owner && c.featureId === FEATURE && Date.parse(c.createdAt) >= since);
-  return new Set(contents.map((c) => c.productId).filter((x): x is string => Boolean(x)));
+  const out = new Set<string>();
+  const sinceDate = kstDate(new Date(since));
+  for (const d of (await listRuns(AUTO_LIMITS.repeatDays + 2)).filter((x) => x >= sinceDate)) {
+    const run = await readRun(d).catch(() => null);
+    for (const it of run?.items ?? []) if (it.status !== "failed" && it.status !== "skipped") out.add(it.productId);
+  }
+  const pubs = await getRepositories().publications.list((x) => x.userId === owner && Boolean(x.productId) && Date.parse(x.createdAt) >= since).catch(() => []);
+  for (const x of pubs) out.add(x.productId!);
+  return out;
 }
 
 interface Candidate {
