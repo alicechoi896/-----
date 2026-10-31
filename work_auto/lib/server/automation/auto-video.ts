@@ -1,4 +1,5 @@
 import "server-only";
+import { withClaude } from "../providers/ai-force";
 import type { GeneratedContent } from "@/lib/types";
 import type { VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { AppError } from "../http";
@@ -277,7 +278,7 @@ export async function startRun(date = kstDate(), countOverride?: number, source:
   const settings = await readSettings();
   const count = countOverride ?? settings.count;
   const base: AutoRun = existing ?? { date, createdAt: now(), items: [], note: null, scheduledAt: null };
-  const { picks, note } = await chooseProducts(count, new Set(base.items.map((x) => x.productId)));
+  const { picks, note } = await withClaude(() => chooseProducts(count, new Set(base.items.map((x) => x.productId))));
   const start = base.items.length;
   const run: AutoRun = {
     ...base,
@@ -296,7 +297,7 @@ export async function startRun(date = kstDate(), countOverride?: number, source:
  */
 export async function addItems(date: string, count: number, source: "schedule" | "test" = "test"): Promise<AutoRun> {
   const run: AutoRun = (await readRun(date)) ?? { date, createdAt: now(), items: [], note: null, scheduledAt: null };
-  const { picks, note } = await chooseProducts(count, new Set(run.items.map((x) => x.productId)));
+  const { picks, note } = await withClaude(() => chooseProducts(count, new Set(run.items.map((x) => x.productId))));
   if (!picks.length) throw new AppError("NO_PRODUCT", note ?? "지금 만들 수 있는 제품이 없습니다.", 409);
   const start = run.items.length;
   run.items.push(...picks.map((x, i) => ({ id: `ai_${date.replace(/-/g, "")}_${start + i + 1}`, ...x, source, status: "pending" as const })));
@@ -416,7 +417,8 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
   if (producing.has(lockKey) || item.status === "running" || item.status === "done") return item;
   producing.add(lockKey);
   try {
-    return await produceItemLocked(owner, settings, date, item);
+    // v0.9.119: 원고·고르기·컷 계획 글은 Claude 로 고정
+    return await withClaude(() => produceItemLocked(owner, settings, date, item));
   } finally {
     producing.delete(lockKey);
   }
@@ -424,7 +426,10 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
 
 async function produceItemLocked(owner: string, settings: AutoVideoSettings, date: string, item: AutoItem): Promise<AutoItem> {
   const itemId = item.id;
-  const step = async (s: string, extra: Partial<AutoItem> = {}) => void (await patchItem(date, itemId, { step: s, ...extra }));
+  const step = async (s: string, extra: Partial<AutoItem> = {}) => {
+    console.info("[AutoVideo] step", JSON.stringify({ date, item: itemId, step: s }));
+    await patchItem(date, itemId, { step: s, ...extra });
+  };
   // v0.9.110: 샤오홍슈 영상이 연결되지 않은 제품은 만들지 않는다 (고른 뒤 연결이 풀렸어도 — AI·음성 비용 없음)
   const linked = (await linkedVideoCount(owner)).get(item.productId) ?? 0;
   if (linked < AUTO_LIMITS.minVideos) {

@@ -8,6 +8,7 @@ import { GiphyProvider, MockGiphyProvider } from "./giphy";
 import type { ProductSourceInput, ProviderCredentialMap, ProviderId } from "@/lib/types";
 import { serverConfig } from "../config";
 import { AppError } from "../http";
+import { forcedAi } from "./ai-force";
 import { getCurrentUserId, getRepositories } from "../repositories";
 import { settingsService } from "../services/settings";
 import { decryptSecret } from "../security/crypto";
@@ -73,6 +74,12 @@ export async function getAIProvider(): Promise<AIProvider> {
     claude: () => (claude ? new ClaudeProvider(claude.apiKey, serverConfig.claudeModel) : null),
     openai: () => (openai ? new OpenAIProvider(openai.apiKey, serverConfig.openaiModel) : null),
   };
+  // v0.9.119: 제품 홍보 영상 원고·새벽 자동 제작은 Claude 로 고정 (설정과 상관없이)
+  if (forcedAi() === "claude") {
+    const c = make.claude();
+    if (!c) throw new AppError("CLAUDE_REQUIRED", "제품 홍보 영상 원고는 Claude 로 만듭니다. 설정 › API 연결 센터에서 Claude 키를 연결해 주세요.", 409);
+    return c;
+  }
   const preferred = settings.preferredAi ? make[settings.preferredAi]() : null;
   return preferred ?? make.claude() ?? make.openai() ?? mockAI;
 }

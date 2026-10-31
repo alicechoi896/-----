@@ -1,4 +1,5 @@
 import "server-only";
+import { CLAUDE_ONLY_FEATURES, forcedAi, withClaude } from "../providers/ai-force";
 import { endingTarget, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
@@ -274,6 +275,7 @@ const listOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 export const contentGenerationService = {
   /** 한 번에 생성 (블로그·예전 방식). 블로그는 생성 직전에 NAVER Keyword Intelligence 를 모아 넣는다 */
   async generate(req: GenerateContentRequest & { clientRequestId?: string }): Promise<GeneratedContent> {
+    if (CLAUDE_ONLY_FEATURES.has(String(req.featureId)) && !forcedAi()) return withClaude(() => this.generate(req));
     const p = await prepare(req);
     const intel = p.featureId.startsWith("blog-") ? await collectIntel(p, req.clientRequestId) : null;
     if (intel) {
@@ -298,6 +300,7 @@ export const contentGenerationService = {
    * 플랫폼 API 는 여기서만 (YouTube search 1 + videos 1 / NAVER 블로그 검색 1 + 데이터랩 1). docs/TWO_STAGE_CONTENT_GENERATION.md
    */
   async stage1(req: GenerateContentRequest & { clientRequestId?: string }): Promise<GeneratedContent> {
+    if (CLAUDE_ONLY_FEATURES.has(String(req.featureId)) && !forcedAi()) return withClaude(() => this.stage1(req));
     const p = await prepare(req);
     if (!isTwoStage(p.config.outputs)) throw new AppError("VALIDATION", "2단계 생성은 영상·클립 원고에서만 씁니다.");
     const intel = await collectIntel(p, req.clientRequestId);
@@ -346,6 +349,7 @@ export const contentGenerationService = {
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const s1 = await repo.contents.get(String(input.stage1Id ?? ""));
+    if (s1 && CLAUDE_ONLY_FEATURES.has(s1.featureId) && !forcedAi()) return withClaude(() => this.stage2(input));
     if (!s1 || s1.userId !== userId || s1.context.workflow?.stage !== 1) throw new AppError("NOT_FOUND", "1단계 결과를 찾을 수 없습니다.", 404);
     const title = str(input.title, 200);
     const hook = str(input.hook, 300);
