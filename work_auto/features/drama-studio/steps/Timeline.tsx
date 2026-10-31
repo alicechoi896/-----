@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Clapperboard, Download, GripVertical, Music, Trash2
 import { Badge, Button, EmptyState, IconButton, Input, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import type { TimelineItem } from "@/lib/drama-studio/types";
 import { cn, formatRelative } from "@/lib/utils";
-import { autoSubtitle } from "@/lib/drama-studio/steps";
+import { autoSubtitle, buildTimeline } from "@/lib/drama-studio/steps";
 import { studioApi } from "../api";
 import { UploadButton } from "../ui";
 import type { ProjectCtl } from "../useProject";
@@ -64,7 +64,16 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
   }
   return (
     <>
-      <SectionCard title={`타임라인 · ${tl.length}개 · 약 ${total.toFixed(1)}초`} icon={Clapperboard} description="승인한 클립만 넣을 수 있습니다. 줄을 끌어 원하는 자리로 옮기거나(끄는 동안 바로 자리가 바뀜) 화살표로 순서를 바꾸고, 앞·뒤를 초 단위로 다듬습니다. 순서를 바꾼 뒤 [다시 렌더링]을 눌러야 최종 영상에 반영됩니다.">
+      <SectionCard
+        title={`타임라인 · ${tl.length}개 · ${total.toFixed(1)}초 / 목표 ${p.settings.targetSec}초`}
+        icon={Clapperboard}
+        actions={
+          tl.length > 0 && (
+            <Button size="sm" variant="secondary" onClick={() => set(buildTimeline(p))} data-timeline-rebuild>
+              장면 순서로 정리 (중복 빼기)
+            </Button>
+          )
+        } description="승인한 클립만 넣을 수 있습니다. 줄을 끌어 원하는 자리로 옮기거나(끄는 동안 바로 자리가 바뀜) 화살표로 순서를 바꾸고, 앞·뒤를 초 단위로 다듬습니다. 순서를 바꾼 뒤 [다시 렌더링]을 눌러야 최종 영상에 반영됩니다.">
         {!tl.length ? (
           <EmptyState compact title="타임라인이 비어 있습니다" description="클립 카드에서 [타임라인에]를 눌러 주세요." />
         ) : (

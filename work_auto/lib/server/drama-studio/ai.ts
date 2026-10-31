@@ -1,7 +1,7 @@
 import "server-only";
 import { getAIProvider } from "../providers/registry";
 import { AppError } from "../http";
-import { chosenLogline, emptyScene, newId } from "@/lib/drama-studio/steps";
+import { chosenLogline, emptyScene, fitDurations, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaIdea, DramaProject, DramaScenario, DramaScene, DramaStory, SceneEnPrompt } from "@/lib/drama-studio/types";
 
 /**
@@ -274,7 +274,8 @@ export async function genScenario(p: DramaProject, sceneCount: number, style: "d
       ),
     ),
   );
-  const scenes = parts.flatMap((x) => (x.data.scenes ?? []).slice(0, 8)).map((r) => toScene(r, cast));
+  // v0.9.94: 장면 길이 합을 목표 길이에 맞춘다 (3분이면 180초)
+  const scenes = fitDurations(parts.flatMap((x) => (x.data.scenes ?? []).slice(0, 8)).map((r) => toScene(r, cast)), p.settings.targetSec);
   const a = (outline.data.acts ?? {}) as Json;
   return {
     scenario: {

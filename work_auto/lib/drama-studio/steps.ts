@@ -1,4 +1,4 @@
-import type { DramaProject, DramaScenario, DramaScene, DramaSettings, DramaStory, EditableSection, StepKey, StepState } from "./types";
+import type { DramaProject, DramaScenario, DramaScene, DramaSettings, DramaStory, EditableSection, StepKey, StepState, TimelineItem } from "./types";
 
 /**
  * 8단계 순서·승인 규칙 (화면·서버 공용). docs/DRAMA_STUDIO.md
@@ -211,13 +211,16 @@ export function swapIntoTimeline(p: DramaProject, clip: { id: string; sceneIds: 
   if (!clip.sceneIds.length) return false;
   const same = (ids: string[]) => ids.length === clip.sceneIds.length && ids.every((x) => clip.sceneIds.includes(x));
   let swapped = false;
+  const olds = new Set<string>();
   p.timeline = p.timeline.map((t) => {
     const old = p.clips.find((c) => c.id === t.clipId);
     if (!old || old.id === clip.id || !same(old.sceneIds)) return t;
     swapped = true;
+    olds.add(old.id);
     return { ...t, clipId: clip.id, trimStart: 0, trimEnd: 0 };
   });
-  if (swapped) p.clips = p.clips.map((c) => (c.id === clip.id ? { ...c, approved: true } : c));
+  // v0.9.94: 바꾼 예전 클립은 승인을 풀어 '모두 승인 + 타임라인'에서 다시 끝에 붙지 않게
+  if (swapped) p.clips = p.clips.map((c) => (c.id === clip.id ? { ...c, approved: true } : olds.has(c.id) ? { ...c, approved: false } : c));
   return swapped;
 }
 
@@ -230,4 +233,51 @@ export function autoSubtitle(p: DramaProject, sceneIds: string[]): string {
     .map((l) => l.replace(/^[^:：]{1,12}[:：]\s*/, "").replace(/^["'“”]|["'“”]$/g, "").trim())
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * v0.9.94: 장면 길이 합을 목표 길이에 맞춘다 (비율대로 늘리고 줄인 뒤 4~15초 안에서 남는 초를 나눔).
+ * 3분을 골랐는데 장면 길이 합이 2분 27초라 3분이 안 나오던 문제
+ */
+export function fitDurations<T extends { durationSec: number }>(scenes: T[], targetSec: number, min = 4, max = 15): T[] {
+  if (!scenes.length || !targetSec) return scenes;
+  const sum = scenes.reduce((n, s) => n + Math.max(1, s.durationSec || 8), 0);
+  const out = scenes.map((s) => ({ ...s, durationSec: Math.min(max, Math.max(min, Math.round((Math.max(1, s.durationSec || 8) * targetSec) / sum))) }));
+  // 반올림·상한 때문에 남거나 모자란 초를 앞에서부터 1초씩
+  let diff = targetSec - out.reduce((n, s) => n + s.durationSec, 0);
+  for (let guard = 0; diff !== 0 && guard < 1000; guard++) {
+    const i = guard % out.length;
+    if (diff > 0 && out[i].durationSec < max) {
+      out[i].durationSec++;
+      diff--;
+    } else if (diff < 0 && out[i].durationSec > min) {
+      out[i].durationSec--;
+      diff++;
+    }
+  }
+  return out;
+}
+
+/**
+ * v0.9.94: 타임라인을 장면 순서대로, 장면마다 클립 1개로 다시 정리한다 (승인한 클립만).
+ * 이미 타임라인에 있던 클립(다듬기·소리 설정)은 그대로 쓰고, 없으면 그 장면의 가장 최근 승인 클립. 장면 없는 업로드 클립은 맨 뒤에 그대로.
+ * '모두 승인 + 타임라인'이 예전 버전까지 끝에 또 붙이던 문제
+ */
+export function buildTimeline(p: DramaProject): TimelineItem[] {
+  const covered = new Set<string>();
+  const inTl = new Map(p.timeline.map((t) => [t.clipId, t]));
+  const out: TimelineItem[] = [];
+  for (const s of p.scenario.scenes) {
+    if (covered.has(s.id)) continue;
+    const cands = p.clips.filter((c) => c.approved && c.sceneIds[0] === s.id && c.sceneIds.every((id) => !covered.has(id)));
+    if (!cands.length) continue;
+    const pick = cands.find((c) => inTl.has(c.id)) ?? cands[cands.length - 1];
+    out.push(inTl.get(pick.id) ?? { id: newId("tl"), clipId: pick.id, trimStart: 0, trimEnd: 0, audio: true });
+    for (const id of pick.sceneIds) covered.add(id);
+  }
+  for (const t of p.timeline) {
+    const c = p.clips.find((x) => x.id === t.clipId);
+    if (c && !c.sceneIds.length && !out.some((x) => x.id === t.id)) out.push(t);
+  }
+  return out;
 }

@@ -75,3 +75,34 @@ describe("앞 장면에 이어 만들기", () => {
     expect(r.project.storyboard[r.project.scenario.scenes[0].id][0].faceCheck?.ok).toBe(true);
   });
 });
+
+describe("목표 길이 · 타임라인 정리 (v0.9.94)", async () => {
+  const { fitDurations, buildTimeline, emptyProject, emptyScene, swapIntoTimeline } = await import("@/lib/drama-studio/steps");
+  it("장면 길이 합을 목표(3분)에 맞춘다 (4~15초 안에서)", () => {
+    const scenes = Array.from({ length: 22 }, (_, i) => emptyScene({ durationSec: [5, 6, 7][i % 3] }));
+    const fit = fitDurations(scenes, 180);
+    expect(fit.reduce((n, s) => n + s.durationSec, 0)).toBe(180);
+    expect(fit.every((s) => s.durationSec >= 4 && s.durationSec <= 15)).toBe(true);
+  });
+  it("타임라인: 장면 순서대로 장면마다 1개, 예전 버전·중복은 빼고 다듬기는 유지", () => {
+    const p = emptyProject("dp_tl000001", "t", "x");
+    const [a, b, c] = [emptyScene(), emptyScene(), emptyScene()];
+    p.scenario.scenes = [a, b, c];
+    const clip = (id: string, sceneIds: string[], approved = true) => ({ id, sceneIds, key: "k", source: "ai" as const, modelId: "m", mode: "first_frame" as const, prompt: "", durationSec: 5, createdAt: "", approved, taskId: null });
+    p.clips = [clip("cl_b1", [b.id]), clip("cl_a1", [a.id]), clip("cl_a2", [a.id]), clip("cl_c1", [c.id]), clip("cl_x", [b.id], false)];
+    p.timeline = [{ id: "tl_1", clipId: "cl_a1", trimStart: 0.5, trimEnd: 0, audio: false }, { id: "tl_2", clipId: "cl_b1", trimStart: 0, trimEnd: 0, audio: true }, { id: "tl_3", clipId: "cl_a2", trimStart: 0, trimEnd: 0, audio: true }];
+    const tl = buildTimeline(p);
+    expect(tl.map((t) => t.clipId)).toEqual(["cl_a1", "cl_b1", "cl_c1"]);
+    expect(tl[0].trimStart).toBe(0.5);
+  });
+  it("다시 만든 클립으로 바꾸면 예전 클립은 승인이 풀린다", () => {
+    const p = emptyProject("dp_tl000002", "t", "x");
+    const s = emptyScene();
+    p.scenario.scenes = [s];
+    p.clips = [{ id: "cl_old", sceneIds: [s.id], key: "k", source: "ai", modelId: "m", mode: "first_frame", prompt: "", durationSec: 5, createdAt: "", approved: true, taskId: null }, { id: "cl_new", sceneIds: [s.id], key: "k2", source: "ai", modelId: "m", mode: "first_frame", prompt: "", durationSec: 5, createdAt: "", approved: false, taskId: null }];
+    p.timeline = [{ id: "tl_1", clipId: "cl_old", trimStart: 0, trimEnd: 0, audio: true }];
+    expect(swapIntoTimeline(p, p.clips[1])).toBe(true);
+    expect(p.clips.find((c) => c.id === "cl_old")!.approved).toBe(false);
+    expect(buildTimeline(p).map((t) => t.clipId)).toEqual(["cl_new"]);
+  });
+});

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, BookText, ClipboardPaste, History, LayoutGrid, Plus, RefreshCw, Save, ScrollText, Sparkles, Trash2 } from "lucide-react";
 import { Button, EmptyState, IconButton, Input, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
-import { MAX_SCENES, defaultSceneCount, emptyScene } from "@/lib/drama-studio/steps";
+import { MAX_SCENES, defaultSceneCount, emptyScene, fitDurations } from "@/lib/drama-studio/steps";
 import type { DramaScenario, DramaScene } from "@/lib/drama-studio/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { studioApi } from "../api";
@@ -92,10 +92,15 @@ export function ScenarioStep({ ctl }: { ctl: ProjectCtl }) {
           </SectionCard>
 
           <SectionCard
-            title={`장면 ${sc.scenes.length}개 · 약 ${total}초`}
+            title={`장면 ${sc.scenes.length}개 · 합계 ${total}초 / 목표 ${p.settings.targetSec}초`}
             icon={LayoutGrid}
             actions={
               <span className="flex items-center gap-1.5">
+                {Math.abs(total - p.settings.targetSec) > 3 && (
+                  <Button size="sm" variant="subtle" onClick={() => set({ scenes: fitDurations(sc.scenes, p.settings.targetSec) })} data-fit-durations>
+                    목표 {p.settings.targetSec}초에 맞추기
+                  </Button>
+                )}
                 <SegmentedControl size="sm" value={view} onChange={setView} options={[{ value: "cards", label: "장면 카드" }, { value: "read", label: "전체 읽기" }]} />
                 <Button size="sm" variant="ghost" icon={Save} disabled={Boolean(ctl.busy)} onClick={() => void ctl.run("버전 저장", () => studioApi.generate(p.id, "save-version", { label: `버전 ${p.scenarioVersions.length + 1}` }))}>
                   버전 저장

@@ -5,7 +5,7 @@ import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanF
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { MODE_LABEL, VIDEO_MODELS, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { videoPrompt } from "@/lib/drama-studio/prompts";
-import { newId } from "@/lib/drama-studio/steps";
+import { buildTimeline, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
 import { newRequestId, studioApi } from "../api";
@@ -125,19 +125,16 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
     }
     const clips = p.clips.map((c) => (pick.has(c.id) ? { ...c, approved: true } : c));
     ctl.edit("clips", clips);
-    if (alsoTimeline) {
-      const have = new Set(p.timeline.map((t) => t.clipId));
-      const order = (c: DramaClip) => Math.min(...c.sceneIds.map((id) => scenes.findIndex((x) => x.id === id)).filter((n) => n >= 0), 9999);
-      const add = clips.filter((c) => c.approved && !have.has(c.id)).sort((a, b) => order(a) - order(b));
-      if (add.length) ctl.edit("timeline", [...p.timeline, ...add.map((c) => ({ id: newId("tl"), clipId: c.id, trimStart: 0, trimEnd: 0, audio: true }))]);
-    }
+    // v0.9.94: 장면 순서대로, 장면마다 클립 1개로 다시 정리 (예전 버전이 끝에 또 붙지 않게)
+    if (alsoTimeline) ctl.edit("timeline", buildTimeline({ ...p, clips }));
   };
   const unapprovedClips = p.clips.filter((c) => !c.approved).length;
   /** 타임라인의 같은 장면 자리를 이 클립으로 (v0.9.90) */
   const sameScenes = (a: string[], b: string[]) => a.length > 0 && a.length === b.length && a.every((x) => b.includes(x));
   const slotOf = (c: DramaClip) => p.timeline.find((t) => t.clipId !== c.id && sameScenes(p.clips.find((x) => x.id === t.clipId)?.sceneIds ?? [], c.sceneIds));
   const chooseVersion = (c: DramaClip) => {
-    ctl.edit("clips", p.clips.map((x) => (x.id === c.id ? { ...x, approved: true } : x)));
+    const old = slotOf(c)?.clipId;
+    ctl.edit("clips", p.clips.map((x) => (x.id === c.id ? { ...x, approved: true } : x.id === old ? { ...x, approved: false } : x)));
     ctl.edit("timeline", p.timeline.map((t) => (t === slotOf(c) ? { ...t, clipId: c.id, trimStart: 0, trimEnd: 0 } : t)));
   };
   const mode0 = (c: DramaClip): GenMode => (c.mode === "upload" ? "first_frame" : c.mode);
@@ -183,7 +180,9 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
 
           <div>
             <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[12.5px] font-medium text-fg">장면 고르기 ({picked.length}개)</span>
+              <span className="text-[12.5px] font-medium text-fg">
+                장면 고르기 ({picked.length}개{plan === "single" && picked.length ? ` · 합계 ${pickedScenes.reduce((n, s) => n + clampSec(secs[s.id] ?? s.durationSec), 0)}초` : ""} / 전체 장면 ${scenes.reduce((n, s) => n + s.durationSec, 0)}초 · 목표 ${p.settings.targetSec}초)
+              </span>
               <Button size="sm" variant="ghost" onClick={() => setPicked(scenes.filter((s) => !p.clips.some((c) => c.approved && c.sceneIds.includes(s.id))).map((s) => s.id))}>
                 영상 없는 장면 모두
               </Button>
