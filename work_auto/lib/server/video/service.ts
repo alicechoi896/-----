@@ -341,9 +341,12 @@ export const videoJobService = {
       await videoStorage.remove(j.outputPath!).catch(() => undefined);
       await repo.videoJobs.update(j.id, { qa: { ...j.qa, fileDeleted: true }, updatedAt: nowIso() });
     }
-    // v0.9.80: 저장해 둔 원본(다시 쓰기용)은 7일 뒤 지운다
-    const kept = await videoStorage.list(`${userId}/src`).catch(() => []);
+    // v0.9.80: 저장해 둔 원본(다시 쓰기용)은 7일 뒤 지운다. v0.9.112: 제품에 연결된 영상은 보관함이라 지우지 않는다
+    const linked = new Set((await repo.videos.list((v) => v.userId === userId && Boolean(v.productId))).map((v) => v.id));
+    const kept = await videoStorage.list(`${userId}/src`, { limit: 1000 }).catch(() => []);
     for (const f of kept) {
+      const id = (f.key.split("/").pop() ?? "").replace(/.mp4$/, "");
+      if (linked.has(id)) continue;
       if (f.createdAt && Date.now() - Date.parse(f.createdAt) > VIDEO_RENDER_CONFIG.sourceCacheDays * 86_400_000) await videoStorage.remove(f.key).catch(() => undefined);
     }
   },

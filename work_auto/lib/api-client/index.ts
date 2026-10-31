@@ -445,6 +445,14 @@ export const api = {
   },
 
   videos: {
+    /** v0.9.112 영상 파일 보관함 */
+    vaultStatus: (ids: string[]) => request<Record<string, boolean>>(`/api/videos/vault?ids=${ids.join(",")}`),
+    vaultFetch: (videoId: string, url?: string) => request<{ stored: boolean; sizeMB: number }>("/api/videos/vault", { method: "POST", body: json({ videoId, url }) }),
+    async vaultUpload(videoId: string, file: File): Promise<void> {
+      const up = await request<{ url: string; method: "PUT" | "POST"; contentType: string }>("/api/videos/vault", { method: "POST", body: json({ videoId, upload: { size: file.size, fileName: file.name } }) });
+      const res = await fetch(up.url, { method: up.method, body: file, headers: { "Content-Type": up.contentType } });
+      if (!res.ok) throw new Error(`파일을 올리지 못했습니다 (HTTP ${res.status}).`);
+    },
     /** productId: 특정 제품 / "none" = 제품 연결 안 됨 / 생략 = 전체 */
     list: (productId?: string) => request<ReferenceVideo[]>(`/api/videos${qs({ productId })}`),
     import: (url: string, note?: string) => request<ReferenceVideo>("/api/videos", { method: "POST", body: json({ url, note }) }),

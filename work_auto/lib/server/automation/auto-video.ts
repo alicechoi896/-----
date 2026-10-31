@@ -9,6 +9,7 @@ import { keywordLibrary } from "../services/keyword-library";
 import { productService } from "../services/products";
 import { videoJobService } from "../video/service";
 import { videoStorage } from "../video/storage";
+import { storedVideoIds } from "../video/vault";
 
 /**
  * 제품 홍보 영상 자동 제작 (v0.9.107). docs/AUTO_VIDEO.md
@@ -147,11 +148,20 @@ interface Candidate {
   keywords: { keyword: string; trend: string }[];
 }
 
-/** 제품에 연결된 샤오홍슈 영상 수 */
+/**
+ * 제품에 연결된 샤오홍슈 영상 중 '파일이 보관된' 영상 수 (v0.9.112) — 링크가 만료돼도 보관 파일로 만든다.
+ * 보관 안 된 영상은 쓰지 않는다 (샤오홍슈가 막으면 TikHub 없이는 받을 수 없어 실패하므로)
+ */
 async function linkedVideoCount(owner: string): Promise<Map<string, number>> {
-  const videos = await getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId));
+  const ids = await usableVideoIds(owner);
   const m = new Map<string, number>();
-  for (const v of videos) m.set(v.productId!, (m.get(v.productId!) ?? 0) + 1);
+  for (const [pid, list] of ids) m.set(pid, list.length);
+  return m;
+}
+async function usableVideoIds(owner: string): Promise<Map<string, string[]>> {
+  const [videos, stored] = await Promise.all([getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId)), storedVideoIds(owner)]);
+  const m = new Map<string, string[]>();
+  for (const v of videos) if (stored.has(v.id)) m.set(v.productId!, [...(m.get(v.productId!) ?? []), v.id]);
   return m;
 }
 
@@ -177,7 +187,7 @@ export async function chooseProducts(count: number, exclude: Set<string> = new S
   const owner = await getCurrentUserId();
   const [products, videoCount, recent] = await Promise.all([productService.list(), linkedVideoCount(owner), recentProductIds(owner)]);
   const pool = products.filter((p) => (videoCount.get(p.id) ?? 0) >= AUTO_LIMITS.minVideos && !recent.has(p.id) && !exclude.has(p.id));
-  if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 연결 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품).`, aiCalls: 0 };
+  if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (파일이 보관된 샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품). 제품 상세 › 연결된 영상에서 [파일 받아 두기]를 해 주세요.`, aiCalls: 0 };
   const cands: Candidate[] = [];
   for (const p of pool.slice(0, 40)) cands.push({ id: p.id, name: p.name, oneLiner: p.oneLiner, videos: videoCount.get(p.id) ?? 0, keywords: (await keywordLibrary.suggest(p.id).catch(() => [])).slice(0, 6) });
   const n = Math.min(count, cands.length);
@@ -319,7 +329,7 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
   // v0.9.110: 샤오홍슈 영상이 연결되지 않은 제품은 만들지 않는다 (고른 뒤 연결이 풀렸어도 — AI·음성 비용 없음)
   const linked = (await linkedVideoCount(owner)).get(item.productId) ?? 0;
   if (linked < AUTO_LIMITS.minVideos) {
-    const r = await patchItem(date, itemId, { status: "skipped", videos: linked, step: "건너뜀", error: `샤오홍슈 영상이 ${linked}개만 연결돼 있어 만들지 않았습니다 (${AUTO_LIMITS.minVideos}개 이상 필요).`, finishedAt: now() });
+    const r = await patchItem(date, itemId, { status: "skipped", videos: linked, step: "건너뜀", error: `파일이 보관된 샤오홍슈 영상이 ${linked}개뿐이라 만들지 않았습니다 (${AUTO_LIMITS.minVideos}개 이상 필요 — 제품 상세 › 연결된 영상에서 [파일 받아 두기]).`, finishedAt: now() });
     return r!.items.find((x) => x.id === itemId)!;
   }
   await step("원고 1단계 (키워드 분석·제목 후보)", { status: "running", startedAt: now(), error: null });
@@ -342,7 +352,9 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
     const pick2 = await pickBest("pick2", `제목 '${title}' 에 가장 잘 맞고 끝까지 보게 만드는 대본을 고른다.`, { script: scripts });
     await step("컷 계획 (샤오홍슈 영상 매칭·주목 효과·GIF)");
     const voice = await lastVoiceSettings(owner);
-    const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", ...voice });
+    // 보관 파일이 있는 영상만 (링크가 만료돼도 그 파일로)
+    const videoIds = (await usableVideoIds(owner)).get(item.productId) ?? [];
+    const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, ...voice });
     await addGifs(plan);
     (plan as VideoPlan & { auto?: boolean }).auto = true;
     await step("영상 만드는 중 (음성·자막·컷 편집)");

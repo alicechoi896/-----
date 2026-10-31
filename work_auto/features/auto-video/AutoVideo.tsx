@@ -130,7 +130,7 @@ export function AutoVideo() {
   return (
     <div className="space-y-6" data-auto-video>
       {error && <Notice tone="warning">{error}</Notice>}
-      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 영상이 ${data.limits.minVideos}개 이상 연결된 제품만 골라(연결 안 된 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 가장 최근에 직접 만든 영상 설정을 따릅니다. 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
+      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 파일이 보관된 샤오홍슈 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결·보관 안 된 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 가장 최근에 직접 만든 영상 설정을 따릅니다. 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-[14px] font-medium">
             <input type="checkbox" checked={s.enabled} disabled={Boolean(busy)} onChange={(e) => void save({ enabled: e.target.checked })} className="size-4 accent-[var(--color-brand)]" data-auto-enabled />
@@ -159,9 +159,9 @@ export function AutoVideo() {
             지금 만들 수 있는 제품 <b className={data.eligibility.eligible ? "text-success" : "text-danger"}>{data.eligibility.eligible}개</b> / 전체 {data.eligibility.total}개
             <span className="text-fg-subtle">
               {" "}
-              (제외: 샤오홍슈 영상 연결 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
+              (제외: 보관된 샤오홍슈 영상 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
             </span>
-            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 공통 도구 › 영상 URL 가져오기에서 제품에 샤오홍슈 영상을 연결해 주세요.</span>}
+            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고 [파일 받아 두기]를 해 주세요 (링크가 만료됐으면 [링크 새로 넣기] 또는 [파일 올리기]).</span>}
           </p>
         )}
         <p className="mt-3 text-[12px] text-fg-subtle">비용(영상 1개): AI 글 약 4~5회 + AI 음성 1편 + 샤오홍슈 글자 확인(AI 이미지 읽기, 처음 쓰는 영상만). YouTube 검색은 무료 한도 안. 완성 영상 파일은 7일 동안 보관됩니다 (받으면 1시간 뒤 지움).</p>
