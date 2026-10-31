@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Sparkles, Square, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Pencil, Sparkles, Square, Upload } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Modal, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { IMAGE_MODELS, estimateImageCredits, imageModel } from "@/lib/drama-studio/models";
 import { framePrompt } from "@/lib/drama-studio/prompts";
 import type { DramaImage, DramaScene } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
 import { newRequestId, studioApi } from "../api";
-import { CostConfirm, TASK_LABEL, UploadButton, taskTone } from "../ui";
+import { CostConfirm, PromptModal, TASK_LABEL, UploadButton, taskTone } from "../ui";
 import type { ProjectCtl } from "../useProject";
 import { ImageCard } from "./SheetsStep";
 
@@ -27,6 +27,8 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [modelId, setModelId] = useState("nano-banana-edit");
   const [confirm, setConfirm] = useState<{ sceneId: string; prompt?: string }[] | null>(null);
+  // v0.9.91: 프롬프트 고치기 창 (장면 id)
+  const [promptFor, setPromptFor] = useState<string | null>(null);
   const [bulk, setBulk] = useState<{ file: File; sceneId: string }[] | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
@@ -131,6 +133,9 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
         <div className="mt-1.5 flex flex-wrap gap-1">
           <Button size="sm" variant="ghost" icon={Sparkles} disabled={Boolean(ctl.busy) || running(s.id)} onClick={() => setConfirm([{ sceneId: s.id }])}>
             {frames(s.id).length ? "재생성" : "만들기"}
+          </Button>
+          <Button size="sm" variant={s.imagePrompt.trim() ? "subtle" : "ghost"} icon={Pencil} onClick={() => setPromptFor(s.id)} data-frame-prompt>
+            프롬프트{s.imagePrompt.trim() ? " (고침)" : ""}
           </Button>
           <UploadButton accept="image/png,image/jpeg,image/webp" variant="ghost" disabled={Boolean(uploading)} onFiles={async (fs) => {
             setUploading("올리는 중…");
@@ -255,6 +260,27 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
         </SectionCard>
       )}
 
+      {promptFor && (() => {
+        const sc = scenes.find((x) => x.id === promptFor)!;
+        const refs = p.characters.filter((c) => sc.characterIds.includes(c.id) && (p.sheets[c.id] ?? []).some((i) => i.approved && !i.removed));
+        const auto = framePrompt({ ...sc, imagePrompt: "" }, p.characters, p.settings.aspect, m.maxReferenceImages ? refs : []);
+        return (
+          <PromptModal
+            key={promptFor}
+            title={`#${scenes.indexOf(sc) + 1} ${sc.title} — 이미지 프롬프트`}
+            value={sc.imagePrompt}
+            auto={auto}
+            note={refs.length ? `기준 이미지 참고: ${refs.map((c) => c.name).join(", ")}` : "기준 이미지 없음 (글만)"}
+            onClose={() => setPromptFor(null)}
+            onSave={(text) => (setScene(sc.id, { imagePrompt: text }), setPromptFor(null))}
+            onRegenerate={(text) => {
+              setScene(sc.id, { imagePrompt: text.trim() === auto.trim() ? "" : text });
+              setPromptFor(null);
+              setConfirm([{ sceneId: sc.id, prompt: text }]);
+            }}
+          />
+        );
+      })()}
       <CostConfirm
         open={Boolean(confirm)}
         title="스토리보드 이미지 만들기"

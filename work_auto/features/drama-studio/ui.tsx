@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Upload } from "lucide-react";
 import { Button, Input, Modal, Notice, Textarea } from "@/components/ui";
 import { CREDIT_USD } from "@/lib/drama-studio/models";
@@ -101,3 +101,36 @@ export function UploadButton({ accept, multiple, onFiles, children, size = "sm",
 /** 상태 배지 색 */
 export const taskTone = (s: string): "info" | "success" | "danger" | "neutral" => (s === "success" ? "success" : s === "fail" ? "danger" : s === "queued" ? "neutral" : "info");
 export const TASK_LABEL: Record<string, string> = { queued: "생성 대기", requesting: "요청 중", generating: "생성 중", success: "완료", fail: "실패" };
+
+/**
+ * 프롬프트 고치기 창 (v0.9.91) — 실제로 보낼 프롬프트를 채워서 보여 주고, 고쳐서 저장하거나 바로 다시 만든다.
+ * value = 직접 고친 프롬프트 (비어 있으면 auto = 자동 프롬프트)
+ */
+export function PromptModal({ title, value, auto, note, onClose, onSave, onRegenerate, regenerateLabel = "이 프롬프트로 다시 만들기", busy }: { title: string; value: string; auto: string; note?: string; onClose: () => void; onSave: (text: string) => void; onRegenerate: (text: string) => void; regenerateLabel?: string; busy?: boolean }) {
+  const [text, setText] = useState(value.trim() || auto);
+  const custom = text.trim() !== auto.trim();
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      description="영어로 쓰는 것이 가장 정확합니다. 고친 프롬프트는 이 장면에 저장돼 다음에 다시 만들 때도 씁니다."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => setText(auto)} disabled={!custom}>
+            자동 프롬프트로 되돌리기
+          </Button>
+          <Button variant="secondary" onClick={() => onSave(custom ? text : "")}>
+            저장만
+          </Button>
+          <Button variant="primary" loading={busy} disabled={!text.trim()} onClick={() => onRegenerate(text)} data-prompt-regenerate>
+            {regenerateLabel}
+          </Button>
+        </>
+      }
+    >
+      <Textarea rows={16} value={text} onChange={(e) => setText(e.target.value)} className="font-mono text-[12px]" data-prompt-text />
+      <p className="mt-1.5 text-[11.5px] text-fg-subtle">{custom ? "직접 고친 프롬프트" : "자동 프롬프트 (시나리오·인물에서 만든 것)"} · {text.length.toLocaleString()}자{note ? ` · ${note}` : ""}</p>
+    </Modal>
+  );
+}

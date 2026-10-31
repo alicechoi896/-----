@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Clapperboard, Download, Film, ListPlus, RefreshCw, Sparkles, Video } from "lucide-react";
+import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, Sparkles, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { MODE_LABEL, VIDEO_MODELS, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { videoPrompt } from "@/lib/drama-studio/prompts";
@@ -9,7 +9,7 @@ import { newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
 import { newRequestId, studioApi } from "../api";
-import { CostConfirm, TASK_LABEL, UploadButton, taskTone } from "../ui";
+import { CostConfirm, PromptModal, TASK_LABEL, UploadButton, taskTone } from "../ui";
 import type { ProjectCtl } from "../useProject";
 import { Timeline } from "./Timeline";
 
@@ -31,6 +31,8 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   const [batchPrompt, setBatchPrompt] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { jobs: { sceneIds: string[]; options: VideoOptions; prompt?: string }[] } | { retry: string[] }>(null);
   const [uploading, setUploading] = useState(false);
+  // v0.9.91: 클립 프롬프트 고쳐 다시 만들기
+  const [promptClip, setPromptClip] = useState<DramaClip | null>(null);
 
   const frameOf = (id: string) => (p.storyboard[id] ?? []).find((f) => f.approved) ?? null;
   const refChars = (list: DramaScene[]): DramaCharacter[] => [...new Set(list.flatMap((s) => s.characterIds))].map((id) => p.characters.find((c) => c.id === id)).filter((c): c is DramaCharacter => Boolean(c && (p.sheets[c.id] ?? []).some((i) => i.approved)));
@@ -136,6 +138,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
     ctl.edit("clips", p.clips.map((x) => (x.id === c.id ? { ...x, approved: true } : x)));
     ctl.edit("timeline", p.timeline.map((t) => (t === slotOf(c) ? { ...t, clipId: c.id, trimStart: 0, trimEnd: 0 } : t)));
   };
+  const mode0 = (c: DramaClip): GenMode => (c.mode === "upload" ? "first_frame" : c.mode);
   const sceneLabel = (ids: string[]) => (ids.length ? ids.map((id) => `#${scenes.findIndex((s) => s.id === id) + 1}`).join("·") : "장면 없음");
 
   return (
@@ -345,6 +348,11 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                       다시 생성
                     </Button>
                   )}
+                  {c.sceneIds.length > 0 && (
+                    <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setPromptClip(c)} data-clip-prompt>
+                      프롬프트 고쳐 다시 만들기
+                    </Button>
+                  )}
                   {ctl.urls[c.key] && (
                     <a href={ctl.urls[c.key]} download target="_blank" rel="noreferrer" className="inline-flex h-8 items-center px-2 text-fg-muted hover:text-fg" aria-label="다운로드">
                       <Download className="size-3.5" />
@@ -359,6 +367,37 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
 
       <Timeline ctl={ctl} />
 
+      {promptClip && (() => {
+        const sc = promptClip.sceneIds.map((id) => scenes.find((x) => x.id === id)).filter((x): x is DramaScene => Boolean(x));
+        if (!sc.length) return null;
+        const multi = sc.length > 1;
+        // 지금 위 설정(모델·방식·해상도·소리)으로, 길이는 이 클립 길이에 맞춰
+        const mode: GenMode = multi ? (m.modes.includes("multi_shot") ? "multi_shot" : "reference") : modesFor("single").includes(mode0(promptClip)) ? mode0(promptClip) : (modesFor("single")[0] ?? "text");
+        const shots = sc.map((x) => Math.max(m.multiShot?.minShotSec ?? 1, Math.min(m.multiShot?.maxShotSec ?? 12, Math.round(x.durationSec))));
+        const opts: VideoOptions = { modelId, mode, durationSec: clampSec(promptClip.durationSec), resolution, aspect: p.settings.aspect, audio, shotSecs: mode === "multi_shot" ? shots : undefined };
+        const auto = videoPrompt(sc.map((x) => ({ ...x, videoPrompt: "" })), p.characters, opts, refChars(sc));
+        const saved = multi ? "" : sc[0].videoPrompt;
+        return (
+          <PromptModal
+            key={promptClip.id}
+            title={`${sceneLabel(promptClip.sceneIds)} — 영상 프롬프트`}
+            value={saved || (promptClip.prompt && promptClip.prompt !== auto ? promptClip.prompt : "")}
+            auto={auto}
+            note={`${m.label} · ${MODE_LABEL[mode].split(" (")[0]} · ${mode === "multi_shot" ? shots.reduce((a, b) => a + b, 0) : opts.durationSec}초 (위 설정 기준)`}
+            regenerateLabel="이 프롬프트로 다시 만들기 (확인 후)"
+            onClose={() => setPromptClip(null)}
+            onSave={(text) => {
+              if (!multi) ctl.edit("scenario", { ...p.scenario, scenes: scenes.map((x) => (x.id === sc[0].id ? { ...x, videoPrompt: text } : x)) });
+              setPromptClip(null);
+            }}
+            onRegenerate={(text) => {
+              if (!multi) ctl.edit("scenario", { ...p.scenario, scenes: scenes.map((x) => (x.id === sc[0].id ? { ...x, videoPrompt: text.trim() === auto.trim() ? "" : text } : x)) });
+              setPromptClip(null);
+              setConfirm({ jobs: [{ sceneIds: promptClip.sceneIds, options: opts, prompt: text }] });
+            }}
+          />
+        );
+      })()}
       <CostConfirm
         open={Boolean(confirm)}
         title={confirm && "retry" in confirm ? "실패한 영상 다시 만들기" : "AI 영상 만들기"}
