@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Pencil, ScanFace, Sparkles, Square, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Pencil, ScanFace, Sparkles, Square, Trash2, Upload } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Modal, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { IMAGE_MODELS, estimateImageCredits, imageModel } from "@/lib/drama-studio/models";
 import { framePrompt } from "@/lib/drama-studio/prompts";
@@ -65,6 +65,13 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
   const emptyScenes = scenes.filter((sc) => !frames(sc.id).length);
   const [assign, setAssign] = useState<Record<string, string>>({});
   const targetOf = (imgId: string, k: number) => assign[imgId] ?? emptyScenes[k]?.id ?? "";
+  /** v0.9.98: 이미지 지우기 — keys = 지울 장면(또는 연결 끊긴 장면) 키 */
+  const removeFrames = (keys: string[]) => {
+    const next = { ...p.storyboard };
+    for (const k of keys) next[k] = (next[k] ?? []).map((i) => ({ ...i, removed: true, approved: false }));
+    ctl.edit("storyboard", next);
+  };
+  const orphanKeys = Object.keys(p.storyboard).filter((k) => !scenes.some((sc) => sc.id === k));
   const doAssign = (pairs: { imageId: string; toSceneId: string }[]) =>
     void ctl.run("이미지 연결", () => studioApi.generate(p.id, "assign-frames", { moves: pairs.filter((x) => x.toSceneId) }));
   /** 보여 주는 이미지의 얼굴 검사 결과 (undefined = 검사 안 함) */
@@ -166,6 +173,11 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           <Button size="sm" variant={s.imagePrompt.trim() ? "subtle" : "ghost"} icon={Pencil} onClick={() => setPromptFor(s.id)} data-frame-prompt>
             프롬프트{s.imagePrompt.trim() ? " (고침)" : ""}
           </Button>
+          {frames(s.id).length > 0 && (
+            <Button size="sm" variant="ghost" icon={Trash2} onClick={() => window.confirm(`#${i + 1} 장면 이미지 ${frames(s.id).length}장을 지울까요? (다시 만들 수 있습니다)`) && removeFrames([s.id])} data-frame-delete>
+              지우기
+            </Button>
+          )}
           <UploadButton accept="image/png,image/jpeg,image/webp" variant="ghost" disabled={Boolean(uploading)} onFiles={async (fs) => {
             setUploading("올리는 중…");
             try {
@@ -258,6 +270,22 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           <UploadButton accept="image/png,image/jpeg,image/webp" multiple onFiles={startBulk} disabled={Boolean(uploading)}>
             여러 장 한 번에 올리기
           </UploadButton>
+          <Button
+            variant="danger"
+            icon={Trash2}
+            disabled={!scenes.some((sc) => frames(sc.id).length) && !orphanKeys.length}
+            onClick={() => {
+              const keys = picked.length ? picked : [...scenes.map((sc) => sc.id), ...orphanKeys];
+              const n = keys.reduce((m, k) => m + (p.storyboard[k] ?? []).filter((x) => !x.removed).length, 0);
+              if (window.confirm(`${picked.length ? `고른 ${picked.length}장면` : "모든 장면(연결이 끊긴 이미지 포함)"}의 스토리보드 이미지 ${n}장을 지울까요? 지운 뒤 [승인 안 된 장면 모두 만들기]로 다시 만들 수 있습니다.`)) {
+                removeFrames(keys);
+                setPicked([]);
+              }
+            }}
+            data-frames-delete-all
+          >
+            {picked.length ? `고른 ${picked.length}장면 이미지 지우기` : "이미지 모두 지우기"}
+          </Button>
           <SegmentedControl size="sm" className="ml-auto" value={view} onChange={setView} options={[{ value: "grid", label: "전체 보기", icon: LayoutGrid }, { value: "single", label: "한 장씩", icon: Square }]} />
         </div>
         <p className="mt-2 text-[12px] text-fg-subtle">장면마다 이미지 1장 = 작업 1개 (콜라주로 묶지 않음). {m.note}. 카드를 끌어 놓으면 장면 순서가 바뀝니다. [모두 승인]은 장면마다 가장 최근 이미지를 승인합니다 (다른 버전을 쓰려면 [한 장씩]에서 고르기). {scenes.some((s) => !s.en) ? "[영어 프롬프트 만들기]를 먼저 하면 한국어 시나리오를 영어 프롬프트로 바꿔 더 정확해집니다." : ""}</p>
@@ -270,6 +298,9 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="primary" disabled={Boolean(ctl.busy)} onClick={() => doAssign(orphans.map((img, k) => ({ imageId: img.id, toSceneId: targetOf(img.id, k) })))} data-assign-all>
               고른 장면으로 모두 연결
+            </Button>
+            <Button size="sm" variant="danger" icon={Trash2} onClick={() => window.confirm(`연결이 끊긴 이미지 ${orphans.length}장을 모두 지울까요?`) && removeFrames(orphanKeys)} data-orphans-delete>
+              모두 지우기
             </Button>
             <span className="text-[12px] text-fg-subtle">기본값: 만든 순서대로 이미지가 없는 장면에 하나씩 (바꿀 수 있음)</span>
           </div>
