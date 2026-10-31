@@ -543,7 +543,9 @@ export const dramaStudioService = {
         const used = new Set(p.clips.map((c) => c.shotId).filter(Boolean));
         const keep = (p.shots ?? []).filter((x) => x.sceneId !== sceneId || !(body.replace === true) || used.has(x.id) || x.images.length);
         const start = keep.filter((x) => x.sceneId === sceneId).length;
-        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, x))];
+        // 새 샷 기본 모델 (Seedance 2.0 Mini 기본, Fast 등 고를 수 있음)
+        const pm = videoModel(String(body.modelId ?? "")) ?? videoModel(DEFAULT_SHOT_MODEL)!;
+        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: Math.min(pm.maxSec, Math.max(pm.minSec, x.durationSec)) }))];
         break;
       }
       case "restore-version": {

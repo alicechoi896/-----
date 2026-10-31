@@ -26,6 +26,14 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
   const withFrame = scenes.filter((s) => (p.storyboard[s.id] ?? []).some((i) => i.approved && !i.removed));
   const [sceneId, setSceneId] = useState<string>(() => withFrame[0]?.id ?? scenes[0]?.id ?? "");
   const [count, setCount] = useState(3);
+  // 샷 기본 모델 (AI 샷 나누기·한 번에 바꾸기)
+  const [planModel, setPlanModel] = useState("seedance-2-mini");
+  const shotModels = VIDEO_MODELS.filter((x) => x.family !== "minimax");
+  /** 이 장면 샷 모델을 한 번에 (해상도·길이·방식은 그 모델이 되는 값으로) */
+  const setSceneModel = (modelId: string) => {
+    const nm = videoModel(modelId)!;
+    setShots(shots.map((s) => (s.sceneId !== sceneId ? s : { ...s, modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: Math.min(nm.maxSec, Math.max(nm.minSec, s.durationSec)), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" })));
+  };
   const [ask, setAsk] = useState<null | { kind: "image"; shotIds: string[] } | { kind: "video"; shotIds: string[] }>(null);
   const [uploading, setUploading] = useState(false);
   const scene = scenes.find((s) => s.id === sceneId) ?? null;
@@ -107,10 +115,14 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
             <span className="text-[12px] font-medium text-fg-muted">샷 수</span>
             <Select value={String(count)} options={[1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n}개` }))} onChange={(e) => setCount(Number(e.target.value))} className="w-20" aria-label="샷 수" />
           </label>
-          <Button variant="primary" icon={Wand2} disabled={!scene || Boolean(ctl.busy)} loading={ctl.busy === "샷 나누기"} onClick={() => void ctl.run("샷 나누기", () => studioApi.generate(p.id, "shots-plan", { sceneId, count, replace: list.length > 0 && window.confirm("이미지·영상이 없는 기존 샷은 지우고 새로 나눌까요? (취소 = 기존 샷 뒤에 추가)") }))} data-shot-plan>
+          <label className="space-y-1">
+            <span className="text-[12px] font-medium text-fg-muted">새 샷 기본 모델</span>
+            <Select value={planModel} options={shotModels.map((x) => ({ value: x.id, label: `${x.label} · ${x.priceNote.split(" (")[0]}` }))} onChange={(e) => setPlanModel(e.target.value)} className="w-64" aria-label="새 샷 기본 모델" data-shot-default-model />
+          </label>
+          <Button variant="primary" icon={Wand2} disabled={!scene || Boolean(ctl.busy)} loading={ctl.busy === "샷 나누기"} onClick={() => void ctl.run("샷 나누기", () => studioApi.generate(p.id, "shots-plan", { sceneId, count, modelId: planModel, replace: list.length > 0 && window.confirm("이미지·영상이 없는 기존 샷은 지우고 새로 나눌까요? (취소 = 기존 샷 뒤에 추가)") }))} data-shot-plan>
             AI 로 샷 나누기 (AI 1회)
           </Button>
-          <Button variant="secondary" icon={Plus} disabled={!scene || list.length >= MAX_SHOTS_PER_SCENE} onClick={() => setShots([...shots, emptyShot(sceneId, list.length, { title: "새 샷", durationSec: DEFAULT_SHOT_SEC })])}>
+          <Button variant="secondary" icon={Plus} disabled={!scene || list.length >= MAX_SHOTS_PER_SCENE} onClick={() => setShots([...shots, emptyShot(sceneId, list.length, { title: "새 샷", durationSec: DEFAULT_SHOT_SEC, modelId: planModel, resolution: videoModel(planModel)!.defaultResolution })])}>
             샷 추가
           </Button>
         </div>
@@ -132,6 +144,7 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
 
         {list.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-control border border-line p-2">
+            <Select value="" options={[{ value: "", label: "이 장면 샷 모델 한 번에 바꾸기…" }, ...shotModels.map((x) => ({ value: x.id, label: x.label }))]} onChange={(e) => e.target.value && setSceneModel(e.target.value)} className="h-8 w-56 text-[12.5px]" aria-label="이 장면 샷 모델" data-shot-scene-model />
             <Button size="sm" variant="secondary" icon={Check} disabled={list.every((s) => s.approved)} onClick={() => setShots(shots.map((s) => (s.sceneId === sceneId ? { ...s, approved: true } : s)))}>
               이 장면 샷 모두 승인
             </Button>
