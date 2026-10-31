@@ -32,6 +32,7 @@ export const SECTION_STEP: Partial<Record<EditableSection, StepKey>> = {
   clips: "video",
   timeline: "video",
   renderSettings: "video",
+  shots: "video",
 };
 
 export const GENRES = ["로맨스", "복수", "판타지", "사극", "스릴러", "코미디", "미스터리", "가족", "기타"] as const;
@@ -210,14 +211,16 @@ export function markNewResult(p: DramaProject, step: StepKey): void {
  * v0.9.90: 새 클립(다시 생성·파일 올리기)이 타임라인에 있는 클립과 같은 장면이면 그 자리를 새 클립으로 바꾸고 승인한다.
  * 예전 클립은 클립 목록에 남아 [이 버전으로 교체]로 되돌릴 수 있다. 바꿨으면 true
  */
-export function swapIntoTimeline(p: DramaProject, clip: { id: string; sceneIds: string[] }): boolean {
+export function swapIntoTimeline(p: DramaProject, clip: { id: string; sceneIds: string[]; shotId?: string | null }): boolean {
   if (!clip.sceneIds.length) return false;
   const same = (ids: string[]) => ids.length === clip.sceneIds.length && ids.every((x) => clip.sceneIds.includes(x));
+  // v0.9.104: 샷 클립은 같은 샷끼리만 바꾼다 (같은 장면의 다른 샷·장면 클립과 섞지 않음)
+  const sameSlot = (old: { sceneIds: string[]; shotId?: string | null }) => (clip.shotId ? old.shotId === clip.shotId : !old.shotId && same(old.sceneIds));
   let swapped = false;
   const olds = new Set<string>();
   p.timeline = p.timeline.map((t) => {
     const old = p.clips.find((c) => c.id === t.clipId);
-    if (!old || old.id === clip.id || !same(old.sceneIds)) return t;
+    if (!old || old.id === clip.id || !sameSlot(old)) return t;
     swapped = true;
     olds.add(old.id);
     return { ...t, clipId: clip.id, trimStart: 0, trimEnd: 0 };
@@ -225,6 +228,17 @@ export function swapIntoTimeline(p: DramaProject, clip: { id: string; sceneIds: 
   // v0.9.94: 바꾼 예전 클립은 승인을 풀어 '모두 승인 + 타임라인'에서 다시 끝에 붙지 않게
   if (swapped) p.clips = p.clips.map((c) => (c.id === clip.id ? { ...c, approved: true } : olds.has(c.id) ? { ...c, approved: false } : c));
   return swapped;
+}
+
+/** v0.9.104: 클립 자막 자동 — 샷 클립은 그 샷 대사, 아니면 장면 대사 */
+export function clipSubtitle(p: DramaProject, clip: { sceneIds: string[]; shotId?: string | null }): string {
+  const shot = clip.shotId ? (p.shots ?? []).find((s) => s.id === clip.shotId) : null;
+  if (!shot) return autoSubtitle(p, clip.sceneIds);
+  return shot.dialogue
+    .split(/\n+/)
+    .map((l) => l.replace(/^[^:：]{1,12}[:：]\s*/, "").replace(/^["'“”]|["'“”]$/g, "").trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** v0.9.92: 클립 자막 자동 — 클립 장면들의 대사에서 말한 사람 이름('이름:')을 뺀 줄 */
@@ -272,7 +286,20 @@ export function buildTimeline(p: DramaProject): TimelineItem[] {
   const out: TimelineItem[] = [];
   for (const s of p.scenario.scenes) {
     if (covered.has(s.id)) continue;
-    const cands = p.clips.filter((c) => c.approved && c.sceneIds[0] === s.id && c.sceneIds.every((id) => !covered.has(id)));
+    // v0.9.104: 샷으로 나눠 만든 장면은 샷 순서대로 샷마다 1개
+    const shots = (p.shots ?? []).filter((x) => x.sceneId === s.id).sort((a, b) => a.order - b.order);
+    const shotItems = shots.flatMap((sh) => {
+      const cs = p.clips.filter((c) => c.approved && c.shotId === sh.id);
+      if (!cs.length) return [];
+      const pick = cs.find((c) => inTl.has(c.id)) ?? cs[cs.length - 1];
+      return [inTl.get(pick.id) ?? { id: newId("tl"), clipId: pick.id, trimStart: 0, trimEnd: 0, audio: true }];
+    });
+    if (shotItems.length) {
+      out.push(...shotItems);
+      covered.add(s.id);
+      continue;
+    }
+    const cands = p.clips.filter((c) => c.approved && !c.shotId && c.sceneIds[0] === s.id && c.sceneIds.every((id) => !covered.has(id)));
     if (!cands.length) continue;
     const pick = cands.find((c) => inTl.has(c.id)) ?? cands[cands.length - 1];
     out.push(inTl.get(pick.id) ?? { id: newId("tl"), clipId: pick.id, trimStart: 0, trimEnd: 0, audio: true });

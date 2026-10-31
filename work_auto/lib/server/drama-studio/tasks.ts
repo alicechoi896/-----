@@ -13,7 +13,8 @@ import { projectDir } from "./store";
 import { buildVideoInput, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt, sceneCast } from "@/lib/drama-studio/prompts";
 import { markNewResult, newId, swapIntoTimeline } from "@/lib/drama-studio/steps";
-import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaTask, SheetKind } from "@/lib/drama-studio/types";
+import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaShot, DramaTask, SheetKind } from "@/lib/drama-studio/types";
+import { approvedShotImage, prevShot, nextShot, shotCast, shotImagePrompt, shotVideoPrompt } from "@/lib/drama-studio/shots";
 
 /**
  * Kie 작업 (v0.9.81) — 이미지(캐릭터 시트·스토리보드)·영상(장면·묶음).
@@ -77,7 +78,7 @@ async function submit(prov: VideoAIProvider, tasks: DramaTask[], model: (t: Dram
 
 /* ───── 이미지 ───── */
 export interface ImageJob {
-  target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string };
+  target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string } | { type: "shot"; shotId: string };
   prompt?: string;
 }
 
@@ -92,6 +93,10 @@ export function planImageTasks(p: DramaProject, jobs: ImageJob[], modelId: strin
       const c = p.characters.find((x) => x.id === (j.target as { charId: string }).charId);
       if (!c) throw new AppError("VALIDATION", "등장인물을 찾지 못했습니다.");
       prompt ||= sheetPrompt(c, j.target.sheetKind, m.maxReferenceImages > 0 && baseImages(p, c.id).length > 0);
+    } else if (j.target.type === "shot") {
+      const { shot, scene } = shotOf(p, j.target.shotId);
+      const r = shotRefs(p, scene, shot);
+      prompt ||= shotImagePrompt(p, scene, shot, m.maxReferenceImages ? r.chars : [], Boolean(m.maxReferenceImages && r.storyboard), p.settings.aspect);
     } else {
       const s = p.scenario.scenes.find((x) => x.id === (j.target as { sceneId: string }).sceneId);
       if (!s) throw new AppError("VALIDATION", "장면을 찾지 못했습니다.");
@@ -99,6 +104,21 @@ export function planImageTasks(p: DramaProject, jobs: ImageJob[], modelId: strin
     }
     return baseTask({ kind: "image", target: j.target, modelId, mode: m.maxReferenceImages ? "reference" : "text", prompt, requestId, estimatedCredits: estimateImageCredits(modelId, 1) });
   });
+}
+
+/* ───── v0.9.104 촬영 샷 ───── */
+export function shotOf(p: DramaProject, shotId: string): { shot: DramaShot; scene: DramaScene } {
+  const shot = (p.shots ?? []).find((x) => x.id === shotId);
+  const scene = shot ? p.scenario.scenes.find((x) => x.id === shot.sceneId) : null;
+  if (!shot || !scene) throw new AppError("VALIDATION", "샷을 찾지 못했습니다. 화면을 새로고침해 주세요.");
+  return { shot, scene };
+}
+
+/** 샷 기준 이미지 참고: 샷 인물마다 승인 기준 이미지 1장(정면) → 마지막에 장면 스토리보드 (배경·위치·조명) */
+function shotRefs(p: DramaProject, scene: DramaScene, shot: DramaShot): { chars: DramaCharacter[]; keys: string[]; storyboard: string | null } {
+  const chars = shotCast(p, scene, shot).filter((c) => baseImages(p, c.id).length > 0).slice(0, 8);
+  const storyboard = (p.storyboard[scene.id] ?? []).find((i) => i.approved && !i.removed)?.key ?? null;
+  return { chars, keys: [...chars.map((c) => baseImages(p, c.id)[0].key), ...(storyboard ? [storyboard] : [])], storyboard };
 }
 
 /** 스토리보드 이미지에 넣을 기준 이미지: 장면 인물마다 승인한 기준 이미지 앞 2장 (최대 10장) */
@@ -133,6 +153,9 @@ async function imageInput(p: DramaProject, t: DramaTask, modelId: string, extraR
     } else if (t.target.type === "frame") {
       const sceneId = t.target.sceneId;
       refKeys = frameRefs(p, p.scenario.scenes.find((s) => s.id === sceneId)!).keys;
+    } else if (t.target.type === "shot") {
+      const { shot, scene } = shotOf(p, t.target.shotId);
+      refKeys = shotRefs(p, scene, shot).keys;
     }
   }
   const aspect = t.target.type === "sheet" ? sheetMeta(t.target.sheetKind).aspect : p.settings.aspect;
@@ -191,6 +214,8 @@ export async function createImageTasks(owner: string, p: DramaProject, jobs: Ima
 
 /* ───── 영상 ───── */
 export interface VideoJob {
+  /** v0.9.104: 샷 단위 (있으면 sceneIds·options 는 샷 설정으로 채운다) */
+  shotId?: string;
   sceneIds: string[];
   options: VideoOptions;
   prompt?: string;
@@ -237,7 +262,9 @@ export function planVideoTasks(p: DramaProject, jobs: VideoJob[], requestId: str
     const prev = p.scenario.scenes[i - 1];
     return Boolean(prev && picked.has(prev.id) && picked.has(sceneId) && samePlace(prev.location, p.scenario.scenes[i].location));
   };
+  const shotIdsInRequest = new Set(jobs.map((j) => j.shotId).filter(Boolean));
   const tasks = jobs.map((j) => {
+    if (j.shotId) return planShotVideo(p, j.shotId, requestId, shotIdsInRequest);
     const scenes = j.sceneIds.map((id) => p.scenario.scenes.find((s) => s.id === id)).filter((s): s is DramaScene => Boolean(s));
     if (!scenes.length || scenes.length !== j.sceneIds.length) throw new AppError("VALIDATION", "장면을 찾지 못했습니다.");
     const o = j.options;
@@ -259,7 +286,62 @@ export function planVideoTasks(p: DramaProject, jobs: VideoJob[], requestId: str
     });
   });
   if (chain) chainVideos(p, tasks);
+  // 샷 '앞 샷에서 이어 만들기': 앞 샷도 이번에 만들면 그 작업이 끝난 뒤 마지막 프레임으로
+  for (const t of tasks) {
+    const shotId = t.target.type === "clip" ? t.target.shotId : undefined;
+    if (!shotId || !(t.request as { chainPrev?: boolean }).chainPrev) continue;
+    const prev = prevShot(p, shotOf(p, shotId).shot);
+    const dep = prev && tasks.find((x) => x.target.type === "clip" && x.target.shotId === prev.id);
+    if (dep) t.dependsOn = dep.id;
+  }
   return tasks;
+}
+
+/** 샷 옵션 (프로젝트 화면 비율 유지) */
+export const shotOptions = (p: DramaProject, s: DramaShot): VideoOptions => ({ modelId: s.modelId, mode: s.mode, durationSec: s.durationSec, resolution: s.resolution, aspect: p.settings.aspect, audio: s.audio });
+
+/** 앞 샷의 가장 최근 승인 클립 마지막 프레임 (이어 만들기) */
+const prevShotLastFrame = (p: DramaProject, s: DramaShot): string | null => {
+  const prev = prevShot(p, s);
+  if (!prev) return null;
+  const c = [...p.clips].reverse().find((x) => x.shotId === prev.id && x.approved && !x.removed);
+  return c?.lastFrameKey ?? null;
+};
+
+function planShotVideo(p: DramaProject, shotId: string, requestId: string, inRequest: Set<string | undefined>): DramaTask {
+  const { shot, scene } = shotOf(p, shotId);
+  const o = shotOptions(p, shot);
+  const img = approvedShotImage(shot);
+  const prev = prevShot(p, shot);
+  const chainPrev = shot.continueFromPrev && o.mode === "first_frame" && Boolean(prev) && (inRequest.has(prev!.id) || Boolean(prevShotLastFrame(p, shot)));
+  const next = nextShot(p, shot);
+  const refs = shotVideoRefs(p, scene, shot, o);
+  const errs = validateVideo(o, { first: Boolean(img) || chainPrev, last: Boolean(next && approvedShotImage(next)), references: refs.keys.length, scenes: 1 });
+  if (!img && o.mode !== "first_frame") errs.unshift("샷 기준 이미지를 먼저 승인해 주세요.");
+  if (!shot.approved) errs.unshift("샷 계획을 먼저 승인해 주세요.");
+  if (!img && !chainPrev) errs.unshift("샷 기준 이미지를 먼저 만들고 승인해 주세요.");
+  if (errs.length) throw new AppError("VALIDATION", `${shot.title || "샷"}: ${errs[0]}`);
+  return baseTask({
+    kind: "video",
+    target: { type: "clip", sceneIds: [scene.id], shotId },
+    modelId: o.modelId,
+    mode: o.mode,
+    prompt: shotVideoPrompt(p, scene, shot, o, refs.chars, chainPrev),
+    durationSec: o.durationSec,
+    request: { options: o, shotId, chainPrev },
+    requestId,
+    estimatedCredits: estimateVideoCredits(o),
+  });
+}
+
+/** 샷 참고 이미지 모드: 샷 기준 이미지 → 인물 기준 이미지 (Kling 은 인물 요소) */
+function shotVideoRefs(p: DramaProject, scene: DramaScene, shot: DramaShot, o: VideoOptions): { chars: DramaCharacter[]; keys: string[] } {
+  const m = videoModel(o.modelId);
+  if (o.mode !== "reference" || !m) return { chars: [], keys: [] };
+  const chars = shotCast(p, scene, shot).filter((c) => baseImages(p, c.id).length > 0);
+  if (m.family === "kling") return { chars: chars.slice(0, 3), keys: chars.slice(0, 3).flatMap((c) => baseImages(p, c.id).slice(0, 4).map((i) => i.key)) };
+  const img = approvedShotImage(shot);
+  return { chars, keys: [...(img ? [img.key] : []), ...chars.map((c) => baseImages(p, c.id)[0].key)].slice(0, m.maxReferenceImages) };
 }
 
 /** 참고 이미지: 장면들의 승인 스토리보드 + 등장인물 기준 이미지 (Kling 은 인물 요소) */
@@ -276,7 +358,30 @@ function videoRefs(p: DramaProject, scenes: DramaScene[], o: VideoOptions): { ch
   return { chars, keys: keys.slice(0, m.maxReferenceImages) };
 }
 
+async function shotVideoInput(p: DramaProject, t: DramaTask, firstOverride?: string): Promise<Record<string, unknown>> {
+  const { shot, scene } = shotOf(p, (t.request as { shotId: string }).shotId);
+  const o = (t.request as { options: VideoOptions }).options;
+  const chainPrev = (t.request as { chainPrev?: boolean }).chainPrev;
+  // 이어 만들기: 앞 작업의 마지막 프레임(firstOverride) → 앞 샷 승인 클립 마지막 프레임 → 이 샷 기준 이미지
+  const first = firstOverride ?? (chainPrev ? prevShotLastFrame(p, shot) : null) ?? approvedShotImage(shot)?.key ?? null;
+  const next = nextShot(p, shot);
+  const last = o.mode === "first_last" && next ? (approvedShotImage(next)?.key ?? null) : null;
+  const refs = shotVideoRefs(p, scene, shot, o);
+  const urls = await signed([first ?? "", last ?? "", ...refs.keys]);
+  const input = buildVideoInput(o, {
+    prompt: t.prompt,
+    firstUrl: o.mode !== "reference" && first ? urls[first] : null,
+    lastUrl: last ? urls[last] : null,
+    referenceUrls: refs.keys.map((k) => urls[k]).filter(Boolean),
+    elements: refs.chars.map((c) => ({ name: klingName(c), description: c.appearanceEn || c.appearance || c.name, urls: baseImages(p, c.id).slice(0, 4).map((i) => urls[i.key]).filter(Boolean) })).filter((e) => e.urls.length >= 2),
+  });
+  if (o.mode !== "reference" && !input.first_frame_url && !(input.image_urls as string[] | undefined)?.length) throw new AppError("VALIDATION", "시작 프레임 이미지가 없습니다. 샷 기준 이미지를 승인해 주세요.");
+  t.request = { ...t.request, input: JSON.parse(JSON.stringify(input, (_k, v) => (typeof v === "string" && v.startsWith("http") ? "(signed-url)" : v))), first, last, references: refs.keys, ...(first && first !== approvedShotImage(shot)?.key ? { chainedFrom: first } : {}) };
+  return input;
+}
+
 async function videoInput(p: DramaProject, t: DramaTask, firstOverride?: string): Promise<Record<string, unknown>> {
+  if ((t.request as { shotId?: string }).shotId) return shotVideoInput(p, t, firstOverride);
   const o = (t.request as { options: VideoOptions }).options;
   const lastSceneId = (t.request as { lastSceneId: string | null }).lastSceneId;
   const sceneIds = (t.target as { sceneIds: string[] }).sceneIds;
@@ -296,6 +401,33 @@ async function videoInput(p: DramaProject, t: DramaTask, firstOverride?: string)
   // 저장용: 서명 주소 대신 Storage 키
   t.request = { ...t.request, input: JSON.parse(JSON.stringify(input, (_k, v) => (typeof v === "string" && v.startsWith("http") ? "(signed-url)" : v))), first, last, references: refs.keys, ...(firstOverride ? { chainedFrom: firstOverride } : {}) };
   return input;
+}
+
+/** v0.9.104 검수용 첫 프레임 → Storage 이미지 키 */
+async function firstFrameOf(clipKey: string): Promise<string | null> {
+  const buf = await videoStorage.download(clipKey);
+  if (!buf) return null;
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ds_first_"));
+  try {
+    const src = path.join(dir, "c.mp4");
+    const out = path.join(dir, "first.jpg");
+    await (await import("node:fs/promises")).writeFile(src, buf);
+    await runFfmpeg(["-i", src, "-frames:v", "1", "-q:v", "3", out], 60_000);
+    const key = clipKey.replace(/\/clip\/([^/]+)\.mp4$/, "/img/first_$1.jpg");
+    if (key === clipKey) return null;
+    await videoStorage.put(key, await readFile(out), "image/jpeg");
+    return key;
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** 클립 첫·마지막 프레임을 뽑아 둔다 (샷 연결 검수 · 다음 샷 이어 만들기) */
+export async function attachFrames(clip: DramaClip): Promise<void> {
+  clip.firstFrameKey ??= await firstFrameOf(clip.key);
+  clip.lastFrameKey ??= await lastFrameOf(clip.key);
 }
 
 /** 앞 클립의 마지막 프레임 → Storage 이미지 키 (이어 만들기) */
@@ -486,6 +618,9 @@ export async function syncTasks(owner: string, p: DramaProject): Promise<boolean
       Object.assign(t, { status: "success", resultUrl: demo ? null : s.resultUrl, storedKey: key, credits: s.credits, error: null, updatedAt: now() });
       attachResult(p, t, key, demo ? 3 : null);
       if (t.kind === "video") await fixClipDuration(p, t, buf).catch(() => undefined);
+      // v0.9.104: 샷 클립은 첫·마지막 프레임을 바로 뽑아 둔다 (검수·이어 만들기)
+      const made = t.kind === "video" ? p.clips.find((c) => c.id === t.assetId) : null;
+      if (made?.shotId) await attachFrames(made).catch(() => undefined);
       if (p.tasks.some((x) => x.dependsOn === t.id && x.status === "queued")) changed = (await releaseWaiting(prov, p)) || changed;
     } catch (e) {
       // 상태 확인 실패는 다음에 다시 (작업은 그대로). 결과 복사 실패는 오류로 남긴다
@@ -541,6 +676,13 @@ function attachResult(p: DramaProject, t: DramaTask, key: string, demoSec: numbe
     list.push(img);
     t.assetId = img.id;
     markNewResult(p, "sheets");
+  } else if (t.target.type === "shot") {
+    const shotId = t.target.shotId;
+    const shot = (p.shots ?? []).find((x) => x.id === shotId);
+    if (!shot) return;
+    const img: DramaImage = { id: newId("im"), key, prompt: t.prompt, modelId: t.modelId, source: "ai", createdAt: at, version: shot.images.length + 1, approved: !shot.images.some((i) => i.approved && !i.removed) };
+    shot.images.push(img);
+    t.assetId = img.id;
   } else if (t.target.type === "frame") {
     const list = (p.storyboard[t.target.sceneId] ??= []);
     const img: DramaImage = { id: newId("im"), key, prompt: t.prompt, modelId: t.modelId, source: "ai", createdAt: at, version: list.length + 1, approved: false };
@@ -548,7 +690,7 @@ function attachResult(p: DramaProject, t: DramaTask, key: string, demoSec: numbe
     t.assetId = img.id;
     markNewResult(p, "storyboard");
   } else if (t.target.type === "clip") {
-    const clip: DramaClip = { id: newId("cl"), sceneIds: t.target.sceneIds, key, source: "ai", modelId: t.modelId, mode: t.mode, prompt: t.prompt, durationSec: demoSec ?? t.durationSec ?? 5, createdAt: at, approved: false, taskId: t.id };
+    const clip: DramaClip = { id: newId("cl"), sceneIds: t.target.sceneIds, key, source: "ai", modelId: t.modelId, mode: t.mode, prompt: t.prompt, durationSec: demoSec ?? t.durationSec ?? 5, createdAt: at, approved: false, taskId: t.id, shotId: t.target.shotId ?? null };
     p.clips.push(clip);
     t.assetId = clip.id;
     swapIntoTimeline(p, clip);

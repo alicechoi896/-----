@@ -1,9 +1,10 @@
 import { isCharacter, sceneCast } from "@/lib/drama-studio/prompts";
+import { MAX_SHOTS_PER_SCENE } from "@/lib/drama-studio/shots";
 import "server-only";
 import { getAIProvider } from "../providers/registry";
 import { AppError } from "../http";
 import { chosenLogline, emptyScene, fitDurations, newId } from "@/lib/drama-studio/steps";
-import type { DramaCharacter, DramaIdea, DramaProject, DramaScenario, DramaScene, DramaStory, SceneEnPrompt } from "@/lib/drama-studio/types";
+import type { DramaCharacter, DramaIdea, DramaProject, DramaScenario, DramaScene, DramaStory, SceneEnPrompt, ShotKind } from "@/lib/drama-studio/types";
 
 /**
  * 드라마 스튜디오 AI 글 생성 (v0.9.81) — 연결된 AI(Claude/OpenAI)로. 버튼 1번 = AI 1~몇 회, 자동 재시도 없음.
@@ -362,4 +363,49 @@ English only (names stay in Korean).`,
     if (scenes.some((s) => s.id === id)) out.set(id, { subject: str(r.subject, 400), blocking, keyMoment: str(r.keyMoment, 300), motion: str(r.motion, 700), action: str(r.action, 600), environment: str(r.environment, 300), camera: str(r.camera, 200), lighting: str(r.lighting, 200), color: str(r.color, 200) });
   }
   return { prompts: out, aiCalls: parts.reduce((n, x) => n + x.aiCalls, 0) };
+}
+
+/* ───── 8. 촬영 샷 나누기 (v0.9.104) ───── */
+const SHOT = obj({ kind: S, title: S, action: S, camera: S, dialogue: S, characters: arr(S), durationSec: { type: "number" }, continueFromPrev: { type: "boolean" } });
+const SHOT_KIND_VALUES: ShotKind[] = ["wide", "closeup", "dialogue", "reaction", "insert", "action"];
+
+/** 장면(스토리보드 1장) → 서로 다른 구도의 촬영 샷 2~4개 추천 (AI 1회) */
+export async function genShots(p: DramaProject, sceneId: string, count: number) {
+  const s = p.scenario.scenes.find((x) => x.id === sceneId);
+  if (!s) throw new AppError("NOT_FOUND", "장면을 찾지 못했습니다.", 404);
+  const cast = sceneCast(s, p.characters);
+  const n = Math.min(MAX_SHOTS_PER_SCENE, Math.max(1, count));
+  const r = await ask<{ shots: Json[] }>(
+    "shots",
+    "당신은 한국 숏폼 드라마 촬영 감독이다. 장면 하나를 실제로 찍을 촬영 샷(컷)으로 나눈다. 한 샷 = 한 가지 핵심 행동 + 한 가지 구도. 같은 장면 안에서 배경·의상·인물 위치는 그대로 두고 구도만 바꾼다.",
+    `[등장인물]\n${cast.map((c) => `- ${c.name}: ${c.appearanceEn || c.appearance}`).join("\n") || "(없음)"}\n\n[장면] ${JSON.stringify({ title: s.title, location: s.location, time: s.timeOfDay, action: s.action, dialogue: s.dialogue, emotion: s.emotion, camera: s.camera, visual: s.visual, blocking: s.en?.blocking ?? [] })}\n\n이 장면을 촬영 샷 ${n}개로 나눈다 (서로 다른 구도, 이야기 순서대로). 각 샷:\n- kind: wide(전체 샷)·closeup(인물 클로즈업)·dialogue(대사 샷)·reaction(반응 샷)·insert(손/소품 인서트)·action(인물 이동/액션) 중 하나\n- title: 한국어 한 줄 (무엇을 보여 주는지)\n- action: 영어 1~2문장 — 이 샷에서 일어나는 핵심 행동 하나 (누가, 무엇을, 손·시선·표정까지). 다른 행동을 섞지 않는다\n- camera: 영어 — 구도와 카메라 움직임 (예: slow push-in from medium to close-up)\n- dialogue: 이 샷에서 하는 대사만 '이름: 대사' 줄바꿈 (장면 대사를 샷에 나눠 담고, 없으면 빈 칸). 이름은 등장인물 이름 그대로\n- characters: 화면에 나오는 인물 이름 배열\n- durationSec: 4~8 (대사가 있으면 다 말할 수 있는 길이, 한국어 약 6글자/초)\n- continueFromPrev: 바로 앞 샷과 같은 인물이 같은 행동을 같은 구도로 이어 찍을 때만 true (구도·인물이 바뀌면 false). 첫 샷은 false`,
+    obj({ shots: arr(SHOT) }),
+    () => ({
+      shots: Array.from({ length: n }, (_, i) => ({
+        kind: SHOT_KIND_VALUES[[0, 2, 3, 4, 1, 5][i % 6]],
+        title: ["전체 모습", "대사", "반응", "소품 인서트", "클로즈업", "이동"][i % 6],
+        action: ["Both characters stand facing each other in the room", "She speaks while looking at him", "He reacts with surprise", "Her hand grips the lamp", "Close-up of her determined face", "She walks toward the window"][i % 6],
+        camera: "static medium shot",
+        dialogue: i === 1 ? s.dialogue.split("\n")[0] ?? "" : "",
+        characters: cast.slice(0, 2).map((c) => c.name),
+        durationSec: 5,
+        continueFromPrev: false,
+      })),
+    }),
+    4000,
+  );
+  const shots = (r.data.shots ?? []).slice(0, n).map((x, i) => {
+    const names = Array.isArray(x.characters) ? (x.characters as unknown[]).map((v) => str(v, 30)) : [];
+    return {
+      kind: (SHOT_KIND_VALUES.includes(x.kind as ShotKind) ? x.kind : "wide") as ShotKind,
+      title: str(x.title, 80),
+      action: str(x.action, 500),
+      camera: str(x.camera, 200),
+      dialogue: str(x.dialogue, 600),
+      characterIds: p.characters.filter((c) => names.some((nm) => nm && isCharacter(c, nm))).map((c) => c.id),
+      durationSec: Math.min(15, Math.max(4, Math.round(Number(x.durationSec) || 5))),
+      continueFromPrev: i > 0 && x.continueFromPrev === true,
+    };
+  });
+  return { shots, aiCalls: r.aiCalls };
 }

@@ -12,6 +12,7 @@ import { newRequestId, studioApi } from "../api";
 import { CostConfirm, PromptModal, TASK_LABEL, UploadButton, taskTone } from "../ui";
 import type { ProjectCtl } from "../useProject";
 import { Timeline } from "./Timeline";
+import { ShotStudio } from "./ShotStudio";
 
 type Plan = "single" | "batch";
 
@@ -148,7 +149,8 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="영상 만들기" icon={Clapperboard} description="Kie AI 로 장면 영상을 만듭니다. 작업 1개 = 1회 과금, 만들기 전에 작업 수·최소 예상 크레딧을 확인합니다.">
+      <ShotStudio ctl={ctl} />
+      <SectionCard title="장면 단위로 만들기 (기존)" icon={Clapperboard} description="Kie AI 로 장면 영상을 만듭니다. 작업 1개 = 1회 과금, 만들기 전에 작업 수·최소 예상 크레딧을 확인합니다.">
         <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">

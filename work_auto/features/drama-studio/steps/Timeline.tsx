@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BGM_DEFAULT_VOLUME } from "@/lib/drama-studio/steps";
 import { newRequestId } from "../api";
 import { ArrowDown, ArrowUp, Clapperboard, Download, GripVertical, Music, Trash2, Wand2 } from "lucide-react";
 import { Badge, Button, EmptyState, IconButton, Input, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import type { TimelineItem } from "@/lib/drama-studio/types";
 import { cn, formatRelative } from "@/lib/utils";
-import { autoSubtitle, buildTimeline } from "@/lib/drama-studio/steps";
+import { buildTimeline, clipSubtitle } from "@/lib/drama-studio/steps";
+import { shotCode } from "@/lib/drama-studio/shots";
 import { studioApi } from "../api";
 import { CostConfirm, TASK_LABEL, UploadButton, taskTone } from "../ui";
 import type { ProjectCtl } from "../useProject";
@@ -50,6 +51,18 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
     setMusicAsk(false);
     await ctl.run("음악 만들기", () => studioApi.music(p.id, { note: musicNote, clientRequestId }));
   }
+  // v0.9.104: 효과음 목록 (자료 폴더, 외부 호출 없음)
+  const [sfxList, setSfxList] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    studioApi
+      .home()
+      .then((h) => alive && setSfxList(h.sfx ?? []))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
   const running = p.renders.some((r) => r.status === "running");
   const lastOk = [...p.renders].reverse().find((r) => r.status === "success");
   async function uploadLogo(files: File[]) {
@@ -123,7 +136,7 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
                     <GripVertical className="size-4 cursor-grab text-fg-subtle" />
                     <span className="tabular w-5 text-fg-subtle">{i + 1}</span>
                     {c && ctl.urls[c.key] && <video src={ctl.urls[c.key]} preload="metadata" muted draggable={false} className="pointer-events-none h-12 w-8 rounded bg-black object-cover" />}
-                    <span className="min-w-28 font-medium text-fg">{c?.sceneIds.length ? c.sceneIds.map((id) => `#${sceneNo(id)}`).join("·") : c?.fileName ?? "클립"}</span>
+                    <span className="min-w-28 font-medium text-fg">{c?.shotId && (p.shots ?? []).some((x) => x.id === c.shotId) ? shotCode(p, (p.shots ?? []).find((x) => x.id === c.shotId)!) : c?.sceneIds.length ? c.sceneIds.map((id) => `#${sceneNo(id)}`).join("·") : c?.fileName ?? "클립"}</span>
                     {c && !c.approved && <Badge tone="danger">승인 안 됨 (병합에서 빠짐)</Badge>}
                     <label className="flex items-center gap-1 text-fg-muted">
                       앞
@@ -137,6 +150,9 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
                       <input type="checkbox" checked={t.audio} onChange={(e) => patch(t.id, { audio: e.target.checked })} className="accent-[var(--color-brand)]" />
                       원본 소리
                     </label>
+                    {sfxList.length > 0 && (
+                      <Select value={t.sfx ?? ""} options={[{ value: "", label: "효과음 없음" }, ...sfxList.map((x) => ({ value: x, label: x.replace(/\.[^.]+$/, "").slice(0, 18) }))]} onChange={(e) => patch(t.id, { sfx: e.target.value || null })} className="h-7 w-32 text-[12px]" aria-label="효과음" data-timeline-sfx />
+                    )}
                     <span className="tabular text-fg-subtle">{len(t).toFixed(1)}초</span>
                     <span className="ml-auto flex">
                       <IconButton icon={ArrowUp} label="앞으로" disabled={i === 0} onClick={() => move(i, i - 1)} />
@@ -147,7 +163,7 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
                       <Textarea
                         rows={2}
                         value={t.subtitle ?? ""}
-                        placeholder={(c ? autoSubtitle(p, c.sceneIds) : "") || "자막 (한 줄에 하나씩, 비우면 장면 대사)"}
+                        placeholder={(c ? clipSubtitle(p, c) : "") || "자막 (한 줄에 하나씩, 비우면 장면·샷 대사)"}
                         onChange={(e) => patch(t.id, { subtitle: e.target.value })}
                         onDragStart={(e) => e.stopPropagation()}
                         draggable={false}

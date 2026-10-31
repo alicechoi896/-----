@@ -90,6 +90,9 @@ export function projectKeys(p: DramaProject): string[] {
     ...p.clips.map((c) => c.key),
     ...p.renders.map((r) => r.key ?? ""),
     ...(p.bgmTracks ?? []).map((t) => t.key),
+    // v0.9.104 샷: 기준 이미지 · 올린 음성 · 클립 첫/끝 프레임
+    ...(p.shots ?? []).flatMap((sh) => [...sh.images.map((i) => i.key), sh.voiceKey ?? ""]),
+    ...p.clips.flatMap((c) => [c.firstFrameKey ?? "", c.lastFrameKey ?? ""]),
     p.renderSettings.bgmKey ?? "",
     p.renderSettings.logoKey ?? "",
   ].filter(Boolean);

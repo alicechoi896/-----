@@ -11,7 +11,9 @@ import { renderDrama } from "./render";
 import { faceCheck } from "./face";
 import { isProjectId, loadProject, ownsKey, projectDir, readIndex, saveProject, withUrls } from "./store";
 import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob, createMusicTask } from "./tasks";
-import { IMAGE_MODELS, VIDEO_MODELS, type VideoOptions } from "@/lib/drama-studio/models";
+import { DEFAULT_SHOT_MODEL, IMAGE_MODELS, VIDEO_MODELS, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, emptyShot } from "@/lib/drama-studio/shots";
+import { videoAssets } from "../video/assets";
 import {
   MAX_CHARACTERS,
   MAX_SCENES,
@@ -32,14 +34,14 @@ import {
   startAt,
   stepIndex,
 } from "@/lib/drama-studio/steps";
-import type { DramaClip, DramaImage, DramaProject, DramaRender, DramaSettings, EditableSection, SheetKind, StepKey } from "@/lib/drama-studio/types";
+import type { DramaClip, DramaImage, DramaProject, DramaRender, DramaSettings, DramaShot, EditableSection, SheetKind, ShotKind, StepKey } from "@/lib/drama-studio/types";
 
 /**
  * AI 드라마 스튜디오 서비스 (v0.9.81). docs/DRAMA_STUDIO.md
  * 모든 동작은 로그인한 사용자(관리자는 공용 데이터 주인)의 Storage 폴더 안에서만.
  */
 const now = () => new Date().toISOString();
-const EDITABLE: EditableSection[] = ["title", "currentStep", "settings", "ideas", "selection", "story", "characters", "sheets", "scenario", "storyboard", "clips", "timeline", "renderSettings"];
+const EDITABLE: EditableSection[] = ["title", "currentStep", "settings", "ideas", "selection", "story", "characters", "sheets", "scenario", "storyboard", "clips", "timeline", "renderSettings", "shots"];
 const MAX_JSON = 2_000_000;
 const UPLOAD_RULES = {
   image: { exts: ["png", "jpg", "jpeg", "webp"], max: 15 * 1024 * 1024, type: (e: string) => (e === "png" ? "image/png" : e === "webp" ? "image/webp" : "image/jpeg") },
@@ -54,6 +56,12 @@ async function open(id: string): Promise<{ owner: string; p: DramaProject }> {
 }
 
 /** 서버가 오래 걸리는 일을 하는 동안 화면이 저장한 내용을 덮지 않게: 최신 문서를 다시 읽고 서버가 만든 것만 합친다 */
+/** 작업 결과로 생긴 이미지인가 (작업의 assetId) — 화면에서 지운 예전 이미지를 되살리지 않게 */
+const p_newImage = (worked: DramaProject, imageId: string) => worked.tasks.some((t) => t.assetId === imageId);
+
+/** 효과음 이름 (assets/video/sfx — 영상 자동 제작과 같은 자료) */
+const sfxNames = () => videoAssets.sfx().map((f) => path.basename(f));
+
 async function saveMerged(owner: string, worked: DramaProject, extra?: (fresh: DramaProject) => void): Promise<DramaProject> {
   const fresh = await loadProject(owner, worked.id);
   const byId = new Map(fresh.tasks.map((t) => [t.id, t]));
@@ -72,6 +80,13 @@ async function saveMerged(owner: string, worked: DramaProject, extra?: (fresh: D
     return added;
   };
   if (union(fresh.sheets, worked.sheets)) markNewResult(fresh, "sheets");
+  // v0.9.104: 샷 기준 이미지 (그 사이 끝난 작업)
+  for (const sh of fresh.shots ?? []) {
+    const w = (worked.shots ?? []).find((x) => x.id === sh.id);
+    if (!w) continue;
+    const have = new Set(sh.images.map((i) => i.id));
+    for (const img of w.images) if (!have.has(img.id) && p_newImage(worked, img.id)) sh.images.push({ ...img, approved: img.approved && !sh.images.some((i) => i.approved) });
+  }
   if (union(fresh.storyboard, worked.storyboard)) markNewResult(fresh, "storyboard");
   const haveClips = new Set(fresh.clips.map((c) => c.id));
   const newClips = worked.clips.filter((c) => !haveClips.has(c.id));
@@ -129,6 +144,53 @@ function mergeClips(p: DramaProject, client: unknown): DramaClip[] {
     });
 }
 
+/** v0.9.104 샷 저장 검사: 화면은 계획·설정·이미지 승인/지우기만 바꾼다. 서버에만 있는 새 기준 이미지(그 사이 끝난 작업)는 지킨다 */
+function cleanShots(p: DramaProject, value: unknown): DramaShot[] {
+  const list = (Array.isArray(value) ? value : []) as Partial<DramaShot>[];
+  const known = new Map((p.shots ?? []).map((x) => [x.id, x]));
+  const scenes = new Set(p.scenario.scenes.map((x) => x.id));
+  const chars = new Set(p.characters.map((c) => c.id));
+  const kinds = new Set(SHOT_KINDS.map((k) => k.value));
+  const str = (v: unknown, n: number) => String(v ?? "").slice(0, n);
+  return list
+    .filter((x) => scenes.has(String(x.sceneId)))
+    .slice(0, MAX_SCENES * MAX_SHOTS_PER_SCENE)
+    .map((x) => {
+      const old = known.get(String(x.id));
+      const m = videoModel(String(x.modelId)) ?? videoModel(DEFAULT_SHOT_MODEL)!;
+      const edits = new Map((Array.isArray(x.images) ? (x.images as Partial<DramaImage>[]) : []).map((i) => [String(i.id), i]));
+      const images = (old?.images ?? []).filter((i) => !edits.get(i.id)?.removed).map((i) => (edits.has(i.id) ? { ...i, approved: Boolean(edits.get(i.id)!.approved) } : i));
+      const ok = images.filter((i) => i.approved);
+      for (const i of ok.slice(0, -1)) i.approved = false;
+      const mode = x.mode === "first_last" || x.mode === "reference" ? x.mode : "first_frame";
+      return {
+        ...emptyShot(String(x.sceneId), Number(x.order) || 0),
+        id: old?.id ?? (/^sh_[a-z0-9]{4,40}$/.test(String(x.id)) ? String(x.id) : newId("sh")),
+        sceneId: String(x.sceneId),
+        order: Math.max(0, Math.round(Number(x.order) || 0)),
+        kind: kinds.has(x.kind as ShotKind) ? (x.kind as ShotKind) : "wide",
+        title: str(x.title, 120),
+        action: str(x.action, 800),
+        camera: str(x.camera, 300),
+        dialogue: str(x.dialogue, 800),
+        characterIds: (Array.isArray(x.characterIds) ? x.characterIds.map(String) : []).filter((id) => chars.has(id)).slice(0, 8),
+        durationSec: Math.min(m.maxSec, Math.max(m.minSec, Math.round(Number(x.durationSec) || DEFAULT_SHOT_SEC))),
+        modelId: m.id,
+        resolution: m.resolutions.includes(String(x.resolution)) ? String(x.resolution) : m.defaultResolution,
+        mode: m.modes.includes(mode) ? mode : "first_frame",
+        continueFromPrev: x.continueFromPrev === true,
+        audio: m.audio === "always" ? true : m.audio === "none" ? false : x.audio !== false,
+        voiceSource: x.voiceSource === "upload" || x.voiceSource === "none" ? x.voiceSource : "ai",
+        voiceKey: old?.voiceKey ?? null,
+        voiceName: old?.voiceName ?? null,
+        syncChecked: x.syncChecked === true,
+        approved: x.approved === true,
+        images,
+        createdAt: old?.createdAt ?? new Date().toISOString(),
+      } as DramaShot;
+    });
+}
+
 function cleanSection(p: DramaProject, section: EditableSection, value: unknown): void {
   const v = value as never;
   switch (section) {
@@ -179,9 +241,12 @@ function cleanSection(p: DramaProject, section: EditableSection, value: unknown)
       p.timeline = (Array.isArray(value) ? (value as DramaProject["timeline"]) : [])
         .filter((t) => ids.has(t.clipId))
         .slice(0, 120)
-        .map((t) => ({ id: String(t.id || newId("tl")), clipId: t.clipId, trimStart: Math.max(0, Number(t.trimStart) || 0), trimEnd: Math.max(0, Number(t.trimEnd) || 0), audio: t.audio !== false, subtitle: typeof t.subtitle === "string" ? t.subtitle.slice(0, 1000) : null }));
+        .map((t) => ({ id: String(t.id || newId("tl")), clipId: t.clipId, trimStart: Math.max(0, Number(t.trimStart) || 0), trimEnd: Math.max(0, Number(t.trimEnd) || 0), audio: t.audio !== false, subtitle: typeof t.subtitle === "string" ? t.subtitle.slice(0, 1000) : null, sfx: typeof t.sfx === "string" && sfxNames().includes(t.sfx) ? t.sfx : null }));
       return;
     }
+    case "shots":
+      p.shots = cleanShots(p, value);
+      return;
     case "renderSettings": {
       const r = (value ?? {}) as Partial<DramaProject["renderSettings"]>;
       p.renderSettings = { ...p.renderSettings, transition: r.transition === "fade" ? "fade" : "none", bgmVolume: Math.min(1, Math.max(0, Number(r.bgmVolume) || 0)), title: String(r.title ?? "").slice(0, 80), subtitles: r.subtitles === true, subtitleSize: r.subtitleSize === "s" || r.subtitleSize === "l" ? r.subtitleSize : "m", ...(r.bgmKey === null ? { bgmKey: null, bgmName: null } : {}), ...(r.logoKey === null ? { logoKey: null, logoName: null } : {}) };
@@ -225,7 +290,7 @@ function approvalProblem(p: DramaProject, step: StepKey): string | null {
 
 export const dramaStudioService = {
   meta() {
-    return { videoModels: VIDEO_MODELS, imageModels: IMAGE_MODELS };
+    return { videoModels: VIDEO_MODELS, imageModels: IMAGE_MODELS, sfx: sfxNames() };
   },
 
   async list() {
@@ -275,7 +340,7 @@ export const dramaStudioService = {
     if (section === "currentStep" && !canEnter(fresh, fresh.currentStep)) fresh.currentStep = p.currentStep;
     const step = SECTION_STEP[section];
     // v0.9.100: 인물의 '다른 호칭'만 바꾸면 뒤 단계 승인을 풀지 않는다 (얼굴·이야기는 그대로)
-    const noAlias = (j: string) => (section === "characters" ? JSON.stringify((JSON.parse(j ?? "[]") as Record<string, unknown>[]).map((c) => ({ ...c, aliases: undefined }))) : j);
+    const noAlias = (j: string) => (section === "characters" ? JSON.stringify((JSON.parse(j ?? "[]") as Record<string, unknown>[]).map((c) => ({ ...c, aliases: undefined, voice: undefined }))) : j);
     if (step && before !== after && noAlias(before) !== noAlias(after)) markEdited(fresh, step);
     return withUrls(await saveProject(owner, fresh, now()));
   },
@@ -469,6 +534,18 @@ export const dramaStudioService = {
         extra = { deleted: gone.length };
         break;
       }
+      // v0.9.104: 스토리보드(장면) 1장 → 촬영 샷 추천 (AI 1회). replace = 영상이 없는 샷은 지우고 새로
+      case "shots-plan": {
+        requireStep(p, "video");
+        const sceneId = String(body.sceneId ?? "");
+        const r = await ai.genShots(p, sceneId, Number(body.count) || 3);
+        aiCalls = r.aiCalls;
+        const used = new Set(p.clips.map((c) => c.shotId).filter(Boolean));
+        const keep = (p.shots ?? []).filter((x) => x.sceneId !== sceneId || !(body.replace === true) || used.has(x.id) || x.images.length);
+        const start = keep.filter((x) => x.sceneId === sceneId).length;
+        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, x))];
+        break;
+      }
       case "restore-version": {
         const v = p.scenarioVersions.find((x) => x.id === body.versionId);
         if (!v) throw new AppError("NOT_FOUND", "버전을 찾지 못했습니다.", 404);
@@ -491,7 +568,7 @@ export const dramaStudioService = {
     if (requestId.length < 8) throw new AppError("VALIDATION", "요청 번호가 없습니다.");
     const { owner, p } = await open(id);
     const jobs = (Array.isArray(body.jobs) ? body.jobs : []) as ImageJob[];
-    requireStep(p, jobs.some((j) => j?.target?.type === "frame") ? "storyboard" : "sheets");
+    requireStep(p, jobs.some((j) => j?.target?.type === "shot") ? "video" : jobs.some((j) => j?.target?.type === "frame") ? "storyboard" : "sheets");
     const tasks = await createImageTasks(owner, p, jobs, String(body.modelId ?? "nano-banana-edit"), requestId);
     const saved = await saveMerged(owner, { ...p, tasks: [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks] });
     return { ...(await withUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
@@ -522,7 +599,7 @@ export const dramaStudioService = {
     if (Array.isArray(body.retryTaskIds) && body.retryTaskIds.length) {
       jobs = p.tasks
         .filter((t) => (body.retryTaskIds as unknown[]).includes(t.id) && t.kind === "video" && t.status === "fail")
-        .map((t) => ({ sceneIds: (t.target as { sceneIds: string[] }).sceneIds, options: (t.request as { options: VideoOptions }).options, prompt: t.prompt, lastSceneId: (t.request as { lastSceneId?: string }).lastSceneId ?? undefined }));
+        .map((t) => ((t.request as { shotId?: string }).shotId ? { shotId: (t.request as { shotId: string }).shotId, sceneIds: [], options: (t.request as { options: VideoOptions }).options } : { sceneIds: (t.target as { sceneIds: string[] }).sceneIds, options: (t.request as { options: VideoOptions }).options, prompt: t.prompt, lastSceneId: (t.request as { lastSceneId?: string }).lastSceneId ?? undefined }));
       if (!jobs.length) throw new AppError("VALIDATION", "다시 만들 실패 작업이 없습니다.");
     }
     const tasks = await createVideoTasks(owner, p, jobs, requestId, body.chain === true);
@@ -560,7 +637,7 @@ export const dramaStudioService = {
     const buf = await videoStorage.download(key);
     if (!buf) throw new AppError("NOT_FOUND", "올린 파일을 찾지 못했습니다. 다시 올려 주세요.", 404);
     const fileName = String(body.fileName ?? "").slice(0, 120);
-    const target = (body.target ?? {}) as { type?: string; charId?: string; sheetKind?: SheetKind; sceneId?: string; sceneIds?: string[]; newSceneTitle?: string };
+    const target = (body.target ?? {}) as { type?: string; charId?: string; sheetKind?: SheetKind; sceneId?: string; sceneIds?: string[]; newSceneTitle?: string; shotId?: string };
     const at = now();
     const img = (over: Partial<DramaImage>): DramaImage => ({ id: newId("im"), key, prompt: "", modelId: "upload", source: "upload", createdAt: at, version: 1, approved: false, fileName, ...over });
     if (target.type === "sheet") {
@@ -599,6 +676,14 @@ export const dramaStudioService = {
       p.clips.push(clip);
       swapIntoTimeline(p, clip);
       markEdited(p, "video");
+    } else if (target.type === "shot-voice" || target.type === "shot-image") {
+      const shot = (p.shots ?? []).find((x) => x.id === (target as { shotId?: string }).shotId);
+      if (!shot) throw new AppError("VALIDATION", "샷을 찾지 못했습니다.");
+      if (target.type === "shot-voice") Object.assign(shot, { voiceKey: key, voiceName: fileName, voiceSource: "upload", syncChecked: false });
+      else {
+        for (const i of shot.images) i.approved = false;
+        shot.images.push(img({ version: shot.images.length + 1, approved: true }));
+      }
     } else if (target.type === "bgm") {
       p.renderSettings = { ...p.renderSettings, bgmKey: key, bgmName: fileName };
       (p.bgmTracks ??= []).push({ id: newId("bg"), key, name: fileName.slice(0, 60) || "올린 음악", durationSec: null, prompt: "", source: "upload", createdAt: at });

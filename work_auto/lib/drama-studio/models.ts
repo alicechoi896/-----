@@ -30,11 +30,33 @@ export interface VideoModel {
   multiShot: { maxShots: number; minShotSec: number; maxShotSec: number } | null;
   /** 최소 단가 (크레딧/초, kie.ai/pricing '부터' 값). null = 공개 가격 확인 안 됨 */
   minCreditsPerSec: number | null;
+  /** v0.9.104: 해상도별 단가 (영상 입력 없음 기준, 확인된 모델만) */
+  creditsPerSecByRes?: Record<string, number>;
   priceNote: string;
   note: string;
 }
 
 export const VIDEO_MODELS: VideoModel[] = [
+  {
+    id: "seedance-2-mini",
+    label: "Seedance 2.0 Mini",
+    model: "bytedance/seedance-2-mini",
+    family: "seedance",
+    modes: ["first_frame", "first_last", "reference", "text"],
+    minSec: 4,
+    maxSec: 15,
+    resolutions: ["480p", "720p"],
+    defaultResolution: "720p",
+    aspects: ["9:16", "16:9"],
+    audio: "toggle",
+    maxReferenceImages: 9,
+    supportsLastFrame: true,
+    multiShot: null,
+    minCreditsPerSec: 3.8,
+    creditsPerSecByRes: { "480p": 3.8, "720p": 8.2 },
+    priceNote: "480p 3.8 · 720p 8.2 크레딧/초",
+    note: "샷 기본 · 가장 저렴 · 4~15초",
+  },
   {
     id: "seedance-2-fast",
     label: "Seedance 2.0 Fast",
@@ -133,6 +155,8 @@ export const VIDEO_MODELS: VideoModel[] = [
   },
 ];
 export const DEFAULT_VIDEO_MODEL = "seedance-2-fast";
+/** v0.9.104: 샷 단위 영상 기본 (720p · 5초) */
+export const DEFAULT_SHOT_MODEL = "seedance-2-mini";
 export const videoModel = (id: string) => VIDEO_MODELS.find((m) => m.id === id) ?? null;
 
 export const MODE_LABEL: Record<GenMode, string> = {
@@ -215,7 +239,7 @@ export function estimateVideoCredits(o: VideoOptions): number | null {
   const m = videoModel(o.modelId);
   if (!m?.minCreditsPerSec) return null;
   const sec = o.mode === "multi_shot" ? (o.shotSecs ?? []).reduce((a, b) => a + b, 0) : o.durationSec;
-  return Math.round(m.minCreditsPerSec * sec);
+  return Math.round((m.creditsPerSecByRes?.[o.resolution] ?? m.minCreditsPerSec) * sec);
 }
 
 export const estimateImageCredits = (modelId: string, count: number) => {

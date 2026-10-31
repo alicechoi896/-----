@@ -93,3 +93,14 @@
 - 영상 프롬프트 `[SHOT] One continuous shot…` + 첫 프레임 얼굴 고정. 스토리보드 `[REFERENCES]` 동일 인물 강조
 - 이어 만들기 `createVideoTasks(…, chain)`: 첫 프레임 방식 장면별 작업 중 바로 앞 장면과 장소(location)가 같으면 `dependsOn` → 앞 클립 완료 시 `lastFrameOf()`(ffmpeg -sseof) 로 마지막 프레임을 `{project}/img/last_{task}.png` 에 저장해 `first_frame_url` 로
 - 얼굴 검사 `lib/server/drama-studio/face.ts` (`generate face-check`): 인물 기준 이미지(정면) + 대상 이미지(512~768px) → AI 비전 → `faceCheck {ok, score, note}`
+
+
+## 08 촬영 샷 (v0.9.104)
+- 데이터: `DramaProject.shots[]` (`DramaShot`: sceneId·order·kind·action(영어)·camera·dialogue·characterIds·durationSec·modelId·resolution·mode·continueFromPrev·audio·voiceSource·voiceKey·approved·images). 표시 번호 `shotCode()` = Scene02-ShotA
+- AI: `generate shots-plan {sceneId, count, replace}` → `ai.genShots`
+- 이미지: `images { jobs: [{ target: { type: "shot", shotId } }] }` — 참고 = 샷 인물 기준 이미지(정면 1장씩) + 마지막에 승인 스토리보드 (`shotImagePrompt`)
+- 영상: `videos { jobs: [{ shotId }] }` — 서버가 샷 설정으로 옵션을 만든다 (`shotOptions`, `planShotVideo`, `shotVideoInput`). 샷 승인 + 기준 이미지 승인(또는 이어 만들기) 필요. 이어 만들기: 같은 요청의 앞 샷 작업에 dependsOn → 끝나면 마지막 프레임 / 아니면 앞 샷 승인 클립의 lastFrameKey
+- 결과: 샷 클립은 `shotId`, `firstFrameKey`·`lastFrameKey` (sync 에서 FFmpeg 로 뽑음)
+- 타임라인: `buildTimeline` 샷 순서, `swapIntoTimeline` 같은 샷만, `clipSubtitle`, `TimelineItem.sfx`
+- 병합: 샷 voiceSource=upload 면 클립 소리 0.35 + 올린 음성, 효과음 0.8 (amix)
+- 인물 목소리 `DramaCharacter.voice` — 바꿔도 뒤 단계 승인 유지

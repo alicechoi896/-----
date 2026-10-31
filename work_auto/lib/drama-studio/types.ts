@@ -88,6 +88,8 @@ export interface DramaCharacter {
   speech: string;
   /** v0.9.100: 극 중 다른 이름·호칭 (쉼표로, 예: '지니, 요정님') — 대본에 이 호칭이 나와도 이 인물로 본다 */
   aliases?: string;
+  /** v0.9.104: 목소리 설정 (08 영상 제작에서 저장, AI 음성 생성 프롬프트에 넣는다. 예: '낮고 차분한 30대 남성') */
+  voice?: string;
 }
 
 export type SheetKind = "front" | "side" | "full" | "expression" | "outfit" | "extra";
@@ -189,7 +191,7 @@ export type TaskStatus = "queued" | "requesting" | "generating" | "success" | "f
 export interface DramaTask {
   id: string;
   kind: "image" | "video" | "music";
-  target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string } | { type: "clip"; sceneIds: string[] } | { type: "bgm" };
+  target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string } | { type: "shot"; shotId: string } | { type: "clip"; sceneIds: string[]; shotId?: string } | { type: "bgm" };
   modelId: string;
   mode: GenMode;
   prompt: string;
@@ -228,6 +230,11 @@ export interface DramaClip {
   taskId: string | null;
   fileName?: string;
   faceCheck?: FaceCheck;
+  /** v0.9.104: 샷 단위로 만든 클립 */
+  shotId?: string | null;
+  /** v0.9.104: 검수용 첫·마지막 프레임 (Storage 이미지 키) */
+  firstFrameKey?: string | null;
+  lastFrameKey?: string | null;
 }
 
 export interface TimelineItem {
@@ -238,6 +245,8 @@ export interface TimelineItem {
   audio: boolean;
   /** v0.9.92: 이 클립 자막 (한 줄씩). null·없음 = 장면 대사에서 자동 */
   subtitle?: string | null;
+  /** v0.9.104: 이 클립 시작에 넣을 효과음 (자료 폴더 이름) */
+  sfx?: string | null;
 }
 
 export interface RenderSettings {
@@ -306,6 +315,53 @@ export interface DramaProject {
   renders: DramaRender[];
   /** v0.9.101: 배경음악 목록 (AI 로 만든 곡·올린 곡). 쓰는 곡은 renderSettings.bgmKey */
   bgmTracks?: DramaBgmTrack[];
+  /** v0.9.104: 08 영상 제작 — 스토리보드(장면)마다 나눈 촬영 샷 */
+  shots?: DramaShot[];
+}
+
+/** v0.9.104 촬영 샷 종류 */
+export type ShotKind = "wide" | "closeup" | "dialogue" | "reaction" | "insert" | "action";
+
+/**
+ * v0.9.104 촬영 샷: 장면(스토리보드 1장)을 1~4개의 서로 다른 구도로 나눈 것.
+ * 샷마다 기준 이미지(Nano Banana) → 승인 → 그 이미지를 시작 프레임으로 AI 영상 (Seedance 2.0 Mini 기본).
+ * 화면 표시 번호는 'Scene02-ShotA' (장면 순서·샷 순서로 계산), id 는 바뀌지 않는다.
+ */
+export interface DramaShot {
+  id: string;
+  sceneId: string;
+  /** 장면 안 순서 (0부터) */
+  order: number;
+  kind: ShotKind;
+  /** 한국어 한 줄 (무엇을 보여 주는 샷인지) */
+  title: string;
+  /** 영어: 이 샷의 핵심 행동 한 가지 (영상 프롬프트) */
+  action: string;
+  /** 영어: 구도·카메라 움직임 */
+  camera: string;
+  /** 이 샷에서 하는 대사 ('이름: 대사' 줄바꿈) */
+  dialogue: string;
+  characterIds: string[];
+  durationSec: number;
+  modelId: string;
+  resolution: string;
+  /** 시작 프레임 / 시작+끝 프레임(다음 샷 기준 이미지) / 참고 이미지 — 섞지 않는다 */
+  mode: "first_frame" | "first_last" | "reference";
+  /** 앞 샷 영상의 마지막 프레임에서 이어 만들기 (같은 인물·같은 행동을 이어 찍을 때만) */
+  continueFromPrev: boolean;
+  /** AI 가 소리(대사·효과음)를 만들기 */
+  audio: boolean;
+  /** 음성: AI 생성 / 올린 파일 / 없음 */
+  voiceSource: "ai" | "upload" | "none";
+  voiceKey: string | null;
+  voiceName?: string | null;
+  /** 대사 싱크를 사람이 확인했는가 */
+  syncChecked?: boolean;
+  /** 샷 계획 승인 */
+  approved: boolean;
+  /** 기준 이미지 (승인 1장 = 시작 프레임) */
+  images: DramaImage[];
+  createdAt: string;
 }
 
 export interface DramaBgmTrack {
@@ -341,4 +397,5 @@ export type EditableSection =
   | "storyboard"
   | "clips"
   | "timeline"
-  | "renderSettings";
+  | "renderSettings"
+  | "shots";

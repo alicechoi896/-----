@@ -7,7 +7,7 @@ import { videoStorage } from "../video/storage";
 import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
 import { videoAssets } from "../video/assets";
 import { projectDir } from "./store";
-import { autoSubtitle } from "@/lib/drama-studio/steps";
+import { clipSubtitle } from "@/lib/drama-studio/steps";
 import type { DramaProject, DramaRender } from "@/lib/drama-studio/types";
 
 /* ───── v0.9.92 자막·로고 (투명 PNG 를 영상 위에 얹는다) ───── */
@@ -133,7 +133,7 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
       // 자막 줄: 직접 쓴 것 → 없으면 장면 대사. 줄 길이 비율로 시간을 나눈다
       const overlays: { file: string; from: number; to: number }[] = [];
       if (p.renderSettings.subtitles) {
-        const text = (t.subtitle ?? "").trim() || autoSubtitle(p, clip.sceneIds);
+        const text = (t.subtitle ?? "").trim() || clipSubtitle(p, clip);
         const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
         const totalChars = lines.reduce((n, l) => n + Math.max(4, l.length), 0);
         let at = 0;
@@ -147,6 +147,21 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
       }
       const extra = [...overlays.map((o) => o.file), ...(logo ? [logo] : [])];
       const firstExtra = audioIn ? 1 : 2;
+      // v0.9.104: 샷에 올린 음성 파일 (클립 소리는 작게 깔고 음성을 얹는다) · 이 클립 시작 효과음
+      const shot = clip.shotId ? (p.shots ?? []).find((x) => x.id === clip.shotId) : null;
+      const audioFiles: string[] = [];
+      let voiceFile: string | null = null;
+      if (shot?.voiceSource === "upload" && shot.voiceKey) {
+        const vb = await videoStorage.download(shot.voiceKey).catch(() => null);
+        if (vb) {
+          voiceFile = path.join(dir, `voice${i}${path.extname(shot.voiceKey) || ".mp3"}`);
+          await writeFile(voiceFile, vb);
+          audioFiles.push(voiceFile);
+        }
+      }
+      const sfxFile = t.sfx ? videoAssets.sfx().find((f) => path.basename(f) === t.sfx) ?? null : null;
+      if (sfxFile) audioFiles.push(sfxFile);
+      const aBase = firstExtra + extra.length;
       let graph = `[0:v]${vf}[v0]`;
       let cur = "v0";
       overlays.forEach((o, k) => {
@@ -157,12 +172,24 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
         graph += `;[${cur}][${firstExtra + overlays.length}:v]overlay=0:0[lg]`;
         cur = "lg";
       }
-      graph += `;[${audioIn ? "0:a:0" : "1:a:0"}]${af}[aout]`;
+      if (!audioFiles.length) graph += `;[${audioIn ? "0:a:0" : "1:a:0"}]${af}[aout]`;
+      else {
+        const mix: string[] = [];
+        graph += `;[${audioIn ? "0:a:0" : "1:a:0"}]aresample=44100,aformat=channel_layouts=stereo${voiceFile ? ",volume=0.35" : ""}[abase]`;
+        mix.push("[abase]");
+        audioFiles.forEach((_, k) => {
+          const isSfx = audioFiles[k] === sfxFile;
+          graph += `;[${aBase + k}:a:0]aresample=44100,aformat=channel_layouts=stereo,${isSfx ? "volume=0.8," : ""}apad,atrim=0:${dur.toFixed(3)}[ax${k}]`;
+          mix.push(`[ax${k}]`);
+        });
+        graph += `;${mix.join("")}amix=inputs=${mix.length}:normalize=0:duration=first,${af}[aout]`;
+      }
       await runFfmpeg(
         [
           "-ss", start.toFixed(3), "-t", dur.toFixed(3), "-i", src,
           ...(audioIn ? [] : ["-f", "lavfi", "-t", dur.toFixed(3), "-i", "anullsrc=r=44100:cl=stereo"]),
           ...extra.flatMap((f) => ["-loop", "1", "-t", dur.toFixed(3), "-i", f]),
+          ...audioFiles.flatMap((f) => ["-i", f]),
           "-filter_complex", graph,
           "-map", `[${cur}]`, "-map", "[aout]",
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "2M", "-bufsize", "4M", "-r", String(FPS),
