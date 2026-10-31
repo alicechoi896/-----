@@ -126,7 +126,11 @@ export interface Treatment {
 }
 
 /** 샤오홍슈 자막이 주로 있는 아래쪽 띠 (글자 검사를 못 했을 때 기본 블러, v0.9.66) */
-export const SUBTITLE_BAND: Box = { x: 0.04, y: 0.7, w: 0.92, h: 0.2 };
+export const SUBTITLE_BAND: Box = { x: 0.03, y: 0.66, w: 0.94, h: 0.28 };
+/** v0.9.85: 확대로 가릴 때 글자 상자 둘레 여유 (AI 상자가 글자보다 작게 잡히는 일이 많아서 2% → 6%) */
+const CROP_PAD = 0.06;
+/** v0.9.85: 글자를 가린 뒤 조금 더 확대 (가장자리에 글자가 걸치지 않게) */
+const EXTRA_ZOOM = 1.08;
 /** 블러 합계가 화면의 이 비율을 넘으면 쓰지 않는다 */
 const MAX_BLUR_AREA = 0.3;
 
@@ -215,12 +219,15 @@ function decide(boxes: Box[], checked: boolean, aspect: number): Treatment {
   }
   if (!boxes.length) return { kind: "clean" };
   const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
-  // 확대 판단은 여유를 조금만 (너무 크게 확대하지 않게)
-  const padded = boxes.map((b) => clampBox({ x: b.x - pad / 2, y: b.y - pad / 2, w: b.w + pad, h: b.h + pad }));
+  // 상단 제목 띠가 이미 덮는 글자(띠 안에 끝나는 것)는 여유를 넓히기 전에 뺀다
+  const bar = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+  const visible = boxes.filter((b) => b.y + b.h + 0.02 > bar);
+  if (!visible.length) return { kind: "clean" };
+  const padded = visible.map((b) => clampBox({ x: b.x - CROP_PAD, y: b.y - CROP_PAD, w: b.w + CROP_PAD * 2, h: b.h + CROP_PAD * 2 }));
   const full = findCrop(padded, aspect, 1);
   if (full) return { kind: "clean" };
   const crop = findCrop(padded, aspect);
-  if (crop) return { kind: "crop", crop };
+  if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect) };
   // 확대로 안 되면 블러 (상자마다 따로, 상단 띠가 덮는 것은 빼고). 합계가 너무 크면 사용 안 함
   const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
   const blurs = mergeNear(boxes)
@@ -229,6 +236,19 @@ function decide(boxes: Box[], checked: boolean, aspect: number): Treatment {
   const area = blurs.reduce((n, b) => n + b.w * b.h, 0);
   if (blurs.length && area <= MAX_BLUR_AREA) return { kind: "blur", blur: blurs[0], blurs };
   return { kind: "rejected" };
+}
+
+/** 찾은 창을 조금 더 확대 (가운데 기준). 그래도 글자가 안 보이고 최대 배율 안이면 그 창, 아니면 원래 창 */
+function zoomMore(crop: Box, boxes: Box[], aspect: number): Box {
+  const s = crop.w / EXTRA_ZOOM;
+  if (1 / s > VIDEO_RENDER_CONFIG.maxCropZoom + 1e-9) return crop;
+  const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+  const cx = crop.x + crop.w / 2;
+  const cy = crop.y + crop.h / 2;
+  const win = { x: Math.min(1 - s, Math.max(0, cx - s / 2)), y: Math.min(1 - s, Math.max(0, cy - s / 2)), w: s, h: s };
+  const ex = exposed(win, aspect, barFrac);
+  if (boxes.some((b) => overlap(b, ex) > 0.00002)) return crop;
+  return { x: Number(win.x.toFixed(4)), y: Number(win.y.toFixed(4)), w: Number(s.toFixed(4)), h: Number(s.toFixed(4)) };
 }
 
 function union(boxes: Box[]): Box {
@@ -270,7 +290,11 @@ const persistentCache = new WeakMap<TextScan, Box[]>();
 export function persistentBoxes(scan: TextScan): Box[] {
   const hit = persistentCache.get(scan);
   if (hit) return hit;
-  const small = scan.samples.flatMap((x) => x.boxes).filter((b) => b.w * b.h <= 0.12 && !(b.w >= 0.99 && b.h >= 0.99));
+  // v0.9.85: 두 줄 자막도 (12% → 20%). 아래쪽(자막 자리) 글자는 줄마다 길이가 달라 화면 폭 전체로 넓혀 가린다
+  const small = scan.samples
+    .flatMap((x) => x.boxes)
+    .filter((b) => b.w * b.h <= 0.2 && !(b.w >= 0.99 && b.h >= 0.99))
+    .map((b) => (b.y + b.h / 2 > 0.55 ? { x: 0.02, y: b.y, w: 0.96, h: b.h } : b));
   const out = mergeNear(small);
   persistentCache.set(scan, out);
   return out;

@@ -27,7 +27,8 @@ export const VIDEO_RENDER_CONFIG = {
   /** 원본 글자 처리 */
   /** v0.9.76: 자막·로고를 확대로 가릴 때 최대 배율 (1.35 → 1.6) */
   // v0.9.82: 1.6 → 1.8 (로고·자막은 확대로 가린다)
-  maxCropZoom: 1.8,
+  // v0.9.85: 1.8 → 2.0 (자막·로고가 있으면 더 확대)
+  maxCropZoom: 2.0,
   textMaskPadding: 0.04,
   textMaskTimePaddingSec: 0.3,
   /** 원본 글자 검사: 클립마다 몇 장을 볼지 (AI Vision 1회) */

@@ -255,9 +255,13 @@ export const dramaStudioService = {
     const before = JSON.stringify((p as unknown as Record<string, unknown>)[section]);
     cleanSection(p, section, body.value);
     const after = JSON.stringify((p as unknown as Record<string, unknown>)[section]);
+    // v0.9.85: 저장 직전에 최신 문서를 다시 읽어 이 부분만 바꾼다 — 그 사이 끝난 승인·생성 결과(단계 상태)를 덮어쓰지 않게
+    const fresh = await loadProject(owner, p.id);
+    (fresh as unknown as Record<string, unknown>)[section] = (p as unknown as Record<string, unknown>)[section];
+    if (section === "currentStep" && !canEnter(fresh, fresh.currentStep)) fresh.currentStep = p.currentStep;
     const step = SECTION_STEP[section];
-    if (step && before !== after) markEdited(p, step);
-    return withUrls(await saveProject(owner, p, now()));
+    if (step && before !== after) markEdited(fresh, step);
+    return withUrls(await saveProject(owner, fresh, now()));
   },
 
   async approve(id: string, body: { step?: unknown }) {

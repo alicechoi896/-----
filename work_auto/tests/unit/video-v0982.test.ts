@@ -35,3 +35,17 @@ describe("v0.9.82 영상 자동 제작", () => {
     expect(tr.crop!.y + tr.crop!.h).toBeLessThanOrEqual(0.82);
   });
 });
+
+describe("v0.9.85 자막·로고 더 확대", () => {
+  it("아래 자막은 짧게 잡혀도 화면 폭 전체로 가리고, 가린 뒤 조금 더 확대한다", () => {
+    const scan = { checked: true, interval: 2, samples: [{ t: 0.2, boxes: [{ x: 0.4, y: 0.8, w: 0.2, h: 0.05 }] }, { t: 10.2, boxes: [] }] };
+    const p = persistentBoxes(scan);
+    expect(p[0].x).toBeLessThanOrEqual(0.02);
+    expect(p[0].w).toBeGreaterThanOrEqual(0.96);
+    const tr = decideTreatment(p, true);
+    expect(tr.kind).toBe("crop");
+    // 여유 6% → 창 아래 끝이 자막 위 0.74 보다 위
+    expect(tr.crop!.y + tr.crop!.h).toBeLessThanOrEqual(0.74);
+    expect(1 / tr.crop!.w).toBeLessThanOrEqual(2.0001);
+  });
+});
