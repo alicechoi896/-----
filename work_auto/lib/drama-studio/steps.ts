@@ -139,7 +139,8 @@ export function canEnter(p: DramaProject, step: StepKey): boolean {
 export function markEdited(p: DramaProject, step: StepKey): void {
   const s = p.steps[step];
   const wasApproved = s.status === "approved";
-  if (s.status === "empty" || s.status === "skipped" || wasApproved) p.steps[step] = { ...s, status: "draft" };
+  // 건너뛴 단계(중간부터 시작)는 내용을 채워도 '건너뜀' 그대로 — 뒤 단계를 잠그지 않게 (v0.9.87)
+  if (s.status === "empty" || wasApproved) p.steps[step] = { ...s, status: "draft" };
   if (wasApproved) markDownstreamReview(p, step);
 }
 

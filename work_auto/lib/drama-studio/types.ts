@@ -175,6 +175,8 @@ export interface DramaTask {
   credits: number | null;
   estimatedCredits: number | null;
   requestId: string;
+  /** v0.9.87: 이 작업(같은 인물의 기준 이미지)이 끝나면 그 결과를 참고로 넣어 보낸다 */
+  dependsOn?: string | null;
   createdAt: string;
   updatedAt: string;
 }

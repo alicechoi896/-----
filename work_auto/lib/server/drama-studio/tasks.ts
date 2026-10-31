@@ -120,6 +120,52 @@ function frameRefs(p: DramaProject, s: DramaScene): { chars: DramaCharacter[]; k
   return { chars, keys };
 }
 
+/** 이미지 요청 input. extraRefs = 아직 고정 전이지만 이번에 먼저 만든 기준 이미지(정면) */
+async function imageInput(p: DramaProject, t: DramaTask, modelId: string, extraRefs: string[] = []): Promise<Record<string, unknown>> {
+  const m = imageModel(modelId)!;
+  let refKeys: string[] = [];
+  if (m.maxReferenceImages) {
+    if (t.target.type === "sheet") {
+      const charId = t.target.charId;
+      refKeys = [...extraRefs, ...baseImages(p, charId).map((i) => i.key)].filter((k, i, a) => a.indexOf(k) === i).slice(0, 4);
+      // 자동 프롬프트였으면 '같은 사람' 지시가 들어간 프롬프트로
+      const c = p.characters.find((x) => x.id === charId);
+      if (c && refKeys.length && t.prompt === sheetPrompt(c, t.target.sheetKind, false)) t.prompt = sheetPrompt(c, t.target.sheetKind, true);
+    } else if (t.target.type === "frame") {
+      const sceneId = t.target.sceneId;
+      refKeys = frameRefs(p, p.scenario.scenes.find((s) => s.id === sceneId)!).keys;
+    }
+  }
+  const aspect = t.target.type === "sheet" ? sheetMeta(t.target.sheetKind).aspect : p.settings.aspect;
+  const urls = await signed(refKeys);
+  const refUrls = refKeys.map((k) => urls[k]).filter(Boolean);
+  t.request = { model: m.model, aspect_ratio: aspect, references: refKeys };
+  // 참고 이미지가 없으면 글만 모델로 (Nano Banana Edit 는 이미지가 꼭 필요)
+  if (m.maxReferenceImages && !refUrls.length) {
+    t.modelId = "nano-banana";
+    t.mode = "text";
+    return { prompt: t.prompt, output_format: "png", aspect_ratio: aspect };
+  }
+  t.modelId = modelId;
+  t.mode = m.maxReferenceImages ? "reference" : "text";
+  return m.maxReferenceImages ? { prompt: t.prompt, image_urls: refUrls.slice(0, m.maxReferenceImages), output_format: "png", aspect_ratio: aspect } : { prompt: t.prompt, output_format: "png", aspect_ratio: aspect };
+}
+
+/**
+ * v0.9.87 얼굴 일관성: 기준 이미지를 고정하지 않은 인물의 여러 종류(정면·측면·전신·표정…)를 한 번에 만들면
+ * 장마다 글로만 그려 얼굴이 모두 달랐다 → 그 인물은 정면(없으면 첫 종류) 1장을 먼저 만들고,
+ * 나머지는 '기다림'으로 두었다가 정면이 끝나면 그 이미지를 참고로 넣어 보낸다 (확인한 장수 그대로, 추가 비용 없음).
+ */
+function chainSheets(p: DramaProject, tasks: DramaTask[]): void {
+  const byChar = new Map<string, DramaTask[]>();
+  for (const t of tasks) if (t.target.type === "sheet") byChar.set(t.target.charId, [...(byChar.get(t.target.charId) ?? []), t]);
+  for (const [charId, list] of byChar) {
+    if (list.length < 2 || baseImages(p, charId).length) continue;
+    const anchor = list.find((t) => t.target.type === "sheet" && t.target.sheetKind === "front") ?? list[0];
+    for (const t of list) if (t !== anchor) t.dependsOn = anchor.id;
+  }
+}
+
 export async function createImageTasks(owner: string, p: DramaProject, jobs: ImageJob[], modelId: string, requestId: string): Promise<DramaTask[]> {
   const dup = existing(p, requestId);
   if (dup.length) return dup;
@@ -127,35 +173,17 @@ export async function createImageTasks(owner: string, p: DramaProject, jobs: Ima
   if (inFlight.has(key)) return (await inFlight.get(key)) as DramaTask[];
   const run = (async () => {
     const prov = await provider();
-    const m = imageModel(modelId)!;
     const tasks = planImageTasks(p, jobs, modelId, requestId);
+    chainSheets(p, tasks);
     await submit(
       prov,
-      tasks,
+      tasks.filter((t) => !t.dependsOn),
       // 참고 이미지가 없어 글만 모델로 바꾼 경우까지 (input 을 만든 뒤 정한다)
       (t) => imageModel(t.modelId)!.model,
-      async (t) => {
-        let refKeys: string[] = [];
-        if (m.maxReferenceImages) {
-          if (t.target.type === "sheet") refKeys = baseImages(p, t.target.charId).slice(0, 4).map((i) => i.key);
-          else if (t.target.type === "frame") {
-            const sceneId = t.target.sceneId;
-            refKeys = frameRefs(p, p.scenario.scenes.find((s) => s.id === sceneId)!).keys;
-          }
-        }
-        const aspect = t.target.type === "sheet" ? sheetMeta(t.target.sheetKind).aspect : p.settings.aspect;
-        const urls = await signed(refKeys);
-        const refUrls = refKeys.map((k) => urls[k]).filter(Boolean);
-        t.request = { model: m.model, aspect_ratio: aspect, references: refKeys };
-        // 참고 이미지가 없으면 글만 모델로 (Nano Banana Edit 는 이미지가 꼭 필요)
-        if (m.maxReferenceImages && !refUrls.length) {
-          t.modelId = "nano-banana";
-          t.mode = "text";
-          return { prompt: t.prompt, output_format: "png", aspect_ratio: aspect };
-        }
-        return m.maxReferenceImages ? { prompt: t.prompt, image_urls: refUrls.slice(0, m.maxReferenceImages), output_format: "png", aspect_ratio: aspect } : { prompt: t.prompt, output_format: "png", aspect_ratio: aspect };
-      },
+      (t) => imageInput(p, t, modelId),
     );
+    // 기다리는 작업은 요청한 모델을 기억해 둔다
+    for (const t of tasks.filter((x) => x.dependsOn)) t.request = { model: imageModel(modelId)!.model, wantModel: modelId };
     return tasks;
   })().finally(() => inFlight.delete(key));
   inFlight.set(key, run);
@@ -303,10 +331,11 @@ async function fetchResult(url: string, kind: "image" | "video"): Promise<Buffer
 /** 진행 중인 작업 상태 확인 (무료) → 끝난 것은 Storage 로 복사하고 이미지·클립으로 잇는다. 바뀐 것이 있으면 true */
 export async function syncTasks(owner: string, p: DramaProject): Promise<boolean> {
   const active = p.tasks.filter(ACTIVE).slice(0, 30);
-  if (!active.length) return false;
+  const waiting = p.tasks.filter((t) => t.status === "queued" && t.dependsOn);
+  if (!active.length && !waiting.length) return false;
   const prov = await provider();
   const demo = prov.id.startsWith("mock");
-  let changed = false;
+  let changed = await releaseWaiting(prov, p);
   for (const t of active) {
     if (!t.externalTaskId) {
       // 만들다 끊긴 작업 (서버가 멈춤) — 30분 넘으면 실패로
@@ -329,6 +358,7 @@ export async function syncTasks(owner: string, p: DramaProject): Promise<boolean
       Object.assign(t, { status: "success", resultUrl: demo ? null : s.resultUrl, storedKey: key, credits: s.credits, error: null, updatedAt: now() });
       attachResult(p, t, key, demo ? 3 : null);
       if (t.kind === "video") await fixClipDuration(p, t, buf).catch(() => undefined);
+      if (p.tasks.some((x) => x.dependsOn === t.id && x.status === "queued")) changed = (await releaseWaiting(prov, p)) || changed;
     } catch (e) {
       // 상태 확인 실패는 다음에 다시 (작업은 그대로). 결과 복사 실패는 오류로 남긴다
       const msg = errorText(e) === "만들지 못했습니다." && e instanceof Error ? e.message : errorText(e);
@@ -339,6 +369,31 @@ export async function syncTasks(owner: string, p: DramaProject): Promise<boolean
     }
   }
   return changed;
+}
+
+/** 기준 이미지 작업이 끝난 '기다림' 작업: 성공이면 그 이미지를 참고로 넣어 보내고, 실패면 보내지 않는다 (비용 없음) */
+async function releaseWaiting(prov: VideoAIProvider, p: DramaProject): Promise<boolean> {
+  const ready = p.tasks.filter((t) => t.status === "queued" && t.dependsOn && p.tasks.some((a) => a.id === t.dependsOn && (a.status === "success" || a.status === "fail")));
+  if (!ready.length) return false;
+  const go: DramaTask[] = [];
+  for (const t of ready) {
+    const anchor = p.tasks.find((a) => a.id === t.dependsOn)!;
+    if (anchor.status === "fail" || !anchor.storedKey) {
+      Object.assign(t, { status: "fail", error: "먼저 만드는 기준 이미지(정면)를 만들지 못해 보내지 않았습니다 (비용 없음). 다시 만들어 주세요.", updatedAt: now() });
+      continue;
+    }
+    go.push(t);
+  }
+  if (go.length) {
+    const want = (t: DramaTask) => String((t.request as { wantModel?: string }).wantModel ?? "nano-banana-edit");
+    await submit(
+      prov,
+      go,
+      (t) => imageModel(t.modelId)!.model,
+      (t) => imageInput(p, t, want(t), [p.tasks.find((a) => a.id === t.dependsOn)!.storedKey!]),
+    );
+  }
+  return true;
 }
 
 function attachResult(p: DramaProject, t: DramaTask, key: string, demoSec: number | null): void {

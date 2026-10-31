@@ -132,12 +132,12 @@ export function useProject(id: string) {
   );
 
   // 진행 중 작업·렌더가 있으면 상태 확인
-  const active = Boolean(project?.tasks.some((t) => t.status === "generating" || t.status === "requesting") || project?.renders.some((r) => r.status === "running"));
+  const active = Boolean(project?.tasks.some((t) => t.status === "generating" || t.status === "requesting" || (t.status === "queued" && t.dependsOn)) || project?.renders.some((r) => r.status === "running"));
   useEffect(() => {
     if (!active) return;
     const t = setInterval(async () => {
       try {
-        const hasTasks = current.current?.tasks.some((x) => x.status === "generating" || x.status === "requesting");
+        const hasTasks = current.current?.tasks.some((x) => x.status === "generating" || x.status === "requesting" || (x.status === "queued" && x.dependsOn));
         // 화면에서 고치는 중(저장 대기)이면 이번 확인은 건너뛴다
         if (pending.current.size) return;
         apply(await enqueue(() => (hasTasks ? studioApi.sync(id) : studioApi.get(id))));

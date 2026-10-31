@@ -30,7 +30,9 @@ export function sheetPrompt(c: DramaCharacter, kind: SheetKind, hasReference: bo
   const m = sheetMeta(kind);
   return [
     `[FORMAT] Character reference sheet image, ${m.aspect} portrait, Korean drama, cinematic realistic photo.`,
-    hasReference ? "[REFERENCES] The reference image(s) show this exact character. Keep exactly the same face, hairstyle, skin tone and outfit." : "",
+    hasReference
+      ? "[REFERENCES] The reference image(s) show this exact person. Draw the SAME person: identical face shape, eyes, eyebrows, nose, lips, jawline, skin tone, age, hairstyle and hair color, and the same outfit. Only the camera angle, pose or expression changes — do not redesign the face."
+      : "",
     `[SUBJECT] ${c.name}${c.age ? `, age ${c.age}` : ""}${c.gender ? `, ${c.gender}` : ""}: ${characterLine(c)}.`,
     `[ACTION] ${m.en}.`,
     "[ENVIRONMENT] Clean light-grey studio background.",

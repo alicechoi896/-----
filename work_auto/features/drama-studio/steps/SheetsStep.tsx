@@ -91,12 +91,12 @@ export function SheetsStep({ ctl }: { ctl: ProjectCtl }) {
             모든 인물 만들기
           </Button>
         </div>
-        <p className="mt-2 text-[12px] text-fg-subtle">{m.note}. 기준 이미지(고정한 이미지)가 있으면 그 이미지를 참고로 넣어 같은 인물을 만들고, 아직 없으면 글만으로 만듭니다 (처음엔 [정면]부터 만들어 고정한 뒤 나머지를 만드는 것을 권합니다).</p>
+        <p className="mt-2 text-[12px] text-fg-subtle">{m.note}. 얼굴을 맞추기 위해, 기준 이미지(🔒 고정)가 있으면 그 이미지를 참고로 넣고, 아직 없으면 [정면]을 먼저 만든 뒤 그 정면을 참고로 나머지(측면·전신·표정…)를 만듭니다 (자동 2단계, 장수·비용 그대로). 마음에 드는 정면을 고정하면 이후 모든 이미지가 그 얼굴을 따릅니다.</p>
       </SectionCard>
 
       {p.characters.map((c) => {
         const list = p.sheets[c.id] ?? [];
-        const running = tasks.filter((t) => t.target.type === "sheet" && t.target.charId === c.id && (t.status === "generating" || t.status === "requesting"));
+        const running = tasks.filter((t) => t.target.type === "sheet" && t.target.charId === c.id && (t.status === "generating" || t.status === "requesting" || (t.status === "queued" && t.dependsOn)));
         const failed = tasks.filter((t) => t.target.type === "sheet" && t.target.charId === c.id && t.status === "fail").slice(-3);
         return (
           <SectionCard
@@ -113,7 +113,7 @@ export function SheetsStep({ ctl }: { ctl: ProjectCtl }) {
             }
             data-sheet={c.id}
           >
-            {running.length > 0 && <p className="mb-2 text-[12px] text-brand">만드는 중 {running.length}장… (10초마다 확인)</p>}
+            {running.length > 0 && <p className="mb-2 text-[12px] text-brand">만드는 중 {running.length}장… (10초마다 확인){running.some((t) => t.dependsOn) ? ` — 정면을 먼저 만든 뒤 그 얼굴로 나머지 ${running.filter((t) => t.dependsOn).length}장을 만듭니다` : ""}</p>}
             {failed.map((t) => (
               <Notice key={t.id} tone="warning" className="mb-2">
                 {SHEET_KINDS.find((k) => t.target.type === "sheet" && k.kind === t.target.sheetKind)?.label} 실패: {t.error}

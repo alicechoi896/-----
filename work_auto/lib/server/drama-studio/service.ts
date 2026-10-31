@@ -233,7 +233,7 @@ export const dramaStudioService = {
   async get(id: string) {
     const { owner, p } = await open(id);
     // 다시 들어오면 진행 중인 작업 상태부터 (무료)
-    if (p.tasks.some((t) => t.status === "generating" || t.status === "requesting")) {
+    if (p.tasks.some((t) => t.status === "generating" || t.status === "requesting" || (t.status === "queued" && t.dependsOn))) {
       const changed = await syncTasks(owner, p).catch(() => false);
       if (changed) return withUrls(await saveMerged(owner, p));
     }
