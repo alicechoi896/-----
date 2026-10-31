@@ -63,7 +63,7 @@ export function framePrompt(s: DramaScene, cast: DramaCharacter[], aspect: Aspec
   const people = cast.filter((c) => s.characterIds.includes(c.id));
   return [
     `[FORMAT] Single storyboard frame for a Korean live-action short drama, ${aspect} ${aspect === "9:16" ? "vertical" : "horizontal"}, cinematic still, one moment only (not a collage, no panels).`,
-    refs.length ? `[REFERENCES] ${refs.map((c, i) => `${c.name} = the person in reference image ${i + 1}; keep the same face, hairstyle and outfit`).join(". ")}.` : "",
+    refs.length ? `[REFERENCES] ${refs.map((c, i) => `${c.name} = the person in reference image ${i + 1}`).join("; ")}. Draw these SAME people: identical face shape, eyes, eyebrows, nose, lips, skin tone, age, hairstyle and outfit as their reference images — do not redesign or beautify the faces.` : "",
     `[SUBJECT] ${people.length ? people.map((c) => `${c.name} (${characterLine(c)})`).join("; ") + ". " : ""}${p.subject}`,
     p.action ? `[ACTION] ${p.action}` : "",
     p.environment ? `[ENVIRONMENT] ${p.environment}` : "",
@@ -94,7 +94,7 @@ export function videoPrompt(scenes: DramaScene[], cast: DramaCharacter[], o: Vid
         ? `[REFERENCES] ${refChars.map((c) => `${c.name} is @${klingName(c)}`).join("; ")}. Keep their faces, hairstyles and outfits identical to the element images.`
         : `[REFERENCES] ${refChars.map((c, i) => `${c.name} = the person in reference image ${i + 1}`).join("; ")}. Keep faces, hairstyles and outfits identical to the reference images.`
       : o.mode === "first_frame" || o.mode === "first_last" || o.mode === "multi_shot"
-        ? "[REFERENCES] Start exactly from the provided first frame; keep every character's face, hairstyle and outfit unchanged."
+        ? "[REFERENCES] Start exactly from the provided first frame and continue naturally from it. Every character keeps EXACTLY the same face, hairstyle, skin tone and outfit as in the first frame for the whole clip — never morph or replace a face."
         : "";
   const one = (s: DramaScene, i?: number) => {
     const p = sceneParts(s);
@@ -122,7 +122,9 @@ export function videoPrompt(scenes: DramaScene[], cast: DramaCharacter[], o: Vid
     scenes.length === 1
       ? one(scenes[0])
       : [`${scenes.length} consecutive shots in this exact order, with clear cuts between them:`, ...scenes.map((s, i) => one(s, i))].join("\n\n");
-  return [fmt, refs, body, `[CONSTRAINTS] Consistent characters in every shot. ${CONSTRAINTS}`].filter(Boolean).join("\n").slice(0, kling ? 2500 : 6000);
+  // v0.9.93: 장면 하나는 컷 없이 한 번에, 행동은 클립 안에서 처음부터 끝까지 (결과만 보여 주고 끝나지 않게)
+  const single = scenes.length === 1 ? "[SHOT] One continuous shot with no cuts, no scene changes and no time jumps. Show the entire action from its beginning to its end within this clip at a natural pace; do not end before the key action happens." : "";
+  return [fmt, refs, single, body, `[CONSTRAINTS] The same characters with identical faces, hairstyles and outfits in every frame. ${CONSTRAINTS}`].filter(Boolean).join("\n").slice(0, kling ? 2500 : 6000);
 }
 
 /** Kling 멀티 샷: 컷마다 500자 이내 프롬프트 */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Pencil, Sparkles, Square, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Pencil, ScanFace, Sparkles, Square, Upload } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Modal, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { IMAGE_MODELS, estimateImageCredits, imageModel } from "@/lib/drama-studio/models";
 import { framePrompt } from "@/lib/drama-studio/prompts";
@@ -56,6 +56,8 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
     ctl.edit("storyboard", next);
   };
   const unapproved = scenes.filter((sc) => frames(sc.id).length && !approvedOf(sc.id));
+  /** 보여 주는 이미지의 얼굴 검사 결과 (undefined = 검사 안 함) */
+  const shownFace = (id: string) => (approvedOf(id) ?? frames(id).at(-1))?.faceCheck?.ok;
   const setScene = (id: string, patch: Partial<DramaScene>) => ctl.edit("scenario", { ...p.scenario, scenes: scenes.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
   const noRefs = useMemo(() => p.characters.filter((c) => !(p.sheets[c.id] ?? []).some((i) => i.approved)).map((c) => c.name), [p.characters, p.sheets]);
   const done = scenes.filter((s) => approvedOf(s.id)).length;
@@ -132,7 +134,10 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           <Checkbox checked={picked.includes(s.id)} onChange={(v) => setPicked((x) => (v ? [...x, s.id] : x.filter((y) => y !== s.id)))} label={`${i + 1}번 고르기`} />
           <span className="tabular text-[12px] font-bold text-brand">#{i + 1}</span>
           <span className="truncate text-[12.5px] font-medium text-fg">{s.title || "(제목 없음)"}</span>
-          <span className="ml-auto">{a ? <Badge tone="success">승인</Badge> : running(s.id) ? <Badge tone="info">생성 중</Badge> : f?.status === "fail" ? <Badge tone="danger">실패</Badge> : null}</span>
+          <span className="ml-auto flex gap-1">
+            {shownFace(s.id) === false && <Badge tone="danger">얼굴 다름</Badge>}
+            {a ? <Badge tone="success">승인</Badge> : running(s.id) ? <Badge tone="info">생성 중</Badge> : f?.status === "fail" ? <Badge tone="danger">실패</Badge> : null}
+          </span>
         </div>
         {shown && ctl.urls[shown.key] ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -141,6 +146,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           <div className={cn("flex w-full items-center justify-center rounded bg-subtle text-[11px] text-fg-subtle", p.settings.aspect === "9:16" ? "aspect-[9/16] max-h-72" : "aspect-video")}>이미지 없음</div>
         )}
         <p className="mt-1.5 line-clamp-2 text-[11.5px] text-fg-muted">{s.visual || s.action}</p>
+        {shownFace(s.id) === false && <p className="text-[11px] text-danger">얼굴 검사: {(approvedOf(s.id) ?? frames(s.id).at(-1))?.faceCheck?.note || "기준 이미지와 다른 사람처럼 보입니다"} — [프롬프트]·[재생성]으로 다시 만들어 주세요.</p>}
         {f?.status === "fail" && !a && <p className="text-[11px] text-danger">{f.error}</p>}
         <div className="mt-1.5 flex flex-wrap gap-1">
           <Button size="sm" variant="ghost" icon={Sparkles} disabled={Boolean(ctl.busy) || running(s.id)} onClick={() => setConfirm([{ sceneId: s.id }])}>
@@ -224,6 +230,19 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
           </Button>
           <Button variant="ghost" onClick={() => setPicked(picked.length === scenes.length ? [] : scenes.map((sc) => sc.id))} data-pick-all-frames>
             {picked.length === scenes.length ? "전체 해제" : "전체 선택"}
+          </Button>
+          <Button
+            variant="secondary"
+            icon={ScanFace}
+            disabled={Boolean(ctl.busy)}
+            loading={ctl.busy === "얼굴 검사"}
+            onClick={() => {
+              const n = scenes.filter((sc) => frames(sc.id).length && sc.characterIds.length).length;
+              if (window.confirm(`스토리보드 ${Math.min(30, n)}장의 얼굴이 캐릭터 기준 이미지와 같은 사람인지 AI 로 검사합니다 (AI 이미지 읽기 ${Math.min(30, n)}회). 진행할까요?`)) void ctl.run("얼굴 검사", () => studioApi.generate(p.id, "face-check", { target: "frames", ids: picked.length ? picked : undefined }));
+            }}
+            data-face-check-frames
+          >
+            얼굴 일관성 검사 (AI)
           </Button>
           <UploadButton accept="image/png,image/jpeg,image/webp" multiple onFiles={startBulk} disabled={Boolean(uploading)}>
             여러 장 한 번에 올리기

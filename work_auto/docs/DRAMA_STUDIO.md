@@ -87,3 +87,9 @@
 
 - `tests/unit/drama-studio-rules.test.ts`: 모델 범위·배타 입력·멀티 샷·예상 크레딧·프롬프트 문법·단계 규칙
 - `tests/unit/drama-studio-flow.test.ts`: Mock AI·Mock Kie 로 아이디어 → 25장면 → 스토리보드 25컷 → 개별·묶음 영상 → 일부 실패 → 실패만 재시도 → 타임라인 순서 변경 → 실제 FFmpeg 병합 → 다시 열기 → 앞 단계 수정 시 재검토, 스토리보드부터 시작(업로드)
+
+## v0.9.93 자연스러운 영상 · 얼굴 일관성
+- 기본 장면 수 `defaultSceneCount(targetSec)` = 길이÷8 (6~25). 시나리오 장면 규칙(SCENE_GUIDE): 한 장면 = 연속 행동 하나 6~12초, 핵심 순간은 화면에, 외모 고정
+- 영상 프롬프트 `[SHOT] One continuous shot…` + 첫 프레임 얼굴 고정. 스토리보드 `[REFERENCES]` 동일 인물 강조
+- 이어 만들기 `createVideoTasks(…, chain)`: 첫 프레임 방식 장면별 작업 중 바로 앞 장면과 장소(location)가 같으면 `dependsOn` → 앞 클립 완료 시 `lastFrameOf()`(ffmpeg -sseof) 로 마지막 프레임을 `{project}/img/last_{task}.png` 에 저장해 `first_frame_url` 로
+- 얼굴 검사 `lib/server/drama-studio/face.ts` (`generate face-check`): 인물 기준 이미지(정면) + 대상 이미지(512~768px) → AI 비전 → `faceCheck {ok, score, note}`

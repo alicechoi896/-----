@@ -8,6 +8,7 @@ import { mediaDuration } from "../video/ffmpeg";
 import { videoStorage } from "../video/storage";
 import * as ai from "./ai";
 import { renderDrama } from "./render";
+import { faceCheck } from "./face";
 import { isProjectId, loadProject, ownsKey, projectDir, readIndex, saveProject, withUrls } from "./store";
 import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob } from "./tasks";
 import { IMAGE_MODELS, VIDEO_MODELS, type VideoOptions } from "@/lib/drama-studio/models";
@@ -399,6 +400,14 @@ export const dramaStudioService = {
         if (cur.status === "review") p.steps[st] = { ...cur, status: cur.version > 0 ? "approved" : "draft" };
         break;
       }
+      // v0.9.93 얼굴 일관성 검사 (AI 이미지 읽기, 장면·클립 1개 = 1회)
+      case "face-check": {
+        requireStep(p, body.target === "clips" ? "video" : "storyboard");
+        const r = await faceCheck(p, body.target === "clips" ? "clips" : "frames", Array.isArray(body.ids) ? body.ids.map(String) : undefined);
+        aiCalls = r.aiCalls;
+        extra = { faceChecked: r.checked, faceFlagged: r.flagged };
+        break;
+      }
       case "save-version": {
         p.scenarioVersions = [...p.scenarioVersions, { id: newId("sv"), label: String(body.label ?? "").slice(0, 40) || `버전 ${p.scenarioVersions.length + 1}`, at: now(), scenario: p.scenario }].slice(-10);
         break;
@@ -432,7 +441,7 @@ export const dramaStudioService = {
   },
 
   /** 영상 만들기 (Kie, 작업 1개 = 1회 과금) */
-  async videos(id: string, body: { jobs?: unknown; clientRequestId?: unknown; confirmed?: unknown; retryTaskIds?: unknown }) {
+  async videos(id: string, body: { jobs?: unknown; clientRequestId?: unknown; confirmed?: unknown; retryTaskIds?: unknown; chain?: unknown }) {
     if (body.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "비용이 드는 작업입니다. 확인 창에서 [만들기]를 눌러 주세요.", 409);
     const requestId = String(body.clientRequestId ?? "").slice(0, 80);
     if (requestId.length < 8) throw new AppError("VALIDATION", "요청 번호가 없습니다.");
@@ -446,7 +455,7 @@ export const dramaStudioService = {
         .map((t) => ({ sceneIds: (t.target as { sceneIds: string[] }).sceneIds, options: (t.request as { options: VideoOptions }).options, prompt: t.prompt, lastSceneId: (t.request as { lastSceneId?: string }).lastSceneId ?? undefined }));
       if (!jobs.length) throw new AppError("VALIDATION", "다시 만들 실패 작업이 없습니다.");
     }
-    const tasks = await createVideoTasks(owner, p, jobs, requestId);
+    const tasks = await createVideoTasks(owner, p, jobs, requestId, body.chain === true);
     const saved = await saveMerged(owner, { ...p, tasks: [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks] });
     return { ...(await withUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
   },

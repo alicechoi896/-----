@@ -91,6 +91,14 @@ export interface DramaCharacter {
 export type SheetKind = "front" | "side" | "full" | "expression" | "outfit" | "extra";
 
 /** 생성·업로드한 이미지 (캐릭터 시트·스토리보드 공용) */
+/** v0.9.93 얼굴 일관성 검사 결과 */
+export interface FaceCheck {
+  ok: boolean;
+  score: number;
+  note: string;
+  at: string;
+}
+
 export interface DramaImage {
   id: string;
   /** Storage 키 (영구 보관) */
@@ -105,6 +113,7 @@ export interface DramaImage {
   /** 캐릭터 시트 종류 */
   kind?: SheetKind;
   fileName?: string;
+  faceCheck?: FaceCheck;
   /** v0.9.89: 화면에서 [목록에서 빼기] — 서버는 이 표시가 있을 때만 뺀다 (목록에 없다고 지우지 않음) */
   removed?: boolean;
 }
@@ -196,6 +205,7 @@ export interface DramaClip {
   approved: boolean;
   taskId: string | null;
   fileName?: string;
+  faceCheck?: FaceCheck;
 }
 
 export interface TimelineItem {

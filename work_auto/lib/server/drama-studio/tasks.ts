@@ -199,21 +199,52 @@ export interface VideoJob {
   lastSceneId?: string;
 }
 
+/** 같은 장소인가 (공백·괄호 무시) */
+const samePlace = (a: string, b: string) => {
+  const n = (x: string) => x.replace(/\s+|[()（）·,.-]/g, "").toLowerCase();
+  return Boolean(n(a)) && n(a) === n(b);
+};
+
+/**
+ * v0.9.93 앞 클립에 이어 만들기: 장면별 '첫 프레임' 작업들 중, 바로 앞 장면과 장소가 같은 장면은
+ * 앞 클립이 끝나면 그 마지막 프레임을 첫 프레임으로 보낸다 (동작·위치가 이어지고 얼굴이 바뀌지 않게). 장소가 바뀌면 그 장면 스토리보드에서 시작
+ */
+function chainVideos(p: DramaProject, tasks: DramaTask[]): void {
+  const order = (t: DramaTask) => p.scenario.scenes.findIndex((s) => s.id === (t.target as { sceneIds: string[] }).sceneIds[0]);
+  const single = tasks.filter((t) => t.mode === "first_frame" && (t.target as { sceneIds: string[] }).sceneIds.length === 1).sort((a, b) => order(a) - order(b));
+  for (let i = 1; i < single.length; i++) {
+    const prev = single[i - 1];
+    const cur = single[i];
+    if (order(cur) !== order(prev) + 1) continue;
+    const a = p.scenario.scenes[order(prev)];
+    const b = p.scenario.scenes[order(cur)];
+    if (samePlace(a.location, b.location)) cur.dependsOn = prev.id;
+  }
+}
+
 function approvedFrame(p: DramaProject, sceneId: string): DramaImage | null {
   const list = p.storyboard[sceneId] ?? [];
   return list.find((i) => i.approved) ?? null;
 }
 
-export function planVideoTasks(p: DramaProject, jobs: VideoJob[], requestId: string): DramaTask[] {
+export function planVideoTasks(p: DramaProject, jobs: VideoJob[], requestId: string, chain = false): DramaTask[] {
   if (!jobs.length) throw new AppError("VALIDATION", "만들 장면을 골라 주세요.");
   if (jobs.length > MAX_TASKS_PER_REQUEST) throw new AppError("VALIDATION", `한 번에 최대 ${MAX_TASKS_PER_REQUEST}개 작업입니다.`);
-  return jobs.map((j) => {
+  // 이어 만들 장면 (앞 장면도 이번에 만들고, 같은 장소)
+  const picked = new Set(jobs.filter((j) => j.sceneIds.length === 1 && j.options.mode === "first_frame").map((j) => j.sceneIds[0]));
+  const chained = (sceneId: string) => {
+    if (!chain) return false;
+    const i = p.scenario.scenes.findIndex((s) => s.id === sceneId);
+    const prev = p.scenario.scenes[i - 1];
+    return Boolean(prev && picked.has(prev.id) && picked.has(sceneId) && samePlace(prev.location, p.scenario.scenes[i].location));
+  };
+  const tasks = jobs.map((j) => {
     const scenes = j.sceneIds.map((id) => p.scenario.scenes.find((s) => s.id === id)).filter((s): s is DramaScene => Boolean(s));
     if (!scenes.length || scenes.length !== j.sceneIds.length) throw new AppError("VALIDATION", "장면을 찾지 못했습니다.");
     const o = j.options;
     const refs = videoRefs(p, scenes, o);
     const lastId = j.lastSceneId ?? p.scenario.scenes[p.scenario.scenes.findIndex((s) => s.id === scenes[scenes.length - 1].id) + 1]?.id;
-    const errs = validateVideo(o, { first: Boolean(approvedFrame(p, scenes[0].id)), last: Boolean(lastId && approvedFrame(p, lastId)), references: refs.keys.length, scenes: scenes.length });
+    const errs = validateVideo(o, { first: Boolean(approvedFrame(p, scenes[0].id)) || (scenes.length === 1 && chained(scenes[0].id)), last: Boolean(lastId && approvedFrame(p, lastId)), references: refs.keys.length, scenes: scenes.length });
     if (errs.length) throw new AppError("VALIDATION", `${scenes.map((s) => p.scenario.scenes.indexOf(s) + 1).join("·")}번 장면: ${errs[0]}`);
     const prompt = j.prompt?.trim() || videoPrompt(scenes, p.characters, o, refs.chars);
     return baseTask({
@@ -228,6 +259,8 @@ export function planVideoTasks(p: DramaProject, jobs: VideoJob[], requestId: str
       estimatedCredits: estimateVideoCredits(o),
     });
   });
+  if (chain) chainVideos(p, tasks);
+  return tasks;
 }
 
 /** 참고 이미지: 장면들의 승인 스토리보드 + 등장인물 기준 이미지 (Kling 은 인물 요소) */
@@ -245,39 +278,62 @@ function videoRefs(p: DramaProject, scenes: DramaScene[], o: VideoOptions): { ch
   return { chars, keys: keys.slice(0, m.maxReferenceImages) };
 }
 
-export async function createVideoTasks(owner: string, p: DramaProject, jobs: VideoJob[], requestId: string): Promise<DramaTask[]> {
+async function videoInput(p: DramaProject, t: DramaTask, firstOverride?: string): Promise<Record<string, unknown>> {
+  const o = (t.request as { options: VideoOptions }).options;
+  const lastSceneId = (t.request as { lastSceneId: string | null }).lastSceneId;
+  const sceneIds = (t.target as { sceneIds: string[] }).sceneIds;
+  const scenes = sceneIds.map((id) => p.scenario.scenes.find((s) => s.id === id)!);
+  const first = firstOverride ?? approvedFrame(p, scenes[0].id)?.key ?? null;
+  const last = lastSceneId ? (approvedFrame(p, lastSceneId)?.key ?? null) : null;
+  const refs = videoRefs(p, scenes, o);
+  const urls = await signed([first ?? "", last ?? "", ...refs.keys]);
+  const input = buildVideoInput(o, {
+    prompt: t.prompt,
+    firstUrl: o.mode === "first_frame" || o.mode === "first_last" || o.mode === "multi_shot" ? (first ? urls[first] : null) : null,
+    lastUrl: o.mode === "first_last" && last ? urls[last] : null,
+    referenceUrls: refs.keys.map((k) => urls[k]).filter(Boolean),
+    shots: o.mode === "multi_shot" ? shotPrompts(scenes, p.characters, o) : undefined,
+    elements: refs.chars.map((c) => ({ name: klingName(c), description: c.appearanceEn || c.appearance || c.name, urls: baseImages(p, c.id).slice(0, 4).map((i) => urls[i.key]).filter(Boolean) })).filter((e) => e.urls.length >= 2),
+  });
+  // 저장용: 서명 주소 대신 Storage 키
+  t.request = { ...t.request, input: JSON.parse(JSON.stringify(input, (_k, v) => (typeof v === "string" && v.startsWith("http") ? "(signed-url)" : v))), first, last, references: refs.keys, ...(firstOverride ? { chainedFrom: firstOverride } : {}) };
+  return input;
+}
+
+/** 앞 클립의 마지막 프레임 → Storage 이미지 키 (이어 만들기) */
+async function lastFrameOf(clipKey: string): Promise<string | null> {
+  const buf = await videoStorage.download(clipKey);
+  if (!buf) return null;
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ds_last_"));
+  try {
+    const src = path.join(dir, "c.mp4");
+    const out = path.join(dir, "last.png");
+    await (await import("node:fs/promises")).writeFile(src, buf);
+    await runFfmpeg(["-sseof", "-0.2", "-i", src, "-frames:v", "1", "-update", "1", out], 60_000);
+    const key = clipKey.replace(/\/clip\/([^/]+)\.mp4$/, "/img/last_$1.png");
+    if (key === clipKey) return null;
+    await videoStorage.put(key, await readFile(out), "image/png");
+    return key;
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+export async function createVideoTasks(owner: string, p: DramaProject, jobs: VideoJob[], requestId: string, chain = false): Promise<DramaTask[]> {
   const dup = existing(p, requestId);
   if (dup.length) return dup;
   const key = `${owner}:${p.id}:${requestId}`;
   if (inFlight.has(key)) return (await inFlight.get(key)) as DramaTask[];
   const run = (async () => {
     const prov = await provider();
-    const tasks = planVideoTasks(p, jobs, requestId);
+    const tasks = planVideoTasks(p, jobs, requestId, chain);
     await submit(
       prov,
-      tasks,
+      tasks.filter((t) => !t.dependsOn),
       (t) => videoModel(t.modelId)!.model,
-      async (t) => {
-        const o = (t.request as { options: VideoOptions }).options;
-        const lastSceneId = (t.request as { lastSceneId: string | null }).lastSceneId;
-        const sceneIds = (t.target as { sceneIds: string[] }).sceneIds;
-        const scenes = sceneIds.map((id) => p.scenario.scenes.find((s) => s.id === id)!);
-        const first = approvedFrame(p, scenes[0].id)?.key ?? null;
-        const last = lastSceneId ? (approvedFrame(p, lastSceneId)?.key ?? null) : null;
-        const refs = videoRefs(p, scenes, o);
-        const urls = await signed([first ?? "", last ?? "", ...refs.keys]);
-        const input = buildVideoInput(o, {
-          prompt: t.prompt,
-          firstUrl: o.mode === "first_frame" || o.mode === "first_last" || o.mode === "multi_shot" ? (first ? urls[first] : null) : null,
-          lastUrl: o.mode === "first_last" && last ? urls[last] : null,
-          referenceUrls: refs.keys.map((k) => urls[k]).filter(Boolean),
-          shots: o.mode === "multi_shot" ? shotPrompts(scenes, p.characters, o) : undefined,
-          elements: refs.chars.map((c) => ({ name: klingName(c), description: c.appearanceEn || c.appearance || c.name, urls: baseImages(p, c.id).slice(0, 4).map((i) => urls[i.key]).filter(Boolean) })).filter((e) => e.urls.length >= 2),
-        });
-        // 저장용: 서명 주소 대신 Storage 키
-        t.request = { ...t.request, input: JSON.parse(JSON.stringify(input, (_k, v) => (typeof v === "string" && v.startsWith("http") ? "(signed-url)" : v))), first, last, references: refs.keys };
-        return input;
-      },
+      (t) => videoInput(p, t),
     );
     return tasks;
   })().finally(() => inFlight.delete(key));
@@ -379,11 +435,19 @@ async function releaseWaiting(prov: VideoAIProvider, p: DramaProject): Promise<b
   for (const t of ready) {
     const anchor = p.tasks.find((a) => a.id === t.dependsOn)!;
     if (anchor.status === "fail" || !anchor.storedKey) {
-      Object.assign(t, { status: "fail", error: "먼저 만드는 기준 이미지(정면)를 만들지 못해 보내지 않았습니다 (비용 없음). 다시 만들어 주세요.", updatedAt: now() });
+      Object.assign(t, { status: "fail", error: t.kind === "video" ? "앞 장면 클립을 만들지 못해 이어서 만들지 않았습니다 (비용 없음). 앞 장면부터 다시 만들어 주세요." : "먼저 만드는 기준 이미지(정면)를 만들지 못해 보내지 않았습니다 (비용 없음). 다시 만들어 주세요.", updatedAt: now() });
       continue;
     }
     go.push(t);
   }
+  const videos = go.filter((t) => t.kind === "video");
+  for (const t of videos) {
+    const anchor = p.tasks.find((a) => a.id === t.dependsOn)!;
+    const frame = await lastFrameOf(anchor.storedKey!);
+    // 마지막 프레임을 못 뽑으면 그 장면 스토리보드에서 시작 (스토리보드도 없으면 실패 — 비용 없음)
+    await submit(prov, [t], (x) => videoModel(x.modelId)!.model, (x) => videoInput(p, x, frame ?? undefined));
+  }
+  go.splice(0, go.length, ...go.filter((t) => t.kind !== "video"));
   if (go.length) {
     const want = (t: DramaTask) => String((t.request as { wantModel?: string }).wantModel ?? "nano-banana-edit");
     await submit(

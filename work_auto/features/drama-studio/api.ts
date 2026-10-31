@@ -39,7 +39,7 @@ export const studioApi = {
   approve: (id: string, step: StepKey) => post<Loaded>(`/api/drama-studio/${id}/approve`, { step }),
   generate: (id: string, action: string, extra: Record<string, unknown> = {}) => post<Loaded & { aiCalls: number; improved?: DramaIdea }>(`/api/drama-studio/${id}/generate`, { action, clientRequestId: newRequestId(), ...extra }),
   images: (id: string, body: { jobs: { target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string }; prompt?: string }[]; modelId: string; clientRequestId: string }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/images`, { ...body, confirmed: true }),
-  videos: (id: string, body: { jobs?: { sceneIds: string[]; options: VideoOptions; prompt?: string }[]; retryTaskIds?: string[]; clientRequestId: string }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/videos`, { ...body, confirmed: true }),
+  videos: (id: string, body: { jobs?: { sceneIds: string[]; options: VideoOptions; prompt?: string }[]; retryTaskIds?: string[]; clientRequestId: string; chain?: boolean }) => post<Loaded & { created: number; failed: number }>(`/api/drama-studio/${id}/videos`, { ...body, confirmed: true }),
   sync: (id: string) => post<Loaded & { changed: boolean }>(`/api/drama-studio/${id}/sync`),
   render: (id: string) => post<Loaded>(`/api/drama-studio/${id}/render`),
   /** 파일 올리기: 서명 주소로 Storage 에 바로 → 단계에 잇기 */

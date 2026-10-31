@@ -204,7 +204,13 @@ export async function genCharacterOne(p: DramaProject, target: DramaCharacter, n
 /* ───── 6. 시나리오 ───── */
 const SCENE = obj({ title: S, location: S, timeOfDay: S, characters: arr(S), action: S, dialogue: S, emotion: S, camera: S, visual: S, estimatedDuration: { type: "number" }, sound: S, continuity: S });
 const SCENE_GUIDE =
-  "장면마다: title, location(공간), timeOfDay(시간대), characters(등장인물 이름 배열), action(인물 행동), dialogue(대사, '이름: 대사' 줄바꿈), emotion(감정 변화), camera(카메라 연출), visual(화면 묘사), estimatedDuration(초, 3~10), sound(효과음·음악), continuity(앞 장면에서 이어지는 소품·의상·시간대·상처 등 연속성 메모).";
+  `장면마다: title, location(공간), timeOfDay(시간대), characters(등장인물 이름 배열), action(인물 행동), dialogue(대사, '이름: 대사' 줄바꿈), emotion(감정 변화), camera(카메라 연출), visual(화면 묘사), estimatedDuration(초, 6~12 — 그 행동을 처음부터 끝까지 보여 주는 데 필요한 시간), sound(효과음·음악), continuity(앞 장면에서 이어지는 소품·의상·시간대·상처 등 연속성 메모).
+장면 규칙 (영상 품질에 가장 중요):
+1) 한 장면 = 카메라 한 번으로 찍는 연속된 행동 하나. 그 장면 안에서 행동이 시작되고 끝난다 (예: '램프를 발견해 집어 들고 소매로 문지르자 연기가 피어오른다'). 행동을 다음 장면으로 넘기지 않는다.
+2) 이야기의 중요한 순간(발견·변신·고백·반전·결정)은 반드시 화면에 직접 보이게 한 장면을 준다. 결과만 다음 장면에 보여 주지 않는다.
+3) 같은 장소가 이어지면 앞 장면의 마지막 모습(자세·위치·들고 있는 물건)에서 다음 장면이 시작되게 쓴다. 장소가 바뀌는 장면은 location 을 분명히 바꿔 쓴다.
+4) 등장인물의 외모·머리·의상은 처음부터 끝까지 절대 바꾸지 않는다 (상처·젖음 같은 변화는 continuity 에 적고 이어지게). 같은 인물을 다른 모습으로 묘사하지 않는다.
+5) 한 장면에 장소 이동·시간 점프를 넣지 않는다.`;
 
 function toScene(r: Json, cast: DramaCharacter[]): DramaScene {
   const names = Array.isArray(r.characters) ? (r.characters as unknown[]).map((x) => str(x, 20)) : [];
@@ -218,7 +224,7 @@ function toScene(r: Json, cast: DramaCharacter[]): DramaScene {
     emotion: str(r.emotion, 200),
     camera: str(r.camera, 300),
     visual: str(r.visual, 800),
-    durationSec: Math.min(15, Math.max(3, Math.round(Number(r.estimatedDuration) || 5))),
+    durationSec: Math.min(15, Math.max(4, Math.round(Number(r.estimatedDuration) || 8))),
     sound: str(r.sound, 200),
     continuity: str(r.continuity, 300),
   });
@@ -246,7 +252,7 @@ export async function genScenario(p: DramaProject, sceneCount: number, style: "d
   const outline = await ask<Json>(
     "scenario-outline",
     SYSTEM,
-    `${ctx}\n\n작품 제목(title), 전체 줄거리(synopsis), 발단·전개·위기·절정·결말(acts: setup, development, crisis, climax, ending), 반전(twist), 장면별 비트(beats: 정확히 ${sceneCount}개, 각 1~2문장으로 무슨 일이 일어나는지·장소·시간대)를 쓴다.`,
+    `${ctx}\n\n작품 제목(title), 전체 줄거리(synopsis), 발단·전개·위기·절정·결말(acts: setup, development, crisis, climax, ending), 반전(twist), 장면별 비트(beats: 정확히 ${sceneCount}개, 각 1~2문장으로 무슨 일이 일어나는지·장소·시간대)를 쓴다. 비트 하나는 카메라 한 번에 찍는 연속된 행동 하나이고, 이야기의 중요한 순간(발견·변신·반전 등)은 반드시 비트로 직접 보여 준다 (건너뛰고 결과만 보여 주지 않는다).`,
     obj({ title: S, synopsis: S, acts: obj({ setup: S, development: S, crisis: S, climax: S, ending: S }), twist: S, beats: arr(S) }),
     () => ({ title: "마지막 문자", synopsis: "1년 만에 온 문자가 모든 것을 바꾼다.", acts: { setup: "문자 도착", development: "보낸 사람 추적", crisis: "친구의 거짓말", climax: "진실 대면", ending: "새 문자" }, twist: "보낸 사람은 미래의 나", beats: Array.from({ length: sceneCount }, (_, i) => `비트 ${i + 1}`) }),
     6000,

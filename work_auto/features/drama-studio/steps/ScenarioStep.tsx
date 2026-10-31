@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, BookText, ClipboardPaste, History, LayoutGrid, Plus, RefreshCw, Save, ScrollText, Sparkles, Trash2 } from "lucide-react";
 import { Button, EmptyState, IconButton, Input, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
-import { DEFAULT_SCENE_COUNT, MAX_SCENES, emptyScene } from "@/lib/drama-studio/steps";
+import { MAX_SCENES, defaultSceneCount, emptyScene } from "@/lib/drama-studio/steps";
 import type { DramaScenario, DramaScene } from "@/lib/drama-studio/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { studioApi } from "../api";
@@ -44,8 +44,8 @@ export function ScenarioStep({ ctl }: { ctl: ProjectCtl }) {
       <SectionCard title="시나리오 설정" icon={ScrollText}>
         <div className="flex flex-wrap items-end gap-3">
           <label className="space-y-1">
-            <span className="text-[12px] font-medium text-fg-muted">장면 수 (기본 25)</span>
-            <Input type="number" min={3} max={MAX_SCENES} value={sc.sceneCount || DEFAULT_SCENE_COUNT} onChange={(e) => set({ sceneCount: Math.min(MAX_SCENES, Math.max(3, Number(e.target.value) || DEFAULT_SCENE_COUNT)) })} className="h-9 w-24" />
+            <span className="text-[12px] font-medium text-fg-muted">장면 수 (권장 {defaultSceneCount(p.settings.targetSec)} = 길이÷8초)</span>
+            <Input type="number" min={3} max={MAX_SCENES} value={sc.sceneCount || defaultSceneCount(p.settings.targetSec)} onChange={(e) => set({ sceneCount: Math.min(MAX_SCENES, Math.max(3, Number(e.target.value) || defaultSceneCount(p.settings.targetSec))) })} className="h-9 w-24" />
           </label>
           <label className="space-y-1">
             <span className="text-[12px] font-medium text-fg-muted">결말 유형</span>
@@ -58,11 +58,11 @@ export function ScenarioStep({ ctl }: { ctl: ProjectCtl }) {
           <span className="text-[12px] text-fg-subtle">
             {p.settings.genre} · {p.settings.mood} · {p.settings.aspect} · 목표 {p.settings.targetSec}초
           </span>
-          <Button variant="primary" icon={Sparkles} className="ml-auto" disabled={Boolean(ctl.busy)} loading={ctl.busy === "시나리오 작성"} onClick={() => void ctl.run("시나리오 작성", () => studioApi.generate(p.id, "scenario", { sceneCount: sc.sceneCount || DEFAULT_SCENE_COUNT, style: sc.style, endingType: sc.endingType }))} data-gen-scenario>
+          <Button variant="primary" icon={Sparkles} className="ml-auto" disabled={Boolean(ctl.busy)} loading={ctl.busy === "시나리오 작성"} onClick={() => void ctl.run("시나리오 작성", () => studioApi.generate(p.id, "scenario", { sceneCount: sc.sceneCount || defaultSceneCount(p.settings.targetSec), style: sc.style, endingType: sc.endingType }))} data-gen-scenario>
             {sc.scenes.length ? "전체 다시 쓰기" : "AI 로 시나리오 쓰기"}
           </Button>
         </div>
-        <p className="mt-2 text-[12px] text-fg-subtle">줄거리를 먼저 잡고 장면을 8개씩 나눠 동시에 씁니다 (25장면 기준 AI 5회, 1~2분). 다시 쓰면 지금 시나리오는 자동으로 버전에 보관합니다.</p>
+        <p className="mt-2 text-[12px] text-fg-subtle">장면 하나 = 한 번에 찍는 행동 하나(6~12초)로 씁니다. 장면이 너무 많으면 행동이 중간에 끊기니 권장 수를 쓰세요. 줄거리를 먼저 잡고 장면을 8개씩 나눠 동시에 씁니다. 다시 쓰면 지금 시나리오는 자동으로 버전에 보관합니다.</p>
         <details className="mt-3">
           <summary className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-fg-muted">
             <ClipboardPaste className="size-3.5" /> 이미 쓴 시나리오 붙여 넣기 (장면으로 나누기)

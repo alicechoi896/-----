@@ -38,6 +38,8 @@ export const GENRES = ["로맨스", "복수", "판타지", "사극", "스릴러"
 export const MOODS = ["감동", "긴장", "반전", "통쾌함", "코믹", "설렘", "미스터리"] as const;
 export const TARGET_SECONDS = [60, 90, 120, 180] as const;
 export const DEFAULT_SCENE_COUNT = 25;
+/** v0.9.93: 기본 장면 수 = 전체 길이 ÷ 8초 (한 장면에 행동 하나를 끝까지 담을 수 있게, 6~25) */
+export const defaultSceneCount = (targetSec: number) => Math.min(25, Math.max(6, Math.round((targetSec || 120) / 8)));
 export const MAX_SCENES = 60;
 export const MAX_CHARACTERS = 12;
 
@@ -108,7 +110,7 @@ export function emptyProject(id: string, title: string, now: string, settings: P
     story: emptyStory(),
     characters: [],
     sheets: {},
-    scenario: emptyScenario(),
+    scenario: { ...emptyScenario(), sceneCount: defaultSceneCount(settings.targetSec ?? DEFAULT_SETTINGS.targetSec) },
     scenarioVersions: [],
     storyboard: {},
     tasks: [],

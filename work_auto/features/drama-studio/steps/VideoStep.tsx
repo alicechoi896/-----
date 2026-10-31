@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, Sparkles, Video } from "lucide-react";
+import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanFace, Sparkles, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { MODE_LABEL, VIDEO_MODELS, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { videoPrompt } from "@/lib/drama-studio/prompts";
@@ -31,6 +31,8 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   const [batchPrompt, setBatchPrompt] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { jobs: { sceneIds: string[]; options: VideoOptions; prompt?: string }[] } | { retry: string[] }>(null);
   const [uploading, setUploading] = useState(false);
+  // v0.9.93: 같은 장소의 다음 장면은 앞 클립 마지막 프레임에서 이어 만들기 (기본 켬)
+  const [chain, setChain] = useState(true);
   // v0.9.91: 클립 프롬프트 고쳐 다시 만들기
   const [promptClip, setPromptClip] = useState<DramaClip | null>(null);
 
@@ -83,7 +85,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   }
   async function submit() {
     if (!confirm) return;
-    const body = "retry" in confirm ? { retryTaskIds: confirm.retry, clientRequestId: newRequestId() } : { jobs: confirm.jobs, clientRequestId: newRequestId() };
+    const body = "retry" in confirm ? { retryTaskIds: confirm.retry, clientRequestId: newRequestId() } : { jobs: confirm.jobs, clientRequestId: newRequestId(), chain: chain && plan === "single" && mode === "first_frame" };
     const r = await ctl.run("영상 요청", () => studioApi.videos(p.id, body));
     if (r) {
       setConfirm(null);
@@ -166,6 +168,12 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               <input type="checkbox" checked={audio} disabled={m.audio !== "toggle"} onChange={(e) => setAudio(e.target.checked)} className="accent-[var(--color-brand)]" />
               소리·대사 만들기 {m.audio === "always" && "(항상)"}
             </label>
+            {plan === "single" && mode === "first_frame" && (
+              <label className="flex items-center gap-1.5 pb-2 text-[13px]" title="같은 장소의 다음 장면은 앞 클립이 끝나면 그 마지막 장면에서 시작합니다. 동작·위치가 이어지고 얼굴이 바뀌지 않습니다. 앞 클립을 기다려야 해서 더 오래 걸립니다 (비용은 같음)." data-chain>
+                <input type="checkbox" checked={chain} onChange={(e) => setChain(e.target.checked)} className="accent-[var(--color-brand)]" />
+                앞 장면에 이어 만들기 (같은 장소)
+              </label>
+            )}
           </div>
           <p className="text-[12px] text-fg-subtle">
             {m.label}: 한 번에 {m.minSec}~{m.maxSec}초 · {m.resolutions.join("/")} · 참고 이미지 최대 {m.maxReferenceImages}장 · {m.priceNote}. 첫 프레임·첫+끝 프레임·참고 이미지는 서로 섞지 않고 하나만 보냅니다.
@@ -307,6 +315,20 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
         actions={
           p.clips.length > 0 && (
             <span className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={ScanFace}
+                disabled={Boolean(ctl.busy)}
+                loading={ctl.busy === "얼굴 검사"}
+                onClick={() => {
+                  const n = p.clips.filter((c) => c.approved).length;
+                  if (window.confirm(`승인한 클립 ${Math.min(30, n)}개의 얼굴이 캐릭터 기준 이미지와 같은지 AI 로 검사합니다 (AI 이미지 읽기 ${Math.min(30, n)}회). 진행할까요?`)) void ctl.run("얼굴 검사", () => studioApi.generate(p.id, "face-check", { target: "clips" }));
+                }}
+                data-face-check-clips
+              >
+                얼굴 검사 (AI)
+              </Button>
               <Button size="sm" variant="secondary" icon={Check} disabled={!unapprovedClips} onClick={() => approveAllClips(false)} data-approve-all-clips>
                 모두 승인
               </Button>
@@ -325,8 +347,9 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               <div key={c.id} className={cn("rounded-control border p-2", c.approved ? "border-success" : "border-line")} data-clip={c.id}>
                 {ctl.urls[c.key] ? <video src={ctl.urls[c.key]} controls playsInline preload="metadata" className={cn("w-full rounded bg-black", p.settings.aspect === "9:16" ? "aspect-[9/16]" : "aspect-video")} /> : <div className="aspect-video rounded bg-subtle" />}
                 <p className="mt-1 text-[12px] font-medium text-fg">
-                  {sceneLabel(c.sceneIds)} · {c.durationSec}초
+                  {sceneLabel(c.sceneIds)} · {c.durationSec}초 {c.faceCheck && (c.faceCheck.ok ? <Badge tone="success">얼굴 같음</Badge> : <Badge tone="danger">얼굴 다름</Badge>)}
                 </p>
+                {c.faceCheck && !c.faceCheck.ok && <p className="text-[11px] text-danger">{c.faceCheck.note || "기준 이미지와 다른 사람처럼 보입니다"} — [프롬프트 고쳐 다시 만들기]로 다시 만들어 주세요.</p>}
                 <p className="text-[11px] text-fg-subtle">
                   {c.source === "upload" ? `업로드 ${c.fileName ?? ""}` : `${videoModel(c.modelId)?.label ?? c.modelId} · ${MODE_LABEL[c.mode as GenMode]?.split(" (")[0] ?? c.mode}`}
                 </p>
@@ -408,7 +431,10 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               ? [{ label: "실패한 작업 (같은 설정·프롬프트)", count: confirm.retry.length, credits: confirm.retry.reduce<number | null>((n, id) => (n === null ? null : (() => { const e = tasks.find((t) => t.id === id)?.estimatedCredits; return e == null ? null : n + e; })()), 0) }]
               : [{ label: `${m.label} · ${MODE_LABEL[mode].split(" (")[0]}`, count: confirm.jobs.length, credits: confirm.jobs.reduce<number | null>((n, j) => (n === null ? null : (() => { const e = estimateVideoCredits(j.options); return e == null ? null : n + e; })()), 0) }]
         }
-        notes={caveat && confirm && !("retry" in confirm) ? [caveat] : []}
+        notes={[
+          ...(caveat && confirm && !("retry" in confirm) ? [caveat] : []),
+          ...(confirm && !("retry" in confirm) && chain && plan === "single" && mode === "first_frame" && confirm.jobs.length > 1 ? ["앞 장면에 이어 만들기: 같은 장소가 이어지는 장면은 앞 클립이 끝난 뒤 차례로 만듭니다 (화면을 열어 두면 10초마다 진행, 닫았다가 다시 열면 이어서)."] : []),
+        ]}
         onCancel={() => setConfirm(null)}
         onConfirm={() => void submit()}
         busy={ctl.busy === "영상 요청"}
