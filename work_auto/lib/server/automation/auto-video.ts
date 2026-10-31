@@ -189,7 +189,13 @@ export async function chooseProducts(count: number, exclude: Set<string> = new S
   const pool = products.filter((p) => (videoCount.get(p.id) ?? 0) >= AUTO_LIMITS.minVideos && !recent.has(p.id) && !exclude.has(p.id));
   if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (공유 링크 xhslink 인 샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품). 제품 상세 › 연결된 영상에서 [공유 링크로 바꾸기]를 해 주세요.`, aiCalls: 0 };
   const cands: Candidate[] = [];
-  for (const p of pool.slice(0, 40)) cands.push({ id: p.id, name: p.name, oneLiner: p.oneLiner, videos: videoCount.get(p.id) ?? 0, keywords: (await keywordLibrary.suggest(p.id).catch(() => [])).slice(0, 6) });
+  for (const p of pool.slice(0, 40)) {
+    // v0.9.115: 제품 분석을 볼 수 없는 제품은 고르지 않는다 (원고를 만들다 '제품 분석 데이터가 없습니다'로 실패하지 않게)
+    const ok = await productService.getDetail(p.id).then(() => true).catch(() => false);
+    if (!ok) continue;
+    cands.push({ id: p.id, name: p.name, oneLiner: p.oneLiner, videos: videoCount.get(p.id) ?? 0, keywords: (await keywordLibrary.suggest(p.id).catch(() => [])).slice(0, 6) });
+  }
+  if (!cands.length) return { picks: [], note: "만들 수 있는 제품이 없습니다 (조건에 맞는 제품의 분석 데이터를 볼 수 없습니다 — 제품 상세가 열리는지 확인해 주세요).", aiCalls: 0 };
   const n = Math.min(count, cands.length);
   const ai = await getAIProvider();
   const fallback = () =>
@@ -410,6 +416,24 @@ export async function tick(date = kstDate(), source?: "schedule" | "test"): Prom
 export async function videoUrls(run: AutoRun | null): Promise<Record<string, string>> {
   const keys = (run?.items ?? []).map((x) => x.videoKey).filter((k): k is string => Boolean(k));
   return keys.length ? videoStorage.urls(keys, 3600).catch(() => ({})) : {};
+}
+
+/** v0.9.115 결과 지우기: 항목 하나(itemId) 또는 그날 전체. 완성 영상 파일도 지운다 (원고·업로드 예약은 그대로). 만드는 중인 항목은 지우지 않는다 */
+export async function removeItems(date: string, itemId?: string): Promise<{ removed: number; run: AutoRun | null }> {
+  const owner = await getCurrentUserId();
+  const run = await readRun(date);
+  if (!run) throw new AppError("NOT_FOUND", "그날 결과가 없습니다.", 404);
+  const targets = run.items.filter((x) => (itemId ? x.id === itemId : true) && x.status !== "running");
+  if (!targets.length) throw new AppError("VALIDATION", itemId ? "지울 수 없는 항목입니다 (만드는 중이면 끝난 뒤 지워 주세요)." : "지울 항목이 없습니다.");
+  for (const t of targets) if (t.videoKey) await videoStorage.remove(t.videoKey).catch(() => undefined);
+  const left = run.items.filter((x) => !targets.includes(x));
+  if (!left.length && !itemId) {
+    await videoStorage.remove(runKey(owner, date)).catch(() => undefined);
+    return { removed: targets.length, run: null };
+  }
+  const next = { ...run, items: left };
+  await saveRun(next);
+  return { removed: targets.length, run: next };
 }
 
 export { patchItem };

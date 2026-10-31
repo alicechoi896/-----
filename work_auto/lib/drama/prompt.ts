@@ -22,6 +22,22 @@ export function dialogueLines(text: string, max = 6): { speaker: string; line: s
 
 export function buildDramaPrompt(scene: DramaScene, characters: DramaCharacter[], model: DramaModelId): string {
   const cast = characters.filter((c) => c.imageUrl);
+  // v0.9.115 시작 화면 방식(Veo Lite·Grok 1.5·PixVerse): 첫 인물 사진에서 시작하고, 나머지 인물은 글로만 묘사
+  if (model === "veo-lite" || model === "grok-15" || model === "pixverse-v6max") {
+    const lines = dialogueLines(scene.dialogue);
+    return [
+      "Vertical 9:16 cinematic Korean short drama scene, realistic, natural lighting, smooth camera.",
+      cast[0] ? `Start from the provided first frame: ${cast[0].name} is the person in it — keep exactly the same face, hairstyle and outfit for the whole clip.` : "",
+      ...cast.slice(1).map((c) => `${c.name}: ${c.description || "another person in the scene"}.`),
+      `Scene: ${scene.description}`,
+      lines.length ? "Dialogue, spoken aloud in natural Korean with matching lip movement (keep the Korean words exactly):" : "",
+      ...lines.map((d) => (d.speaker ? `${d.speaker}: "${d.line}"` : `"${d.line}"`)),
+      "No subtitles, no on-screen text, no watermark.",
+    ]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 4000);
+  }
   const who = cast.map((c, i) =>
     model === "kling3"
       ? `${c.name} @${klingElementName(c)}: ${c.description || "the person in the element images"}.`

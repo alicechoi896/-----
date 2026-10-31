@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, CalendarPlus, Play, RefreshCw, Settings2 } from "lucide-react";
+import { CalendarClock, CalendarPlus, Play, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { Badge, Button, CopyButton, EmptyState, ErrorState, Input, LoadingState, Modal, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +111,20 @@ export function AutoVideo() {
       setBusy(null);
     }
   }
+  async function remove(itemId?: string) {
+    if (!data) return;
+    const msg = itemId ? "이 결과를 지울까요? (완성 영상 파일도 지웁니다. 업로드 관리 예약은 그대로)" : `${data.date} 결과를 모두 지울까요? (완성 영상 파일도 지웁니다. 만드는 중인 항목은 남깁니다)`;
+    if (!window.confirm(msg)) return;
+    setBusy("지우기");
+    try {
+      await call(`/api/auto-video?date=${data.date}${itemId ? `&itemId=${itemId}` : ""}`, { method: "DELETE" });
+      await load(data.date);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "지우지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function runNow() {
     setAsk(false);
     setBusy("시험");
@@ -161,7 +175,7 @@ export function AutoVideo() {
               {" "}
               (제외: 공유 링크(xhslink) 영상 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
             </span>
-            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, '만료되는 링크'는 [공유 링크로 바꾸기]로 xhslink 주소를 넣어 주세요.</span>}
+            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, [만료되는 링크]는 [공유 링크로 바꾸기]로 xhslink 주소를 넣어 주세요.</span>}
           </p>
         )}
         <p className="mt-3 text-[12px] text-fg-subtle">비용(영상 1개): AI 글 약 4~5회 + AI 음성 1편 + 샤오홍슈 글자 확인(AI 이미지 읽기, 처음 쓰는 영상만). YouTube 검색은 무료 한도 안. 완성 영상 파일은 7일 동안 보관됩니다 (받으면 1시간 뒤 지움).</p>
@@ -174,6 +188,11 @@ export function AutoVideo() {
           <span className="flex items-center gap-1.5">
             <Select value={date} options={[...new Set([data.today, ...data.dates])].map((d) => ({ value: d, label: d === data.today ? `${d} (오늘)` : d }))} onChange={(e) => void load(e.target.value)} className="h-8 w-44" aria-label="날짜" />
             <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void load(date)} aria-label="새로고침" />
+            {items.length > 0 && (
+              <Button size="sm" variant="ghost" icon={Trash2} disabled={Boolean(busy)} onClick={() => void remove()} data-auto-delete-all>
+                이날 결과 모두 지우기
+              </Button>
+            )}
           </span>
         }
         data-auto-report
@@ -188,7 +207,7 @@ export function AutoVideo() {
         ) : (
           <ol className="space-y-4">
             {items.map((it, k) => (
-              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} date={data.date} onDone={() => void load(date)} onError={setError} />
+              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} />
             ))}
           </ol>
         )}
@@ -220,7 +239,7 @@ export function AutoVideo() {
   );
 }
 
-function ReportItem({ it, k, url, date, onDone, onError }: { it: Item; k: number; url?: string; date: string; onDone: () => void; onError: (m: string) => void }) {
+function ReportItem({ it, k, url, date, onDone, onError, onRemove }: { it: Item; k: number; url?: string; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void }) {
   const [at, setAt] = useState(() => defaultSlot(k));
   const [busy, setBusy] = useState(false);
   const st = STATUS[it.status];
@@ -246,6 +265,11 @@ function ReportItem({ it, k, url, date, onDone, onError }: { it: Item; k: number
         {it.videos != null && <span className="text-fg-subtle">· 샤오홍슈 영상 {it.videos}개</span>}
         {it.status === "running" && it.step && <span className="text-info">· {it.step}</span>}
         {it.publicationId && <Badge tone="brand">업로드 관리 예약됨</Badge>}
+        {it.status !== "running" && (
+          <button type="button" className="ml-auto inline-flex items-center gap-1 text-[12px] text-fg-subtle hover:text-danger" onClick={onRemove} data-auto-delete>
+            <Trash2 className="size-3.5" /> 지우기
+          </button>
+        )}
       </div>
       {it.reason && <p className="mb-2 text-[12px] text-fg-subtle">고른 이유: {it.reason}</p>}
       {it.error && <p className="text-[12px] text-danger">실패: {it.error}</p>}

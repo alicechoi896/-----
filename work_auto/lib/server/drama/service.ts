@@ -59,7 +59,12 @@ function input(model: DramaModelId, scene: DramaScene, cast: DramaCharacter[]): 
   const prompt = buildDramaPrompt(scene, cast, model);
   const sec = DRAMA_LIMITS.durationSec;
   if (model === "minimax-h3") return { prompt, reference_image_urls: cast.map((c) => c.imageUrl!), aspect_ratio: "9:16", duration: sec, resolution: "768P" };
-  if (model === "seedance-mini") return { prompt, reference_image_urls: cast.map((c) => c.imageUrl!), aspect_ratio: "9:16", duration: sec, resolution: "720p", generate_audio: true };
+  if (model === "seedance-mini" || model === "seedance-fast") return { prompt, reference_image_urls: cast.map((c) => c.imageUrl!), aspect_ratio: "9:16", duration: sec, resolution: "720p", generate_audio: true };
+  // v0.9.115: 참고 이미지를 받지 않는 모델은 첫 인물 사진을 시작 화면으로 (시작 프레임 방식만, 참고와 섞지 않음)
+  const first = cast[0]?.imageUrl ?? "";
+  if (model === "veo-lite") return { model: "veo3_lite", prompt, generation_type: "FIRST_AND_LAST_FRAMES_2_VIDEO", image_urls: [first], aspect_ratio: "9:16", duration: sec, resolution: "720p" };
+  if (model === "grok-15") return { prompt, first_frame_url: first, aspect_ratio: "9:16", resolution: "720p", duration: sec };
+  if (model === "pixverse-v6max") return { prompt, image_urls: [first], quality: "720p", duration: sec, generate_audio_switch: true };
   // Kling 3.0: 인물마다 요소 (사진 2장: 전신 + 얼굴 확대), 프롬프트에서 @char1
   return {
     prompt,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Clapperboard, Download, ImagePlus, Loader2, Plus, RefreshCw, Sparkles, Trash2, Users } from "lucide-react";
-import { DRAMA_LIMITS, DRAMA_MODELS, dramaCostUsd, type DramaModelId } from "@/lib/drama/config";
+import { DEFAULT_DRAMA_MODELS, DRAMA_LIMITS, DRAMA_MODELS, dramaCostUsd, type DramaModelId } from "@/lib/drama/config";
 import type { DramaCharacter, DramaScene, DramaTask } from "@/lib/types/drama";
 import { api } from "@/lib/api-client";
 import { Badge, Button, EmptyState, Input, Notice, SectionCard, Textarea } from "@/components/ui";
@@ -55,7 +55,7 @@ function load(): Saved | null {
 export function DramaTestWorkspace() {
   const [characters, setCharacters] = useState<DramaCharacter[]>(DEFAULT_CHARS);
   const [scenes, setScenes] = useState<DramaScene[]>(DEFAULT_SCENES);
-  const [models, setModels] = useState<DramaModelId[]>(DRAMA_MODELS.map((m) => m.id));
+  const [models, setModels] = useState<DramaModelId[]>(DEFAULT_DRAMA_MODELS);
   const [tasks, setTasks] = useState<DramaTask[]>([]);
   const [preview, setPreview] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
@@ -223,7 +223,7 @@ export function DramaTestWorkspace() {
       </SectionCard>
 
       <SectionCard title="③ 비교할 모델" icon={Sparkles}>
-        <div className="grid gap-2 md:grid-cols-3" data-drama-models>
+        <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4" data-drama-models>
           {DRAMA_MODELS.map((m) => {
             const on = models.includes(m.id);
             return (
@@ -232,7 +232,7 @@ export function DramaTestWorkspace() {
                 <span>
                   <span className="block font-semibold text-fg">{m.label}</span>
                   <span className="block text-xs text-fg-subtle">
-                    {DRAMA_LIMITS.durationSec}초 약 ${(m.creditsPerSec * DRAMA_LIMITS.durationSec * DRAMA_LIMITS.creditUsd).toFixed(2)} · {m.note}
+                    {DRAMA_LIMITS.durationSec}초 {m.priceKnown ? `약 ${(m.creditsPerSec * DRAMA_LIMITS.durationSec * DRAMA_LIMITS.creditUsd).toFixed(2)}` : "가격 확인 안 됨"} · {m.note}
                   </span>
                 </span>
               </label>
