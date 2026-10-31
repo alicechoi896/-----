@@ -204,7 +204,7 @@ export async function genCharacterOne(p: DramaProject, target: DramaCharacter, n
 /* ───── 6. 시나리오 ───── */
 const SCENE = obj({ title: S, location: S, timeOfDay: S, characters: arr(S), action: S, dialogue: S, emotion: S, camera: S, visual: S, estimatedDuration: { type: "number" }, sound: S, continuity: S });
 const SCENE_GUIDE =
-  `장면마다: title, location(공간), timeOfDay(시간대), characters(등장인물 이름 배열), action(인물 행동), dialogue(대사, '이름: 대사' 줄바꿈), emotion(감정 변화), camera(카메라 연출), visual(화면 묘사), estimatedDuration(초, 6~12 — 그 행동을 처음부터 끝까지 보여 주는 데 필요한 시간), sound(효과음·음악), continuity(앞 장면에서 이어지는 소품·의상·시간대·상처 등 연속성 메모).
+  `장면마다: title, location(공간), timeOfDay(시간대), characters(등장인물 이름 배열), action(인물 행동 — 화면에 보이는 동작을 순서대로 3~5단계로 구체적으로: 누가 무엇을 어떻게, 손·물건·시선·표정까지. 예: '선반 위 먼지 쌓인 램프를 발견한다 → 다가가 두 손으로 집어 든다 → 소매로 램프를 문지른다 → 주둥이에서 푸른 연기가 피어오르고 놀라 뒤로 물러선다'), dialogue(대사, '이름: 대사' 줄바꿈), emotion(감정 변화), camera(카메라 연출), visual(화면 묘사), estimatedDuration(초, 6~12 — 그 행동을 처음부터 끝까지 보여 주는 데 필요한 시간), sound(효과음·음악), continuity(앞 장면에서 이어지는 소품·의상·시간대·상처 등 연속성 메모).
 장면 규칙 (영상 품질에 가장 중요):
 1) 한 장면 = 카메라 한 번으로 찍는 연속된 행동 하나. 그 장면 안에서 행동이 시작되고 끝난다 (예: '램프를 발견해 집어 들고 소매로 문지르자 연기가 피어오른다'). 행동을 다음 장면으로 넘기지 않는다.
 2) 이야기의 중요한 순간(발견·변신·고백·반전·결정)은 반드시 화면에 직접 보이게 한 장면을 준다. 결과만 다음 장면에 보여 주지 않는다.
@@ -333,7 +333,7 @@ export async function genEnglishPrompts(p: DramaProject, sceneIds: string[]) {
       ask<{ scenes: Json[] }>(
         "scenario-en",
         "You write concise English prompts for AI image and video generation from Korean drama scenes. Keep Korean character names as written. Be concrete and visual.",
-        `Characters:\n${p.characters.map((c) => `- ${c.name}: ${c.appearanceEn || c.appearance}`).join("\n")}\n\nScenes (Korean):\n${list.map((s) => JSON.stringify({ id: s.id, title: s.title, location: s.location, time: s.timeOfDay, characters: s.characterIds.map(name), action: s.action, emotion: s.emotion, camera: s.camera, visual: s.visual })).join("\n")}\n\nFor each scene return: id (same), subject (who is in frame and how they look, 1 sentence), action (what happens, 1-2 sentences), environment (place and time), camera (shot size and movement), lighting, color (color grade and texture). English only.`,
+        `Characters:\n${p.characters.map((c) => `- ${c.name}: ${c.appearanceEn || c.appearance}`).join("\n")}\n\nScenes (Korean):\n${list.map((s) => JSON.stringify({ id: s.id, title: s.title, location: s.location, time: s.timeOfDay, characters: s.characterIds.map(name), action: s.action, emotion: s.emotion, camera: s.camera, visual: s.visual })).join("\n")}\n\nFor each scene return: id (same), subject (who is in frame and how they look, 1 sentence), action (every visible step of the action in order, concrete hands/objects/gaze/expression — keep all steps from the Korean action, 2-4 sentences), environment (place and time), camera (shot size and movement), lighting, color (color grade and texture). English only.`,
         obj({ scenes: arr(EN) }),
         () => ({ scenes: list.map((s) => ({ id: s.id, subject: "A Korean woman in a beige trench coat", action: "She looks at her phone in shock", environment: "dark apartment living room at night", camera: "close-up, slow push-in", lighting: "phone screen light on her face", color: "cool teal tones, film grain" })) }),
         8000,
