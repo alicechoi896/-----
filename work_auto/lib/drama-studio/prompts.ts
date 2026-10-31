@@ -191,7 +191,13 @@ export function videoPrompt(scenes: DramaScene[], cast: DramaCharacter[], o: Vid
       ? one(scenes[0])
       : [`${scenes.length} consecutive shots in this exact order, with clear cuts between them:`, ...scenes.map((s, i) => one(s, i))].join("\n\n");
   // v0.9.93: 장면 하나는 컷 없이 한 번에, 행동은 클립 안에서 처음부터 끝까지 (결과만 보여 주고 끝나지 않게)
-  const single = scenes.length === 1 ? "[SHOT] One continuous shot with no cuts, no scene changes and no time jumps. Show the entire action from its beginning to its end within this clip at a natural pace; do not end before the key action happens." : "";
+  // v0.9.135: 컷 나누기 — 한 클립 안에서 영화처럼 2~3컷 (샷마다 따로 만들지 않아 비용은 장면 1개 값)
+  const single =
+    scenes.length === 1
+      ? o.cuts
+        ? "[SHOTS] Edit this scene like a film within ONE clip using 2-3 natural camera cuts on the same set and in the same moment: open on a wide or medium shot that shows the place and every character, cut to a closer shot of whoever speaks or acts, then end on a reaction close-up or a detail insert at the key moment. Keep perfect continuity across cuts (same positions, lighting, outfits and props); the action continues across the cuts without time jumps."
+        : "[SHOT] One continuous shot with no cuts, no scene changes and no time jumps. Show the entire action from its beginning to its end within this clip at a natural pace; do not end before the key action happens."
+      : "";
   return [fmt, refs, single, body, `[CONSTRAINTS] The same characters with identical faces, hairstyles and outfits in every frame. ${NO_SWAP} ${CONSTRAINTS}`].filter(Boolean).join("\n").slice(0, kling ? 2500 : 6000);
 }
 

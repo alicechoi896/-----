@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { LayoutGrid, List, Plus, Trash2 } from "lucide-react";
 import type { Product } from "@/lib/types";
 import { api } from "@/lib/api-client";
+import { PRODUCT_GROUPS, groupOf, type ProductGroup } from "@/lib/types/product";
 import { useAsync } from "@/lib/hooks/useAsync";
 import {
   DataTable,
@@ -32,6 +33,7 @@ export function ProductLibrary() {
   const { data, loading, error, reload, setData } = useAsync(() => api.products.list(), []);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
+  const [group, setGroup] = useState<"" | ProductGroup>("");
   const [view, setView] = useState<"card" | "list">("card");
 
   const products = useMemo(() => data ?? [], [data]);
@@ -42,7 +44,7 @@ export function ProductLibrary() {
   const filtered = products.filter((p) => {
     const q = query.trim().toLowerCase();
     const matchQ = !q || `${p.name} ${p.brand} ${p.tags.join(" ")}`.toLowerCase().includes(q);
-    return matchQ && (!category || p.category === category);
+    return matchQ && (!category || p.category === category) && (!group || groupOf(p) === group);
   });
 
   async function handleDelete(product: Product) {
@@ -88,6 +90,12 @@ export function ProductLibrary() {
       <FilterBar
         actions={
           <>
+            <SegmentedControl
+              size="sm"
+              value={group}
+              onChange={(v) => setGroup(v as "" | ProductGroup)}
+              options={[{ value: "", label: "전체" }, ...PRODUCT_GROUPS.map((g) => ({ value: g.value, label: g.label }))]}
+            />
             <SegmentedControl
               size="sm"
               value={view}

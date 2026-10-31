@@ -127,7 +127,17 @@ export interface Product {
   updatedAt: ISODate;
   /** 콘텐츠 생성에 마지막으로 사용된 시각 */
   lastUsedAt: ISODate | null;
+  /** v0.9.135 제품 분류 (DB products.product_group, 기본 appliance). 패션은 AI 패션에서만, 가전은 원고·영상 자동 제작에서 */
+  productGroup?: ProductGroup;
 }
+
+export type ProductGroup = "appliance" | "fashion";
+export const PRODUCT_GROUPS: { value: ProductGroup; label: string }[] = [
+  { value: "appliance", label: "가전" },
+  { value: "fashion", label: "패션" },
+];
+/** 분류 값이 없으면 가전 */
+export const groupOf = (p: Pick<Product, "productGroup">): ProductGroup => (p.productGroup === "fashion" ? "fashion" : "appliance");
 
 export interface ProductDetail {
   product: Product;
@@ -137,7 +147,7 @@ export interface ProductDetail {
 
 /** 제품 수정 시 변경 가능한 필드 */
 export type ProductUpdateInput = Partial<
-  Pick<Product, "name" | "brand" | "category" | "seller" | "oneLiner" | "keyBenefits" | "tags">
+  Pick<Product, "name" | "brand" | "category" | "seller" | "oneLiner" | "keyBenefits" | "tags" | "productGroup">
 > & {
   contentData?: Partial<ProductAnalysisContent["contentData"]>;
 };

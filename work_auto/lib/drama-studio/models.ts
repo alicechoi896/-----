@@ -233,7 +233,8 @@ export const kieModelOf = (modelId: string, mode: GenMode) => {
   return m?.modelByMode?.[mode] ?? m?.model ?? modelId;
 };
 
-export const DEFAULT_VIDEO_MODEL = "seedance-2-fast";
+// v0.9.135: 기본 Seedance 2.0 Mini (가장 저렴, 장면당 1번)
+export const DEFAULT_VIDEO_MODEL = "seedance-2-mini";
 /** v0.9.104: 샷 단위 영상 기본 (720p · 5초) */
 export const DEFAULT_SHOT_MODEL = "seedance-2-mini";
 export const videoModel = (id: string) => VIDEO_MODELS.find((m) => m.id === id) ?? null;
@@ -245,6 +246,7 @@ export const MODE_LABEL: Record<GenMode, string> = {
   multi_shot: "여러 장면 순서대로 (멀티 샷)",
   text: "글만 (이미지 없이)",
   lipsync: "립싱크 시험 (만든 클립에 올린 목소리를 입힘)",
+  still: "사진 + 움직임 (스토리보드 이미지, 무료)",
 };
 
 /** v0.9.122 립싱크 시험: Kie volcengine 영상→영상 립싱크 (가격 미공개 — 확인 창에서 '모름'으로) */
@@ -276,6 +278,8 @@ export interface VideoOptions {
   audio: boolean;
   /** multi_shot: 컷별 길이 */
   shotSecs?: number[];
+  /** v0.9.135: 장면 하나를 한 클립 안에서 2~3컷(와이드 → 클로즈업 → 반응)으로 — 비용은 그대로 */
+  cuts?: boolean;
 }
 
 /**

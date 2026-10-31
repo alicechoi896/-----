@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Clapperboard, Download, Film, ListPlus, Mic, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
+import { Check, ImageIcon, Clapperboard, Download, Film, ListPlus, Mic, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
-import { MODE_LABEL, VIDEO_MODELS, fitDuration, modelOptionLabel, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { MODE_LABEL, VIDEO_MODELS, fitDuration, modelOptionLabel, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions, DEFAULT_VIDEO_MODEL } from "@/lib/drama-studio/models";
 import { sceneCast, videoPrompt } from "@/lib/drama-studio/prompts";
 import { buildTimeline, fitDurations, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
@@ -22,7 +22,9 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   const scenes = p.scenario.scenes;
   const [plan, setPlan] = useState<Plan>("single");
   const [picked, setPicked] = useState<string[]>([]);
-  const [modelId, setModelId] = useState("seedance-2-fast");
+  const [modelId, setModelId] = useState(DEFAULT_VIDEO_MODEL);
+  // v0.9.135: 장면 하나를 한 클립 안에서 2~3컷으로 (기본 켬, 비용 그대로)
+  const [cuts, setCuts] = useState(true);
   const m = videoModel(modelId)!;
   const [mode, setMode] = useState<GenMode>("first_frame");
   const [resolution, setResolution] = useState(m.defaultResolution);
@@ -59,7 +61,9 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
     if (!allowed.includes(mode)) setMode(allowed[0] ?? "reference");
   };
   const clampSec = (s: number) => fitDuration(m, s);
-  const optFor = (s: DramaScene): VideoOptions => ({ modelId, mode, durationSec: clampSec(secs[s.id] ?? s.durationSec), resolution, aspect: p.settings.aspect, audio });
+  const optFor = (s: DramaScene): VideoOptions => ({ modelId, mode, durationSec: clampSec(secs[s.id] ?? s.durationSec), resolution, aspect: p.settings.aspect, audio, cuts });
+  /** 대사가 없는 장면 (이동·분위기) — 사진 + 움직임 추천 */
+  const silent = (s: DramaScene) => !s.dialogue.trim();
   const shotSecs = pickedScenes.map((s) => Math.max(m.multiShot?.minShotSec ?? 1, Math.min(m.multiShot?.maxShotSec ?? 12, Math.round(s.durationSec))));
   const batchOpt: VideoOptions = { modelId, mode, durationSec: mode === "multi_shot" ? shotSecs.reduce((a, b) => a + b, 0) : batchSec, resolution, aspect: p.settings.aspect, audio, shotSecs: mode === "multi_shot" ? shotSecs : undefined };
 
@@ -148,7 +152,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
     ctl.edit("clips", p.clips.map((x) => (x.id === c.id ? { ...x, approved: true } : x.id === old ? { ...x, approved: false } : x)));
     ctl.edit("timeline", p.timeline.map((t) => (t === slotOf(c) ? { ...t, clipId: c.id, trimStart: 0, trimEnd: 0 } : t)));
   };
-  const mode0 = (c: DramaClip): GenMode => (c.mode === "upload" ? "first_frame" : c.mode);
+  const mode0 = (c: DramaClip): GenMode => (c.mode === "upload" || c.mode === "still" ? "first_frame" : c.mode);
   const sceneLabel = (ids: string[]) => (ids.length ? ids.map((id) => `#${scenes.findIndex((s) => s.id === id) + 1}`).join("·") : "장면 없음");
 
   return (
@@ -177,6 +181,12 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               <input type="checkbox" checked={audio} disabled={m.audio !== "toggle"} onChange={(e) => setAudio(e.target.checked)} className="accent-[var(--color-brand)]" />
               소리·대사 만들기 {m.audio === "always" && "(항상)"}
             </label>
+            {plan === "single" && (
+              <label className="flex items-center gap-1.5 pb-2 text-[13px]" title="샷마다 따로 만들지 않고, 장면 하나를 한 클립 안에서 와이드 → 말하는 사람 클로즈업 → 반응 컷으로 나눠 만듭니다. 비용은 장면 1개 값 그대로입니다." data-cuts>
+                <input type="checkbox" checked={cuts} onChange={(e) => setCuts(e.target.checked)} className="accent-[var(--color-brand)]" />
+                장면 안에서 컷 나누기 (와이드 → 클로즈업 → 반응 · 비용 그대로)
+              </label>
+            )}
             {plan === "single" && mode === "first_frame" && (
               <label className="flex items-center gap-1.5 pb-2 text-[13px]" title="같은 장소의 다음 장면은 앞 클립이 끝나면 그 마지막 장면에서 시작합니다. 동작·위치가 이어지고 얼굴이 바뀌지 않습니다. 앞 클립을 기다려야 해서 더 오래 걸립니다 (비용은 같음)." data-chain>
                 <input type="checkbox" checked={chain} onChange={(e) => setChain(e.target.checked)} className="accent-[var(--color-brand)]" />
@@ -212,6 +222,12 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setPicked([])}>
                 모두 해제
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPicked(scenes.filter((s) => !silent(s)).map((s) => s.id))} title="대사·감정이 있는 장면만 AI 영상으로">
+                대사 있는 장면만
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPicked(scenes.filter((s) => silent(s) && frameOf(s.id)).map((s) => s.id))} title="대사 없는 장면은 사진 + 움직임(무료)으로">
+                대사 없는 장면만
               </Button>
             </div>
             <ul className="grid max-h-[420px] gap-1.5 overflow-y-auto md:grid-cols-2" data-video-scenes>
@@ -293,6 +309,9 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" icon={Sparkles} disabled={!picked.length || Boolean(ctl.busy)} onClick={openConfirm} data-gen-videos>
               {plan === "single" ? `고른 ${picked.length}장면 영상 만들기` : `${picked.length}장면을 영상 1개로 만들기`}
+            </Button>
+            <Button variant="secondary" icon={ImageIcon} disabled={!pickedScenes.some((s) => frameOf(s.id)) || Boolean(ctl.busy)} loading={ctl.busy === "사진 움직임"} onClick={() => void ctl.run("사진 움직임", () => studioApi.generate(p.id, "still-clips", { sceneIds: pickedScenes.filter((s) => frameOf(s.id)).map((s) => s.id) }))} title="승인한 스토리보드 이미지에 천천히 움직이는 효과를 넣은 클립 (외부 비용 없음). 대사 없는 장면에 추천" data-still-clips>
+              고른 장면 사진 + 움직임으로 (무료)
             </Button>
             <UploadButton accept="video/mp4,video/quicktime,video/webm" multiple disabled={uploading} onFiles={(f) => void uploadClips(f, picked.length === 1 ? picked : [])}>
               {picked.length === 1 ? "이 장면에 영상 파일 올리기" : "영상 파일 올리기 (장면 없이)"}
@@ -386,7 +405,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                 </p>
                 {c.faceCheck && !c.faceCheck.ok && <p className="text-[11px] text-danger">{c.faceCheck.note || "기준 이미지와 다른 사람처럼 보입니다"} — [프롬프트 고쳐 다시 만들기]로 다시 만들어 주세요.</p>}
                 <p className="text-[11px] text-fg-subtle">
-                  {c.mode === "lipsync" ? "립싱크 시험 결과 (올린 목소리 입힘)" : c.source === "upload" ? `업로드 ${c.fileName ?? ""}` : `${videoModel(c.modelId)?.label ?? c.modelId} · ${MODE_LABEL[c.mode as GenMode]?.split(" (")[0] ?? c.mode}`}
+                  {c.mode === "lipsync" ? "립싱크 시험 결과 (올린 목소리 입힘)" : c.mode === "still" ? "사진 + 움직임 (무료)" : c.source === "upload" ? `업로드 ${c.fileName ?? ""}` : `${videoModel(c.modelId)?.label ?? c.modelId} · ${MODE_LABEL[c.mode as GenMode]?.split(" (")[0] ?? c.mode}`}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   <Button size="sm" variant={c.approved ? "primary" : "secondary"} icon={Check} onClick={() => setClips(p.clips.map((x) => (x.id === c.id ? { ...x, approved: !x.approved } : x)))}>

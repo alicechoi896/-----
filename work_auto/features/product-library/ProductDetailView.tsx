@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Database, History, Pencil, Trash2 } from "lucide-react";
 import type { ProductDetail } from "@/lib/types";
 import { api } from "@/lib/api-client";
+import { PRODUCT_GROUPS, groupOf, type ProductGroup } from "@/lib/types/product";
 import { findFeature } from "@/lib/registry";
 import { useAsync } from "@/lib/hooks/useAsync";
 import {
@@ -16,6 +17,7 @@ import {
   Input,
   LoadingState,
   SectionCard,
+  SegmentedControl,
   Textarea,
 } from "@/components/ui";
 import { CreateContentMenu } from "@/components/shared/ProductCard";
@@ -57,6 +59,16 @@ export function ProductDetailView({ productId, initialMode }: { productId: strin
           </p>
           <h2 className="mt-1 text-lg font-bold text-fg">{product.name}</h2>
           <p className="mt-1 text-sm text-fg-muted">{product.oneLiner}</p>
+          <div className="mt-2 flex items-center gap-2 text-[12.5px]" data-product-group>
+            <span className="text-fg-subtle">분류</span>
+            <SegmentedControl
+              size="sm"
+              value={groupOf(product)}
+              onChange={(v) => void api.products.update(product.id, { productGroup: v as ProductGroup }).then((next) => detail.setData(() => next))}
+              options={PRODUCT_GROUPS.map((g) => ({ value: g.value, label: g.label }))}
+            />
+            <span className="text-fg-subtle">패션은 AI 패션에서만, 가전은 원고·영상 자동 제작에서 보입니다</span>
+          </div>
           <p className="tabular mt-2 text-xs text-fg-subtle">
             저장 {formatDate(product.createdAt)} · 최근 사용 {product.lastUsedAt ? formatRelative(product.lastUsedAt) : "사용 전"} · 분석 v
             {analysis.version} ({analysis.meta.provider}/{analysis.meta.model})

@@ -486,7 +486,9 @@ function LibraryPicker({ open, onClose, onPick }: { open: boolean; onClose: () =
       alive = false;
     };
   }, [open, list]);
-  const shown = (list ?? []).filter((x) => !q.trim() || x.name.includes(q.trim()));
+  // v0.9.135: 패션으로 분류한 제품만 (하나도 없으면 전체)
+  const fashionOnly = (list ?? []).filter((x) => x.productGroup === "fashion");
+  const shown = (fashionOnly.length ? fashionOnly : (list ?? [])).filter((x) => !q.trim() || x.name.includes(q.trim()));
   return (
     <Modal open={open} onClose={onClose} title="제품 라이브러리에서 가져오기" description="이미 학습한 쿠팡·스마트스토어 상품의 대표 사진·이름·링크를 가져옵니다 (쿠팡 호출 없음)." className="max-w-2xl">
       <div className="space-y-2">

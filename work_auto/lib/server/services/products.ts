@@ -138,7 +138,9 @@ export const productService = {
   async update(id: string, input: ProductUpdateInput): Promise<ProductDetail> {
     const repo = getRepositories();
     const { product, analysis } = await this.getDetail(id);
-    const { contentData, ...productPatch } = input;
+    const { contentData, ...rest } = input;
+    // v0.9.135: 분류는 appliance | fashion 만
+    const productPatch = { ...rest, ...(rest.productGroup !== undefined ? { productGroup: rest.productGroup === "fashion" ? ("fashion" as const) : ("appliance" as const) } : {}) };
     await repo.products.update(product.id, { ...productPatch, updatedAt: nowIso() });
     if (contentData) {
       const patch: Partial<ProductAnalysis> = { contentData: { ...analysis.contentData, ...contentData } };

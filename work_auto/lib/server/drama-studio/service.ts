@@ -10,6 +10,7 @@ import * as ai from "./ai";
 import { renderDrama } from "./render";
 import { faceCheck } from "./face";
 import { isProjectId, loadProject, ownsKey, projectDir, readIndex, saveProject, withUrls } from "./store";
+import { makeStillClips } from "./still";
 import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob, createMusicTask, createLipsyncTask } from "./tasks";
 import { DEFAULT_SHOT_MODEL, IMAGE_MODELS, VIDEO_MODELS, fitDuration, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, emptyShot } from "@/lib/drama-studio/shots";
@@ -546,6 +547,16 @@ export const dramaStudioService = {
         // 새 샷 기본 모델 (Seedance 2.0 Mini 기본, Fast 등 고를 수 있음)
         const pm = videoModel(String(body.modelId ?? "")) ?? videoModel(DEFAULT_SHOT_MODEL)!;
         p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: fitDuration(pm, x.durationSec), mode: (((["first_frame", "first_last", "reference"] as const).find((x) => pm.modes.includes(x))) ?? "first_frame") }))];
+        break;
+      }
+      case "still-clips": {
+        // v0.9.135: 고른 장면을 사진 + 움직임 클립으로 (무료, 외부 호출 없음)
+        requireStep(p, "video");
+        const ids = (Array.isArray(body.sceneIds) ? body.sceneIds : []).map(String);
+        if (!ids.length) throw new AppError("VALIDATION", "장면을 골라 주세요.");
+        const r = await makeStillClips(owner, p, ids);
+        if (!r.made) throw new AppError("VALIDATION", "승인한 스토리보드 이미지가 있는 장면만 만들 수 있습니다.");
+        extra = { made: r.made, skipped: r.skipped };
         break;
       }
       case "shots-plan-all": {
