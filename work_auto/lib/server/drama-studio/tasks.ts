@@ -480,7 +480,7 @@ export async function createLipsyncTask(p: DramaProject, clipId: string, request
   if (!clip) throw new AppError("VALIDATION", "클립을 찾지 못했습니다. 화면을 새로고침해 주세요.");
   const shot = clip.shotId ? (p.shots ?? []).find((x) => x.id === clip.shotId) : null;
   const audioKey = shot?.voiceKey ?? null;
-  if (!audioKey) throw new AppError("VALIDATION", "이 클립의 샷에 올린 목소리 파일이 없습니다. 07 샷에서 '음성: 올린 파일'로 목소리를 올린 뒤 눌러 주세요.");
+  if (!audioKey) throw new AppError("VALIDATION", "이 클립의 샷에 올린 목소리 파일이 없습니다. 08 영상 제작 › 샷 카드에서 '음성: 올린 파일'로 목소리를 올린 뒤 눌러 주세요.");
   if (p.tasks.some((t) => t.mode === "lipsync" && (t.status === "generating" || t.status === "requesting"))) throw new AppError("BUSY", "립싱크를 만드는 중입니다. 끝난 뒤 다시 눌러 주세요.", 409);
   const key = `lipsync:${p.id}:${requestId}`;
   if (inFlight.has(key)) return (await inFlight.get(key)) as DramaTask[];

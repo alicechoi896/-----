@@ -414,7 +414,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                     </Button>
                   )}
                   {c.shotId && c.mode !== "lipsync" && (
-                    <Button size="sm" variant="ghost" icon={Mic} disabled={!lipsyncReady(c) || lipsyncBusy} title={lipsyncReady(c) ? undefined : "07 샷에서 '음성: 올린 파일'로 목소리를 올리면 쓸 수 있습니다"} onClick={() => setLipsync(c)} data-clip-lipsync>
+                    <Button size="sm" variant="ghost" icon={Mic} disabled={!lipsyncReady(c) || lipsyncBusy} title={lipsyncReady(c) ? undefined : "08 영상 제작 › 샷 카드에서 '음성: 올린 파일'로 목소리를 올리면 쓸 수 있습니다"} onClick={() => setLipsync(c)} data-clip-lipsync>
                       립싱크 시험
                     </Button>
                   )}
