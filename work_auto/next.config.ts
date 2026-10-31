@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
   // 영상 자동 제작 (v0.9.51): FFmpeg 실행 파일·영상 자료·기본 글꼴을 렌더 함수에 함께 올린다
   serverExternalPackages: ["ffmpeg-static", "@napi-rs/canvas"],
   outputFileTracingIncludes: {
+    // AI 패션 (v0.9.103): 피드 카드·릴스·데모 결과
+    "/api/fashion/*/render": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/pretendard/dist/public/static/Pretendard-SemiBold.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Bold.otf", "./node_modules/@napi-rs/canvas*/**/*"],
+    "/api/fashion/*/sync": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/font/*": ["./assets/video/fonts/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
     "/api/video-jobs": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],

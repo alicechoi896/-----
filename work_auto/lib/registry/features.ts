@@ -19,6 +19,7 @@ import {
   UserCheck,
   Users,
   Wand2,
+  Shirt,
 } from "lucide-react";
 import type { MemberTier } from "@/lib/types";
 import type { FeatureDef } from "./types";
@@ -182,6 +183,21 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: ["meta-instagram", "tikhub"],
     inputs: ["해시태그 (공식 API, 무료·7일 30개)", "검색어 (TikHub, 한국어 그대로)"],
     outputs: ["릴스 목록 (조회수·좋아요·댓글·게시일·작성자)", "해시태그", "대본 포맷에 담기", "YouTube 영상 원고 만들기"],
+  },
+  {
+    id: "ig-fashion",
+    channelId: "instagram",
+    order: 2,
+    title: "AI 패션 피드·릴스",
+    description: "쿠팡 상품(링크·사진·제품 라이브러리)으로 AI 모델이 입은 룩을 만들어, 같은 모델·같은 배경에서 옷만 바뀌는 릴스(LOOK1~6, 위쪽 POV 문구)와 '착용 사진 + 제품 사진' 피드 카드를 만듭니다. 실제 사진은 살짝 다른 얼굴로 바꿔 씁니다.",
+    href: "/instagram/fashion",
+    icon: Shirt,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["kie"],
+    inputs: ["상품 (쿠팡 링크 + 사진 / 제품 라이브러리)", "모델 (AI 설명 또는 실제 사진)", "배경·주제·POV 문구", "음악 (AI 만들기·올리기)"],
+    outputs: ["모델 기준 이미지", "룩 이미지 (같은 모델·배경)", "피드 카드 PNG (4:5)", "릴스 MP4 (9:16, 사진 + 움직임)"],
   },
 
   // ───────── NAVER 블로그 ─────────

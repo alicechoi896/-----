@@ -386,6 +386,27 @@ export const SHOTS = [
     },
   },
   {
+    id: "04-ig-fashion",
+    url: "/instagram/fashion",
+    viewport: { width: 1280, height: 1650 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const r = await p.request.post(abs("/api/fashion"), { data: { title: "가을 출근룩 6가지", theme: "출근룩" } });
+      const id = (await r.json()).data.project.id;
+      await p.goto(abs(`/instagram/fashion?project=${id}`));
+      await p.getByRole("heading", { name: /① 상품/ }).waitFor({ timeout: 15_000 });
+      await p.locator("[data-fashion-pov]").fill("POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나");
+      await p.waitForTimeout(400);
+    },
+    marks: {
+      1: (p) => p.getByRole("heading", { name: /① 상품/ }).locator("xpath=ancestor::section[1]"),
+      2: (p) => p.getByRole("heading", { name: /② 모델/ }).locator("xpath=ancestor::section[1]"),
+      3: (p) => p.getByRole("heading", { name: /③ 배경/ }).locator("xpath=ancestor::section[1]"),
+      4: (p) => p.getByRole("heading", { name: /④ 룩/ }).locator("xpath=ancestor::section[1]"),
+      5: (p) => p.getByRole("heading", { name: /⑤ 결과물/ }).locator("xpath=ancestor::section[1]"),
+    },
+  },
+  {
     id: "04-scraps",
     url: "/scraps",
     viewport: { width: 1280, height: 900 },
