@@ -51,6 +51,18 @@ export const CHANNELS: ChannelDef[] = [
     accent: "instagram",
     showOnHome: true,
   },
+  // v0.9.133: 영상 제작 — 유튜브·네이버 클립이 같이 쓰는 영상 만들기·제품 영상 자동 제작·무음 구간 자르기를 한곳에 (주소는 그대로)
+  {
+    id: "video",
+    name: "영상 제작",
+    hubTitle: "영상 제작",
+    description: "원고로 영상 만들기 · 제품 영상 자동 제작 · 무음 구간 자르기",
+    hubDescription: "유튜브·네이버 클립 원고로 9:16 영상을 만들고, 매일 새벽 제품 영상을 자동으로 만듭니다.",
+    href: "/video",
+    icon: Film,
+    accent: "youtube",
+    showOnHome: true,
+  },
   // v0.9.116: AI 드라마·AI 패션은 공통 도구·Instagram 에서 빼 따로 메뉴로 (주소는 그대로 — 저장된 링크가 깨지지 않게)
   {
     id: "drama",

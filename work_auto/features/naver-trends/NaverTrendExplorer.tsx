@@ -235,8 +235,8 @@ function ClipView({ insight, q, keyword, onKeyword, onClear }: { insight: NaverT
           description="클립 소재로 쓰기 좋은 주제입니다."
           makeHref={(t) => `/naver-clip/info-content?${clipParams(t, insight)}`}
           makeChoices={(t) => [
-            { label: "제품 홍보 클립 만들기", href: `/naver-clip/product-content?${clipParams(t, insight)}` },
-            { label: "정보성 클립 만들기", href: `/naver-clip/info-content?${clipParams(t, insight)}` },
+            { label: "제품 홍보 클립 원고", href: `/naver-clip/product-content?${clipParams(t, insight)}` },
+            { label: "정보성 클립 원고", href: `/naver-clip/info-content?${clipParams(t, insight)}` },
           ]}
           makeLabel="클립 만들기"
           more={<MoreButton show={pg.more.rising} loading={pg.loading === "rising"} onClick={() => void pg.loadMore("rising")} error={pg.error} />}

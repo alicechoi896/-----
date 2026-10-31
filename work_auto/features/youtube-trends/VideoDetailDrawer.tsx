@@ -132,10 +132,10 @@ function DetailBody({
           {saved ? "찜 해제" : "찜하기"}
         </Button>
         <LinkButton href={infoVideoHref(prefill)} icon={Video} variant="primary">
-          이 트렌드로 정보성 영상 만들기
+          이 트렌드로 정보성 영상 원고 쓰기
         </LinkButton>
         <LinkButton href={productVideoHref(prefill)} icon={PackageOpen}>
-          제품 홍보 영상 만들기
+          제품 홍보 영상 원고
         </LinkButton>
         <LinkButton href={styleHref(item)} icon={Palette} variant="ghost" title="이 영상의 제목·설명·태그로 나의 스타일 초안을 만듭니다">
           스타일로 저장

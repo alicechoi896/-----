@@ -144,8 +144,8 @@ function HitRow({ v, channelName }: { v: YouTubeChannelVideo; channelName: strin
           iconOnly
           label="이 영상으로 영상 만들기"
           items={[
-            { label: "제품 홍보 영상 만들기", href: productVideoHref({ trendTitle: v.title, keywords: keywords.length ? keywords : [v.title] }) },
-            { label: "정보성 영상 만들기", href: infoVideoHref({ trendTitle: v.title, keywords: keywords.length ? keywords : [v.title] }) },
+            { label: "제품 홍보 영상 원고", href: productVideoHref({ trendTitle: v.title, keywords: keywords.length ? keywords : [v.title] }) },
+            { label: "정보성 영상 원고", href: infoVideoHref({ trendTitle: v.title, keywords: keywords.length ? keywords : [v.title] }) },
           ]}
         />
       </span>

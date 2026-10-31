@@ -806,7 +806,13 @@ export const SHOTS = [
     id: "09-day",
     url: "/uploads",
     prepare: async (p) => {
-      await p.locator("main [title^=\"YouTube · \"]", { hasText: "클린웨이브" }).first().click();
+      const item = p.locator("main [title^=\"유튜브 · \"], main [title^=\"YouTube · \"]", { hasText: "클린웨이브" }).first();
+      // 데모 일정이 지난달에 있으면 이전 달로 (월이 바뀌면 이번 달에 없다)
+      for (let i = 0; i < 3 && !(await item.isVisible().catch(() => false)); i++) {
+        await p.locator("main [title=\"이전 달\"]").first().click();
+        await p.waitForTimeout(800);
+      }
+      await item.click();
       await p.getByText("지금 조회").first().waitFor({ timeout: 10_000 });
     },
     marks: {
