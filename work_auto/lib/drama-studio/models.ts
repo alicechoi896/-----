@@ -238,6 +238,11 @@ export function fitDuration(m: Pick<VideoModel, "minSec" | "maxSec" | "durations
 /** 고를 수 있는 길이 목록 */
 export const durationChoices = (m: Pick<VideoModel, "minSec" | "maxSec" | "durations">) => m.durations ?? Array.from({ length: m.maxSec - m.minSec + 1 }, (_, i) => m.minSec + i);
 
+/** 한 번에 만들 수 있는 길이 글 (예: '최대 15초', '4·6·8초') */
+export const lengthLabel = (m: Pick<VideoModel, "minSec" | "maxSec" | "durations">) => (m.durations ? `${m.durations.join("·")}초` : `${m.minSec}~${m.maxSec}초`);
+/** 모델 고르기 칸 글: 이름 · 최대 길이 */
+export const modelOptionLabel = (m: VideoModel) => `${m.label} · 최대 ${m.durations ? Math.max(...m.durations) : m.maxSec}초`;
+
 /** Kie 에 보낼 model 값 (방식마다 다른 모델) */
 export const kieModelOf = (modelId: string, mode: GenMode) => {
   const m = videoModel(modelId);

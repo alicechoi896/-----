@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Clapperboard, ListPlus, Mic, Plus, ScanFace, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { Badge, Button, Input, Notice, SectionCard, Select, Textarea } from "@/components/ui";
-import { VIDEO_MODELS, MODE_LABEL, durationChoices, estimateImageCredits, fitDuration, videoModel } from "@/lib/drama-studio/models";
+import { VIDEO_MODELS, MODE_LABEL, durationChoices, modelOptionLabel, estimateImageCredits, fitDuration, videoModel } from "@/lib/drama-studio/models";
 import { DEFAULT_SHOT_SEC, MAX_SHOTS_PER_SCENE, SHOT_KINDS, approvedShotImage, dialogueFit, emptyShot, shotCode, shotCostSummary, shotsOf } from "@/lib/drama-studio/shots";
 import { buildTimeline } from "@/lib/drama-studio/steps";
 import type { DramaClip, DramaImage, DramaShot, ShotKind } from "@/lib/drama-studio/types";
@@ -28,11 +28,11 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
   const [count, setCount] = useState(3);
   // 샷 기본 모델 (AI 샷 나누기·한 번에 바꾸기)
   const [planModel, setPlanModel] = useState("seedance-2-mini");
-  const shotModels = VIDEO_MODELS.filter((x) => x.family !== "minimax");
+  const shotModels = VIDEO_MODELS;
   /** 이 장면 샷 모델을 한 번에 (해상도·길이·방식은 그 모델이 되는 값으로) */
   const setSceneModel = (modelId: string) => {
     const nm = videoModel(modelId)!;
-    setShots(shots.map((s) => (s.sceneId !== sceneId ? s : { ...s, modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: fitDuration(nm, s.durationSec), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" })));
+    setShots(shots.map((s) => (s.sceneId !== sceneId ? s : { ...s, modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: fitDuration(nm, s.durationSec), mode: nm.modes.includes(s.mode) ? s.mode : ((["first_frame", "first_last", "reference"] as const).find((x) => nm.modes.includes(x)) ?? "first_frame") })));
   };
   const [ask, setAsk] = useState<null | { kind: "image"; shotIds: string[] } | { kind: "video"; shotIds: string[] }>(null);
   const [uploading, setUploading] = useState(false);
@@ -117,7 +117,7 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
           </label>
           <label className="space-y-1">
             <span className="text-[12px] font-medium text-fg-muted">새 샷 기본 모델</span>
-            <Select value={planModel} options={shotModels.map((x) => ({ value: x.id, label: `${x.label} · ${x.priceNote.split(" (")[0]}` }))} onChange={(e) => setPlanModel(e.target.value)} className="w-64" aria-label="새 샷 기본 모델" data-shot-default-model />
+            <Select value={planModel} options={shotModels.map((x) => ({ value: x.id, label: modelOptionLabel(x) }))} onChange={(e) => setPlanModel(e.target.value)} className="w-64" aria-label="새 샷 기본 모델" data-shot-default-model />
           </label>
           <Button variant="primary" icon={Wand2} disabled={!scene || Boolean(ctl.busy)} loading={ctl.busy === "샷 나누기"} onClick={() => void ctl.run("샷 나누기", () => studioApi.generate(p.id, "shots-plan", { sceneId, count, modelId: planModel, replace: list.length > 0 && window.confirm("이미지·영상이 없는 기존 샷은 지우고 새로 나눌까요? (취소 = 기존 샷 뒤에 추가)") }))} data-shot-plan>
             AI 로 샷 나누기 (AI 1회)
@@ -144,7 +144,7 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
 
         {list.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-control border border-line p-2">
-            <Select value="" options={[{ value: "", label: "이 장면 샷 모델 한 번에 바꾸기…" }, ...shotModels.map((x) => ({ value: x.id, label: x.label }))]} onChange={(e) => e.target.value && setSceneModel(e.target.value)} className="h-8 w-56 text-[12.5px]" aria-label="이 장면 샷 모델" data-shot-scene-model />
+            <Select value="" options={[{ value: "", label: "이 장면 샷 모델 한 번에 바꾸기…" }, ...shotModels.map((x) => ({ value: x.id, label: modelOptionLabel(x) }))]} onChange={(e) => e.target.value && setSceneModel(e.target.value)} className="h-8 w-56 text-[12.5px]" aria-label="이 장면 샷 모델" data-shot-scene-model />
             <Button size="sm" variant="secondary" icon={Check} disabled={list.every((s) => s.approved)} onClick={() => setShots(shots.map((s) => (s.sceneId === sceneId ? { ...s, approved: true } : s)))}>
               이 장면 샷 모두 승인
             </Button>
@@ -205,9 +205,9 @@ export function ShotStudio({ ctl }: { ctl: ProjectCtl }) {
                       })}
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-                      <Select value={s.modelId} options={VIDEO_MODELS.filter((x) => x.family !== "minimax").map((x) => ({ value: x.id, label: x.label }))} onChange={(e) => {
+                      <Select value={s.modelId} options={VIDEO_MODELS.map((x) => ({ value: x.id, label: modelOptionLabel(x) }))} onChange={(e) => {
                         const nm = videoModel(e.target.value)!;
-                        setShot(s.id, { modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: fitDuration(nm, s.durationSec), mode: nm.modes.includes(s.mode) ? s.mode : "first_frame" });
+                        setShot(s.id, { modelId: nm.id, resolution: nm.resolutions.includes(s.resolution) ? s.resolution : nm.defaultResolution, durationSec: fitDuration(nm, s.durationSec), mode: nm.modes.includes(s.mode) ? s.mode : ((["first_frame", "first_last", "reference"] as const).find((x) => nm.modes.includes(x)) ?? "first_frame") });
                       }} className="h-8 w-40" aria-label="영상 모델" />
                       <Select value={s.resolution} options={(m?.resolutions ?? []).map((r) => ({ value: r, label: r }))} onChange={(e) => setShot(s.id, { resolution: e.target.value })} className="h-8 w-20" aria-label="해상도" />
                       <Select value={String(s.durationSec)} options={(m ? durationChoices(m) : [5]).map((n) => ({ value: String(n), label: `${n}초` }))} onChange={(e) => setShot(s.id, { durationSec: Number(e.target.value) })} className="h-8 w-20" aria-label="길이" />

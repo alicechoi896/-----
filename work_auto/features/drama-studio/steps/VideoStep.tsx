@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
-import { MODE_LABEL, VIDEO_MODELS, fitDuration, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
+import { MODE_LABEL, VIDEO_MODELS, fitDuration, modelOptionLabel, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { sceneCast, videoPrompt } from "@/lib/drama-studio/prompts";
 import { buildTimeline, fitDurations, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
@@ -13,6 +13,7 @@ import { CostConfirm, PromptModal, TASK_LABEL, UploadButton, taskTone } from "..
 import type { ProjectCtl } from "../useProject";
 import { Timeline } from "./Timeline";
 import { ShotStudio } from "./ShotStudio";
+import { ModelGuide } from "./ModelGuide";
 
 type Plan = "single" | "batch";
 
@@ -149,6 +150,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
 
   return (
     <div className="space-y-5">
+      <ModelGuide />
       <ShotStudio ctl={ctl} />
       <SectionCard title="장면 단위로 만들기 (기존)" icon={Clapperboard} description="Kie AI 로 장면 영상을 만듭니다. 작업 1개 = 1회 과금, 만들기 전에 작업 수·최소 예상 크레딧을 확인합니다.">
         <div className="space-y-4">
@@ -159,7 +161,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
             </div>
             <label className="space-y-1">
               <span className="text-[12px] font-medium text-fg-muted">영상 모델</span>
-              <Select value={modelId} options={VIDEO_MODELS.map((x) => ({ value: x.id, label: `${x.label} — ${x.note}` }))} onChange={(e) => chooseModel(e.target.value)} className="w-80" aria-label="영상 모델" data-video-model />
+              <Select value={modelId} options={VIDEO_MODELS.map((x) => ({ value: x.id, label: `${modelOptionLabel(x)} — ${x.note}` }))} onChange={(e) => chooseModel(e.target.value)} className="w-80" aria-label="영상 모델" data-video-model />
             </label>
             <label className="space-y-1">
               <span className="text-[12px] font-medium text-fg-muted">입력 방식</span>

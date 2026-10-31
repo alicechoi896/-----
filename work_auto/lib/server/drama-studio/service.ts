@@ -177,7 +177,7 @@ function cleanShots(p: DramaProject, value: unknown): DramaShot[] {
         durationSec: fitDuration(m, Number(x.durationSec) || DEFAULT_SHOT_SEC),
         modelId: m.id,
         resolution: m.resolutions.includes(String(x.resolution)) ? String(x.resolution) : m.defaultResolution,
-        mode: m.modes.includes(mode) ? mode : "first_frame",
+        mode: m.modes.includes(mode) ? mode : (((["first_frame", "first_last", "reference"] as const).find((x) => m.modes.includes(x))) ?? "first_frame"),
         continueFromPrev: x.continueFromPrev === true,
         audio: m.audio === "always" ? true : m.audio === "none" ? false : x.audio !== false,
         voiceSource: x.voiceSource === "upload" || x.voiceSource === "none" ? x.voiceSource : "ai",
@@ -545,7 +545,7 @@ export const dramaStudioService = {
         const start = keep.filter((x) => x.sceneId === sceneId).length;
         // 새 샷 기본 모델 (Seedance 2.0 Mini 기본, Fast 등 고를 수 있음)
         const pm = videoModel(String(body.modelId ?? "")) ?? videoModel(DEFAULT_SHOT_MODEL)!;
-        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: fitDuration(pm, x.durationSec) }))];
+        p.shots = [...keep, ...r.shots.map((x, i) => emptyShot(sceneId, start + i, { ...x, modelId: pm.id, resolution: pm.defaultResolution, durationSec: fitDuration(pm, x.durationSec), mode: (((["first_frame", "first_last", "reference"] as const).find((x) => pm.modes.includes(x))) ?? "first_frame") }))];
         break;
       }
       case "restore-version": {

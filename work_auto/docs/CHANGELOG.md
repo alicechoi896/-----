@@ -2,6 +2,13 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.108] - 2026-11-01: 드라마 — 모델 최대 길이 표시·한눈에 보기
+
+### 추가
+- 영상 모델 고르기 칸에 '최대 N초' (Veo 3.1 Lite 8초(4·6·8) · Grok 1.5·MiniMax H3·PixVerse V6 Max·Seedance 2.0 Mini·Fast·2.0·Kling 3.0 15초 · Seedance 2.5 30초)
+- 08 영상 제작 위쪽 **영상 모델 한눈에 보기** 표: 한 번에 길이·해상도·방식·소리·가격
+- 촬영 샷에서도 MiniMax H3 를 고를 수 있게 (참고 이미지 방식으로 자동)
+
 ## [0.9.107] - 2026-11-01: 제품 영상 자동 제작 (매일 새벽)
 
 ### 추가
