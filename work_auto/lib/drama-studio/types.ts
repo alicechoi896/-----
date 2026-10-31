@@ -86,6 +86,8 @@ export interface DramaCharacter {
   relations: DramaRelation[];
   arc: string;
   speech: string;
+  /** v0.9.100: 극 중 다른 이름·호칭 (쉼표로, 예: '지니, 요정님') — 대본에 이 호칭이 나와도 이 인물로 본다 */
+  aliases?: string;
 }
 
 export type SheetKind = "front" | "side" | "full" | "expression" | "outfit" | "extra";
@@ -212,6 +214,8 @@ export interface DramaTask {
 
 export interface DramaClip {
   id: string;
+  /** v0.9.100: [지우기] 표시 — 서버가 목록에서 뺀다 (파일은 보관) */
+  removed?: boolean;
   sceneIds: string[];
   key: string;
   source: "ai" | "upload";

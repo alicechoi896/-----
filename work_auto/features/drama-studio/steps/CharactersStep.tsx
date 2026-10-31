@@ -12,6 +12,7 @@ import type { ProjectCtl } from "../useProject";
 
 const ROLES = ["주인공", "적대자", "조력자", "조연", "기타"];
 const FIELDS: { k: keyof DramaCharacter; label: string; rows: number }[] = [
+  { k: "aliases", label: "다른 호칭 (쉼표로, 예: 지니, 요정님 — 대본에 이 호칭이 나와도 이 인물의 얼굴로 그림)", rows: 1 },
   { k: "appearance", label: "외모 특징", rows: 2 },
   { k: "appearanceEn", label: "이미지용 영어 외모 묘사 (캐릭터 시트·스토리보드 프롬프트에 씀)", rows: 2 },
   { k: "outfit", label: "의상", rows: 1 },
@@ -24,7 +25,7 @@ const FIELDS: { k: keyof DramaCharacter; label: string; rows: number }[] = [
   { k: "speech", label: "말투와 대화 특징", rows: 1 },
 ];
 
-export const blankCharacter = (): DramaCharacter => ({ id: newId("c"), name: "", role: "조연", age: "", gender: "", appearance: "", appearanceEn: "", outfit: "", personality: "", desire: "", weakness: "", secret: "", conflict: "", relations: [], arc: "", speech: "" });
+export const blankCharacter = (): DramaCharacter => ({ id: newId("c"), name: "", role: "조연", age: "", gender: "", appearance: "", appearanceEn: "", outfit: "", personality: "", desire: "", weakness: "", secret: "", conflict: "", relations: [], arc: "", speech: "", aliases: "" });
 
 /** 04 등장인물: 자동 생성·추가·수정·개별 재생성·삭제·관계도. 인물은 내부 ID(c_…)로 장면·이미지와 잇는다 */
 export function CharactersStep({ ctl }: { ctl: ProjectCtl }) {
@@ -90,7 +91,7 @@ export function CharactersStep({ ctl }: { ctl: ProjectCtl }) {
                 {openId === c.id && (
                   <div className="grid gap-2.5 border-t border-line p-3 md:grid-cols-2">
                     {FIELDS.map((f) => (
-                      <TextField key={f.k} label={f.label} rows={f.rows > 1 ? f.rows : 0} value={String(c[f.k] ?? "")} onChange={(v) => set(c.id, { [f.k]: v })} className={f.k === "appearanceEn" ? "md:col-span-2" : ""} />
+                      <TextField key={f.k} label={f.label} rows={f.rows > 1 ? f.rows : 0} value={String(c[f.k] ?? "")} onChange={(v) => set(c.id, { [f.k]: v })} className={f.k === "appearanceEn" || f.k === "aliases" ? "md:col-span-2" : ""} />
                     ))}
                     <div className="space-y-1.5 md:col-span-2">
                       <span className="text-[12px] font-medium text-fg-muted">다른 인물과의 관계</span>

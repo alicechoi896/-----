@@ -1,3 +1,4 @@
+import { sceneCast } from "@/lib/drama-studio/prompts";
 import "server-only";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -9,7 +10,7 @@ import type { ChatContentPart } from "../providers/types";
 import { runFfmpeg } from "../video/ffmpeg";
 import { videoStorage } from "../video/storage";
 import { baseImages } from "./tasks";
-import type { DramaCharacter, DramaProject, FaceCheck } from "@/lib/drama-studio/types";
+import type { DramaProject, FaceCheck } from "@/lib/drama-studio/types";
 
 /**
  * 얼굴 일관성 검사 (v0.9.93) — 스토리보드 사진·영상 클립(가운데 프레임)의 인물이 캐릭터 기준 이미지와 같은 사람인지 AI 이미지 읽기로 본다.
@@ -47,9 +48,10 @@ export async function faceCheck(p: DramaProject, target: "frames" | "clips", ids
   if (ai.id !== "mock" && !ai.supportsVision) throw new AppError("NO_VISION", "연결된 AI 가 이미지를 읽지 못합니다. API 연결 센터에서 Claude 또는 OpenAI 를 연결해 주세요.", 409);
   // 검사할 것: 인물이 나오고 그 인물의 기준 이미지가 있는 장면
   const castOf = (sceneIds: string[]) =>
-    [...new Set(sceneIds.flatMap((id) => p.scenario.scenes.find((s) => s.id === id)?.characterIds ?? []))]
-      .map((id) => p.characters.find((c) => c.id === id))
-      .filter((c): c is DramaCharacter => Boolean(c && baseImages(p, c.id).length));
+    [...new Set(sceneIds.flatMap((id) => {
+      const s = p.scenario.scenes.find((x) => x.id === id);
+      return s ? sceneCast(s, p.characters) : [];
+    }))].filter((c) => baseImages(p, c.id).length > 0);
   type Item = { set: (r: FaceCheck) => void; sceneIds: string[]; load: () => Promise<Buffer | null> };
   const items: Item[] = [];
   if (target === "frames") {

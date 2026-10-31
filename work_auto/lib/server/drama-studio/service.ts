@@ -113,8 +113,8 @@ function mergeImages(server: Record<string, DramaImage[]>, client: unknown, sing
 function mergeClips(p: DramaProject, client: unknown): DramaClip[] {
   const edits = new Map((Array.isArray(client) ? (client as Partial<DramaClip>[]) : []).map((x) => [String(x.id), x]));
   const sceneIds = new Set(p.scenario.scenes.map((s) => s.id));
-  // v0.9.89: 화면 목록에 없는 클립은 그대로 (지우지 않음)
-  return p.clips.map((c) => {
+  // v0.9.89: 화면 목록에 없는 클립은 그대로 (지우지 않음). v0.9.100: [지우기] 표시(removed)한 것만 뺀다 (파일은 남김)
+  return p.clips.filter((c) => !edits.get(c.id)?.removed).map((c) => {
       const e = edits.get(c.id);
       if (!e) return c;
       const ids = Array.isArray(e.sceneIds) ? e.sceneIds.map(String).filter((x) => sceneIds.has(x)) : c.sceneIds;
@@ -267,7 +267,9 @@ export const dramaStudioService = {
     (fresh as unknown as Record<string, unknown>)[section] = (p as unknown as Record<string, unknown>)[section];
     if (section === "currentStep" && !canEnter(fresh, fresh.currentStep)) fresh.currentStep = p.currentStep;
     const step = SECTION_STEP[section];
-    if (step && before !== after) markEdited(fresh, step);
+    // v0.9.100: 인물의 '다른 호칭'만 바꾸면 뒤 단계 승인을 풀지 않는다 (얼굴·이야기는 그대로)
+    const noAlias = (j: string) => (section === "characters" ? JSON.stringify((JSON.parse(j ?? "[]") as Record<string, unknown>[]).map((c) => ({ ...c, aliases: undefined }))) : j);
+    if (step && before !== after && noAlias(before) !== noAlias(after)) markEdited(fresh, step);
     return withUrls(await saveProject(owner, fresh, now()));
   },
 

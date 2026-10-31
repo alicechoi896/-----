@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VIDEO_MODELS, buildVideoInput, estimateVideoCredits, hasConflictingInputs, multiSceneCaveat, validateVideo, type VideoOptions } from "@/lib/drama-studio/models";
-import { framePrompt, klingName, shotPrompts, videoPrompt } from "@/lib/drama-studio/prompts";
+import { framePrompt, klingName, sameName, sceneCast, shotPrompts, videoPrompt } from "@/lib/drama-studio/prompts";
 import { canEnter, emptyProject, emptyScene, markEdited, startAt } from "@/lib/drama-studio/steps";
 import type { DramaCharacter } from "@/lib/drama-studio/types";
 
@@ -96,6 +96,24 @@ describe("프롬프트", () => {
     expect(v).toContain("[END ON] 도현 rises from the sofa");
     expect(v).toContain('도현 (frame left, on the sofa) says in Korean: "가자"');
     expect(framePrompt({ ...two, en }, cast, "9:16", [])).toContain("[KEY MOMENT] 도현 rises from the sofa — show only this single frozen instant");
+  });
+  it("v0.9.100: 등장인물 칸에 없어도 글에 이름이 나오면 참고 인물에 넣고, 성별을 못 박는다", () => {
+    const genie = { ...char("c_ccc333", "지니 (램프의 요정)"), gender: "남성", appearanceEn: "tall blue-skinned genie with a black topknot" };
+    const all = [...cast, genie];
+    const sc = emptyScene({ title: "램프", characterIds: ["c_aaa111"], action: "서윤이 램프를 문지르자 연기 속에서 지니가 나타난다", dialogue: "지니: 소원을 말해라" });
+    expect(sceneCast(sc, all).map((c) => c.id)).toEqual(["c_aaa111", "c_ccc333"]);
+    const f = framePrompt(sc, all, "9:16", []);
+    expect(f).toContain("male");
+    expect(f).toContain("tall blue-skinned genie");
+    expect(sameName("지니", "지니 (램프의 요정)")).toBe(true);
+    expect(sameName("서윤", "도현")).toBe(false);
+  });
+  it("v0.9.100: 이름이 카심이어도 다른 호칭(지니)이 대본에 나오면 카심으로", () => {
+    const kasim = { ...char("c_ddd444", "카심"), gender: "남성", aliases: "지니, 램프의 요정" };
+    const sc = emptyScene({ title: "등장", characterIds: [], action: "연기 속에서 지니가 나타난다", dialogue: "지니: 주인님, 소원을 말씀하세요" });
+    expect(sceneCast(sc, [...cast, kasim]).map((c) => c.name)).toEqual(["카심"]);
+    const v = videoPrompt([sc], [...cast, kasim], opt({ mode: "first_frame" }));
+    expect(v).toContain("카심 says in Korean");
   });
   it("직접 고친 프롬프트가 있으면 그대로", () => {
     expect(videoPrompt([{ ...scene, videoPrompt: "MY PROMPT" }], cast, opt())).toBe("MY PROMPT");

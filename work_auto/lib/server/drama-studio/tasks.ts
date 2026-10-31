@@ -11,7 +11,7 @@ import { runFfmpeg, mediaDuration } from "../video/ffmpeg";
 import { videoStorage } from "../video/storage";
 import { projectDir } from "./store";
 import { buildVideoInput, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
-import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt } from "@/lib/drama-studio/prompts";
+import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt, sceneCast } from "@/lib/drama-studio/prompts";
 import { markNewResult, newId, swapIntoTimeline } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaTask, SheetKind } from "@/lib/drama-studio/types";
 
@@ -105,10 +105,9 @@ export function planImageTasks(p: DramaProject, jobs: ImageJob[], modelId: strin
 function frameRefs(p: DramaProject, s: DramaScene): { chars: DramaCharacter[]; keys: string[] } {
   const chars: DramaCharacter[] = [];
   const keys: string[] = [];
-  for (const id of s.characterIds) {
-    const c = p.characters.find((x) => x.id === id);
-    const imgs = baseImages(p, id).slice(0, 2);
-    if (!c || !imgs.length || keys.length >= 10) continue;
+  for (const c of sceneCast(s, p.characters)) {
+    const imgs = baseImages(p, c.id).slice(0, 2);
+    if (!imgs.length || keys.length >= 10) continue;
     chars.push(c);
     keys.push(imgs[0].key);
   }
@@ -267,8 +266,7 @@ export function planVideoTasks(p: DramaProject, jobs: VideoJob[], requestId: str
 function videoRefs(p: DramaProject, scenes: DramaScene[], o: VideoOptions): { chars: DramaCharacter[]; keys: string[] } {
   const m = videoModel(o.modelId);
   if (o.mode !== "reference" || !m) return { chars: [], keys: [] };
-  const ids = [...new Set(scenes.flatMap((s) => s.characterIds))];
-  const chars = ids.map((id) => p.characters.find((c) => c.id === id)).filter((c): c is DramaCharacter => Boolean(c) && baseImages(p, c!.id).length > 0);
+  const chars = [...new Set(scenes.flatMap((s) => sceneCast(s, p.characters)))].filter((c) => baseImages(p, c.id).length > 0);
   if (m.family === "kling") {
     const keys = chars.slice(0, 3).flatMap((c) => baseImages(p, c.id).slice(0, 4).map((i) => i.key));
     return { chars: chars.slice(0, 3), keys };

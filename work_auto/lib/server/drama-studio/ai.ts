@@ -1,3 +1,4 @@
+import { isCharacter, sceneCast } from "@/lib/drama-studio/prompts";
 import "server-only";
 import { getAIProvider } from "../providers/registry";
 import { AppError } from "../http";
@@ -75,7 +76,7 @@ function storyBrief(p: DramaProject): string {
 }
 
 const castBrief = (cs: DramaCharacter[]) =>
-  cs.map((c) => `- ${c.id} ${c.name} (${c.role}, ${c.age}, ${c.gender}): 외모 ${c.appearance} / 의상 ${c.outfit} / 성격 ${c.personality} / 말투 ${c.speech}`).join("\n");
+  cs.map((c) => `- ${c.id} ${c.name}${c.aliases ? ` (극 중 호칭: ${c.aliases})` : ""} (${c.role}, ${c.age}, ${c.gender}): 외모 ${c.appearance} / 의상 ${c.outfit} / 성격 ${c.personality} / 말투 ${c.speech}`).join("\n");
 
 /* ───── 1. 아이디어 ───── */
 const IDEA = obj({ title: S, concept: S, conflict: S, hook: S, twist: S, fit: S });
@@ -147,10 +148,10 @@ export async function genStory(p: DramaProject) {
 }
 
 /* ───── 4. 등장인물 ───── */
-const CHAR = obj({ name: S, role: S, age: S, gender: S, appearance: S, appearanceEn: S, outfit: S, personality: S, desire: S, weakness: S, secret: S, conflict: S, relations: arr(obj({ name: S, relation: S })), arc: S, speech: S });
+const CHAR = obj({ name: S, role: S, age: S, gender: S, appearance: S, appearanceEn: S, outfit: S, personality: S, desire: S, weakness: S, secret: S, conflict: S, relations: arr(obj({ name: S, relation: S })), arc: S, speech: S, aliases: S });
 const CHAR_GUIDE =
-  "각 인물: name, role(주인공·적대자·조력자·조연 등), age, gender, appearance(외모 특징, 한국어), appearanceEn(이미지 생성용 영어 외모·헤어·의상 묘사 1~2문장, 한국인 배우로), outfit(의상), personality, desire(욕망과 목표), weakness(약점), secret(숨겨진 비밀), conflict(주요 갈등), relations(다른 인물과의 관계: name, relation), arc(극 중 변화), speech(말투와 대화 특징).";
-const mockChar = (i: number): Json => ({ name: ["서윤", "도현", "하은", "민재"][i % 4] + (i >= 4 ? i : ""), role: ["주인공", "적대자", "조력자", "조연"][i % 4], age: "20대 후반", gender: i % 2 ? "남성" : "여성", appearance: "단발 검은 머리, 큰 눈", appearanceEn: "Korean woman in her late 20s, short straight black bob hair, wearing a beige trench coat", outfit: "베이지 트렌치코트", personality: "침착하지만 고집이 셈", desire: "진실을 알고 싶다", weakness: "사람을 쉽게 믿는다", secret: "1년 전 그날 현장에 있었다", conflict: "친구를 의심해야 한다", relations: [], arc: "후회를 마주한다", speech: "짧고 단정한 존댓말" });
+  "각 인물: name, role(주인공·적대자·조력자·조연 등), age, gender, appearance(외모 특징, 한국어), appearanceEn(이미지 생성용 영어 외모·헤어·의상 묘사 1~2문장, 한국인 배우로), outfit(의상), personality, desire(욕망과 목표), weakness(약점), secret(숨겨진 비밀), conflict(주요 갈등), relations(다른 인물과의 관계: name, relation), arc(극 중 변화), speech(말투와 대화 특징), aliases(극 중에서 이 인물을 부르는 다른 이름·호칭·정체, 쉼표로. 예: 이름이 카심인 램프의 요정이면 '지니, 램프의 요정'. 없으면 빈 칸).";
+const mockChar = (i: number): Json => ({ name: ["서윤", "도현", "하은", "민재"][i % 4] + (i >= 4 ? i : ""), role: ["주인공", "적대자", "조력자", "조연"][i % 4], age: "20대 후반", gender: i % 2 ? "남성" : "여성", appearance: "단발 검은 머리, 큰 눈", appearanceEn: "Korean woman in her late 20s, short straight black bob hair, wearing a beige trench coat", outfit: "베이지 트렌치코트", personality: "침착하지만 고집이 셈", desire: "진실을 알고 싶다", weakness: "사람을 쉽게 믿는다", secret: "1년 전 그날 현장에 있었다", conflict: "친구를 의심해야 한다", relations: [], arc: "후회를 마주한다", speech: "짧고 단정한 존댓말", aliases: "" });
 
 function toChar(r: Json, byName: Map<string, string>, keepId?: string): DramaCharacter {
   const rel = Array.isArray(r.relations) ? (r.relations as Json[]) : [];
@@ -171,6 +172,7 @@ function toChar(r: Json, byName: Map<string, string>, keepId?: string): DramaCha
     relations: rel.map((x) => ({ targetId: byName.get(str(x.name, 20)) ?? "", relation: str(x.relation, 100) })).filter((x) => x.targetId),
     arc: str(r.arc, 300),
     speech: str(r.speech, 200),
+    aliases: str(r.aliases, 100),
   };
 }
 
@@ -211,15 +213,16 @@ const SCENE_GUIDE =
 3) 같은 장소가 이어지면 앞 장면의 마지막 모습(자세·위치·들고 있는 물건)에서 다음 장면이 시작되게 쓴다. 장소가 바뀌는 장면은 location 을 분명히 바꿔 쓴다.
 4) 등장인물의 외모·머리·의상은 처음부터 끝까지 절대 바꾸지 않는다 (상처·젖음 같은 변화는 continuity 에 적고 이어지게). 같은 인물을 다른 모습으로 묘사하지 않는다.
 5) 한 장면에 장소 이동·시간 점프를 넣지 않는다.
-6) 인물이 둘 이상이면 visual 에 누가 화면 어디에 있는지 적는다 (예: '도현은 화면 왼쪽 소파에 앉아 있고, 서준은 오른쪽 문가에 서 있다'). 같은 장소가 이어지면 위치를 바꾸지 않는다.`;
+6) characters 배열과 대사의 '이름:' 은 반드시 [등장인물]의 이름 그대로 쓴다 (호칭·별명으로 쓰지 않는다. 예: 이름이 카심이면 '지니'가 아니라 '카심'). 행동 글에서도 인물을 처음 가리킬 때 이름을 쓴다.
+7) 인물이 둘 이상이면 visual 에 누가 화면 어디에 있는지 적는다 (예: '도현은 화면 왼쪽 소파에 앉아 있고, 서준은 오른쪽 문가에 서 있다'). 같은 장소가 이어지면 위치를 바꾸지 않는다.`;
 
 function toScene(r: Json, cast: DramaCharacter[]): DramaScene {
   const names = Array.isArray(r.characters) ? (r.characters as unknown[]).map((x) => str(x, 20)) : [];
-  return emptyScene({
+  const scene = emptyScene({
     title: str(r.title, 80),
     location: str(r.location, 100),
     timeOfDay: str(r.timeOfDay, 30),
-    characterIds: cast.filter((c) => names.some((n) => n && (n === c.name || n.includes(c.name)))).map((c) => c.id),
+    characterIds: cast.filter((c) => names.some((n) => n && isCharacter(c, n))).map((c) => c.id),
     action: str(r.action, 800),
     dialogue: str(r.dialogue, 1200),
     emotion: str(r.emotion, 200),
@@ -229,6 +232,8 @@ function toScene(r: Json, cast: DramaCharacter[]): DramaScene {
     sound: str(r.sound, 200),
     continuity: str(r.continuity, 300),
   });
+  // v0.9.100: 행동·대사·화면 글에 이름이 나오는데 등장인물 칸에서 빠진 인물도 넣는다
+  return { ...scene, characterIds: sceneCast(scene, cast).map((c) => c.id) };
 }
 
 const mockScene = (i: number, cast: DramaCharacter[]): Json => ({

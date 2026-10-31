@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Check, Download, GripVertical, Images, Languages, LayoutGrid, Pencil, ScanFace, Sparkles, Square, Trash2, Upload } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Modal, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { IMAGE_MODELS, estimateImageCredits, imageModel } from "@/lib/drama-studio/models";
-import { framePrompt } from "@/lib/drama-studio/prompts";
+import { framePrompt, sceneCast } from "@/lib/drama-studio/prompts";
 import type { DramaImage, DramaScene } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
 import { newRequestId, studioApi } from "../api";
@@ -218,7 +218,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
               <Textarea rows={8} className="font-mono text-[11.5px]" value={s.imagePrompt} placeholder={framePrompt(s, p.characters, p.settings.aspect, [])} onChange={(e) => setScene(s.id, { imagePrompt: e.target.value })} />
             </label>
             <p className="text-[12px] text-fg-muted">
-              등장인물: {s.characterIds.map((id) => p.characters.find((c) => c.id === id)?.name ?? "?").join(", ") || "없음"} · 기준 이미지를 고정한 인물은 그 이미지를 참고로 넣습니다.
+              등장인물: {sceneCast(s, p.characters).map((c) => c.name).join(", ") || "없음"} · 기준 이미지를 고정한 인물은 그 이미지를 참고로 넣습니다.
             </p>
           </div>
         )}
@@ -260,7 +260,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
             disabled={Boolean(ctl.busy)}
             loading={ctl.busy === "얼굴 검사"}
             onClick={() => {
-              const n = scenes.filter((sc) => frames(sc.id).length && sc.characterIds.length).length;
+              const n = scenes.filter((sc) => frames(sc.id).length && sceneCast(sc, p.characters).length).length;
               if (window.confirm(`스토리보드 ${Math.min(30, n)}장의 얼굴이 캐릭터 기준 이미지와 같은 사람인지 AI 로 검사합니다 (AI 이미지 읽기 ${Math.min(30, n)}회). 진행할까요?`)) void ctl.run("얼굴 검사", () => studioApi.generate(p.id, "face-check", { target: "frames", ids: picked.length ? picked : undefined }));
             }}
             data-face-check-frames
@@ -368,7 +368,7 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
 
       {promptFor && (() => {
         const sc = scenes.find((x) => x.id === promptFor)!;
-        const refs = p.characters.filter((c) => sc.characterIds.includes(c.id) && (p.sheets[c.id] ?? []).some((i) => i.approved && !i.removed));
+        const refs = sceneCast(sc, p.characters).filter((c) => (p.sheets[c.id] ?? []).some((i) => i.approved && !i.removed));
         const auto = framePrompt({ ...sc, imagePrompt: "" }, p.characters, p.settings.aspect, m.maxReferenceImages ? refs : []);
         return (
           <PromptModal

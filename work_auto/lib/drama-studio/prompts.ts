@@ -22,8 +22,38 @@ export const sheetMeta = (k: SheetKind) => SHEET_KINDS.find((s) => s.kind === k)
 
 const CONSTRAINTS = "No subtitles, no on-screen text, no watermark, no logo. Photorealistic, natural skin texture.";
 
+/** 이름 비교용: 괄호 속 설명·띄어쓰기 빼기 ('지니 (램프의 요정)' → '지니') */
+export const nameKey = (n: string) => n.replace(/\(.*?\)|\[.*?\]/g, "").replace(/\s+/g, "").trim();
+export const sameName = (a: string, b: string) => {
+  const x = nameKey(a);
+  const y = nameKey(b);
+  return Boolean(x && y) && (x === y || (y.length >= 2 && x.includes(y)) || (x.length >= 2 && y.includes(x)));
+};
+
+/**
+ * v0.9.100: 장면에 나오는 인물. 고른 인물(characterIds) + 행동·대사·화면 설명·영어 조각에 이름이 나오는 인물.
+ * 등장인물 칸에서 빠지면 기준 이미지·외모 설명이 안 가서 얼굴·성별이 바뀌던 문제 (예: 지니가 여자로)
+ */
+/** 이 인물의 이름 + 다른 호칭 */
+export const namesOf = (c: Pick<DramaCharacter, "name" | "aliases">) => [c.name, ...(c.aliases ?? "").split(/[,，、/]/)].map((x) => x.trim()).filter(Boolean);
+/** 글에 쓰인 이름(n)이 이 인물인가 (호칭 포함) */
+export const isCharacter = (c: Pick<DramaCharacter, "name" | "aliases">, n: string) => namesOf(c).some((x) => sameName(x, n));
+
+export function sceneCast(s: DramaScene, cast: DramaCharacter[]): DramaCharacter[] {
+  const text = nameKey([s.title, s.action, s.dialogue, s.visual, s.en?.subject, s.en?.action, s.en?.keyMoment, s.en?.motion, ...(s.en?.blocking ?? []).map((b) => b.name)].filter(Boolean).join(" "));
+  const picked = s.characterIds.map((id) => cast.find((c) => c.id === id)).filter((c): c is DramaCharacter => Boolean(c));
+  const mentioned = cast.filter((c) => !picked.includes(c) && namesOf(c).some((n) => nameKey(n).length >= 2 && text.includes(nameKey(n))));
+  return [...picked, ...mentioned];
+}
+
+const GENDER_EN: Record<string, string> = { 남성: "male", 남자: "male", 여성: "female", 여자: "female" };
+
 export function characterLine(c: DramaCharacter): string {
-  return [c.appearanceEn || c.appearance, c.outfit && !c.appearanceEn ? `wearing ${c.outfit}` : ""].filter(Boolean).join(", ");
+  const looks = c.appearanceEn || c.appearance;
+  // 성별·나이를 앞에 못 박는다 (외모 글에 없으면 모델이 성별을 바꿔 그림)
+  const g = GENDER_EN[(c.gender ?? "").trim()] ?? (c.gender ?? "").trim();
+  const head = [g && !new RegExp(`\\b(${g}|man|woman|boy|girl)\\b`, "i").test(looks) ? g : "", c.age ? `age ${c.age}` : ""].filter(Boolean).join(", ");
+  return [head, looks, c.outfit && !c.appearanceEn ? `wearing ${c.outfit}` : ""].filter(Boolean).join(", ");
 }
 
 /** 캐릭터 시트 이미지 프롬프트. hasReference = 기준 이미지를 참고로 넣었는가 */
@@ -63,7 +93,7 @@ const SIDES = [["frame center"], ["frame left", "frame right"], ["frame left", "
 export function blockingOf(s: DramaScene, people: DramaCharacter[]): SceneBlocking[] {
   const given = s.en?.blocking ?? [];
   return people.map((c, k) => {
-    const b = given.find((x) => x.name === c.name);
+    const b = given.find((x) => isCharacter(c, x.name));
     return { name: c.name, position: b?.position || (SIDES[Math.min(people.length, 3) - 1]?.[k] ?? "background"), pose: b?.pose || "", cue: b?.cue || characterLine(c) };
   });
 }
@@ -85,7 +115,7 @@ const NO_SWAP = "Each person stays in the stated position with their own face, h
 export function framePrompt(s: DramaScene, cast: DramaCharacter[], aspect: Aspect, refs: DramaCharacter[]): string {
   if (s.imagePrompt.trim()) return s.imagePrompt.trim();
   const p = sceneParts(s);
-  const people = cast.filter((c) => s.characterIds.includes(c.id));
+  const people = sceneCast(s, cast);
   return [
     `[FORMAT] Single storyboard frame for a Korean live-action short drama, ${aspect} ${aspect === "9:16" ? "vertical" : "horizontal"}, cinematic still, one moment only (not a collage, no panels).`,
     refs.length ? `[REFERENCES] ${refs.map((c, i) => `${c.name} = the person in reference image ${i + 1}`).join("; ")}. Draw these SAME people: identical face shape, eyes, eyebrows, nose, lips, skin tone, age, hairstyle and outfit as their reference images — do not redesign or beautify the faces.` : "",
@@ -128,14 +158,15 @@ export function videoPrompt(scenes: DramaScene[], cast: DramaCharacter[], o: Vid
         : "";
   const one = (s: DramaScene, i?: number) => {
     const p = sceneParts(s);
-    const people = cast.filter((c) => s.characterIds.includes(c.id));
+    const people = sceneCast(s, cast);
     const blocks = blockingOf(s, people);
     const whoName = (n: string) => {
-      const c = cast.find((x) => x.name === n);
+      const c = cast.find((x) => x.name === n) ?? cast.find((x) => isCharacter(x, n));
       return c ? who(c) : n;
     };
     const lines = dialogueLines(s.dialogue, 4).map((d) => {
-      const b = blocks.find((x) => x.name === d.speaker);
+      const sp = cast.find((x) => isCharacter(x, d.speaker));
+      const b = blocks.find((x) => (sp ? x.name === sp.name : sameName(x.name, d.speaker)));
       return d.speaker ? `${whoName(d.speaker)}${b && blocks.length > 1 ? ` (${b.position})` : ""} says in Korean: "${d.line}"` : `"${d.line}"`;
     });
     return [

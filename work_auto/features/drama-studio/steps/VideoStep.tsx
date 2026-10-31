@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanFace, Sparkles, Video } from "lucide-react";
+import { Check, Clapperboard, Download, Film, ListPlus, Pencil, RefreshCw, ScanFace, Sparkles, Trash2, Video } from "lucide-react";
 import { Badge, Button, Checkbox, EmptyState, Input, Notice, SectionCard, Select, SegmentedControl, Textarea } from "@/components/ui";
 import { MODE_LABEL, VIDEO_MODELS, estimateVideoCredits, multiSceneCaveat, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
-import { videoPrompt } from "@/lib/drama-studio/prompts";
+import { sceneCast, videoPrompt } from "@/lib/drama-studio/prompts";
 import { buildTimeline, fitDurations, newId } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaScene, GenMode } from "@/lib/drama-studio/types";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   const [promptClip, setPromptClip] = useState<DramaClip | null>(null);
 
   const frameOf = (id: string) => (p.storyboard[id] ?? []).find((f) => f.approved) ?? null;
-  const refChars = (list: DramaScene[]): DramaCharacter[] => [...new Set(list.flatMap((s) => s.characterIds))].map((id) => p.characters.find((c) => c.id === id)).filter((c): c is DramaCharacter => Boolean(c && (p.sheets[c.id] ?? []).some((i) => i.approved)));
+  const refChars = (list: DramaScene[]): DramaCharacter[] => [...new Set(list.flatMap((s) => sceneCast(s, p.characters)))].filter((c) => (p.sheets[c.id] ?? []).some((i) => i.approved));
   const pickedScenes = scenes.filter((s) => picked.includes(s.id));
   const modesFor = (pl: Plan) => m.modes.filter((x) => (pl === "batch" ? x === "multi_shot" || x === "reference" : x !== "multi_shot"));
   const chooseModel = (id: string) => {
@@ -96,6 +96,12 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
   const tasks = p.tasks.filter((t) => t.kind === "video");
   const failed = tasks.filter((t) => t.status === "fail" && !tasks.some((x) => x.status !== "fail" && x.target.type === "clip" && t.target.type === "clip" && x.createdAt > t.createdAt && x.target.sceneIds.join() === t.target.sceneIds.join()));
   const setClips = (list: DramaClip[]) => ctl.edit("clips", list);
+  /** v0.9.100: 영상 지우기 — 목록·타임라인에서 뺀다. 그 장면은 다시 만들 수 있다 */
+  const removeClips = (ids: string[]) => {
+    const gone = new Set(ids);
+    ctl.edit("clips", p.clips.map((x) => (gone.has(x.id) ? { ...x, removed: true, approved: false } : x)));
+    if (p.timeline.some((t) => gone.has(t.clipId))) ctl.edit("timeline", p.timeline.filter((t) => !gone.has(t.clipId)));
+  };
   const inTimeline = new Set(p.timeline.map((t) => t.clipId));
   const addToTimeline = (c: DramaClip) => {
     const covered = new Set(p.timeline.flatMap((t) => p.clips.find((x) => x.id === t.clipId)?.sceneIds ?? []));
@@ -340,6 +346,18 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
               >
                 얼굴 검사 (AI)
               </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                icon={Trash2}
+                onClick={() => {
+                  const list = p.clips.filter((c) => !c.removed);
+                  if (window.confirm(`영상 클립 ${list.length}개를 모두 지울까요? 타임라인에서도 빠집니다. 지운 뒤 위에서 장면을 골라 다시 만들 수 있습니다.`)) removeClips(list.map((c) => c.id));
+                }}
+                data-clips-delete-all
+              >
+                영상 모두 지우기
+              </Button>
               <Button size="sm" variant="secondary" icon={Check} disabled={!unapprovedClips} onClick={() => approveAllClips(false)} data-approve-all-clips>
                 모두 승인
               </Button>
@@ -354,7 +372,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
           <EmptyState compact title="아직 클립이 없습니다" description="위에서 영상을 만들거나 영상 파일을 올려 주세요." />
         ) : (
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" data-clips>
-            {p.clips.map((c) => (
+            {p.clips.filter((c) => !c.removed).map((c) => (
               <div key={c.id} className={cn("rounded-control border p-2", c.approved ? "border-success" : "border-line")} data-clip={c.id}>
                 {ctl.urls[c.key] ? <video src={ctl.urls[c.key]} controls playsInline preload="metadata" className={cn("w-full rounded bg-black", p.settings.aspect === "9:16" ? "aspect-[9/16]" : "aspect-video")} /> : <div className="aspect-video rounded bg-subtle" />}
                 <p className="mt-1 text-[12px] font-medium text-fg">
@@ -387,6 +405,9 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                       프롬프트 고쳐 다시 만들기
                     </Button>
                   )}
+                  <Button size="sm" variant="ghost" icon={Trash2} onClick={() => window.confirm(`${sceneLabel(c.sceneIds)} 클립을 지울까요?${inTimeline.has(c.id) ? " 타임라인에서도 빠집니다." : ""}`) && removeClips([c.id])} data-clip-delete>
+                    지우기
+                  </Button>
                   {ctl.urls[c.key] && (
                     <a href={ctl.urls[c.key]} download target="_blank" rel="noreferrer" className="inline-flex h-8 items-center px-2 text-fg-muted hover:text-fg" aria-label="다운로드">
                       <Download className="size-3.5" />
