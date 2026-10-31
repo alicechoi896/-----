@@ -210,7 +210,7 @@ export function AutoVideo() {
               {" "}
               (제외: 공유 링크(xhslink) 영상 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
             </span>
-            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, 만료되는 링크는 아래 [모든 영상 영구 링크 받기]로 한 번에 바꿀 수 있습니다.</span>}
+            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, 만료되는 링크는 샤오홍슈 앱 [공유] → 링크 복사 주소를 [공유 링크 직접 넣기]로 넣어 주세요.</span>}
           </p>
         )}
         <div className="mt-3">

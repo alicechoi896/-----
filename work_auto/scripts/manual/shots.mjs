@@ -408,7 +408,7 @@ export const SHOTS = [
     },
     marks: {
       1: (p) => p.getByRole("heading", { name: "자동 제작 설정" }).locator("xpath=ancestor::section[1]"),
-      2: (p) => p.locator("[data-xhs-permanent-run]"),
+      2: (p) => p.locator("[data-xhs-permanent-all]"),
       3: (p) => p.locator("[data-auto-run-now]"),
       4: (p) => p.locator("[data-auto-item]").first(),
       5: (p) => p.locator("[data-auto-schedule]").first(),
