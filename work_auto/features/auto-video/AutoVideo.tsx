@@ -20,6 +20,7 @@ interface Item {
   keyword: string;
   reason: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
+  videos?: number;
   step?: string;
   error?: string | null;
   title?: string | null;
@@ -40,7 +41,8 @@ interface Data {
   today: string;
   run: { date: string; createdAt: string; items: Item[]; note?: string | null } | null;
   urls: Record<string, string>;
-  limits: { maxCount: number; repeatDays: number };
+  limits: { maxCount: number; repeatDays: number; minVideos: number };
+  eligibility: { total: number; eligible: number; noVideo: number; fewVideo: number; recent: number } | null;
   ready: { automation: boolean; cron: boolean };
 }
 
@@ -127,7 +129,7 @@ export function AutoVideo() {
   return (
     <div className="space-y-6" data-auto-video>
       {error && <Notice tone="warning">{error}</Notice>}
-      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 제품을 고르고(최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 가장 최근에 직접 만든 영상 설정을 따릅니다. 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
+      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 영상이 ${data.limits.minVideos}개 이상 연결된 제품만 골라(연결 안 된 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만든 제품 제외) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 가장 최근에 직접 만든 영상 설정을 따릅니다. 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-[14px] font-medium">
             <input type="checkbox" checked={s.enabled} disabled={Boolean(busy)} onChange={(e) => void save({ enabled: e.target.checked })} className="size-4 accent-[var(--color-brand)]" data-auto-enabled />
@@ -150,6 +152,16 @@ export function AutoVideo() {
           <Notice tone="warning" className="mt-3">
             새벽 자동 실행 준비가 덜 됐습니다: {!data.ready.automation && "자동화 계정(AUTOMATION_EMAIL·AUTOMATION_PASSWORD) "}{!data.ready.cron && "CRON_SECRET "}환경변수를 Vercel 에 넣어 주세요. [지금 시험 실행]은 지금 로그인한 계정으로 동작합니다.
           </Notice>
+        )}
+        {data.eligibility && (
+          <p className="mt-3 text-[13px]" data-auto-eligibility>
+            지금 만들 수 있는 제품 <b className={data.eligibility.eligible ? "text-success" : "text-danger"}>{data.eligibility.eligible}개</b> / 전체 {data.eligibility.total}개
+            <span className="text-fg-subtle">
+              {" "}
+              (제외: 샤오홍슈 영상 연결 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
+            </span>
+            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 공통 도구 › 영상 URL 가져오기에서 제품에 샤오홍슈 영상을 연결해 주세요.</span>}
+          </p>
         )}
         <p className="mt-3 text-[12px] text-fg-subtle">비용(영상 1개): AI 글 약 4~5회 + AI 음성 1편 + 샤오홍슈 글자 확인(AI 이미지 읽기, 처음 쓰는 영상만). YouTube 검색은 무료 한도 안. 완성 영상 파일은 7일 동안 보관됩니다 (받으면 1시간 뒤 지움).</p>
       </SectionCard>
@@ -181,7 +193,7 @@ export function AutoVideo() {
         open={ask}
         onClose={() => setAsk(false)}
         title="지금 시험 실행"
-        description="오늘 실행이 없으면 제품을 고르고, 1개를 바로 만듭니다 (5~10분). AI 글·AI 음성 비용이 듭니다. 자동으로 다시 시도하지 않습니다."
+        description="오늘 남은 항목이 있으면 그중 1개를, 없으면 새 제품을 골라(오늘·최근 7일 안에 만든 제품 제외) 1개를 바로 만듭니다 (5~10분). AI 글·AI 음성 비용이 듭니다. 자동으로 다시 시도하지 않습니다."
         footer={
           <>
             <Button variant="secondary" onClick={() => setAsk(false)}>
@@ -194,7 +206,7 @@ export function AutoVideo() {
         }
       >
         <label className="flex items-center gap-2 text-[13px]">
-          오늘 고를 제품 수 (오늘 실행이 없을 때만)
+          새로 고를 제품 수 (남은 항목이 없을 때)
           <Select value={String(testCount)} options={[1, 2, 3, 5, 10].map((n) => ({ value: String(n), label: `${n}개` }))} onChange={(e) => setTestCount(Number(e.target.value))} className="h-8 w-20" />
         </label>
         <p className="mt-2 text-[12px] text-fg-subtle">지금은 1개만 만들고, 남은 항목은 다시 누르거나 새벽 자동 실행(켜져 있으면 내일)에서 이어집니다.</p>
@@ -225,6 +237,7 @@ function ReportItem({ it, k, url, date, onDone, onError }: { it: Item; k: number
         <Badge tone={st.tone}>{st.label}</Badge>
         <span className="font-semibold">{it.productName}</span>
         <span className="text-fg-subtle">키워드 {it.keyword}</span>
+        {it.videos != null && <span className="text-fg-subtle">· 샤오홍슈 영상 {it.videos}개</span>}
         {it.status === "running" && it.step && <span className="text-info">· {it.step}</span>}
         {it.publicationId && <Badge tone="brand">업로드 관리 예약됨</Badge>}
       </div>

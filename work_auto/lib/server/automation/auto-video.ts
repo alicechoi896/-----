@@ -39,6 +39,8 @@ export interface AutoItem {
   keyword: string;
   reason: string;
   status: AutoItemStatus;
+  /** 고를 때 연결돼 있던 샤오홍슈 영상 수 */
+  videos?: number;
   step?: string;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -141,16 +143,36 @@ interface Candidate {
   keywords: { keyword: string; trend: string }[];
 }
 
-export async function chooseProducts(count: number): Promise<{ picks: { productId: string; productName: string; keyword: string; reason: string }[]; note: string | null; aiCalls: number }> {
+/** 제품에 연결된 샤오홍슈 영상 수 */
+async function linkedVideoCount(owner: string): Promise<Map<string, number>> {
+  const videos = await getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId));
+  const m = new Map<string, number>();
+  for (const v of videos) m.set(v.productId!, (m.get(v.productId!) ?? 0) + 1);
+  return m;
+}
+
+/** 화면 안내: 전체 제품 중 만들 수 있는 제품 수 (외부 호출 없음) */
+export async function eligibility(): Promise<{ total: number; eligible: number; noVideo: number; fewVideo: number; recent: number }> {
   const owner = await getCurrentUserId();
-  const [products, videos, recent] = await Promise.all([
-    productService.list(),
-    getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId)),
-    recentProductIds(owner),
-  ]);
-  const videoCount = new Map<string, number>();
-  for (const v of videos) videoCount.set(v.productId!, (videoCount.get(v.productId!) ?? 0) + 1);
-  const pool = products.filter((p) => (videoCount.get(p.id) ?? 0) >= AUTO_LIMITS.minVideos && !recent.has(p.id));
+  const [products, count, recent] = await Promise.all([productService.list(), linkedVideoCount(owner), recentProductIds(owner)]);
+  let noVideo = 0;
+  let fewVideo = 0;
+  let rec = 0;
+  let eligible = 0;
+  for (const p of products) {
+    const n = count.get(p.id) ?? 0;
+    if (!n) noVideo++;
+    else if (n < AUTO_LIMITS.minVideos) fewVideo++;
+    else if (recent.has(p.id)) rec++;
+    else eligible++;
+  }
+  return { total: products.length, eligible, noVideo, fewVideo, recent: rec };
+}
+
+export async function chooseProducts(count: number, exclude: Set<string> = new Set()): Promise<{ picks: { productId: string; productName: string; keyword: string; reason: string; videos: number }[]; note: string | null; aiCalls: number }> {
+  const owner = await getCurrentUserId();
+  const [products, videoCount, recent] = await Promise.all([productService.list(), linkedVideoCount(owner), recentProductIds(owner)]);
+  const pool = products.filter((p) => (videoCount.get(p.id) ?? 0) >= AUTO_LIMITS.minVideos && !recent.has(p.id) && !exclude.has(p.id));
   if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 연결 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품).`, aiCalls: 0 };
   const cands: Candidate[] = [];
   for (const p of pool.slice(0, 40)) cands.push({ id: p.id, name: p.name, oneLiner: p.oneLiner, videos: videoCount.get(p.id) ?? 0, keywords: (await keywordLibrary.suggest(p.id).catch(() => [])).slice(0, 6) });
@@ -160,7 +182,7 @@ export async function chooseProducts(count: number): Promise<{ picks: { productI
     [...cands]
       .sort((a, b) => b.keywords.filter((k) => k.trend === "up" || k.trend === "new").length - a.keywords.filter((k) => k.trend === "up" || k.trend === "new").length || b.videos - a.videos)
       .slice(0, n)
-      .map((c) => ({ productId: c.id, productName: c.name, keyword: c.keywords[0]?.keyword ?? c.name, reason: "키워드 추이·연결 영상 수 기준" }));
+      .map((c) => ({ productId: c.id, productName: c.name, keyword: c.keywords[0]?.keyword ?? c.name, reason: "키워드 추이·연결 영상 수 기준", videos: c.videos }));
   if (ai.id === "mock") return { picks: fallback(), note: pool.length < count ? `조건에 맞는 제품이 ${pool.length}개뿐입니다.` : null, aiCalls: 0 };
   try {
     const { data } = await ai.generateStructured<{ picks: { index: number; keyword: string; reason: string }[] }>({
@@ -182,7 +204,7 @@ export async function chooseProducts(count: number): Promise<{ picks: { productI
       .map((x) => ({ c: cands[Number(x.index) - 1], keyword: String(x.keyword ?? "").slice(0, 40), reason: String(x.reason ?? "").slice(0, 120) }))
       .filter((x) => x.c && !seen.has(x.c.id) && seen.add(x.c.id))
       .slice(0, n)
-      .map((x) => ({ productId: x.c.id, productName: x.c.name, keyword: x.keyword || x.c.keywords[0]?.keyword || x.c.name, reason: x.reason }));
+      .map((x) => ({ productId: x.c.id, productName: x.c.name, keyword: x.keyword || x.c.keywords[0]?.keyword || x.c.name, reason: x.reason, videos: x.c.videos }));
     return { picks: picks.length ? picks : fallback(), note: pool.length < count ? `조건에 맞는 제품이 ${pool.length}개뿐입니다.` : null, aiCalls: 1 };
   } catch {
     return { picks: fallback(), note: "AI 가 제품을 고르지 못해 키워드 추이 순으로 골랐습니다.", aiCalls: 0 };
@@ -203,6 +225,21 @@ export async function startRun(date = kstDate(), countOverride?: number): Promis
   };
   await saveRun(run);
   console.info("[AutoVideo] start", JSON.stringify({ date, items: run.items.length, note }));
+  return run;
+}
+
+/**
+ * v0.9.110 [지금 시험 실행]은 언제든: 오늘 실행에 남은 항목이 없으면 새 제품을 골라 덧붙인다
+ * (오늘 이미 고른 제품·최근 7일 안에 만든 제품은 빼고, 샤오홍슈 영상 연결 조건 그대로)
+ */
+export async function addItems(date: string, count: number): Promise<AutoRun> {
+  const run = (await readRun(date)) ?? { date, createdAt: now(), items: [], note: null };
+  const { picks, note } = await chooseProducts(count, new Set(run.items.map((x) => x.productId)));
+  if (!picks.length) throw new AppError("NO_PRODUCT", note ?? "지금 만들 수 있는 제품이 없습니다.", 409);
+  const start = run.items.length;
+  run.items.push(...picks.map((x, i) => ({ id: `ai_${date.replace(/-/g, "")}_${start + i + 1}`, ...x, status: "pending" as const })));
+  run.note = note;
+  await saveRun(run);
   return run;
 }
 
@@ -267,6 +304,12 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
   const item = run?.items.find((x) => x.id === itemId);
   if (!run || !item) throw new AppError("NOT_FOUND", "자동 제작 항목을 찾지 못했습니다.", 404);
   const step = async (s: string, extra: Partial<AutoItem> = {}) => void (await patchItem(date, itemId, { step: s, ...extra }));
+  // v0.9.110: 샤오홍슈 영상이 연결되지 않은 제품은 만들지 않는다 (고른 뒤 연결이 풀렸어도 — AI·음성 비용 없음)
+  const linked = (await linkedVideoCount(owner)).get(item.productId) ?? 0;
+  if (linked < AUTO_LIMITS.minVideos) {
+    const r = await patchItem(date, itemId, { status: "skipped", videos: linked, step: "건너뜀", error: `샤오홍슈 영상이 ${linked}개만 연결돼 있어 만들지 않았습니다 (${AUTO_LIMITS.minVideos}개 이상 필요).`, finishedAt: now() });
+    return r!.items.find((x) => x.id === itemId)!;
+  }
   await step("원고 1단계 (키워드 분석·제목 후보)", { status: "running", startedAt: now(), error: null });
   const t0 = Date.now();
   try {
