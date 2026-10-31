@@ -1,4 +1,4 @@
-import { BookOpen, Bookmark, Brain, CalendarCheck, Camera, Clapperboard, FileText, Film, MonitorPlay, Settings, Shirt, ShieldCheck, Wrench } from "lucide-react";
+import { BookOpen, Bookmark, Brain, CalendarCheck, Camera, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -56,36 +56,14 @@ export const CHANNELS: ChannelDef[] = [
     id: "video",
     name: "영상 제작",
     hubTitle: "영상 제작",
-    description: "원고로 영상 만들기 · 제품 영상 자동 제작 · 무음 구간 자르기",
-    hubDescription: "유튜브·네이버 클립 원고로 9:16 영상을 만들고, 매일 새벽 제품 영상을 자동으로 만듭니다.",
+    description: "원고로 영상 만들기 · 제품 영상 자동 제작 · 무음 구간 자르기 · AI 드라마 · AI 패션",
+    hubDescription: "유튜브·네이버 클립 원고로 9:16 영상을 만들고, 매일 새벽 제품 영상을 자동으로 만듭니다. AI 드라마와 AI 패션 사진·영상도 여기서 만듭니다.",
     href: "/video",
     icon: Film,
     accent: "youtube",
     showOnHome: true,
   },
-  // v0.9.116: AI 드라마·AI 패션은 공통 도구·Instagram 에서 빼 따로 메뉴로 (주소는 그대로 — 저장된 링크가 깨지지 않게)
-  {
-    id: "drama",
-    name: "AI 드라마",
-    hubTitle: "AI 드라마",
-    description: "아이디어 → 시나리오 → 스토리보드 → 촬영 샷 → AI 영상 → 편집",
-    hubDescription: "쇼츠 드라마를 8단계로 만들고, 영상 모델을 비교 시험합니다.",
-    href: "/drama",
-    icon: Clapperboard,
-    accent: "tools",
-    showOnHome: true,
-  },
-  {
-    id: "fashion",
-    name: "AI 패션 사진·영상",
-    hubTitle: "AI 패션 사진·영상",
-    description: "상품 → AI 모델 → 룩 이미지 → 피드 카드·릴스",
-    hubDescription: "쿠팡 상품으로 AI 모델이 입은 룩을 만들어 인스타그램 피드 카드와 릴스를 만듭니다.",
-    href: "/fashion",
-    icon: Shirt,
-    accent: "instagram",
-    showOnHome: true,
-  },
+  // v0.9.136: AI 드라마·AI 패션 사진·영상은 영상 제작 안으로 (예전 /drama·/fashion 주소는 /video 로 넘어감)
   {
     id: "tools",
     name: "공통 도구",

@@ -1,9 +1,6 @@
-import { ChannelHub } from "@/components/shared/ChannelHub";
-import { getChannel } from "@/lib/registry";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: getChannel("drama").hubTitle };
-
-/** v0.9.116: 2차 화면 — Registry 에 등록된 "drama" 기능 카드 목록 */
+/** v0.9.136: AI 드라마·AI 패션은 영상 제작 메뉴 안으로 — 예전 그룹 주소는 영상 제작으로 */
 export default function Page() {
-  return <ChannelHub channelId="drama" />;
+  redirect("/video");
 }
