@@ -1,26 +1,27 @@
 import "server-only";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import type { ReferenceVideo } from "@/lib/types";
 import { AppError } from "../http";
 import { runWithoutPaidFallback } from "../automation/context";
-import { xhsNoteOf } from "../providers/video/xiaohongshu-resolver";
+import { resolveXiaohongshu, xhsNoteOf } from "../providers/video/xiaohongshu-resolver";
 import { getCurrentUserId, getRepositories } from "../repositories";
-import { fetchSource, SourceError } from "./source";
 import { videoStorage } from "./storage";
-import { VIDEO_RENDER_CONFIG } from "@/lib/video-production/config";
 
 /**
- * 영상 파일 보관함 (v0.9.112) — 샤오홍슈 링크의 임시 열쇠(xsec_token)가 살아 있을 때 원본 파일을 받아 보관해 두고,
- * 영상 제작·새벽 자동 제작은 보관한 파일을 쓴다 (링크가 만료돼도, TikHub 없이).
- * 보관 위치는 영상 제작이 원래 쓰던 원본 캐시와 같다: {owner}/src/{videoId}.mp4 (제품에 연결된 영상은 7일이 지나도 지우지 않는다).
- * 받기는 샤오홍슈 무료 경로만 (TikHub 대체 경로는 쓰지 않음). 막히면 [링크 새로 넣기] 또는 [파일 올리기].
+ * 샤오홍슈 영구 링크 (v0.9.113) — 앱 [공유] 의 단축 링크 xhslink.com/… 는 몇 년이 지나도 살아 있고,
+ * 열 때마다 샤오홍슈가 새 임시 열쇠(xsec_token)가 붙은 노트 주소로 넘겨 준다 → 받을 때마다 새로 열어 무료로 받는다 (2026-11-01 직접 확인).
+ * 검색 결과로 가져온 긴 주소(xiaohongshu.com/explore/…?xsec_token=…)는 열쇠가 만료되면 열리지 않는다 → 같은 영상의 공유 링크로 바꾼다.
+ * 원본 파일은 보관하지 않는다 (영상 제작이 쓰던 7일 임시 캐시 {owner}/src/{id}.mp4 만 그대로).
  */
-export const vaultKey = (owner: string, videoId: string) => `${owner}/src/${videoId}.mp4`;
-const MAX_BYTES = VIDEO_RENDER_CONFIG.maxSourceBytes;
+export const isShortXhsLink = (url: string) => {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return h === "xhslink.com" || h.endsWith(".xhslink.com");
+  } catch {
+    return false;
+  }
+};
 
-/** 보관된 영상 id 목록 */
+/** 7일 임시 캐시에 원본이 있는 영상 id */
 export async function storedVideoIds(owner?: string): Promise<Set<string>> {
   const o = owner ?? (await getCurrentUserId());
   const out = new Set<string>();
@@ -35,70 +36,26 @@ export async function storedVideoIds(owner?: string): Promise<Set<string>> {
   return out;
 }
 
-async function ownVideo(videoId: string): Promise<{ owner: string; video: ReferenceVideo }> {
+/** 영상 제작에 쓸 수 있는가: 영구 링크(xhslink) 또는 임시 캐시에 원본이 있음 */
+export const usableXhsVideo = (v: Pick<ReferenceVideo, "id" | "url" | "platform">, stored: Set<string>) => v.platform === "xiaohongshu" && (isShortXhsLink(v.url) || stored.has(v.id));
+
+/**
+ * 같은 영상의 공유 링크(xhslink)로 바꾸기. 같은 노트인지 확인하고, 실제로 열리는지 무료로 한 번 시험한다 (TikHub 안 씀).
+ */
+export async function relinkVideo(videoId: string, url: string): Promise<ReferenceVideo> {
   const owner = await getCurrentUserId();
   const video = await getRepositories().videos.get(String(videoId));
   if (!video || video.userId !== owner) throw new AppError("NOT_FOUND", "영상을 찾을 수 없습니다.", 404);
-  return { owner, video };
-}
-
-/** 영상들의 보관 상태 */
-export async function vaultStatus(ids: string[]): Promise<Record<string, boolean>> {
-  const stored = await storedVideoIds();
-  return Object.fromEntries(ids.slice(0, 1000).map((id) => [id, stored.has(id)]));
-}
-
-/**
- * 무료로 받아 보관 (샤오홍슈 페이지 → 영상 서버). newUrl 을 주면 같은 노트의 새 공유 링크로 바꾼 뒤 받는다.
- * TikHub 로 넘어가지 않는다.
- */
-export async function vaultFetch(videoId: string, newUrl?: string): Promise<{ stored: boolean; sizeMB: number }> {
-  const { owner, video } = await ownVideo(videoId);
-  if (video.platform !== "xiaohongshu") throw new AppError("VALIDATION", "샤오홍슈 영상만 받아 둘 수 있습니다.");
-  let v = video;
-  if (newUrl?.trim()) {
-    const url = newUrl.trim();
-    if (!/^https?:\/\//.test(url) || !/xiaohongshu\.com|xhslink\.com/.test(url)) throw new AppError("BAD_URL", "샤오홍슈 공유 링크를 넣어 주세요.");
-    const [a, b] = await Promise.all([xhsNoteOf(video.url).catch(() => null), xhsNoteOf(url).catch(() => null)]);
-    if (!b) throw new AppError("BAD_URL", "링크에서 샤오홍슈 노트를 찾지 못했습니다. 앱에서 공유 → 링크 복사한 주소를 넣어 주세요.");
-    if (a && a.noteId !== b.noteId) throw new AppError("VALIDATION", "다른 영상의 링크입니다. 같은 영상의 공유 링크를 넣어 주세요.");
-    v = (await getRepositories().videos.update(video.id, { url }))!;
-  }
-  const dir = await mkdtemp(path.join(os.tmpdir(), "vault_"));
-  try {
-    const src = await runWithoutPaidFallback(() => fetchSource(v, dir, 0)).catch((e) => {
-      const msg = e instanceof SourceError || e instanceof Error ? e.message : String(e);
-      throw new AppError("VAULT_FETCH", `${msg} — [링크 새로 넣기]에 앱에서 새로 복사한 공유 링크를 넣거나, [파일 올리기]로 mp4 를 올려 주세요.`, 400);
-    });
-    const buf = await readFile(src.file);
-    if (buf.length > MAX_BYTES) throw new AppError("VALIDATION", `원본이 너무 큽니다 (${Math.round(buf.length / 1048576)}MB, 최대 ${Math.round(MAX_BYTES / 1048576)}MB).`);
-    await videoStorage.put(vaultKey(owner, v.id), buf, "video/mp4");
-    console.info("[Vault] fetch", JSON.stringify({ videoId: v.id, mb: Math.round(buf.length / 104857.6) / 10, newUrl: Boolean(newUrl) }));
-    return { stored: true, sizeMB: Math.round(buf.length / 104857.6) / 10 };
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
-
-/** 직접 올리기 1) 주소 — 허락받아 가진 mp4 를 그 영상의 원본으로 */
-export async function vaultUploadUrl(videoId: string, size: number, fileName: string): Promise<{ url: string; method: "PUT" | "POST"; contentType: string }> {
-  const { owner, video } = await ownVideo(videoId);
-  if (!/\.(mp4|mov)$/i.test(fileName)) throw new AppError("VALIDATION", "mp4·mov 파일만 올릴 수 있습니다.");
-  if (!(size > 0) || size > MAX_BYTES) throw new AppError("VALIDATION", `파일은 ${Math.round(MAX_BYTES / 1048576)}MB 까지 올릴 수 있습니다.`);
-  const up = await videoStorage.signedUpload(vaultKey(owner, video.id), "/api/videos/vault/upload");
-  return { ...up, contentType: "video/mp4" };
-}
-
-/** 데모(Supabase 없음)에서만: 서버 메모리에 올리기 */
-export async function vaultUploadMemory(key: string, body: ArrayBuffer): Promise<void> {
-  const owner = await getCurrentUserId();
-  if (!key.startsWith(`${owner}/src/`) || key.includes("..") || !key.endsWith(".mp4")) throw new AppError("VALIDATION", "잘못된 주소입니다.");
-  await videoStorage.put(key, Buffer.from(body), "video/mp4");
-}
-
-/** 가져온 직후 받아 두기 (링크가 막 복사돼 열쇠가 살아 있을 때). 실패해도 가져오기는 그대로 — 조용히 넘어간다 */
-export async function vaultAfterImport(videos: ReferenceVideo[]): Promise<void> {
-  for (const v of videos.filter((x) => x.platform === "xiaohongshu").slice(0, 10)) {
-    await vaultFetch(v.id).catch((e) => console.warn("[Vault] after import", JSON.stringify({ videoId: v.id, error: e instanceof Error ? e.message.slice(0, 120) : "?" })));
-  }
+  if (video.platform !== "xiaohongshu") throw new AppError("VALIDATION", "샤오홍슈 영상만 바꿀 수 있습니다.");
+  const link = url.trim().match(/https?:\/\/[^\s"'<>，。]+/i)?.[0] ?? "";
+  if (!isShortXhsLink(link)) throw new AppError("BAD_URL", "샤오홍슈 앱에서 [공유] → 링크 복사한 xhslink.com 주소를 넣어 주세요 (공유 문구를 통째로 붙여 넣어도 됩니다).");
+  const [a, b] = await Promise.all([xhsNoteOf(video.url).catch(() => null), xhsNoteOf(link).catch(() => null)]);
+  if (!b) throw new AppError("BAD_URL", "이 공유 링크가 열리지 않습니다. 앱에서 다시 복사해 주세요.");
+  if (a && a.noteId !== b.noteId) throw new AppError("VALIDATION", "다른 영상의 공유 링크입니다. 같은 영상의 링크를 넣어 주세요.");
+  // 실제로 영상 주소가 나오는지 (무료, TikHub 로 넘어가지 않음)
+  await runWithoutPaidFallback(() => resolveXiaohongshu(link)).catch((e) => {
+    throw new AppError("XHS_BLOCKED", `공유 링크는 맞지만 지금 영상을 열지 못했습니다 (${e instanceof Error ? e.message.slice(0, 80) : "알 수 없음"}). 잠시 후 다시 시도해 주세요.`, 400);
+  });
+  console.info("[XhsLink] relink", JSON.stringify({ videoId: video.id, noteId: b.noteId }));
+  return (await getRepositories().videos.update(video.id, { url: link }))!;
 }

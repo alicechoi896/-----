@@ -55,7 +55,9 @@ async function fetchText(url: string): Promise<{ text: string; finalUrl: string 
 }
 
 /** 공유 링크·단축 링크 → 노트 ID 와 xsec_token */
-const shortLinks = new Map<string, string>();
+const shortLinks = new Map<string, { at: number; url: string }>();
+/** v0.9.113: 단축 링크가 넘겨 준 주소의 열쇠(xsec_token)는 만료되므로 10분만 기억하고, 그 뒤엔 단축 링크를 새로 연다 */
+const SHORT_TTL_MS = 10 * 60 * 1000;
 
 /** 샤오홍슈 도메인인지 (서버가 다른 주소로 접속하지 않게 주소의 도메인을 정확히 확인한다) */
 function xhsHost(raw: string): "short" | "note" | null {
@@ -83,10 +85,10 @@ async function normalize(input: string): Promise<{ noteId: string; token: string
   if (kind === "short") {
     // 단축 링크는 실제 노트 주소로 이동한다 (같은 단축 링크는 다시 묻지 않는다)
     const known = shortLinks.get(url);
-    if (known) url = known;
+    if (known && Date.now() - known.at < SHORT_TTL_MS) url = known.url;
     else {
       const finalUrl = (await fetchText(url)).finalUrl;
-      shortLinks.set(url, finalUrl);
+      shortLinks.set(url, { at: Date.now(), url: finalUrl });
       if (shortLinks.size > 1000) shortLinks.delete(shortLinks.keys().next().value!);
       url = finalUrl;
     }

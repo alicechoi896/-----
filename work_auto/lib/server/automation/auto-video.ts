@@ -9,7 +9,7 @@ import { keywordLibrary } from "../services/keyword-library";
 import { productService } from "../services/products";
 import { videoJobService } from "../video/service";
 import { videoStorage } from "../video/storage";
-import { storedVideoIds } from "../video/vault";
+import { storedVideoIds, usableXhsVideo } from "../video/vault";
 
 /**
  * 제품 홍보 영상 자동 제작 (v0.9.107). docs/AUTO_VIDEO.md
@@ -149,8 +149,8 @@ interface Candidate {
 }
 
 /**
- * 제품에 연결된 샤오홍슈 영상 중 '파일이 보관된' 영상 수 (v0.9.112) — 링크가 만료돼도 보관 파일로 만든다.
- * 보관 안 된 영상은 쓰지 않는다 (샤오홍슈가 막으면 TikHub 없이는 받을 수 없어 실패하므로)
+ * 제품에 연결된 샤오홍슈 영상 중 '쓸 수 있는' 영상 수 (v0.9.113) — 영구 공유 링크(xhslink) 또는 7일 임시 캐시에 원본이 있는 영상.
+ * 열쇠가 만료되는 긴 주소뿐인 영상은 쓰지 않는다 (TikHub 없이는 받을 수 없어 실패하므로)
  */
 async function linkedVideoCount(owner: string): Promise<Map<string, number>> {
   const ids = await usableVideoIds(owner);
@@ -161,7 +161,7 @@ async function linkedVideoCount(owner: string): Promise<Map<string, number>> {
 async function usableVideoIds(owner: string): Promise<Map<string, string[]>> {
   const [videos, stored] = await Promise.all([getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId)), storedVideoIds(owner)]);
   const m = new Map<string, string[]>();
-  for (const v of videos) if (stored.has(v.id)) m.set(v.productId!, [...(m.get(v.productId!) ?? []), v.id]);
+  for (const v of videos) if (usableXhsVideo(v, stored)) m.set(v.productId!, [...(m.get(v.productId!) ?? []), v.id]);
   return m;
 }
 
@@ -187,7 +187,7 @@ export async function chooseProducts(count: number, exclude: Set<string> = new S
   const owner = await getCurrentUserId();
   const [products, videoCount, recent] = await Promise.all([productService.list(), linkedVideoCount(owner), recentProductIds(owner)]);
   const pool = products.filter((p) => (videoCount.get(p.id) ?? 0) >= AUTO_LIMITS.minVideos && !recent.has(p.id) && !exclude.has(p.id));
-  if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (파일이 보관된 샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품). 제품 상세 › 연결된 영상에서 [파일 받아 두기]를 해 주세요.`, aiCalls: 0 };
+  if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (공유 링크 xhslink 인 샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품). 제품 상세 › 연결된 영상에서 [공유 링크로 바꾸기]를 해 주세요.`, aiCalls: 0 };
   const cands: Candidate[] = [];
   for (const p of pool.slice(0, 40)) cands.push({ id: p.id, name: p.name, oneLiner: p.oneLiner, videos: videoCount.get(p.id) ?? 0, keywords: (await keywordLibrary.suggest(p.id).catch(() => [])).slice(0, 6) });
   const n = Math.min(count, cands.length);
@@ -329,7 +329,7 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
   // v0.9.110: 샤오홍슈 영상이 연결되지 않은 제품은 만들지 않는다 (고른 뒤 연결이 풀렸어도 — AI·음성 비용 없음)
   const linked = (await linkedVideoCount(owner)).get(item.productId) ?? 0;
   if (linked < AUTO_LIMITS.minVideos) {
-    const r = await patchItem(date, itemId, { status: "skipped", videos: linked, step: "건너뜀", error: `파일이 보관된 샤오홍슈 영상이 ${linked}개뿐이라 만들지 않았습니다 (${AUTO_LIMITS.minVideos}개 이상 필요 — 제품 상세 › 연결된 영상에서 [파일 받아 두기]).`, finishedAt: now() });
+    const r = await patchItem(date, itemId, { status: "skipped", videos: linked, step: "건너뜀", error: `쓸 수 있는 샤오홍슈 영상(공유 링크 xhslink)이 ${linked}개뿐이라 만들지 않았습니다 (${AUTO_LIMITS.minVideos}개 이상 필요 — 제품 상세 › 연결된 영상에서 [공유 링크로 바꾸기]).`, finishedAt: now() });
     return r!.items.find((x) => x.id === itemId)!;
   }
   await step("원고 1단계 (키워드 분석·제목 후보)", { status: "running", startedAt: now(), error: null });

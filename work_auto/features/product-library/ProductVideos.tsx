@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Archive, Download, ExternalLink, Film, FolderDown, Link2, ListPlus, Unlink, Upload } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, Download, ExternalLink, Film, FolderDown, Link2, ListPlus, Unlink } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -30,65 +30,24 @@ export function ProductVideos({ productId }: { productId: string }) {
 
   const videos = (list.data ?? []).filter((v) => v.productId === productId);
   const xhsVideos = videos.filter((v) => canDirectDownload(v.platform));
-  // v0.9.112 영상 파일 보관함: 보관된 파일은 링크가 만료돼도 영상 제작·새벽 자동 제작에 쓴다 (TikHub 없이)
-  const [vault, setVault] = useState<Record<string, boolean>>({});
-  const [vaultBusy, setVaultBusy] = useState<string | null>(null);
-  const [vaultMsg, setVaultMsg] = useState<Record<string, string>>({});
+  // v0.9.113: 샤오홍슈 공유 링크(xhslink)는 몇 년이 지나도 열려 영상 제작·새벽 자동 제작에 그대로 쓴다. 검색으로 가져온 긴 주소는 열쇠가 만료된다
+  const isShort = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*xhslink\.com\//i.test(url);
+  const expiring = videos.filter((v) => v.platform === "xiaohongshu" && !isShort(v.url));
   const [relink, setRelink] = useState<{ id: string; url: string } | null>(null);
-  const fileFor = useRef<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const ids = xhsVideos.filter((v) => v.platform === "xiaohongshu").map((v) => v.id).join(",");
-  useEffect(() => {
-    if (!ids) return;
-    let alive = true;
-    api.videos
-      .vaultStatus(ids.split(","))
-      .then((s) => alive && setVault(s))
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [ids]);
-  const notStored = xhsVideos.filter((v) => v.platform === "xiaohongshu" && vault[v.id] === false);
-  async function keep(v: ReferenceVideo, url?: string) {
-    setVaultBusy(v.id);
-    setVaultMsg((m) => ({ ...m, [v.id]: "" }));
+  const [relinkBusy, setRelinkBusy] = useState(false);
+  const [relinkMsg, setRelinkMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  async function saveRelink() {
+    if (!relink) return;
+    setRelinkBusy(true);
     try {
-      const r = await api.videos.vaultFetch(v.id, url);
-      setVault((s) => ({ ...s, [v.id]: true }));
-      setVaultMsg((m) => ({ ...m, [v.id]: `보관했습니다 (${r.sizeMB}MB)` }));
-      if (url) {
-        list.setData((prev) => prev?.map((x) => (x.id === v.id ? { ...x, url } : x)) ?? null);
-        setRelink(null);
-      }
-      return true;
+      const v = await api.videos.relink(relink.id, relink.url);
+      list.setData((prev) => prev?.map((x) => (x.id === v.id ? v : x)) ?? null);
+      setRelinkMsg((m) => ({ ...m, [v.id]: { ok: true, text: "공유 링크로 바꿨습니다 (영구)" } }));
+      setRelink(null);
     } catch (e) {
-      setVaultMsg((m) => ({ ...m, [v.id]: e instanceof Error ? e.message : "받지 못했습니다." }));
-      return false;
+      setRelinkMsg((m) => ({ ...m, [relink.id]: { ok: false, text: e instanceof Error ? e.message : "바꾸지 못했습니다." } }));
     } finally {
-      setVaultBusy(null);
-    }
-  }
-  async function keepAll() {
-    let ok = 0;
-    for (const [i, v] of notStored.entries()) {
-      setMessage({ tone: "info", text: `영상 파일 받아 두는 중 ${i + 1}/${notStored.length}…` });
-      if (await keep(v)) ok++;
-    }
-    setMessage({ tone: ok === notStored.length ? "info" : "warning", text: `${ok}/${notStored.length}개 보관했습니다.${ok < notStored.length ? " 실패한 영상은 [링크 새로 넣기] 또는 [파일 올리기]로 보관해 주세요." : ""}` });
-  }
-  async function uploadFile(file: File) {
-    const id = fileFor.current;
-    if (!id) return;
-    setVaultBusy(id);
-    try {
-      await api.videos.vaultUpload(id, file);
-      setVault((s) => ({ ...s, [id]: true }));
-      setVaultMsg((m) => ({ ...m, [id]: `올린 파일을 보관했습니다 (${Math.round(file.size / 104857.6) / 10}MB)` }));
-    } catch (e) {
-      setVaultMsg((m) => ({ ...m, [id]: e instanceof Error ? e.message : "올리지 못했습니다." }));
-    } finally {
-      setVaultBusy(null);
+      setRelinkBusy(false);
     }
   }
   const links = parseVideoLinks(text);
@@ -130,11 +89,6 @@ export function ProductVideos({ productId }: { productId: string }) {
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {xhs.bulk && <span className="text-xs text-fg-subtle">{xhs.bulk}</span>}
-          {notStored.length > 0 && (
-            <Button size="sm" variant="secondary" icon={Archive} disabled={Boolean(vaultBusy)} onClick={() => void keepAll()} title="샤오홍슈에서 무료로 받아 보관 (TikHub 안 씀)" data-vault-all>
-              보관 안 된 영상 파일 받아 두기 ({notStored.length})
-            </Button>
-          )}
           {xhsVideos.length > 1 && (
             <>
               <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(xhs.bulk)} disabled={xhs.busy} onClick={() => void xhs.runAll(xhsVideos, "제품영상")}>
@@ -198,39 +152,25 @@ export function ProductVideos({ productId }: { productId: string }) {
                   </p>
                   <XhsJobStatus job={xhs.jobs[v.id]} />
                   {v.platform === "xiaohongshu" && (
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]" data-vault>
-                      {vault[v.id] === true ? <Badge tone="success">파일 보관됨 ✓</Badge> : vault[v.id] === false ? <Badge tone="warning">파일 없음</Badge> : null}
-                      {vault[v.id] === false && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]" data-xhs-link>
+                      {isShort(v.url) ? (
+                        <Badge tone="success">영구 링크 ✓ (xhslink)</Badge>
+                      ) : (
                         <>
-                          <Button size="sm" variant="ghost" icon={Archive} className="h-7 px-2 text-[12px]" loading={vaultBusy === v.id} disabled={Boolean(vaultBusy)} onClick={() => void keep(v)} data-vault-fetch>
-                            파일 받아 두기
-                          </Button>
-                          <Button size="sm" variant="ghost" icon={Link2} className="h-7 px-2 text-[12px]" disabled={Boolean(vaultBusy)} onClick={() => setRelink({ id: v.id, url: "" })}>
-                            링크 새로 넣기
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            icon={Upload}
-                            className="h-7 px-2 text-[12px]"
-                            disabled={Boolean(vaultBusy)}
-                            onClick={() => {
-                              fileFor.current = v.id;
-                              fileInput.current?.click();
-                            }}
-                          >
-                            파일 올리기
+                          <Badge tone="warning">만료되는 링크</Badge>
+                          <Button size="sm" variant="ghost" icon={Link2} className="h-7 px-2 text-[12px]" onClick={() => setRelink({ id: v.id, url: "" })} data-xhs-relink>
+                            공유 링크로 바꾸기
                           </Button>
                         </>
                       )}
-                      {vaultMsg[v.id] && <span className={vault[v.id] ? "text-success" : "text-danger"}>{vaultMsg[v.id]}</span>}
+                      {relinkMsg[v.id] && <span className={relinkMsg[v.id].ok ? "text-success" : "text-danger"}>{relinkMsg[v.id].text}</span>}
                     </div>
                   )}
                   {relink?.id === v.id && (
                     <div className="mt-1.5 flex gap-1.5">
-                      <Input value={relink.url} onChange={(e) => setRelink({ id: v.id, url: e.target.value })} placeholder="샤오홍슈 앱 › 공유 › 링크 복사한 주소 (같은 영상)" className="h-8 flex-1 text-[12.5px]" aria-label="새 공유 링크" />
-                      <Button size="sm" variant="primary" loading={vaultBusy === v.id} disabled={!relink.url.trim()} onClick={() => void keep(v, relink.url.trim())}>
-                        넣고 받아 두기
+                      <Input value={relink.url} onChange={(e) => setRelink({ id: v.id, url: e.target.value })} placeholder="샤오홍슈 앱 › [공유] › 링크 복사 (http://xhslink.com/o/…) — 공유 문구 통째로 붙여 넣어도 됩니다" className="h-8 flex-1 text-[12.5px]" aria-label="공유 링크" />
+                      <Button size="sm" variant="primary" loading={relinkBusy} disabled={!relink.url.trim()} onClick={() => void saveRelink()}>
+                        바꾸기
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setRelink(null)}>
                         취소
@@ -271,20 +211,11 @@ export function ProductVideos({ productId }: { productId: string }) {
           })}
         </ul>
       )}
-      <input
-        ref={fileInput}
-        type="file"
-        accept="video/mp4,video/quicktime,.mp4,.mov"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) void uploadFile(f);
-        }}
-      />
-      <p className="border-t border-line px-5 py-2 text-[11.5px] text-fg-subtle">
-        파일 보관됨 ✓ 인 영상은 샤오홍슈 링크가 만료돼도 영상 제작·새벽 자동 제작에 그대로 씁니다. 받기는 샤오홍슈 무료 경로만 쓰고(TikHub 안 씀), 막히면 앱에서 공유 링크를 새로 복사해 넣거나 허락받은 mp4 를 올려 주세요.
-      </p>
+      {expiring.length > 0 && (
+        <p className="border-t border-line px-5 py-2 text-[12px] text-warning">
+          만료되는 링크 {expiring.length}개 — 검색으로 가져온 주소는 시간이 지나면 열리지 않습니다. 샤오홍슈 앱에서 그 영상의 [공유] → 링크 복사(xhslink.com) 주소로 바꾸면 계속 쓸 수 있습니다 (새벽 자동 제작은 공유 링크 영상만 씁니다).
+        </p>
+      )}
       <div className="border-t border-line px-5 py-2.5 text-right">
         <Link href="/tools/video-import" className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-brand">
           영상 URL 가져오기에서 전체 보기
