@@ -38,7 +38,12 @@ export async function runAsAutomation<T>(fn: () => Promise<T>): Promise<T> {
   }
   if (!automationConfigured()) throw new Error("자동화 계정이 설정되지 않았습니다 (Vercel 환경변수 AUTOMATION_EMAIL·AUTOMATION_PASSWORD).");
   const client = createClient(supabaseEnv.url, supabaseEnv.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-  const { error } = await client.auth.signInWithPassword({ email: process.env.AUTOMATION_EMAIL!, password: process.env.AUTOMATION_PASSWORD! });
+  let { error } = await client.auth.signInWithPassword({ email: process.env.AUTOMATION_EMAIL!, password: process.env.AUTOMATION_PASSWORD! });
+  // v0.9.125: 로그인 요청 한도(rate limit)면 20초 뒤 한 번만 더 (05:05 크론이 이걸로 실패했다)
+  if (error && /rate limit/i.test(error.message)) {
+    await new Promise((r) => setTimeout(r, 20_000));
+    ({ error } = await client.auth.signInWithPassword({ email: process.env.AUTOMATION_EMAIL!, password: process.env.AUTOMATION_PASSWORD! }));
+  }
   if (error) throw new Error(`자동화 계정으로 로그인하지 못했습니다 (${error.message.slice(0, 80)}).`);
   try {
     return await als.run({ client, noPaidFallback: true }, fn);

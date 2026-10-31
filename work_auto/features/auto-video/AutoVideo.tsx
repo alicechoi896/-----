@@ -133,6 +133,19 @@ export function AutoVideo() {
       setBusy(null);
     }
   }
+  /** v0.9.125 대기 항목(새벽 자동 포함)을 지금 만들기 — AI 글·음성 비용 */
+  async function makeNow(itemId: string) {
+    if (!data || !window.confirm("이 항목을 지금 만들까요? (5~10분, AI 글·AI 음성 비용)")) return;
+    setBusy("지금");
+    try {
+      await call("/api/auto-video/run-now", { method: "POST", body: JSON.stringify({ confirmed: true, itemId }) });
+      await load(data.date);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "시작하지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function remove(itemId?: string) {
     if (!data) return;
     const msg = itemId ? "이 결과를 지울까요? (완성 영상 파일도 지웁니다. 업로드 관리 예약은 그대로)" : `${data.date} 결과를 모두 지울까요? (완성 영상 파일도 지웁니다. 만드는 중인 항목은 남깁니다)`;
@@ -166,7 +179,7 @@ export function AutoVideo() {
   return (
     <div className="space-y-6" data-auto-video>
       {error && <Notice tone="warning">{error}</Notice>}
-      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만들어 결과가 남아 있거나 업로드 관리에 등록한 제품 제외 — 결과를 지우면 다시 고를 수 있음) 05:05부터 5분마다 1개씩 만듭니다. 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
+      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만들어 결과가 남아 있거나 업로드 관리에 등록한 제품 제외 — 결과를 지우면 다시 고를 수 있음) 고르자마자 바로 만들기 시작합니다 (남은 것은 5분마다 이어서). 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-[14px] font-medium">
             <input type="checkbox" checked={s.enabled} disabled={Boolean(busy)} onChange={(e) => void save({ enabled: e.target.checked })} className="size-4 accent-[var(--color-brand)]" data-auto-enabled />
@@ -234,7 +247,7 @@ export function AutoVideo() {
         ) : (
           <ol className="space-y-4">
             {items.map((it, k) => (
-              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} />
+              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} onMakeNow={() => void makeNow(it.id)} makeBusy={Boolean(busy) || items.some((x) => x.status === "running")} />
             ))}
           </ol>
         )}
@@ -266,7 +279,7 @@ export function AutoVideo() {
   );
 }
 
-function ReportItem({ it, k, url, date, onDone, onError, onRemove }: { it: Item; k: number; url?: string; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void }) {
+function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, makeBusy }: { it: Item; k: number; url?: string; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void; onMakeNow: () => void; makeBusy: boolean }) {
   const [at, setAt] = useState(() => defaultSlot(k));
   const [busy, setBusy] = useState(false);
   const st = STATUS[it.status];
@@ -292,8 +305,13 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove }: { it: Item;
         {it.videos != null && <span className="text-fg-subtle">· 샤오홍슈 영상 {it.videos}개</span>}
         {it.status === "running" && it.step && <span className="text-info">· {it.step}</span>}
         {it.publicationId && <Badge tone="brand">업로드 관리 예약됨</Badge>}
+        {it.status === "pending" && (
+          <Button size="sm" variant="secondary" icon={Play} className="ml-auto h-7" disabled={makeBusy} onClick={onMakeNow} data-auto-make-now>
+            지금 만들기
+          </Button>
+        )}
         {it.status !== "running" && (
-          <button type="button" className="ml-auto inline-flex items-center gap-1 text-[12px] text-fg-subtle hover:text-danger" onClick={onRemove} data-auto-delete>
+          <button type="button" className={cn("inline-flex items-center gap-1 text-[12px] text-fg-subtle hover:text-danger", it.status !== "pending" && "ml-auto")} onClick={onRemove} data-auto-delete>
             <Trash2 className="size-3.5" /> 지우기
           </button>
         )}

@@ -1,6 +1,6 @@
 import "server-only";
 import { CLAUDE_ONLY_FEATURES, forcedAi, withClaude } from "../providers/ai-force";
-import { endingTarget, yoRatio } from "@/lib/script-format";
+import { banmalRatio, endingTarget, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
@@ -155,9 +155,11 @@ async function enforceEndings(p: Prepared, output: Record<string, GeneratedValue
   const ctx = p.context;
   if (!ctx.scriptFormat || ctx.scriptFormatUse !== "full" || !Array.isArray(output.script)) return;
   const target = endingTarget(ctx.scriptFormat);
-  if (target.maxYo === null || !target.rule) return;
+  if ((target.maxYo === null && target.maxBanmal === null) || !target.rule) return;
   const scripts = output.script as string[];
-  const bad = scripts.map((s, i) => ({ s, i, r: yoRatio(s) })).filter((x) => x.r > target.maxYo! + 0.1);
+  // v0.9.125: '~요'가 너무 많거나, 참고 대본에 없는 반말이 섞였으면 말끝만 고친다
+  const over = (s: string) => (target.maxYo !== null && yoRatio(s) > target.maxYo + 0.1) || (target.maxBanmal !== null && banmalRatio(s) > target.maxBanmal + 0.1);
+  const bad = scripts.map((s, i) => ({ s, i, r: yoRatio(s), b: banmalRatio(s) })).filter((x) => over(x.s));
   if (!bad.length) return;
   try {
     const ai = await getAIProvider();
@@ -188,11 +190,11 @@ async function enforceEndings(p: Prepared, output: Record<string, GeneratedValue
     bad.forEach((b, k) => {
       const f = fixed[k]?.trim();
       // 줄 수가 크게 달라지면(내용을 바꿨으면) 쓰지 않는다
-      if (!f || Math.abs(f.split(/\n+/).length - b.s.split(/\n+/).length) > 2 || yoRatio(f) >= b.r) return;
+      if (!f || Math.abs(f.split(/\n+/).length - b.s.split(/\n+/).length) > 2 || (yoRatio(f) > b.r && b.r > 0) || over(f) && yoRatio(f) >= b.r && banmalRatio(f) >= b.b) return;
       scripts[b.i] = f;
       n++;
     });
-    if (n) ctx.summary.notes.push(`대본 포맷 말끝에 맞춰 대본 ${n}편의 말끝을 고쳤습니다 ('~요' 줄 줄임).`);
+    if (n) ctx.summary.notes.push(`대본 포맷 말끝에 맞춰 대본 ${n}편의 말끝을 고쳤습니다 ('~요'·반말 줄 줄임).`);
   } catch {
     /* 원래 결과 그대로 */
   }

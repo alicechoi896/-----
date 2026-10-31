@@ -267,6 +267,8 @@ export function endingRule(texts: string[]): string | null {
   const lines = [`말끝 규칙 (가장 중요 — 스타일·기본 말투 규칙보다 우선): 참고 대본 문장 끝은 ${dist}. 대본의 문장 끝도 이 비율을 그대로 따른다.`];
   if (ratios.yo < 0.3) lines.push(`참고 대본은 '~요'로 거의 끝나지 않는다 (${pct("yo")}%). '~요'·'~거든요'·'~죠'로 끝나는 줄은 전체의 ${Math.max(0, pct("yo") + 5)}% 이하로만 쓴다.`);
   if (ratios.nida < 0.1) lines.push("'~니다'로 끝내지 않는다.");
+  // v0.9.125: '~요'를 줄이라고 하면 AI 가 반말로 바꾸던 문제 — 참고 대본에 반말이 거의 없으면 반말 금지를 분명히
+  if (ratios.banmal < 0.05) lines.push(`반말(~어·~아·~야·~지·~해·~거든·~잖아·~네·~래 등)로 끝내지 않는다 — 참고 대본에 반말이 거의 없다 (${pct("banmal")}%). '~요'를 줄일 때는 반말 대신 참고 대본처럼 '~다'·명사·'~음'으로 끝낸다.`);
   return lines.join(" ");
 }
 
@@ -277,23 +279,34 @@ export function guidelineBansYo(text: string): boolean {
 }
 
 /** 대본 한 편에서 '~요'로 끝나는 줄 비율 */
+/** v0.9.125: 대본 한 편에서 반말로 끝나는 줄 비율 */
+export function banmalRatio(script: string): number {
+  const ks = script.split(/\n+/).map(endingOf).filter((k): k is EndingKind => Boolean(k));
+  return ks.length ? ks.filter((k) => k === "banmal").length / ks.length : 0;
+}
+
 export function yoRatio(script: string): number {
   const ks = script.split(/\n+/).map(endingOf).filter((k): k is EndingKind => Boolean(k));
   return ks.length ? ks.filter((k) => k === "yo").length / ks.length : 0;
 }
 
 /** 포맷의 말끝 목표: '~요' 최대 비율 + 프롬프트 규칙 (가이드라인 금지 > 참고 대본 분포) */
-export function endingTarget(f: { examples?: { text: string }[]; guideline?: string; hooks?: string[]; ctas?: string[] } | null): { maxYo: number | null; rule: string | null } {
-  if (!f) return { maxYo: null, rule: null };
+export function endingTarget(f: { examples?: { text: string }[]; guideline?: string; hooks?: string[]; ctas?: string[] } | null): { maxYo: number | null; maxBanmal: number | null; rule: string | null } {
+  if (!f) return { maxYo: null, maxBanmal: null, rule: null };
   const texts = (f.examples ?? []).map((e) => e.text);
   const fromExamples = endingRule(texts);
+  const { total, ratios } = endingProfile(texts);
+  // v0.9.125: 참고 대본에 반말이 거의 없으면 반말도 고칠 대상 (가이드라인이 반말을 직접 요구하면 제외)
+  const wantsBanmal = /반말\s*(?:로|으로|만|사용|쓴다|위주)/.test((f.guideline ?? "").replace(/\s+/g, " "));
+  const maxBanmal = total >= 10 && ratios.banmal < 0.05 && !wantsBanmal ? ratios.banmal + 0.05 : null;
   if (guidelineBansYo(f.guideline ?? "")) {
+    const ends = wantsBanmal || (total >= 10 && ratios.banmal >= 0.05) ? "'~다'·반말·'~음'·명사" : "'~다'·'~음'·명사 (반말 금지)";
     return {
       maxYo: 0.05,
-      rule: `말끝 규칙 (가장 중요 — 다른 모든 말투 규칙보다 우선): 대본 포맷 가이드라인에 따라 '~요'·'~거든요'·'~죠'·'~해요'로 끝나는 줄을 쓰지 않는다. 말끝은 참고 대본처럼 '~다'·반말·'~음'·명사로 끝낸다.${fromExamples ? ` ${fromExamples}` : ""}`,
+      maxBanmal,
+      rule: `말끝 규칙 (가장 중요 — 다른 모든 말투 규칙보다 우선): 대본 포맷 가이드라인에 따라 '~요'·'~거든요'·'~죠'·'~해요'로 끝나는 줄을 쓰지 않는다. 말끝은 참고 대본처럼 ${ends}로 끝낸다.${fromExamples ? ` ${fromExamples}` : ""}`,
     };
   }
-  const { total, ratios } = endingProfile(texts);
-  if (total >= 10 && ratios.yo < 0.3) return { maxYo: ratios.yo + 0.05, rule: fromExamples };
-  return { maxYo: null, rule: fromExamples };
+  if (total >= 10 && ratios.yo < 0.3) return { maxYo: ratios.yo + 0.05, maxBanmal, rule: fromExamples };
+  return { maxYo: null, maxBanmal, rule: fromExamples };
 }

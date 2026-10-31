@@ -14,7 +14,15 @@ describe("대본 포맷 말끝", () => {
     expect(endingTarget({ examples: da, guideline: "" }).maxYo).toBeCloseTo(0.05, 2);
     const yo = Array.from({ length: 4 }, () => "이거 좋아요\n진짜 편해요\n써보세요").map((text) => ({ text }));
     expect(endingTarget({ examples: yo, guideline: "" }).maxYo).toBeNull();
-    expect(endingTarget(null)).toEqual({ maxYo: null, rule: null });
+    expect(endingTarget(null)).toEqual({ maxYo: null, maxBanmal: null, rule: null });
+    // v0.9.125: 참고 대본에 반말이 없으면 반말 금지 + 고칠 대상
+    const plain = Array.from({ length: 4 }, () => "이거 미쳤다
+진짜 편함
+가성비 최고다").map((text) => ({ text }));
+    const t = endingTarget({ examples: plain, guideline: "" });
+    expect(t.maxBanmal).toBeCloseTo(0.05, 2);
+    expect(t.rule).toContain("반말");
+    expect(endingTarget({ examples: plain, guideline: "요로 끝내지 않는다" }).rule).toContain("반말 금지");
   });
   it("대본의 '~요' 줄 비율", () => {
     expect(yoRatio("이거 좋아요\n진짜 미쳤다\n써봐\n편해요")).toBe(0.5);

@@ -540,6 +540,15 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
 }
 
 /** 5분마다: 진행 중인 것이 없으면 다음 1개를 만든다. 오래 멈춘 것은 실패로 */
+/** v0.9.125: 대기 항목 하나를 지금 만든다 ([지금 만들기]) */
+export async function produceNow(date: string, itemId: string): Promise<void> {
+  const run = await readRun(date);
+  const it = run?.items.find((x) => x.id === itemId);
+  if (!run || !it) throw new AppError("NOT_FOUND", "항목을 찾지 못했습니다. 새로고침해 주세요.", 404);
+  if (it.status !== "pending") throw new AppError("VALIDATION", "대기 중인 항목만 지금 만들 수 있습니다.");
+  await produceItem(date, itemId);
+}
+
 export async function tick(date = kstDate(), source?: "schedule" | "test"): Promise<{ did: string | null; left: number }> {
   const run = await readRun(date);
   if (!run) return { did: null, left: 0 };
