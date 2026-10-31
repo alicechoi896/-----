@@ -93,6 +93,9 @@ export const emptyScene = (over: Partial<DramaScene> = {}): DramaScene => ({
 
 export const DEFAULT_SETTINGS: DramaSettings = { idea: "", genre: "로맨스", mood: "반전", targetSec: 120, aspect: "9:16", audience: "", mustHave: "" };
 
+/** v0.9.101: 배경음악은 대사 밑에 아주 작게 (대사가 나오면 더 줄어든다) */
+export const BGM_DEFAULT_VOLUME = 0.08;
+
 export function emptyProject(id: string, title: string, now: string, settings: Partial<DramaSettings> = {}): DramaProject {
   const steps = Object.fromEntries(STEP_KEYS.map((k) => [k, { status: "empty", version: 0, approvedAt: null } satisfies StepState])) as Record<StepKey, StepState>;
   return {
@@ -116,7 +119,7 @@ export function emptyProject(id: string, title: string, now: string, settings: P
     tasks: [],
     clips: [],
     timeline: [],
-    renderSettings: { transition: "none", bgmKey: null, bgmName: null, bgmVolume: 0.2, title: title },
+    renderSettings: { transition: "none", bgmKey: null, bgmName: null, bgmVolume: BGM_DEFAULT_VOLUME, title: title },
     renders: [],
   };
 }

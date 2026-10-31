@@ -10,7 +10,7 @@ import * as ai from "./ai";
 import { renderDrama } from "./render";
 import { faceCheck } from "./face";
 import { isProjectId, loadProject, ownsKey, projectDir, readIndex, saveProject, withUrls } from "./store";
-import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob } from "./tasks";
+import { createImageTasks, createVideoTasks, syncTasks, type ImageJob, type VideoJob, createMusicTask } from "./tasks";
 import { IMAGE_MODELS, VIDEO_MODELS, type VideoOptions } from "@/lib/drama-studio/models";
 import {
   MAX_CHARACTERS,
@@ -80,6 +80,13 @@ async function saveMerged(owner: string, worked: DramaProject, extra?: (fresh: D
     // 다시 만든 클립은 타임라인의 같은 장면 자리를 바꾼다 (최신 문서 기준으로)
     for (const c of newClips) swapIntoTimeline(fresh, c);
     markNewResult(fresh, "video");
+  }
+  // v0.9.101: 그 사이 만든 음악 곡 (작업 결과) 지키기
+  const haveBgm = new Set((fresh.bgmTracks ?? []).map((x) => x.id));
+  const newBgm = (worked.bgmTracks ?? []).filter((x) => !haveBgm.has(x.id));
+  if (newBgm.length) {
+    fresh.bgmTracks = [...(fresh.bgmTracks ?? []), ...newBgm];
+    if (!fresh.renderSettings.bgmKey) fresh.renderSettings = { ...fresh.renderSettings, bgmKey: newBgm[0].key, bgmName: newBgm[0].name };
   }
   extra?.(fresh);
   return saveProject(owner, fresh, now());
@@ -437,6 +444,31 @@ export const dramaStudioService = {
         p.scenarioVersions = [...p.scenarioVersions, { id: newId("sv"), label: String(body.label ?? "").slice(0, 40) || `버전 ${p.scenarioVersions.length + 1}`, at: now(), scenario: p.scenario }].slice(-10);
         break;
       }
+      // v0.9.101: 배경음악 고르기·지우기 (무료)
+      case "use-bgm": {
+        const tr = (p.bgmTracks ?? []).find((x) => x.id === body.trackId);
+        if (!tr) throw new AppError("NOT_FOUND", "음악을 찾지 못했습니다.", 404);
+        p.renderSettings = { ...p.renderSettings, bgmKey: tr.key, bgmName: tr.name };
+        break;
+      }
+      case "delete-bgm": {
+        const tr = (p.bgmTracks ?? []).find((x) => x.id === body.trackId);
+        if (!tr) throw new AppError("NOT_FOUND", "음악을 찾지 못했습니다.", 404);
+        p.bgmTracks = (p.bgmTracks ?? []).filter((x) => x.id !== tr.id);
+        if (p.renderSettings.bgmKey === tr.key) p.renderSettings = { ...p.renderSettings, bgmKey: null, bgmName: null };
+        await videoStorage.remove(tr.key).catch(() => undefined);
+        break;
+      }
+      // v0.9.101: 렌더링(최종 영상) 지우기 — 병합 중인 것은 빼고, 파일도 지운다 (다시 렌더링하면 또 만들 수 있음)
+      case "delete-render": {
+        const ids = body.all === true ? p.renders.map((r) => r.id) : [String(body.renderId ?? "")];
+        const gone = p.renders.filter((r) => ids.includes(r.id) && r.status !== "running");
+        if (!gone.length) throw new AppError("VALIDATION", "지울 렌더링 영상이 없습니다 (병합 중인 것은 지울 수 없습니다).");
+        p.renders = p.renders.filter((r) => !gone.includes(r));
+        for (const r of gone) if (r.key) await videoStorage.remove(r.key).catch(() => undefined);
+        extra = { deleted: gone.length };
+        break;
+      }
       case "restore-version": {
         const v = p.scenarioVersions.find((x) => x.id === body.versionId);
         if (!v) throw new AppError("NOT_FOUND", "버전을 찾지 못했습니다.", 404);
@@ -461,6 +493,19 @@ export const dramaStudioService = {
     const jobs = (Array.isArray(body.jobs) ? body.jobs : []) as ImageJob[];
     requireStep(p, jobs.some((j) => j?.target?.type === "frame") ? "storyboard" : "sheets");
     const tasks = await createImageTasks(owner, p, jobs, String(body.modelId ?? "nano-banana-edit"), requestId);
+    const saved = await saveMerged(owner, { ...p, tasks: [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks] });
+    return { ...(await withUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
+  },
+
+  /** v0.9.101 배경음악 만들기 (Kie Suno, 버튼 1번 = 1회 과금, 곡 2개 정도) */
+  async music(id: string, body: { note?: unknown; clientRequestId?: unknown; confirmed?: unknown }) {
+    if (body.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "비용이 드는 작업입니다. 확인 창에서 [만들기]를 눌러 주세요.", 409);
+    const requestId = String(body.clientRequestId ?? "").slice(0, 80);
+    if (requestId.length < 8) throw new AppError("VALIDATION", "요청 번호가 없습니다.");
+    const { owner, p } = await open(id);
+    requireStep(p, "video");
+    if (p.tasks.some((t) => t.kind === "music" && (t.status === "generating" || t.status === "requesting") && t.requestId !== requestId)) throw new AppError("BUSY", "음악을 만드는 중입니다. 끝난 뒤 다시 눌러 주세요.", 409);
+    const tasks = await createMusicTask(p, String(body.note ?? "").slice(0, 300), requestId);
     const saved = await saveMerged(owner, { ...p, tasks: [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks] });
     return { ...(await withUrls(saved)), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
   },
@@ -556,6 +601,7 @@ export const dramaStudioService = {
       markEdited(p, "video");
     } else if (target.type === "bgm") {
       p.renderSettings = { ...p.renderSettings, bgmKey: key, bgmName: fileName };
+      (p.bgmTracks ??= []).push({ id: newId("bg"), key, name: fileName.slice(0, 60) || "올린 음악", durationSec: null, prompt: "", source: "upload", createdAt: at });
     } else if (target.type === "logo") {
       p.renderSettings = { ...p.renderSettings, logoKey: key, logoName: fileName };
     } else throw new AppError("VALIDATION", "어디에 쓸 파일인지 알 수 없습니다.");

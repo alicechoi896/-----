@@ -52,3 +52,19 @@ describe("AI 컷 (v0.9.60, Kie AI)", () => {
     expect(estimateAiClipUsd(["product", "product", "text"])).toEqual({ usd: 0.31, unknown: 0 });
   });
 });
+
+describe("v0.9.101 Suno 음악 결과", () => {
+  it("결과 안의 audio_url 을 모두 찾는다 (곡 2개)", () => {
+    const r = parseRecord({ state: "success", resultJson: JSON.stringify({ data: [{ id: "a", audio_url: "https://x.example/1.mp3", duration: 120 }, { id: "b", audio_url: "https://x.example/2.mp3" }] }) });
+    expect(r.state).toBe("success");
+    expect(r.resultUrl).toBe("https://x.example/1.mp3");
+    expect(r.resultUrls).toEqual(["https://x.example/1.mp3", "https://x.example/2.mp3"]);
+  });
+  it("response 객체 모양도 (sunoData.audioUrl)", () => {
+    const r = parseRecord({ state: "success", response: { sunoData: [{ audioUrl: "https://x.example/3.mp3" }] } });
+    expect(r.resultUrl).toBe("https://x.example/3.mp3");
+  });
+  it("영상 결과(resultUrls)는 그대로", () => {
+    expect(parseRecord({ state: "success", resultJson: JSON.stringify({ resultUrls: ["https://x.example/v.mp4"] }) }).resultUrls).toBeUndefined();
+  });
+});

@@ -339,6 +339,75 @@ export async function createVideoTasks(owner: string, p: DramaProject, jobs: Vid
   return run;
 }
 
+/* ───── 배경음악 (v0.9.101, Kie Suno) ───── */
+export const MUSIC_MODEL = { id: "suno-v6", model: "ai-music-api/generate", version: "V6", label: "Suno V6 (Kie)" };
+
+/** 배경음악 프롬프트: 대사 밑에 깔리는 연주곡 */
+export function musicPrompt(p: DramaProject, note: string): string {
+  const base = note.trim() || [p.settings.genre, p.settings.mood, p.scenario.title || p.title].filter(Boolean).join(", ");
+  return `Instrumental background score for a Korean short drama: ${base}. Soft, calm and unobtrusive underscore that sits under dialogue — no vocals, no lyrics, no sudden loud hits, gentle dynamics, loopable.`.slice(0, 500);
+}
+
+export async function createMusicTask(p: DramaProject, note: string, requestId: string): Promise<DramaTask[]> {
+  const dup = existing(p, requestId);
+  if (dup.length) return dup;
+  const key = `music:${p.id}:${requestId}`;
+  if (inFlight.has(key)) return (await inFlight.get(key)) as DramaTask[];
+  const run = (async () => {
+    const prov = await provider();
+    const t = baseTask({ kind: "music", target: { type: "bgm" }, modelId: MUSIC_MODEL.id, mode: "text", prompt: musicPrompt(p, note), requestId });
+    await submit(prov, [t], () => MUSIC_MODEL.model, async (x) => (x.request = { custom_mode: false, instrumental: true, model: MUSIC_MODEL.version, prompt: x.prompt }));
+    return [t];
+  })().finally(() => inFlight.delete(key));
+  inFlight.set(key, run);
+  return run;
+}
+
+async function demoMusic(sec: number): Promise<Buffer> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ds_bgm_"));
+  try {
+    const out = path.join(dir, "a.mp3");
+    await runFfmpeg(["-f", "lavfi", "-i", `sine=frequency=220:duration=${sec}`, "-af", "volume=0.3", "-c:a", "libmp3lame", "-b:a", "128k", out], 60_000);
+    return await readFile(out);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** 음악 결과(곡 1~2개)를 Storage 로 복사하고 목록에 넣는다. 쓰는 음악이 없으면 첫 곡을 쓴다 */
+async function attachMusic(owner: string, p: DramaProject, t: DramaTask, urls: string[], demo: boolean): Promise<void> {
+  const list = (p.bgmTracks ??= []);
+  const n = list.filter((x) => x.source === "ai").length;
+  const made: string[] = [];
+  for (const [i, url] of (demo ? ["demo"] : urls.slice(0, 2)).entries()) {
+    const buf = demo ? await demoMusic(20) : await fetchResult(url, "audio");
+    const key = `${projectDir(owner, p.id)}/bgm/${t.id}_${i + 1}.mp3`;
+    await videoStorage.put(key, buf, "audio/mpeg");
+    let dur: number | null = null;
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ds_bgm_"));
+    try {
+      const f = path.join(dir, "a.mp3");
+      await (await import("node:fs/promises")).writeFile(f, buf);
+      const d = await mediaDuration(f);
+      dur = d > 0 ? Number(d.toFixed(1)) : null;
+    } catch {
+      dur = null;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+    const id = newId("bg");
+    list.push({ id, key, name: `AI 음악 ${n + i + 1}`, durationSec: dur, prompt: t.prompt, source: "ai", createdAt: now() });
+    made.push(key);
+  }
+  if (!made.length) throw new Error("음악 파일을 받지 못했습니다.");
+  t.storedKey = made[0];
+  t.assetId = list[list.length - made.length].id;
+  if (!p.renderSettings.bgmKey) {
+    const first = list[list.length - made.length];
+    p.renderSettings = { ...p.renderSettings, bgmKey: first.key, bgmName: first.name };
+  }
+}
+
 /* ───── 상태 확인 → 결과 보관 ───── */
 const ACTIVE = (t: DramaTask) => t.status === "generating" || t.status === "requesting";
 
@@ -370,14 +439,14 @@ async function demoResult(kind: "image" | "video", aspect: string, label: string
   }
 }
 
-async function fetchResult(url: string, kind: "image" | "video"): Promise<Buffer> {
+async function fetchResult(url: string, kind: "image" | "video" | "audio"): Promise<Buffer> {
   const u = new URL(url);
   // Kie 결과 파일 서버는 모델마다 달라 주소 제한 대신 https + 내부망 차단(safeFetch)만
   if (u.protocol !== "https:") throw new Error("결과 주소가 https 가 아닙니다.");
   const res = await safeFetch(url, { signal: AbortSignal.timeout(120_000) });
   if (!res.ok) throw new Error(`결과 파일을 받지 못했습니다 (HTTP ${res.status}).`);
   const buf = Buffer.from(await res.arrayBuffer());
-  const max = kind === "video" ? 45 * 1024 * 1024 : 15 * 1024 * 1024;
+  const max = kind === "video" ? 45 * 1024 * 1024 : kind === "audio" ? 25 * 1024 * 1024 : 15 * 1024 * 1024;
   if (buf.length > max) throw new Error(`결과 파일이 너무 큽니다 (${Math.round(buf.length / 1048576)}MB).`);
   return buf;
 }
@@ -404,8 +473,13 @@ export async function syncTasks(owner: string, p: DramaProject): Promise<boolean
         Object.assign(t, { status: "fail", error: (s.error ?? "만들지 못했습니다.").replace("AI 컷을", "Kie 가"), credits: s.credits, updatedAt: now() });
         continue;
       }
+      if (t.kind === "music") {
+        await attachMusic(owner, p, t, s.resultUrls?.length ? s.resultUrls : [s.resultUrl], demo);
+        Object.assign(t, { status: "success", resultUrl: demo ? null : s.resultUrl, credits: s.credits, error: null, updatedAt: now() });
+        continue;
+      }
       const aspect = t.kind === "image" ? String((t.request as { aspect_ratio?: string }).aspect_ratio ?? p.settings.aspect) : p.settings.aspect;
-      const buf = demo ? await demoResult(t.kind, aspect, t.target.type === "clip" ? "video" : t.target.type) : await fetchResult(s.resultUrl, t.kind);
+      const buf = demo ? await demoResult(t.kind as "image" | "video", aspect, t.target.type === "clip" ? "video" : t.target.type) : await fetchResult(s.resultUrl, t.kind as "image" | "video");
       const ext = t.kind === "image" ? (buf.subarray(1, 4).toString() === "PNG" ? "png" : "jpg") : "mp4";
       const key = `${projectDir(owner, p.id)}/${t.kind === "image" ? "img" : "clip"}/${t.id}.${ext}`;
       await videoStorage.put(key, buf, t.kind === "image" ? (ext === "png" ? "image/png" : "image/jpeg") : "video/mp4");
@@ -473,7 +547,7 @@ function attachResult(p: DramaProject, t: DramaTask, key: string, demoSec: numbe
     list.push(img);
     t.assetId = img.id;
     markNewResult(p, "storyboard");
-  } else {
+  } else if (t.target.type === "clip") {
     const clip: DramaClip = { id: newId("cl"), sceneIds: t.target.sceneIds, key, source: "ai", modelId: t.modelId, mode: t.mode, prompt: t.prompt, durationSec: demoSec ?? t.durationSec ?? 5, createdAt: at, approved: false, taskId: t.id };
     p.clips.push(clip);
     t.assetId = clip.id;

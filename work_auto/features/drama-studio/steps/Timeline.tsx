@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { BGM_DEFAULT_VOLUME } from "@/lib/drama-studio/steps";
+import { newRequestId } from "../api";
 import { ArrowDown, ArrowUp, Clapperboard, Download, GripVertical, Music, Trash2, Wand2 } from "lucide-react";
 import { Badge, Button, EmptyState, IconButton, Input, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import type { TimelineItem } from "@/lib/drama-studio/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { autoSubtitle, buildTimeline } from "@/lib/drama-studio/steps";
 import { studioApi } from "../api";
-import { UploadButton } from "../ui";
+import { CostConfirm, TASK_LABEL, UploadButton, taskTone } from "../ui";
 import type { ProjectCtl } from "../useProject";
 
 /** 장면이 여러 타임라인 클립에 들어 있으면 (묶음 1~5 + 개별 3 같은 중복) */
@@ -38,6 +40,16 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
     list.splice(to, 0, it);
     set(list);
   };
+  const [musicNote, setMusicNote] = useState("");
+  const [musicAsk, setMusicAsk] = useState(false);
+  const musicTasks = p.tasks.filter((t) => t.kind === "music");
+  const musicBusy = musicTasks.some((t) => t.status === "generating" || t.status === "requesting");
+  const tracks = p.bgmTracks ?? [];
+  async function makeMusic() {
+    const clientRequestId = newRequestId();
+    setMusicAsk(false);
+    await ctl.run("음악 만들기", () => studioApi.music(p.id, { note: musicNote, clientRequestId }));
+  }
   const running = p.renders.some((r) => r.status === "running");
   const lastOk = [...p.renders].reverse().find((r) => r.status === "success");
   async function uploadLogo(files: File[]) {
@@ -177,9 +189,7 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
                     </Button>
                   </>
                 ) : (
-                  <UploadButton accept="audio/mpeg,audio/mp4,audio/wav,.mp3,.m4a,.wav" disabled={uploading} onFiles={(f) => void uploadBgm(f)}>
-                    음악 올리기
-                  </UploadButton>
+                  <span className="text-[12px] text-fg-subtle">없음 (아래에서 만들거나 올리기)</span>
                 )}
               </div>
             </div>
@@ -215,14 +225,84 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
             </div>
             {rs.bgmKey && (
               <label className="space-y-1">
-                <span className="text-[12px] font-medium text-fg-muted">음악 볼륨 {Math.round(rs.bgmVolume * 100)}%</span>
-                <input type="range" min={0} max={1} step={0.05} value={rs.bgmVolume} onChange={(e) => ctl.edit("renderSettings", { ...rs, bgmVolume: Number(e.target.value) })} className="block w-40 accent-[var(--color-brand)]" />
+                <span className="text-[12px] font-medium text-fg-muted">
+                  음악 볼륨 {Math.round(rs.bgmVolume * 100)}% {Math.abs(rs.bgmVolume - BGM_DEFAULT_VOLUME) < 0.005 ? "(기본: 아주 작게)" : ""}
+                </span>
+                <input type="range" min={0} max={0.5} step={0.01} value={Math.min(0.5, rs.bgmVolume)} onChange={(e) => ctl.edit("renderSettings", { ...rs, bgmVolume: Number(e.target.value) })} className="block w-40 accent-[var(--color-brand)]" />
               </label>
             )}
             <Button variant="primary" icon={Clapperboard} className="ml-auto" disabled={!tl.length || running || Boolean(ctl.busy)} loading={running} onClick={() => void ctl.run("병합 시작", () => studioApi.render(p.id))} data-render>
               {running ? "병합 중…" : lastOk ? "다시 렌더링" : "최종 영상 만들기"}
             </Button>
           </div>
+          <div className="rounded-control border border-line p-3" data-bgm>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Music className="size-4 text-fg-muted" />
+              <span className="text-[13px] font-semibold">배경음악 만들기·고르기</span>
+              <span className="text-[12px] text-fg-subtle">대사 밑에 아주 작게 깔리고, 대사가 나오면 더 줄어듭니다.</span>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[240px] flex-1 space-y-1">
+                <span className="text-[12px] font-medium text-fg-muted">어떤 음악? (비우면 장르·분위기로)</span>
+                <Input value={musicNote} onChange={(e) => setMusicNote(e.target.value.slice(0, 300))} placeholder="예: 신비롭고 따뜻한 동화풍 피아노와 현악" className="h-9" data-music-note />
+              </label>
+              <Button variant="primary" icon={Wand2} disabled={musicBusy || Boolean(ctl.busy)} loading={musicBusy || ctl.busy === "음악 만들기"} onClick={() => setMusicAsk(true)} data-make-music>
+                {musicBusy ? "음악 만드는 중…" : "AI 음악 만들기"}
+              </Button>
+              <UploadButton accept="audio/mpeg,audio/mp4,audio/wav,.mp3,.m4a,.wav" disabled={uploading} onFiles={(f) => void uploadBgm(f)}>
+                음악 올리기
+              </UploadButton>
+            </div>
+            {musicTasks.slice(-3).reverse().filter((t) => t.status !== "success").map((t) => (
+              <p key={t.id} className="mt-2 text-[12px]">
+                <Badge tone={taskTone(t.status)}>{TASK_LABEL[t.status] ?? t.status}</Badge> {t.error ?? "Kie Suno 가 연주곡을 만드는 중입니다 (보통 1~3분, 곡 2개)."}
+              </p>
+            ))}
+            {tracks.length > 0 && (
+              <ul className="mt-3 space-y-2" data-bgm-tracks>
+                {[...tracks].reverse().map((tr) => (
+                  <li key={tr.id} className={cn("flex flex-wrap items-center gap-2 rounded border p-2", rs.bgmKey === tr.key ? "border-brand bg-brand-soft" : "border-line")}>
+                    <span className="min-w-[110px] text-[12.5px] font-medium">
+                      {tr.name}
+                      {tr.durationSec ? <span className="ml-1 text-fg-subtle">{Math.round(tr.durationSec)}초</span> : null}
+                    </span>
+                    {ctl.urls[tr.key] ? <audio src={ctl.urls[tr.key]} controls preload="none" className="h-8 max-w-[280px] flex-1" /> : <span className="text-[12px] text-fg-subtle">미리 듣기 준비 중</span>}
+                    {rs.bgmKey === tr.key ? (
+                      <Badge tone="brand">사용 중</Badge>
+                    ) : (
+                      <Button size="sm" variant="secondary" disabled={Boolean(ctl.busy)} onClick={() => void ctl.run("음악 고르기", () => studioApi.generate(p.id, "use-bgm", { trackId: tr.id }))} data-use-bgm>
+                        이 음악 쓰기
+                      </Button>
+                    )}
+                    <IconButton icon={Trash2} label="음악 지우기" onClick={() => window.confirm(`'${tr.name}'을 지울까요?`) && void ctl.run("음악 지우기", () => studioApi.generate(p.id, "delete-bgm", { trackId: tr.id }))} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <CostConfirm
+            open={musicAsk}
+            title="AI 배경음악 만들기"
+            items={[{ label: "Kie Suno V6 연주곡 (가사 없음, 보통 곡 2개)", count: 1, credits: null }]}
+            notes={["버튼 1번 = Kie 요청 1번 (자동으로 다시 보내지 않습니다).", "실제 쓴 크레딧은 Kie 가 알려 주는 대로 끝난 뒤 남깁니다.", "만든 음악 파일은 이 프로젝트에 보관됩니다."]}
+            onCancel={() => setMusicAsk(false)}
+            onConfirm={() => void makeMusic()}
+            busy={ctl.busy === "음악 만들기"}
+          />
+          {p.renders.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="danger"
+                icon={Trash2}
+                disabled={!p.renders.some((r) => r.status !== "running") || Boolean(ctl.busy)}
+                onClick={() => window.confirm(`렌더링 영상 ${p.renders.filter((r) => r.status !== "running").length}개를 모두 지울까요? (파일도 지웁니다. 클립·타임라인은 그대로라 다시 렌더링할 수 있습니다)`) && void ctl.run("렌더링 지우기", () => studioApi.generate(p.id, "delete-render", { all: true }))}
+                data-renders-delete-all
+              >
+                렌더링 영상 모두 지우기
+              </Button>
+            </div>
+          )}
           {p.renders.length > 0 && (
             <ul className="space-y-3" data-renders>
               {[...p.renders].reverse().map((r) => (
@@ -232,6 +312,11 @@ export function Timeline({ ctl }: { ctl: ProjectCtl }) {
                     <Badge tone={r.status === "success" ? "success" : r.status === "fail" ? "danger" : "info"}>{r.status === "success" ? "완료" : r.status === "fail" ? "실패" : "병합 중"}</Badge>
                     {r.totalSec != null && <span className="text-fg-muted">총 {r.totalSec}초</span>}
                     <span className="text-fg-subtle">{formatRelative(r.createdAt)}</span>
+                    {r.status !== "running" && (
+                      <Button size="sm" variant="ghost" icon={Trash2} className={r.key && ctl.urls[r.key] ? "" : "ml-auto"} disabled={Boolean(ctl.busy)} onClick={() => window.confirm(`버전 ${r.version} 렌더링 영상을 지울까요? (파일도 지웁니다)`) && void ctl.run("렌더링 지우기", () => studioApi.generate(p.id, "delete-render", { renderId: r.id }))} data-render-delete>
+                        지우기
+                      </Button>
+                    )}
                     {r.key && ctl.urls[r.key] && (
                       <a href={ctl.urls[r.key]} download={`${rs.title || p.title}_v${r.version}.mp4`} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-brand hover:underline" data-render-download>
                         <Download className="size-4" /> MP4 다운로드

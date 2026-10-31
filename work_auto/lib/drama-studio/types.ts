@@ -188,8 +188,8 @@ export type TaskStatus = "queued" | "requesting" | "generating" | "success" | "f
 /** Kie 작업 (이미지·영상). 서버만 쓴다 */
 export interface DramaTask {
   id: string;
-  kind: "image" | "video";
-  target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string } | { type: "clip"; sceneIds: string[] };
+  kind: "image" | "video" | "music";
+  target: { type: "sheet"; charId: string; sheetKind: SheetKind } | { type: "frame"; sceneId: string } | { type: "clip"; sceneIds: string[] } | { type: "bgm" };
   modelId: string;
   mode: GenMode;
   prompt: string;
@@ -304,6 +304,18 @@ export interface DramaProject {
   timeline: TimelineItem[];
   renderSettings: RenderSettings;
   renders: DramaRender[];
+  /** v0.9.101: 배경음악 목록 (AI 로 만든 곡·올린 곡). 쓰는 곡은 renderSettings.bgmKey */
+  bgmTracks?: DramaBgmTrack[];
+}
+
+export interface DramaBgmTrack {
+  id: string;
+  key: string;
+  name: string;
+  durationSec: number | null;
+  prompt: string;
+  source: "ai" | "upload";
+  createdAt: string;
 }
 
 export interface DramaProjectSummary {

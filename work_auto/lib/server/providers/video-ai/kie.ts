@@ -30,6 +30,8 @@ export class VideoAIError extends Error {
 export interface ClipStatus {
   state: AiClipState;
   resultUrl: string | null;
+  /** 결과가 여러 개일 때 (Suno 음악 2곡) */
+  resultUrls?: string[];
   credits: number | null;
   error: string | null;
 }
@@ -140,6 +142,7 @@ export function parseRecord(d: Obj | undefined): ClipStatus {
   const raw = String(d?.state ?? "waiting");
   const state: AiClipState = raw === "success" ? "success" : raw === "fail" ? "fail" : raw === "generating" ? "generating" : "waiting";
   let resultUrl: string | null = null;
+  let resultUrls: string[] = [];
   if (state === "success") {
     const parsed = (() => {
       if (d?.response && typeof d.response === "object") return d.response as Obj;
@@ -151,10 +154,22 @@ export function parseRecord(d: Obj | undefined): ClipStatus {
     })();
     const urls = parsed.resultUrls;
     resultUrl = Array.isArray(urls) && typeof urls[0] === "string" ? urls[0] : null;
+    // v0.9.101 Suno 음악: 결과 안 어딘가의 audio_url (곡 여러 개)
+    if (!resultUrl) resultUrls = audioUrls(parsed).concat(audioUrls(d?.response)).filter((u, i, a) => a.indexOf(u) === i);
+    if (!resultUrl && resultUrls.length) resultUrl = resultUrls[0];
   }
   const credits = d?.creditsConsumed != null && Number.isFinite(Number(d.creditsConsumed)) ? Number(d.creditsConsumed) : null;
   const error = state === "fail" ? `AI 컷을 만들지 못했습니다${d?.failMsg ? ` (${String(d.failMsg).slice(0, 120)})` : ""}.` : state === "success" && !resultUrl ? "결과 영상 주소가 없습니다." : null;
-  return { state: state === "success" && !resultUrl ? "fail" : state, resultUrl, credits, error };
+  return { state: state === "success" && !resultUrl ? "fail" : state, resultUrl, credits, error, ...(resultUrls.length ? { resultUrls } : {}) };
+}
+
+/** 음악 결과의 audio_url·audioUrl 모으기 (Suno 응답은 모양이 버전마다 달라 깊이 5까지 찾는다) */
+function audioUrls(x: unknown, depth = 0): string[] {
+  if (!x || typeof x !== "object" || depth > 5) return [];
+  if (Array.isArray(x)) return x.flatMap((y) => audioUrls(y, depth + 1));
+  const o = x as Obj;
+  const own = ["audio_url", "audioUrl"].map((k) => o[k]).filter((v): v is string => typeof v === "string" && /^https:\/\//.test(v));
+  return [...own, ...Object.values(o).flatMap((v) => audioUrls(v, depth + 1))];
 }
 
 /** 데모: 바로 끝난 것으로 (결과는 렌더할 때 시험 영상으로 만든다) */

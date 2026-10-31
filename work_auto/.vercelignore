@@ -12,3 +12,4 @@ coverage
 *.pem
 *.mp4
 npm-debug.log*
+/reference/

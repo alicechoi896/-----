@@ -186,7 +186,7 @@ export async function renderDrama(owner: string, p: DramaProject, r: DramaRender
         final = path.join(dir, "final.mp4");
         const vol = Math.min(1, Math.max(0, p.renderSettings.bgmVolume));
         await runFfmpeg(
-          ["-i", joined, "-stream_loop", "-1", "-i", bf, "-filter_complex", `[1:a]volume=${vol},atrim=0:${total.toFixed(3)},afade=t=out:st=${Math.max(0, total - 1.5).toFixed(3)}:d=1.5[bg];[0:a][bg]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[a]`, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-t", total.toFixed(3), final],
+          ["-i", joined, "-stream_loop", "-1", "-i", bf, "-filter_complex", `[0:a]asplit=2[voice][sc];[1:a]volume=${vol},atrim=0:${total.toFixed(3)},afade=t=out:st=${Math.max(0, total - 1.5).toFixed(3)}:d=1.5[bgraw];[bgraw][sc]sidechaincompress=threshold=0.02:ratio=6:attack=20:release=400[bg];[voice][bg]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[a]`, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-t", total.toFixed(3), final],
           300_000,
         );
       }

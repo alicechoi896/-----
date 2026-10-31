@@ -55,7 +55,10 @@ export async function loadProject(owner: string, id: string): Promise<DramaProje
   buf ??= await videoStorage.download(`${projectDir(owner, id)}/project.json`).catch(() => null);
   if (!buf) throw new AppError("NOT_FOUND", "프로젝트를 찾지 못했습니다. 지워졌거나 다른 사용자의 프로젝트입니다.", 404);
   try {
-    return JSON.parse(buf.toString("utf8")) as DramaProject;
+    const p = JSON.parse(buf.toString("utf8")) as DramaProject;
+    // v0.9.101: 예전 기본 음악 볼륨(20%)은 새 기본(8%, 아주 작게)으로
+    if (p.renderSettings?.bgmVolume === 0.2) p.renderSettings.bgmVolume = 0.08;
+    return p;
   } catch {
     throw new AppError("BROKEN", "프로젝트 파일을 읽지 못했습니다.", 500);
   }
@@ -86,6 +89,7 @@ export function projectKeys(p: DramaProject): string[] {
     ...Object.values(p.storyboard).flat().map((i) => i.key),
     ...p.clips.map((c) => c.key),
     ...p.renders.map((r) => r.key ?? ""),
+    ...(p.bgmTracks ?? []).map((t) => t.key),
     p.renderSettings.bgmKey ?? "",
     p.renderSettings.logoKey ?? "",
   ].filter(Boolean);
