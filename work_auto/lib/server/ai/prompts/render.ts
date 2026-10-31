@@ -5,7 +5,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { endingRule, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
+import { endingTarget, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -86,7 +86,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
         st.heavy
           ? "대본 3편은 모두 포맷 구조를 따르되, Hook 문장과 강조 포인트만 편마다 다르게 한다 (구조를 새로 만들지 않는다)."
           : "대본 3편은 같은 포맷에서 출발하되 편마다 Hook 방식·전개·강조 포인트·CTA 를 다르게 해서, 사용자가 좋은 부분을 골라 섞을 수 있게 한다.",
-        ...(endingRule(f.examples.map((e) => e.text)) ? [endingRule(f.examples.map((e) => e.text))!] : []),
+        ...(endingTarget(f).rule ? [endingTarget(f).rule!] : []),
         "영상 길이와 말투 규칙('~니다.' 금지, 짧은 리듬)은 그대로 지킨다. 가격·할인·배송·순위 주장은 [제품 정보]에 근거가 있을 때만 쓰고, 없으면 '링크에서 확인' 식으로 바꾼다.",
         ...(f.guideline ? f.guideline.split("\n") : ["(가이드라인 없음 — 아래 참고 대본의 구조를 참고한다)"]),
       ]),
@@ -278,11 +278,14 @@ export function renderContentPrompt(
   else if (config.outputs.some((o) => o.key === "description"))
     userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. '이 설명은 ~입니다', '설명글:', '핵심 요약:', '추천 대상:' 같은 안내·항목 이름·괄호 메모를 쓰지 않는다. 시청자에게 바로 말하듯 제품(주제) 소개 → 장점·확인할 점 순서로 3~6문단, 문단 사이는 빈 줄, 마지막 문단은 CTA(행동 유도)로 끝낸다.");
 
+  // v0.9.90: 말끝 규칙을 맨 끝에 한 번 더 — 대본 포맷이 '~요'를 안 쓰는데 결과가 '~요'로 끝나던 문제
+  const ending = ctx.scriptFormat && ctx.scriptFormatUse === "full" && config.outputs.some((o) => o.key === "script") ? endingTarget(ctx.scriptFormat).rule : null;
   const user = [
     block("작업", template.task),
     ...contextBlocks(ctx),
     block("사용자 입력", userInput),
     outputFormat(config.outputs),
+    ending ? block("마지막 확인 — 대본 말끝 (가장 중요)", [ending, "출력하기 전에 대본의 줄마다 말끝을 다시 보고, 규칙과 다르면 내용은 그대로 두고 말끝만 고친다. Hook·CTA·제목도 같은 말끝으로."]) : "",
   ]
     .filter(Boolean)
     .join("\n\n");

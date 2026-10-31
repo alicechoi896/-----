@@ -52,3 +52,31 @@ describe("재검토 알림 닫기", () => {
     expect(p.steps.storyboard.status).toBe("approved");
   });
 });
+
+describe("영상 교체 (v0.9.90)", () => {
+  it("같은 장면에 새 영상을 올리면 타임라인 자리가 새 영상으로 바뀌고, 예전 영상은 남는다", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const ff = (await import("ffmpeg-static")).default as unknown as string;
+    const mp4 = (color: string) => spawnSync(ff, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", `color=c=${color}:s=320x568:d=1`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "-"], { maxBuffer: 1 << 24 }).stdout;
+    const { project } = await svc.create({ title: "영상 교체", startStep: "storyboard" });
+    const id = project.id;
+    let p = (await upload(id, "scene_01.png", { type: "frame" })).project;
+    const sceneId = p.scenario.scenes[0].id;
+    const put = async (name: string, color: string) => {
+      const up = await svc.uploadUrl(id, { kind: "video", fileName: name, size: 10 });
+      const buf = mp4(color);
+      await svc.uploadMemory(up.key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      return (await svc.register(id, { key: up.key, kind: "video", fileName: name, target: { type: "clip", sceneIds: [sceneId] } })).project;
+    };
+    p = await put("a.mp4", "red");
+    const first = p.clips[0];
+    p = (await svc.patch(id, { section: "timeline", value: [{ id: "tl_1", clipId: first.id, trimStart: 0.2, trimEnd: 0, audio: true }] })).project;
+    p = await put("b.mp4", "blue");
+    expect(p.clips).toHaveLength(2);
+    const second = p.clips[1];
+    expect(p.timeline).toHaveLength(1);
+    expect(p.timeline[0].clipId).toBe(second.id);
+    expect(p.clips.find((c) => c.id === second.id)!.approved).toBe(true);
+    expect(p.clips.some((c) => c.id === first.id)).toBe(true);
+  }, 60_000);
+});

@@ -269,3 +269,31 @@ export function endingRule(texts: string[]): string | null {
   if (ratios.nida < 0.1) lines.push("'~니다'로 끝내지 않는다.");
   return lines.join(" ");
 }
+
+/** v0.9.90: 가이드라인에 사람이 직접 쓴 '~요 금지' (예: '요로 끝내지 않는다', '~요 금지', '반말로') */
+export function guidelineBansYo(text: string): boolean {
+  const t = text.replace(/\s+/g, " ");
+  return /요\s*(?:로|으로)?\s*(?:끝|마무리)[^.\n]{0,15}(?:않|말|금지|x|X|❌|노)/.test(t) || /[~-]?요\s*(?:체|말투|어미)?\s*(?:금지|쓰지\s*않|쓰지\s*말|빼)/.test(t) || /반말\s*(?:로|으로|만|사용|쓴다|위주)/.test(t);
+}
+
+/** 대본 한 편에서 '~요'로 끝나는 줄 비율 */
+export function yoRatio(script: string): number {
+  const ks = script.split(/\n+/).map(endingOf).filter((k): k is EndingKind => Boolean(k));
+  return ks.length ? ks.filter((k) => k === "yo").length / ks.length : 0;
+}
+
+/** 포맷의 말끝 목표: '~요' 최대 비율 + 프롬프트 규칙 (가이드라인 금지 > 참고 대본 분포) */
+export function endingTarget(f: { examples?: { text: string }[]; guideline?: string; hooks?: string[]; ctas?: string[] } | null): { maxYo: number | null; rule: string | null } {
+  if (!f) return { maxYo: null, rule: null };
+  const texts = (f.examples ?? []).map((e) => e.text);
+  const fromExamples = endingRule(texts);
+  if (guidelineBansYo(f.guideline ?? "")) {
+    return {
+      maxYo: 0.05,
+      rule: `말끝 규칙 (가장 중요 — 다른 모든 말투 규칙보다 우선): 대본 포맷 가이드라인에 따라 '~요'·'~거든요'·'~죠'·'~해요'로 끝나는 줄을 쓰지 않는다. 말끝은 참고 대본처럼 '~다'·반말·'~음'·명사로 끝낸다.${fromExamples ? ` ${fromExamples}` : ""}`,
+    };
+  }
+  const { total, ratios } = endingProfile(texts);
+  if (total >= 10 && ratios.yo < 0.3) return { maxYo: ratios.yo + 0.05, rule: fromExamples };
+  return { maxYo: null, rule: fromExamples };
+}

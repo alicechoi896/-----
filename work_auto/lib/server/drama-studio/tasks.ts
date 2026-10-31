@@ -12,7 +12,7 @@ import { videoStorage } from "../video/storage";
 import { projectDir } from "./store";
 import { buildVideoInput, estimateImageCredits, estimateVideoCredits, hasConflictingInputs, imageModel, validateVideo, videoModel, type VideoOptions } from "@/lib/drama-studio/models";
 import { framePrompt, klingName, sheetMeta, sheetPrompt, shotPrompts, videoPrompt } from "@/lib/drama-studio/prompts";
-import { markNewResult, newId } from "@/lib/drama-studio/steps";
+import { markNewResult, newId, swapIntoTimeline } from "@/lib/drama-studio/steps";
 import type { DramaCharacter, DramaClip, DramaImage, DramaProject, DramaScene, DramaTask, SheetKind } from "@/lib/drama-studio/types";
 
 /**
@@ -415,6 +415,7 @@ function attachResult(p: DramaProject, t: DramaTask, key: string, demoSec: numbe
     const clip: DramaClip = { id: newId("cl"), sceneIds: t.target.sceneIds, key, source: "ai", modelId: t.modelId, mode: t.mode, prompt: t.prompt, durationSec: demoSec ?? t.durationSec ?? 5, createdAt: at, approved: false, taskId: t.id };
     p.clips.push(clip);
     t.assetId = clip.id;
+    swapIntoTimeline(p, clip);
     markNewResult(p, "video");
   }
 }

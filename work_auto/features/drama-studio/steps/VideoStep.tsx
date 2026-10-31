@@ -129,6 +129,13 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
     }
   };
   const unapprovedClips = p.clips.filter((c) => !c.approved).length;
+  /** 타임라인의 같은 장면 자리를 이 클립으로 (v0.9.90) */
+  const sameScenes = (a: string[], b: string[]) => a.length > 0 && a.length === b.length && a.every((x) => b.includes(x));
+  const slotOf = (c: DramaClip) => p.timeline.find((t) => t.clipId !== c.id && sameScenes(p.clips.find((x) => x.id === t.clipId)?.sceneIds ?? [], c.sceneIds));
+  const chooseVersion = (c: DramaClip) => {
+    ctl.edit("clips", p.clips.map((x) => (x.id === c.id ? { ...x, approved: true } : x)));
+    ctl.edit("timeline", p.timeline.map((t) => (t === slotOf(c) ? { ...t, clipId: c.id, trimStart: 0, trimEnd: 0 } : t)));
+  };
   const sceneLabel = (ids: string[]) => (ids.length ? ids.map((id) => `#${scenes.findIndex((s) => s.id === id) + 1}`).join("·") : "장면 없음");
 
   return (
@@ -293,7 +300,7 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
       <SectionCard
         title={`클립 · ${p.clips.length}개`}
         icon={Video}
-        description="같은 장면을 여러 번 만들면 모두 남겨 비교할 수 있습니다. 승인한 클립만 타임라인에 넣을 수 있습니다. [모두 승인]은 장면마다 가장 최근 클립을 승인합니다."
+        description="같은 장면을 다시 만들거나 파일로 올리면 타임라인의 그 장면 자리가 새 클립으로 바뀝니다 (예전 클립은 남아 [이 버전으로 교체]로 되돌릴 수 있음). [모두 승인]은 장면마다 가장 최근 클립을 승인합니다."
         actions={
           p.clips.length > 0 && (
             <span className="flex gap-1.5">
@@ -324,9 +331,15 @@ export function VideoStep({ ctl }: { ctl: ProjectCtl }) {
                   <Button size="sm" variant={c.approved ? "primary" : "secondary"} icon={Check} onClick={() => setClips(p.clips.map((x) => (x.id === c.id ? { ...x, approved: !x.approved } : x)))}>
                     {c.approved ? "승인됨" : "승인"}
                   </Button>
-                  <Button size="sm" variant="ghost" icon={ListPlus} disabled={!c.approved || inTimeline.has(c.id)} onClick={() => addToTimeline(c)}>
-                    {inTimeline.has(c.id) ? "타임라인에 있음" : "타임라인에"}
-                  </Button>
+                  {slotOf(c) && !inTimeline.has(c.id) ? (
+                    <Button size="sm" variant="subtle" icon={RefreshCw} onClick={() => chooseVersion(c)} data-use-version>
+                      이 버전으로 교체
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" icon={ListPlus} disabled={!c.approved || inTimeline.has(c.id)} onClick={() => addToTimeline(c)}>
+                      {inTimeline.has(c.id) ? "타임라인에 있음" : "타임라인에"}
+                    </Button>
+                  )}
                   {c.sceneIds.length > 0 && (
                     <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => (setPicked(c.sceneIds), setPlan(c.sceneIds.length > 1 ? "batch" : "single"), window.scrollTo({ top: 0, behavior: "smooth" }))}>
                       다시 생성

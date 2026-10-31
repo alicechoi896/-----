@@ -1,4 +1,5 @@
 import "server-only";
+import { endingTarget, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
@@ -145,6 +146,57 @@ function mergeUserKeywords(config: Prepared["config"], input: Record<string, unk
   }
 }
 
+/**
+ * v0.9.90: 대본 포맷의 말끝을 어겼으면(예: 포맷은 '~요'를 거의 안 쓰는데 결과는 '~요' 투성이) 내용은 그대로 두고 말끝만 고친다 (AI 1회, 어겼을 때만).
+ * 실패해도 원래 결과를 그대로 쓴다.
+ */
+async function enforceEndings(p: Prepared, output: Record<string, GeneratedValue>): Promise<void> {
+  const ctx = p.context;
+  if (!ctx.scriptFormat || ctx.scriptFormatUse !== "full" || !Array.isArray(output.script)) return;
+  const target = endingTarget(ctx.scriptFormat);
+  if (target.maxYo === null || !target.rule) return;
+  const scripts = output.script as string[];
+  const bad = scripts.map((s, i) => ({ s, i, r: yoRatio(s) })).filter((x) => x.r > target.maxYo! + 0.1);
+  if (!bad.length) return;
+  try {
+    const ai = await getAIProvider();
+    const ex = (ctx.scriptFormat.examples ?? []).slice(0, 2).map((e) => e.text.slice(0, 400));
+    const r = await ai.generateStructured<{ script?: unknown }>({
+      task: "content:script-endings",
+      messages: [
+        { role: "system", content: "당신은 한국어 쇼츠 대본 편집자다. 내용·순서·줄 수·줄바꿈은 그대로 두고 문장 끝(말끝)만 규칙에 맞게 고친다. JSON 으로만 답한다." },
+        {
+          role: "user",
+          content: [
+            target.rule,
+            ex.length ? `[참고 대본 말투]\n${ex.join("\n---\n")}` : "",
+            `[고칠 대본 ${bad.length}편] (배열 순서 그대로, 각 편은 줄바꿈 유지)`,
+            JSON.stringify(bad.map((b) => b.s)),
+            '형식: {"script":["고친 대본 1", …]}',
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        },
+      ],
+      outputKeys: ["script"],
+      jsonSchema: { type: "object", additionalProperties: false, required: ["script"], properties: { script: { type: "array", items: { type: "string" } } } },
+      variables: { scripts: bad.map((b) => b.s) },
+    });
+    const fixed = Array.isArray(r.data.script) ? (r.data.script as unknown[]).map((x) => String(x ?? "")) : [];
+    let n = 0;
+    bad.forEach((b, k) => {
+      const f = fixed[k]?.trim();
+      // 줄 수가 크게 달라지면(내용을 바꿨으면) 쓰지 않는다
+      if (!f || Math.abs(f.split(/\n+/).length - b.s.split(/\n+/).length) > 2 || yoRatio(f) >= b.r) return;
+      scripts[b.i] = f;
+      n++;
+    });
+    if (n) ctx.summary.notes.push(`대본 포맷 말끝에 맞춰 대본 ${n}편의 말끝을 고쳤습니다 ('~요' 줄 줄임).`);
+  } catch {
+    /* 원래 결과 그대로 */
+  }
+}
+
 async function finish(
   p: Prepared,
   output: Record<string, GeneratedValue>,
@@ -153,6 +205,7 @@ async function finish(
 ): Promise<GeneratedContent> {
   const { feature, config, featureId, channelId, userId, input, context, template } = p;
   mergeUserKeywords(config, input, output);
+  await enforceEndings(p, output);
   if (typeof output.description === "string") output.description = cleanDescription(output.description);
   if (context.honestyGuard) {
     const violations = findHonestyViolations(JSON.stringify(output));

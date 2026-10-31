@@ -200,3 +200,21 @@ export const sceneNo = (p: DramaProject, sceneId: string) => p.scenario.scenes.f
 export function markNewResult(p: DramaProject, step: StepKey): void {
   if (p.steps[step].status === "empty") p.steps[step] = { ...p.steps[step], status: "draft" };
 }
+
+/**
+ * v0.9.90: 새 클립(다시 생성·파일 올리기)이 타임라인에 있는 클립과 같은 장면이면 그 자리를 새 클립으로 바꾸고 승인한다.
+ * 예전 클립은 클립 목록에 남아 [이 버전으로 교체]로 되돌릴 수 있다. 바꿨으면 true
+ */
+export function swapIntoTimeline(p: DramaProject, clip: { id: string; sceneIds: string[] }): boolean {
+  if (!clip.sceneIds.length) return false;
+  const same = (ids: string[]) => ids.length === clip.sceneIds.length && ids.every((x) => clip.sceneIds.includes(x));
+  let swapped = false;
+  p.timeline = p.timeline.map((t) => {
+    const old = p.clips.find((c) => c.id === t.clipId);
+    if (!old || old.id === clip.id || !same(old.sceneIds)) return t;
+    swapped = true;
+    return { ...t, clipId: clip.id, trimStart: 0, trimEnd: 0 };
+  });
+  if (swapped) p.clips = p.clips.map((c) => (c.id === clip.id ? { ...c, approved: true } : c));
+  return swapped;
+}

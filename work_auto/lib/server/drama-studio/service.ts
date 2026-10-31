@@ -24,6 +24,7 @@ import {
   markDownstreamReview,
   markEdited,
   markNewResult,
+  swapIntoTimeline,
   newId,
   passed,
   snapshotOf,
@@ -75,6 +76,8 @@ async function saveMerged(owner: string, worked: DramaProject, extra?: (fresh: D
   const newClips = worked.clips.filter((c) => !haveClips.has(c.id));
   if (newClips.length) {
     fresh.clips.push(...newClips);
+    // 다시 만든 클립은 타임라인의 같은 장면 자리를 바꾼다 (최신 문서 기준으로)
+    for (const c of newClips) swapIntoTimeline(fresh, c);
     markNewResult(fresh, "video");
   }
   extra?.(fresh);
@@ -515,6 +518,7 @@ export const dramaStudioService = {
       const sceneIds = (Array.isArray(target.sceneIds) ? target.sceneIds : []).map(String).filter((x) => p.scenario.scenes.some((s) => s.id === x));
       const clip: DramaClip = { id: newId("cl"), sceneIds, key, source: "upload", modelId: "upload", mode: "upload", prompt: "", durationSec: Number(dur.toFixed(2)), createdAt: at, approved: true, taskId: null, fileName };
       p.clips.push(clip);
+      swapIntoTimeline(p, clip);
       markEdited(p, "video");
     } else if (target.type === "bgm") {
       p.renderSettings = { ...p.renderSettings, bgmKey: key, bgmName: fileName };
