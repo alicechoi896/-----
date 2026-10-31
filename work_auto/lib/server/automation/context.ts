@@ -30,6 +30,26 @@ export function runWithoutPaidFallback<T>(fn: () => Promise<T>): Promise<T> {
   return als.run({ client: null as unknown as SupabaseClient, noPaidFallback: true }, fn);
 }
 
+/**
+ * v0.9.126: 지금 로그인한 사람의 세션을 '새로 고친 토큰'으로 따로 잡아 두고, 응답 뒤(after)의 긴 작업(3~5분)을 그 클라이언트로 실행한다.
+ * 전에는 쿠키 클라이언트를 그대로 써서, 도중에 토큰이 만료되면 완성 영상 저장이 RLS 로 거부됐다 ('로그인이 필요합니다').
+ * 유료 대체 경로(TikHub)는 막는다. 데모(Supabase 없음)는 그대로.
+ */
+export async function captureUserRunner(): Promise<<T>(fn: () => Promise<T>) => Promise<T>> {
+  if (!isSupabaseConfigured()) return (fn) => runWithoutPaidFallback(fn);
+  const { createSupabaseServerClient } = await import("@/lib/supabase/server");
+  const cookie = await createSupabaseServerClient();
+  const { data } = await cookie.auth.refreshSession().catch(() => ({ data: { session: null } }));
+  const session = data.session ?? (await cookie.auth.getSession()).data.session;
+  if (!session) return (fn) => runWithoutPaidFallback(fn);
+  return async (fn) => {
+    const client = createClient(supabaseEnv.url, supabaseEnv.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    // 토큰을 다시 새로 고치지 않는다 (브라우저의 refresh token 과 엇갈려 로그아웃되지 않게). 방금 새로 고쳐 1시간 유효
+    await client.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    return als.run({ client, noPaidFallback: true }, fn);
+  };
+}
+
 /** 자동화 계정으로 로그인해 fn 을 실행한다. 데모(Supabase 없음)는 데모 관리자로 그대로 */
 export async function runAsAutomation<T>(fn: () => Promise<T>): Promise<T> {
   if (!isSupabaseConfigured()) {

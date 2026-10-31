@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { requireAccess } from "@/lib/server/auth";
 import { AppError, handle, readJson } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/rate-limit";
-import { runWithoutPaidFallback } from "@/lib/server/automation/context";
+import { captureUserRunner, runWithoutPaidFallback } from "@/lib/server/automation/context";
 import { AUTO_LIMITS, addItems, kstDate, patchItem, produceNow, readRun, startRun, tick } from "@/lib/server/automation/auto-video";
 
 export const maxDuration = 800;
@@ -28,13 +28,16 @@ export async function POST(request: Request) {
     if (typeof body.itemId === "string" && body.itemId) {
       const id = body.itemId;
       if (!run.items.some((x) => x.id === id && x.status === "pending")) throw new AppError("VALIDATION", "대기 중인 항목만 지금 만들 수 있습니다.");
-      after(() => runWithoutPaidFallback(() => produceNow(date, id)).catch(() => undefined));
+      const runAs = await captureUserRunner();
+      after(() => runAs(() => produceNow(date, id)).catch(() => undefined));
       return { run };
     }
     // v0.9.110: 남은 항목이 없으면 새 제품을 골라 덧붙인다 (언제든 시험 실행)
     // 시험 항목이 남아 있지 않으면 새 제품을 골라 '시험'으로 덧붙인다 (새벽 자동 항목·새벽 자동 여부는 건드리지 않음)
     if (!run.items.some((x) => x.status === "pending" && x.source !== "schedule")) run = await runWithoutPaidFallback(() => addItems(date, count, "test"));
-    after(() => runWithoutPaidFallback(() => tick(date, "test")).then(() => undefined));
+    // v0.9.126: 응답 뒤 3~5분 작업은 새로 고친 세션으로 (도중 토큰 만료로 영상 저장이 거부되던 문제)
+    const runAs = await captureUserRunner();
+    after(() => runAs(() => tick(date, "test")).then(() => undefined));
     return { run };
   });
 }
