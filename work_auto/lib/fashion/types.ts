@@ -63,6 +63,8 @@ export interface FashionLook {
   images: FashionImage[];
   /** v0.9.120 릴스 (나): 룩 이미지에서 시작하는 AI 영상 (Seedance 2.0 Mini 4초). 승인 1개를 릴스에 쓴다 */
   clips?: FashionClip[];
+  /** v0.9.124 이 룩만의 영상 동작 (비우면 컨셉) */
+  clipMotion?: string;
 }
 
 export interface FashionClip {
@@ -90,6 +92,10 @@ export interface FashionSettings {
   reelStyle: "a" | "b";
   /** 음악 볼륨 (릴스는 말소리가 없어 음악이 주인공) */
   bgmVolume: number;
+  /** v0.9.124 릴스 (나) AI 영상 컨셉 (CLIP_CONCEPTS id) */
+  clipConcept?: string;
+  /** v0.9.124 AI 영상 추가 요청 (한국어 가능, 모든 룩 공통) */
+  clipNote?: string;
 }
 
 export type FashionTaskStatus = "queued" | "requesting" | "generating" | "success" | "fail";

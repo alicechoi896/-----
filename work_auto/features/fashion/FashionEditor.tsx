@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Clapperboard, Download, ImageIcon, Library, Music, Palette, Plus, Shirt, Sparkles, Trash2, UserRound, Wand2 } from "lucide-react";
 import { Badge, Button, Input, Modal, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { api } from "@/lib/api-client";
-import { approvedOf, BACKGROUNDS, categoryLabel, newFashionId } from "@/lib/fashion/prompts";
+import { approvedOf, BACKGROUNDS, CLIP_CONCEPTS, categoryLabel, newFashionId } from "@/lib/fashion/prompts";
 import { FASHION_CATEGORIES, type FashionCategory, type FashionImage, type FashionLook, type FashionSettings } from "@/lib/fashion/types";
 import type { Product } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
@@ -427,6 +427,11 @@ function LookClips({ ctl }: { ctl: FashionCtl }) {
         </Button>
         <span className="text-[11.5px] text-fg-subtle">Seedance 2.0 Mini 720p · 룩 이미지에서 시작해 같은 얼굴·옷으로 움직임 · 영상이 없는 룩은 사진 + 움직임으로 들어갑니다</span>
       </div>
+      <div className="grid gap-2 sm:grid-cols-[220px_1fr]" data-clip-concept>
+        <Select value={p.settings.clipConcept ?? "pose"} options={CLIP_CONCEPTS.map((c) => ({ value: c.id, label: c.label }))} onChange={(e) => ctl.edit("settings", { ...p.settings, clipConcept: e.target.value })} aria-label="영상 컨셉" />
+        <Input value={p.settings.clipNote ?? ""} onChange={(e) => ctl.edit("settings", { ...p.settings, clipNote: e.target.value })} placeholder="추가 요청 (모든 룩 공통, 한국어 가능) 예: 엘리베이터 문이 열리며 걸어 나옴, 밝게 웃기" aria-label="영상 추가 요청" />
+        <p className="text-[11.5px] text-fg-subtle sm:col-span-2">컨셉: {CLIP_CONCEPTS.find((c) => c.id === (p.settings.clipConcept ?? "pose"))?.hint} · 룩마다 아래 [이 룩 동작]에 적으면 그 룩만 그 동작으로 만듭니다.</p>
+      </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {ready.map((l) => {
           const clip = (l.clips ?? []).find((c) => c.approved) ?? (l.clips ?? [])[0];
@@ -434,6 +439,7 @@ function LookClips({ ctl }: { ctl: FashionCtl }) {
           return (
             <div key={l.id} className="w-[130px] shrink-0 space-y-1 text-[11.5px]">
               <p className="font-medium">{l.name}</p>
+              <Textarea value={l.clipMotion ?? ""} onChange={(e) => ctl.edit("looks", p.looks.map((x) => (x.id === l.id ? { ...x, clipMotion: e.target.value } : x)))} placeholder="이 룩 동작 (비우면 컨셉)" rows={2} className="min-h-0 text-[11px]" aria-label={`${l.name} 영상 동작`} />
               {clip && ctl.urls[clip.key] ? <video src={ctl.urls[clip.key]} muted loop autoPlay playsInline className="aspect-[9/16] w-full rounded bg-black object-cover" /> : <div className="flex aspect-[9/16] items-center justify-center rounded bg-subtle text-fg-subtle">{busyLook(l.id) ? "만드는 중…" : "영상 없음"}</div>}
               {(l.clips ?? []).length > 1 && (
                 <Select value={clip?.id ?? ""} options={(l.clips ?? []).map((c, i) => ({ value: c.id, label: `버전 ${i + 1}` }))} onChange={(e) => setClips(l.id, (l.clips ?? []).map((c) => ({ ...c, approved: c.id === e.target.value })))} className="h-7 text-[11px]" aria-label="영상 버전" />

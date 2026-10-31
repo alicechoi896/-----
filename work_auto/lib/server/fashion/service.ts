@@ -65,6 +65,8 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
         secPerLook: Math.min(4, Math.max(1.2, Number(v.secPerLook) || 2)),
         reelStyle: v.reelStyle === "b" ? "b" : "a",
         bgmVolume: Math.min(1, Math.max(0, Number(v.bgmVolume ?? 0.5))),
+        clipConcept: str(v.clipConcept, 20) || "pose",
+        clipNote: str(v.clipNote, 300),
       };
       return;
     case "items": {
@@ -108,6 +110,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
           itemIds: (Array.isArray(x.itemIds) ? x.itemIds.map(String) : []).filter((id) => ids.has(id)).slice(0, 8),
           caption: str(x.caption, 60),
           pose: str(x.pose, 200),
+          clipMotion: str((x as { clipMotion?: unknown }).clipMotion, 300),
           images: old ? mergeImages(old.images, x.images) : [],
           clips: old?.clips ? mergeClips(old.clips, (x as { clips?: unknown }).clips) : [],
         };

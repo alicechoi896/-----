@@ -16,6 +16,17 @@ export const BACKGROUNDS: { id: string; label: string; en: string }[] = [
   { id: "field", label: "초원·전원", en: "a green grass field with a wooden fence and blue sky" },
 ];
 
+/** v0.9.124 릴스 (나) AI 영상 컨셉 — 동작·카메라 (모든 룩 공통, 룩마다 '이 룩 동작'으로 바꿀 수 있음) */
+export const CLIP_CONCEPTS: { id: string; label: string; hint: string; en: string }[] = [
+  { id: "pose", label: "포즈 바꾸기 (화보)", hint: "화보 촬영처럼 2~3번 포즈 변경", en: "she changes poses two or three times like a fashion photoshoot — hand on hip, glance over the shoulder, light touch of the hair — holding each pose briefly" },
+  { id: "turn", label: "런웨이 턴", hint: "앞으로 걸어와 반 바퀴 돌아 뒷모습까지", en: "she takes two confident steps toward the camera, does a slow half turn to show the back of the outfit, then turns back and looks at the camera" },
+  { id: "walk", label: "걸어오기", hint: "카메라 쪽으로 자연스럽게 걸어옴", en: "she walks naturally toward the camera with a relaxed, confident stride, arms swinging lightly" },
+  { id: "detail", label: "디테일 클로즈업", hint: "전신 → 옷 디테일로 천천히 다가감", en: "she stands still with a soft smile while the camera slowly pushes in from full body to the outfit details (fabric texture, buttons, bag, shoes) and then pulls back" },
+  { id: "breeze", label: "바람·자연스러움", hint: "바람에 머리·옷자락이 날리고 옷매무새 정리", en: "a light breeze moves her hair and the fabric; she smiles, adjusts her jacket or sleeve and looks at the camera" },
+  { id: "daily", label: "일상 (출근·외출)", hint: "가방 들고 시계 보기 등 일상 동작", en: "a natural everyday moment matching the theme — she adjusts her bag strap, checks her watch or phone, then smiles at the camera as if heading out" },
+  { id: "look", label: "룩 자세 그대로", hint: "④ 룩의 자세 문장을 그대로 움직임으로", en: "" },
+];
+
 export const DEFAULT_SETTINGS: FashionSettings = {
   theme: "출근룩",
   background: "elevator",
@@ -25,6 +36,8 @@ export const DEFAULT_SETTINGS: FashionSettings = {
   secPerLook: 2,
   reelStyle: "a",
   bgmVolume: 0.5,
+  clipConcept: "pose",
+  clipNote: "",
 };
 
 export const newFashionId = (prefix: string) => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;

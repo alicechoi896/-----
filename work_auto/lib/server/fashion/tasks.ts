@@ -3,7 +3,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { approvedOf, fashionMusicPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
+import { CLIP_CONCEPTS, approvedOf, fashionMusicPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
 import type { FashionImage, FashionLook, FashionProject, FashionTask } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getVideoAIProvider } from "../providers/registry";
@@ -120,12 +120,20 @@ export async function createFashionImages(p: FashionProject, jobs: FashionImageJ
 
 /* ───── v0.9.120 릴스 (나): 룩마다 AI 영상 (Seedance 2.0 Mini, 시작 프레임 = 승인 룩 이미지) ───── */
 export const CLIP = { model: "bytedance/seedance-2-mini", modelId: "seedance-2-mini", sec: 4, resolution: "720p", creditsPerSec: 8.2 } as const;
-export const clipPrompt = (p: FashionProject, look: FashionLook) =>
-  [
+/** v0.9.124: 컨셉(동작·카메라) + 이 룩 동작 + 추가 요청 + 주제 */
+export const clipPrompt = (p: FashionProject, look: FashionLook) => {
+  const concept = CLIP_CONCEPTS.find((c) => c.id === (p.settings.clipConcept ?? "pose")) ?? CLIP_CONCEPTS[0];
+  const motion = look.clipMotion?.trim() || concept.en || look.pose.trim() || "she shifts her weight, turns slightly to show the outfit, then looks at the camera with a light smile";
+  return [
     "Vertical 9:16 fashion lookbook reel, photorealistic. Start exactly from the provided first frame and keep EXACTLY the same woman (face, hair, body), the same outfit (every item, color and detail) and the same background for the whole clip.",
-    `Motion: ${look.pose.trim() || "she shifts her weight, turns slightly to show the outfit, then looks at the camera with a light smile"}. Natural, elegant, model-like movement; the camera stays still or slowly pushes in; the whole outfit stays visible.`,
+    `Theme: ${p.settings.theme || "daily look"}${look.caption ? ` — ${look.caption}` : ""}.`,
+    `Motion: ${motion}. Natural, elegant, model-like movement; the whole outfit stays visible.`,
+    p.settings.clipNote?.trim() ? `Extra direction (may be Korean): ${p.settings.clipNote.trim()}` : "",
     "No text, no logo, no watermark, no cuts, no extra people. No speech.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
 
 export async function createFashionClips(p: FashionProject, lookIds: string[], requestId: string): Promise<FashionTask[]> {
   const dup = p.tasks.filter((t) => t.requestId === requestId);
