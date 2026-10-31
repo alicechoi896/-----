@@ -12,13 +12,14 @@ const mem = () => (g.__videoFiles ??= new Map());
 const inMemory = () => !isSupabaseConfigured();
 
 export const videoStorage = {
-  async put(key: string, file: Buffer, contentType = "video/mp4"): Promise<void> {
+  /** cacheControl: CDN 캐시 초 (기본 3600). 자주 바뀌는 JSON 은 "0" (v0.9.86) */
+  async put(key: string, file: Buffer, contentType = "video/mp4", cacheControl?: string): Promise<void> {
     if (inMemory()) {
       mem().set(key, file);
       return;
     }
     const db = await createSupabaseServerClient();
-    const { error } = await db.storage.from("videos").upload(key, file, { contentType, upsert: true });
+    const { error } = await db.storage.from("videos").upload(key, file, { contentType, upsert: true, ...(cacheControl ? { cacheControl } : {}) });
     if (error) throw new Error(`영상을 저장하지 못했습니다 (${error.message}). Supabase 에서 schema.sql 을 다시 실행했는지 확인해 주세요.`);
   },
   /** 다운로드·미리보기 주소 (10분) */
@@ -56,11 +57,15 @@ export const videoStorage = {
     return error || !data ? null : Buffer.from(await data.arrayBuffer());
   },
   /** 폴더 안 파일 (이름·만든 시각) */
-  async list(folder: string): Promise<{ key: string; createdAt: string | null }[]> {
-    if (inMemory()) return [...mem().keys()].filter((k) => k.startsWith(`${folder}/`)).map((key) => ({ key, createdAt: null }));
+  async list(folder: string, opts?: { desc?: boolean; limit?: number }): Promise<{ key: string; createdAt: string | null }[]> {
+    if (inMemory()) {
+      const keys = [...mem().keys()].filter((k) => k.startsWith(`${folder}/`) && !k.slice(folder.length + 1).includes("/")).sort();
+      if (opts?.desc) keys.reverse();
+      return keys.slice(0, opts?.limit ?? 100).map((key) => ({ key, createdAt: null }));
+    }
     const db = await createSupabaseServerClient();
-    const { data } = await db.storage.from("videos").list(folder, { limit: 100 });
-    return (data ?? []).map((f) => ({ key: `${folder}/${f.name}`, createdAt: f.created_at ?? null }));
+    const { data } = await db.storage.from("videos").list(folder, { limit: opts?.limit ?? 100, ...(opts?.desc ? { sortBy: { column: "name", order: "desc" } } : {}) });
+    return (data ?? []).filter((f) => f.id).map((f) => ({ key: `${folder}/${f.name}`, createdAt: f.created_at ?? null }));
   },
   memoryFile(key: string): Buffer | null {
     return inMemory() ? (mem().get(key) ?? null) : null;

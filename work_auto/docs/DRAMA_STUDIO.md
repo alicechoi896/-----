@@ -26,7 +26,7 @@
 
 ```
 {owner}/drama/index.json                      프로젝트 목록
-{owner}/drama/{projectId}/project.json        프로젝트 문서 (lib/drama-studio/types.ts DramaProject)
+{owner}/drama/{projectId}/rev/{번호}_{임의}.json  프로젝트 문서 — 저장마다 새 파일, 최신 15개 (v0.9.86: 같은 이름을 덮어쓰면 CDN 캐시로 예전 내용을 읽었다)
 {owner}/drama/{projectId}/img/{task}.png      AI 이미지 (Kie 결과를 복사해 영구 보관)
 {owner}/drama/{projectId}/clip/{task}.mp4     AI 영상
 {owner}/drama/{projectId}/up/…                사용자가 올린 이미지·영상·음악
