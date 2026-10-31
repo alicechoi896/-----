@@ -10,6 +10,7 @@ import { productService } from "../services/products";
 import { videoJobService } from "../video/service";
 import { videoStorage } from "../video/storage";
 import { storedVideoIds, usableXhsVideo } from "../video/vault";
+import { loadScriptFormats } from "../services/script-formats";
 
 /**
  * 제품 홍보 영상 자동 제작 (v0.9.107). docs/AUTO_VIDEO.md
@@ -58,6 +59,10 @@ export interface AutoItem {
   tags?: string[];
   jobStatus?: string | null;
   issues?: string[];
+  /** v0.9.117 고른 Hook·CTA·대본 (보고 화면) */
+  hook?: string | null;
+  cta?: string | null;
+  script?: string | null;
   publicationId?: string | null;
 }
 export interface AutoRun {
@@ -73,22 +78,52 @@ const now = () => new Date().toISOString();
 /** 한국 날짜 (YYYY-MM-DD) */
 export const kstDate = (d = new Date()) => new Date(d.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 const dir = (owner: string) => `${owner}/auto`;
-const runKey = (owner: string, date: string) => `${dir(owner)}/runs/${date}.json`;
-
-async function readJson<T>(key: string): Promise<T | null> {
-  const buf = await videoStorage.download(key).catch(() => null);
-  if (!buf) return null;
-  try {
-    return JSON.parse(buf.toString("utf8")) as T;
-  } catch {
-    return null;
+/**
+ * v0.9.117 설정·실행 기록은 저장할 때마다 새 이름({folder}/{name}__r{번호}.json)으로 쓰고, 읽을 때는 가장 큰 번호를 읽는다.
+ * 같은 이름을 덮어쓰면 Supabase CDN 캐시가 예전 내용을 돌려줘, 지운 결과가 다시 보이거나 설정이 되돌아갔다 (드라마 스튜디오 v0.9.86 과 같은 문제).
+ * 예전 파일({date}.json, settings.json)은 번호 0 으로 읽는다.
+ */
+const REV_KEEP = 5;
+const pad = (n: number) => String(n).padStart(9, "0");
+const revOf = (key: string, name: string) => {
+  const file = key.split("/").pop() ?? "";
+  if (file === `${name}.json`) return 0;
+  const m = file.match(new RegExp(`^${name.replace(/[-]/g, "\\-")}__r(\\d{9})_[a-z0-9]+\\.json$`));
+  return m ? Number(m[1]) : -1;
+};
+async function listFolder(folder: string): Promise<string[]> {
+  const out: string[] = [];
+  for (let offset = 0; offset < 5000; offset += 1000) {
+    const rows = await videoStorage.list(folder, { limit: 1000, offset }).catch(() => []);
+    out.push(...rows.map((r) => r.key));
+    if (rows.length < 1000) break;
   }
+  return out;
 }
-const writeJson = (key: string, v: unknown) => videoStorage.put(key, Buffer.from(JSON.stringify(v)), "application/json", "0");
+async function readRev<T>(folder: string, name: string): Promise<T | null> {
+  const keys = (await listFolder(folder)).map((k) => ({ k, r: revOf(k, name) })).filter((x) => x.r >= 0).sort((a, b) => b.r - a.r);
+  for (const { k } of keys) {
+    const buf = await videoStorage.download(k).catch(() => null);
+    if (!buf) continue;
+    try {
+      const v = JSON.parse(buf.toString("utf8")) as T & { deleted?: boolean };
+      return v.deleted ? null : v;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+async function writeRev(folder: string, name: string, v: unknown): Promise<void> {
+  const keys = (await listFolder(folder)).map((k) => ({ k, r: revOf(k, name) })).filter((x) => x.r >= 0).sort((a, b) => b.r - a.r);
+  const next = (keys[0]?.r ?? 0) + 1;
+  await videoStorage.put(`${folder}/${name}__r${pad(next)}_${Math.random().toString(36).slice(2, 8)}.json`, Buffer.from(JSON.stringify(v)), "application/json", "0");
+  for (const old of keys.slice(REV_KEEP - 1)) await videoStorage.remove(old.k).catch(() => undefined);
+}
 
 export async function readSettings(): Promise<AutoVideoSettings> {
   const owner = await getCurrentUserId();
-  return { ...DEFAULT_AUTO_SETTINGS, ...((await readJson<AutoVideoSettings>(`${dir(owner)}/settings.json`)) ?? {}) };
+  return { ...DEFAULT_AUTO_SETTINGS, ...((await readRev<AutoVideoSettings>(dir(owner), "settings")) ?? {}) };
 }
 export async function saveSettings(v: Partial<AutoVideoSettings>, by: string): Promise<AutoVideoSettings> {
   const owner = await getCurrentUserId();
@@ -100,28 +135,27 @@ export async function saveSettings(v: Partial<AutoVideoSettings>, by: string): P
     updatedAt: now(),
     updatedBy: by,
   };
-  await writeJson(`${dir(owner)}/settings.json`, next);
+  await writeRev(dir(owner), "settings", next);
   return next;
 }
 
 export async function readRun(date: string): Promise<AutoRun | null> {
   const owner = await getCurrentUserId();
-  return readJson<AutoRun>(runKey(owner, date));
+  return readRev<AutoRun>(`${dir(owner)}/runs`, date);
 }
 async function saveRun(run: AutoRun): Promise<void> {
   const owner = await getCurrentUserId();
-  await writeJson(runKey(owner, run.date), run);
+  await writeRev(`${dir(owner)}/runs`, run.date, run);
+}
+/** 그날 실행 기록 파일을 모두 지운다 */
+async function removeRunFiles(owner: string, date: string): Promise<void> {
+  for (const k of await listFolder(`${dir(owner)}/runs`)) if (revOf(k, date) >= 0) await videoStorage.remove(k).catch(() => undefined);
 }
 /** 최근 실행 날짜들 (새 것부터) */
 export async function listRuns(limit = 14): Promise<string[]> {
   const owner = await getCurrentUserId();
-  const rows = await videoStorage.list(`${dir(owner)}/runs`, { desc: true, limit: 60 }).catch(() => []);
-  return rows
-    .map((r) => r.key.split("/").pop()!.replace(/\.json$/, ""))
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-    .sort()
-    .reverse()
-    .slice(0, limit);
+  const dates = new Set((await listFolder(`${dir(owner)}/runs`)).map((k) => (k.split("/").pop() ?? "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)));
+  return [...dates].sort().reverse().slice(0, limit);
 }
 
 /** 같은 실행 파일을 다시 읽어 그 항목만 바꿔 저장 (동시에 고친 다른 항목을 덮어쓰지 않게) */
@@ -272,6 +306,50 @@ export async function addItems(date: string, count: number, source: "schedule" |
 }
 
 /* ───── 2) 1개 만들기 ───── */
+/** 우리 채널 제품 대본 포맷의 Hook·CTA (기본 포맷 먼저) */
+async function formatPersuasion(owner: string): Promise<{ hooks: string[]; ctas: string[] }> {
+  const rows = await loadScriptFormats(owner, "product", "").catch(() => []);
+  const list = rows.filter((f) => f.contentType === "product").sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+  return { hooks: list.flatMap((f) => f.hooks ?? []).slice(0, 200), ctas: list.flatMap((f) => f.ctas ?? []).slice(0, 200) };
+}
+const bigrams = (t: string) => {
+  const x = t.replace(/\s+/g, "");
+  const out = new Set<string>();
+  for (let i = 0; i < x.length - 1; i++) out.add(x.slice(i, i + 2));
+  return out;
+};
+const similar = (a: string, b: string) => {
+  const A = bigrams(a);
+  const B = bigrams(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  for (const g of A) if (B.has(g)) n++;
+  return n / Math.min(A.size, B.size);
+};
+/** 후보 중 대본 포맷 문장과 닮은 것(0.45 이상)만 — 하나도 없으면 전체 */
+export function preferFormat(cands: string[], format: string[]): string[] {
+  if (!format.length) return cands;
+  const hit = cands.filter((c) => format.some((f) => similar(c, f) >= 0.45));
+  return hit.length ? hit : cands;
+}
+/** 대본을 문장마다 한 줄로 (이미 4줄 이상이면 그대로) — 한 줄 = 한 컷 */
+export function splitScriptLines(text: string): string {
+  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length >= 4) return lines.join("\n");
+  return lines
+    .flatMap((l) => l.split(/(?<=[.!?。！？~]|[다요죠까네]\.?)\s+(?=\S)/))
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+/** 설명: 문장마다 줄을 나누고, 해시태그는 맨 아래 한 줄로 */
+export function tidyDescription(text: string): string {
+  const tags = (text.match(/#[^\s#]+/g) ?? []).join(" ");
+  const body = text.replace(/#[^\s#]+/g, "").trim();
+  const paras = body.split(/\n{2,}/).map((p) => (p.includes("\n") ? p.trim() : p.split(/(?<=[.!?。])\s+/).map((x) => x.trim()).filter(Boolean).join("\n")));
+  return [paras.filter(Boolean).join("\n\n"), tags].filter(Boolean).join("\n\n");
+}
+
 /** AI 가 후보 중 가장 좋은 것 고르기 (1회). 실패하면 첫 번째 */
 async function pickBest(task: string, question: string, lists: Record<string, string[]>): Promise<Record<string, number>> {
   const ai = await getAIProvider();
@@ -325,12 +403,27 @@ async function addGifs(plan: VideoPlan): Promise<void> {
 }
 
 /** 하나 만들기: 단계마다 실행 파일에 진행 상황을 남긴다. 실패해도 다음 항목은 계속 */
+const producing = new Set<string>();
+
 export async function produceItem(date: string, itemId: string): Promise<AutoItem> {
   const owner = await getCurrentUserId();
   const settings = await readSettings();
   const run = await readRun(date);
   const item = run?.items.find((x) => x.id === itemId);
   if (!run || !item) throw new AppError("NOT_FOUND", "자동 제작 항목을 찾지 못했습니다.", 404);
+  // v0.9.117: 같은 항목을 동시에 두 번 만들지 않는다 (시험 실행을 연달아 누르거나 크론과 겹칠 때)
+  const lockKey = `${date}:${itemId}`;
+  if (producing.has(lockKey) || item.status === "running" || item.status === "done") return item;
+  producing.add(lockKey);
+  try {
+    return await produceItemLocked(owner, settings, date, item);
+  } finally {
+    producing.delete(lockKey);
+  }
+}
+
+async function produceItemLocked(owner: string, settings: AutoVideoSettings, date: string, item: AutoItem): Promise<AutoItem> {
+  const itemId = item.id;
   const step = async (s: string, extra: Partial<AutoItem> = {}) => void (await patchItem(date, itemId, { step: s, ...extra }));
   // v0.9.110: 샤오홍슈 영상이 연결되지 않은 제품은 만들지 않는다 (고른 뒤 연결이 풀렸어도 — AI·음성 비용 없음)
   const linked = (await linkedVideoCount(owner)).get(item.productId) ?? 0;
@@ -348,11 +441,17 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
     const hooks = (Array.isArray(out1.hooks) ? out1.hooks : []).map(String);
     const ctas = (Array.isArray(out1.ctas) ? out1.ctas : []).map(String);
     await step("AI 가 제목·Hook·CTA 고르는 중", { stage1Id: s1.id });
-    const pick1 = await pickBest("pick1", "이 제품 쇼츠에 쓸 제목·첫 문장(Hook)·마무리(CTA)를 하나씩 고른다.", { title: top.length ? top : titles.slice(0, 5), hook: hooks.slice(0, 10), cta: ctas.slice(0, 10) });
+    // v0.9.117: 대본 포맷의 Hook·CTA 를 그대로(또는 거의 그대로) 쓴 후보를 우선 (포맷이 없으면 전체)
+    const fmt = await formatPersuasion(owner);
+    const hookPool = preferFormat(hooks.slice(0, 10), fmt.hooks);
+    const ctaPool = preferFormat(ctas.slice(0, 10), fmt.ctas);
+    const pick1 = await pickBest("pick1", "이 제품 쇼츠에 쓸 제목·첫 문장(Hook)·마무리(CTA)를 하나씩 고른다. Hook·CTA 는 우리 채널 대본 포맷에서 온 문장이다.", { title: top.length ? top : titles.slice(0, 5), hook: hookPool, cta: ctaPool });
     const title = (top.length ? top : titles)[pick1.title] ?? titles[0];
     if (!title) throw new Error("제목 후보를 만들지 못했습니다.");
     await step("원고 2단계 (대본 3편·설명·태그)");
-    const s2 = (await contentGenerationService.stage2({ stage1Id: s1.id, title, hook: hooks[pick1.hook] ?? "", cta: ctas[pick1.cta] ?? "" })) as GeneratedContent;
+    const hook = hookPool[pick1.hook] ?? hooks[0] ?? "";
+    const cta = ctaPool[pick1.cta] ?? ctas[0] ?? "";
+    const s2 = (await contentGenerationService.stage2({ stage1Id: s1.id, title, hook, cta })) as GeneratedContent;
     const scripts = (Array.isArray(s2.output.script) ? s2.output.script : []).map(String);
     await step("AI 가 대본 고르는 중", { contentId: s2.id, title });
     const pick2 = await pickBest("pick2", `제목 '${title}' 에 가장 잘 맞고 끝까지 보게 만드는 대본을 고른다.`, { script: scripts });
@@ -360,7 +459,9 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
     const voice = await lastVoiceSettings(owner);
     // 보관 파일이 있는 영상만 (링크가 만료돼도 그 파일로)
     const videoIds = (await usableVideoIds(owner)).get(item.productId) ?? [];
-    const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, ...voice });
+    // v0.9.117: 대본이 한 덩어리면 컷이 1개라 6초짜리가 나왔다 → 문장마다 줄을 나눠 컷으로
+    const scriptText = splitScriptLines(scripts[pick2.script] ?? "");
+    const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, scriptText, ...voice });
     await addGifs(plan);
     (plan as VideoPlan & { auto?: boolean }).auto = true;
     await step("영상 만드는 중 (음성·자막·컷 편집)");
@@ -379,7 +480,10 @@ export async function produceItem(date: string, itemId: string): Promise<AutoIte
       jobStatus: done.status,
       issues: done.qa?.issues ?? [],
       title: done.plan.selectedTitle || title,
-      description: String(out2.description ?? "").slice(0, 5000),
+      hook,
+      cta,
+      script: scriptText,
+      description: tidyDescription(String(out2.description ?? "")).slice(0, 5000),
       keywords: list(out2.keywords).slice(0, 30),
       tags: list(out2.tags).slice(0, 30),
     });
@@ -425,10 +529,14 @@ export async function removeItems(date: string, itemId?: string): Promise<{ remo
   if (!run) throw new AppError("NOT_FOUND", "그날 결과가 없습니다.", 404);
   const targets = run.items.filter((x) => (itemId ? x.id === itemId : true) && x.status !== "running");
   if (!targets.length) throw new AppError("VALIDATION", itemId ? "지울 수 없는 항목입니다 (만드는 중이면 끝난 뒤 지워 주세요)." : "지울 항목이 없습니다.");
-  for (const t of targets) if (t.videoKey) await videoStorage.remove(t.videoKey).catch(() => undefined);
+  for (const t of targets) {
+    if (t.videoKey) await videoStorage.remove(t.videoKey).catch(() => undefined);
+    // v0.9.117: 영상 작업 기록도 지운다 (원고 기록·업로드 예약은 그대로)
+    if (t.jobId) await getRepositories().videoJobs.remove(t.jobId).catch(() => undefined);
+  }
   const left = run.items.filter((x) => !targets.includes(x));
   if (!left.length && !itemId) {
-    await videoStorage.remove(runKey(owner, date)).catch(() => undefined);
+    await removeRunFiles(owner, date);
     return { removed: targets.length, run: null };
   }
   const next = { ...run, items: left };

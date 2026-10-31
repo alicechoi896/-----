@@ -105,17 +105,9 @@ describe("샷 병합: 올린 음성 + 효과음 (FFmpeg)", () => {
   }, 180_000);
 });
 
-describe("v0.9.106 비교 모델: Veo 3.1 Lite · Grok Imagine 1.5 · PixVerse V6 Max", async () => {
+describe("v0.9.106 비교 모델: Grok Imagine 1.5 · PixVerse V6 Max", async () => {
   const { buildVideoInput, fitDuration, hasConflictingInputs, kieModelOf, validateVideo, videoModel } = await import("@/lib/drama-studio/models");
   const o = (modelId: string, mode: "first_frame" | "first_last" | "text" | "reference", durationSec = 6, resolution = "720p") => ({ modelId, mode, durationSec, resolution, aspect: "9:16" as const, audio: true });
-  it("Veo: veo-3-1 + veo3_lite, 시작 프레임 = FIRST_AND_LAST_FRAMES_2_VIDEO, 4·6·8초만", () => {
-    const i = buildVideoInput(o("veo-3-1-lite", "first_frame"), { prompt: "p", firstUrl: "https://a/1.png" });
-    expect(kieModelOf("veo-3-1-lite", "first_frame")).toBe("veo-3-1");
-    expect(i).toMatchObject({ model: "veo3_lite", generation_type: "FIRST_AND_LAST_FRAMES_2_VIDEO", image_urls: ["https://a/1.png"], duration: 6 });
-    expect(validateVideo(o("veo-3-1-lite", "first_frame", 5), { first: true, references: 0, scenes: 1 }).join()).toContain("4·6·8초");
-    expect(fitDuration(videoModel("veo-3-1-lite")!, 5)).toBe(4);
-    expect(fitDuration(videoModel("veo-3-1-lite")!, 7)).toBe(6);
-  });
   it("Grok 1.5: first_frame_url / 참고는 image_urls 1장", () => {
     expect(buildVideoInput(o("grok-imagine-1-5", "first_frame"), { prompt: "p", firstUrl: "https://a/1.png" })).toMatchObject({ first_frame_url: "https://a/1.png", duration: 6, resolution: "720p" });
     const r = buildVideoInput(o("grok-imagine-1-5", "reference"), { prompt: "p", referenceUrls: ["https://a/1.png", "https://a/2.png"] });
@@ -135,10 +127,9 @@ describe("v0.9.106 비교 모델: Veo 3.1 Lite · Grok Imagine 1.5 · PixVerse V
 describe("v0.9.108 모델 최대 길이 표시", async () => {
   const { VIDEO_MODELS, lengthLabel, modelOptionLabel, videoModel } = await import("@/lib/drama-studio/models");
   it("7개 비교 모델이 모두 있고 최대 길이를 붙인다", () => {
-    for (const id of ["veo-3-1-lite", "grok-imagine-1-5", "minimax-h3", "pixverse-v6-max", "seedance-2-mini", "seedance-2-fast", "kling-3"]) expect(VIDEO_MODELS.some((m) => m.id === id)).toBe(true);
-    expect(modelOptionLabel(videoModel("veo-3-1-lite")!)).toBe("Veo 3.1 Lite · 최대 8초 · 가격 확인 안 됨");
+    for (const id of ["grok-imagine-1-5", "minimax-h3", "pixverse-v6-max", "seedance-2-mini", "seedance-2-fast", "kling-3"]) expect(VIDEO_MODELS.some((m) => m.id === id)).toBe(true);
+    expect(VIDEO_MODELS.some((m) => m.id === "veo-3-1-lite")).toBe(false);
     expect(modelOptionLabel(videoModel("seedance-2-mini")!)).toBe("Seedance 2.0 Mini · 최대 15초 · 5초 약 41크레딧($0.21)");
-    expect(lengthLabel(videoModel("veo-3-1-lite")!)).toBe("4·6·8초");
     expect(modelOptionLabel(videoModel("seedance-2-5")!)).toContain("Seedance 2.5 · 최대 30초 · 5초 약 85크레딧");
     expect(lengthLabel(videoModel("kling-3")!)).toBe("3~15초");
   });

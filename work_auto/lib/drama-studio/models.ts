@@ -162,32 +162,11 @@ export const VIDEO_MODELS: VideoModel[] = [
 ];
 /**
  * v0.9.106 비교용 모델 (docs.kie.ai 2026-11-01 확인)
- * - Veo 3.1 Lite: model 'veo-3-1' + input.model 'veo3_lite', generation_type TEXT_2_VIDEO / FIRST_AND_LAST_FRAMES_2_VIDEO(image_urls 1~2장), 4·6·8초, 720p/1080p, 소리 항상
+ * - (Veo 3.1 Lite 는 v0.9.117 사용자 요청으로 목록에서 뺐다 — buildVideoInput 의 veo 분기는 남겨 둠)
  * - Grok Imagine Video 1.5 Preview: 'grok-imagine-video-1-5-preview', first_frame_url·last_frame_url 또는 image_urls(참고 1장), 1~15초, 480p/720p/1080p, 소리 끌 수 없음
  * - PixVerse V6 Max: 'pixverse-v6-max/image-to-video'(image_urls 1장, 비율은 이미지 따라감) · 'pixverse-v6-max/text-to-video', quality 360p~1080p, 1~15초, 소리 선택
  */
 VIDEO_MODELS.push(
-  {
-    id: "veo-3-1-lite",
-    label: "Veo 3.1 Lite",
-    model: "veo-3-1",
-    subModel: "veo3_lite",
-    family: "veo",
-    modes: ["first_frame", "first_last", "text"],
-    minSec: 4,
-    maxSec: 8,
-    durations: [4, 6, 8],
-    resolutions: ["720p", "1080p"],
-    defaultResolution: "720p",
-    aspects: ["9:16", "16:9"],
-    audio: "always",
-    maxReferenceImages: 0,
-    supportsLastFrame: true,
-    multiShot: null,
-    minCreditsPerSec: null,
-    priceNote: "영상 1개 단위 가격 (정확한 값 확인 안 됨 — 끝난 뒤 실제 크레딧 표시)",
-    note: "Google · 4·6·8초 · 소리 항상",
-  },
   {
     id: "grok-imagine-1-5",
     label: "Grok Imagine Video 1.5",

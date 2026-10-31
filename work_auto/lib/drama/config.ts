@@ -15,7 +15,6 @@ export const DRAMA_MODELS: { id: DramaModelId; label: string; model: string; cre
   { id: "seedance-mini", label: "Seedance 2.0 Mini", model: "bytedance/seedance-2-mini", creditsPerSec: 8.2, cast: "ref", maxSec: 15, note: "참고 사진 9장 · 720p · 소리 켬 · 최대 15초", priceKnown: true },
   { id: "seedance-fast", label: "Seedance 2.0 Fast", model: "bytedance/seedance-2-fast", creditsPerSec: 6.8, cast: "ref", maxSec: 15, note: "참고 사진 9장 · 720p · 소리 켬 · 최대 15초 (가격은 '부터' 값)", priceKnown: true },
   { id: "kling3", label: "Kling 3.0", model: "kling-3.0/video", creditsPerSec: 20, cast: "element", maxSec: 15, note: "인물 요소(사진 2장씩) · 720p · 소리 켬 · 한국어 대사 지원 · 최대 15초", priceKnown: true },
-  { id: "veo-lite", label: "Veo 3.1 Lite", model: "veo-3-1", creditsPerSec: 0, cast: "first", maxSec: 8, note: "참고 사진 없음 → 첫 인물 사진을 시작 화면으로 · 720p · 소리 항상 · 4·6·8초 (가격은 끝난 뒤 실제 크레딧)", priceKnown: false },
   { id: "grok-15", label: "Grok Imagine Video 1.5", model: "grok-imagine-video-1-5-preview", creditsPerSec: 2.4, cast: "first", maxSec: 15, note: "참고 사진 1장만 → 첫 인물 사진을 시작 화면으로 · 720p · 소리 항상 · 최대 15초 (가격은 '부터' 값)", priceKnown: true },
   { id: "pixverse-v6max", label: "PixVerse V6 Max", model: "pixverse-v6-max/image-to-video", creditsPerSec: 12, cast: "first", maxSec: 15, note: "참고 사진 없음 → 첫 인물 사진을 시작 화면으로 · 720p · 소리 켬 · 최대 15초", priceKnown: true },
 ];

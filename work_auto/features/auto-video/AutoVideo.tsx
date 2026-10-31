@@ -32,6 +32,9 @@ interface Item {
   jobStatus?: string | null;
   issues?: string[];
   publicationId?: string | null;
+  hook?: string | null;
+  cta?: string | null;
+  script?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
 }
@@ -279,6 +282,8 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove }: { it: Item;
           <div className="min-w-0 space-y-2 text-[13px]">
             {it.issues && it.issues.length > 0 && <Notice tone="warning">{it.issues.slice(0, 3).join(" · ")}</Notice>}
             <Field label="업로드 제목" value={it.title ?? ""} />
+            {it.script && <Field label={`대본 (${it.script.split("\n").filter(Boolean).length}줄 = 컷)`} value={it.script} multiline />}
+            {(it.hook || it.cta) && <Field label="Hook · CTA (대본 포맷에서 고름)" value={[it.hook ? `Hook: ${it.hook}` : "", it.cta ? `CTA: ${it.cta}` : ""].filter(Boolean).join("\n")} multiline />}
             <Field label="설명 (YouTube 설명란)" value={it.description ?? ""} multiline />
             <Field label={`키워드 ${it.keywords?.length ?? 0}개`} value={(it.keywords ?? []).join(", ")} />
             <Field label={`태그 ${it.tags?.length ?? 0}개`} value={(it.tags ?? []).join(", ")} />
