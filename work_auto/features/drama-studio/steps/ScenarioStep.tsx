@@ -71,7 +71,11 @@ export function ScenarioStep({ ctl }: { ctl: ProjectCtl }) {
               )}
             </div>
           )}
-          <Button variant="primary" icon={Sparkles} className="ml-auto" disabled={Boolean(ctl.busy)} loading={ctl.busy === "시나리오 작성"} onClick={() => void ctl.run("시나리오 작성", () => studioApi.generate(p.id, "scenario", { sceneCount: sc.sceneCount || defaultSceneCount(p.settings.targetSec), style: sc.style, endingType: sc.endingType }))} data-gen-scenario>
+          <Button variant="primary" icon={Sparkles} className="ml-auto" disabled={Boolean(ctl.busy)} loading={ctl.busy === "시나리오 작성"} onClick={() => {
+            const imgs = Object.values(p.storyboard).flat().filter((i) => !i.removed).length;
+            if ((imgs || p.clips.length) && !window.confirm(`시나리오를 다시 쓰면 장면이 모두 새로 바뀝니다. 이미 만든 스토리보드 ${imgs}장·영상 ${p.clips.length}개는 지우지 않지만 새 장면과 연결이 끊깁니다 (스토리보드의 '연결이 끊긴 이미지'에서 다시 연결 가능). 계속할까요?`)) return;
+            void ctl.run("시나리오 작성", () => studioApi.generate(p.id, "scenario", { sceneCount: sc.sceneCount || defaultSceneCount(p.settings.targetSec), style: sc.style, endingType: sc.endingType }));
+          }} data-gen-scenario>
             {sc.scenes.length ? "전체 다시 쓰기" : "AI 로 시나리오 쓰기"}
           </Button>
         </div>

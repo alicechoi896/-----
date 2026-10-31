@@ -130,3 +130,30 @@ describe("최종 영상 자막·로고 (v0.9.92)", () => {
     if (process.env.FRAME_OUT) spawnSync(ff, ["-y", "-ss", "0.5", "-i", tmp, "-frames:v", "1", process.env.FRAME_OUT]);
   }, 120_000);
 });
+
+describe("연결 끊긴 이미지 · 예전 시나리오 저장 막기 (v0.9.97)", () => {
+  it("다시 쓰기 전 장면의 이미지를 새 장면에 연결하고, 예전 판 시나리오 저장은 거절한다", async () => {
+    const { project } = await svc.create({ title: "되살리기", startStep: "storyboard" });
+    const id = project.id;
+    let p = (await upload(id, "scene_01.png", { type: "frame" })).project;
+    const oldScene = p.scenario.scenes[0];
+    const img = p.storyboard[oldScene.id][0];
+    // 시나리오가 통째로 바뀐 상황 (장면 ID 새로, rev +1)
+    const { loadProject, saveProject } = await import("@/lib/server/drama-studio/store");
+    const { emptyScene } = await import("@/lib/drama-studio/steps");
+    const x = await loadProject("u4", id);
+    const fresh = [emptyScene({ title: "새 장면 1" }), emptyScene({ title: "새 장면 2" })];
+    x.scenario = { ...x.scenario, scenes: fresh, rev: 1 };
+    await saveProject("u4", x, "t");
+    // 예전 화면(rev 없음)이 예전 장면으로 저장 → 거절
+    await expect(svc.patch(id, { section: "scenario", value: p.scenario })).rejects.toThrow("새로고침");
+    // 연결 끊긴 이미지 → 새 장면 2 에 연결
+    p = (await svc.generate(id, { action: "assign-frames", moves: [{ imageId: img.id, toSceneId: fresh[1].id }] })).project;
+    expect(p.storyboard[oldScene.id]).toBeUndefined();
+    expect(p.storyboard[fresh[1].id][0].id).toBe(img.id);
+    expect(p.storyboard[fresh[1].id][0].approved).toBe(true);
+    // 지금 판(rev 1)으로는 저장된다
+    p = (await svc.patch(id, { section: "scenario", value: { ...p.scenario, title: "고침" } })).project;
+    expect(p.scenario.title).toBe("고침");
+  });
+});

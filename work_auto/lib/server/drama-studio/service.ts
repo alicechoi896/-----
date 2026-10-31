@@ -155,6 +155,8 @@ function cleanSection(p: DramaProject, section: EditableSection, value: unknown)
       return;
     case "scenario": {
       const s = v as DramaProject["scenario"];
+      // v0.9.97: 시나리오가 통째로 바뀐 뒤(장면 ID 가 새로) 예전 화면이 예전 장면으로 저장하면 거절 — 새 장면에 붙은 이미지·영상이 끊기지 않게
+      if ((s?.rev ?? 0) !== (p.scenario.rev ?? 0)) throw new AppError("STALE_SCENARIO", "시나리오가 새로 바뀌었습니다. 화면을 새로고침(Ctrl+F5)한 뒤 다시 고쳐 주세요.", 409);
       const scenes = (Array.isArray(s?.scenes) ? s.scenes : []).slice(0, MAX_SCENES).map((x) => ({ ...emptyScene(), ...x, id: /^sc_[a-z0-9]{4,40}$/.test(String(x.id)) ? x.id : newId("sc") }));
       p.scenario = { ...p.scenario, ...s, scenes };
       return;
@@ -360,7 +362,7 @@ export const dramaStudioService = {
         const count = Math.min(MAX_SCENES, Math.max(3, Number(body.sceneCount) || p.scenario.sceneCount || 25));
         if (p.scenario.scenes.length) p.scenarioVersions = [...p.scenarioVersions, { id: newId("sv"), label: "다시 쓰기 전 자동 보관", at: now(), scenario: p.scenario }].slice(-10);
         const r = await ai.genScenario(p, count, body.style === "visual" ? "visual" : "dialogue", String(body.endingType ?? p.scenario.endingType).slice(0, 40));
-        p.scenario = r.scenario;
+        p.scenario = { ...r.scenario, rev: (p.scenario.rev ?? 0) + 1 };
         aiCalls = r.aiCalls;
         markEdited(p, "scenario");
         break;
@@ -379,7 +381,7 @@ export const dramaStudioService = {
         const text = String(body.text ?? "").trim();
         if (text.length < 20) throw new AppError("VALIDATION", "시나리오 글을 붙여 넣어 주세요.");
         const r = await ai.genParseScenario(p, text);
-        p.scenario = { ...p.scenario, title: r.title || p.scenario.title, scenes: r.scenes, sceneCount: r.scenes.length };
+        p.scenario = { ...p.scenario, title: r.title || p.scenario.title, scenes: r.scenes, sceneCount: r.scenes.length, rev: (p.scenario.rev ?? 0) + 1 };
         aiCalls = r.aiCalls;
         markEdited(p, "scenario");
         break;
@@ -408,6 +410,27 @@ export const dramaStudioService = {
         extra = { faceChecked: r.checked, faceFlagged: r.flagged };
         break;
       }
+      // v0.9.97: 지금 시나리오에 없는 장면에 붙은 스토리보드 이미지를 다른 장면으로 옮긴다 (이미 돈을 낸 이미지 되살리기)
+      case "assign-frames": {
+        const moves = (Array.isArray(body.moves) ? body.moves : []) as { imageId?: string; toSceneId?: string }[];
+        const scenesNow = new Set(p.scenario.scenes.map((s) => s.id));
+        let moved = 0;
+        for (const m of moves.slice(0, 100)) {
+          if (!m.toSceneId || !scenesNow.has(m.toSceneId)) continue;
+          const from = Object.keys(p.storyboard).find((k) => (p.storyboard[k] ?? []).some((i) => i.id === m.imageId));
+          if (!from || from === m.toSceneId) continue;
+          const img = p.storyboard[from].find((i) => i.id === m.imageId)!;
+          p.storyboard[from] = p.storyboard[from].filter((i) => i.id !== m.imageId);
+          if (!p.storyboard[from].length) delete p.storyboard[from];
+          const list = (p.storyboard[m.toSceneId] ??= []);
+          const take = !list.some((i) => i.approved && !i.removed);
+          list.push({ ...img, approved: take, version: list.length + 1, removed: false });
+          moved++;
+        }
+        extra = { moved };
+        if (moved) markEdited(p, "storyboard");
+        break;
+      }
       case "save-version": {
         p.scenarioVersions = [...p.scenarioVersions, { id: newId("sv"), label: String(body.label ?? "").slice(0, 40) || `버전 ${p.scenarioVersions.length + 1}`, at: now(), scenario: p.scenario }].slice(-10);
         break;
@@ -415,7 +438,7 @@ export const dramaStudioService = {
       case "restore-version": {
         const v = p.scenarioVersions.find((x) => x.id === body.versionId);
         if (!v) throw new AppError("NOT_FOUND", "버전을 찾지 못했습니다.", 404);
-        p.scenario = v.scenario;
+        p.scenario = { ...v.scenario, rev: (p.scenario.rev ?? 0) + 1 };
         markEdited(p, "scenario");
         break;
       }

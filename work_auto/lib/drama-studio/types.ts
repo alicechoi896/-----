@@ -159,6 +159,8 @@ export interface DramaScenario {
   style: "dialogue" | "visual";
   endingType: string;
   scenes: DramaScene[];
+  /** v0.9.97: 장면을 통째로 바꿀 때마다(+1: AI 다시 쓰기·붙여 넣기·버전 되돌리기). 예전 판으로 저장하면 거절 */
+  rev?: number;
 }
 
 export type GenMode = "first_frame" | "first_last" | "reference" | "multi_shot" | "text";

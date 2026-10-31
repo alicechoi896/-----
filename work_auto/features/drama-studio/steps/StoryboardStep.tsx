@@ -56,6 +56,17 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
     ctl.edit("storyboard", next);
   };
   const unapproved = scenes.filter((sc) => frames(sc.id).length && !approvedOf(sc.id));
+  // v0.9.97: 지금 시나리오에 없는 장면(시나리오를 다시 쓰기 전 장면)에 붙은 이미지
+  const sceneIdSet = new Set(scenes.map((sc) => sc.id));
+  const orphans = Object.entries(p.storyboard)
+    .filter(([k]) => !sceneIdSet.has(k))
+    .flatMap(([, list]) => list.filter((i) => !i.removed))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const emptyScenes = scenes.filter((sc) => !frames(sc.id).length);
+  const [assign, setAssign] = useState<Record<string, string>>({});
+  const targetOf = (imgId: string, k: number) => assign[imgId] ?? emptyScenes[k]?.id ?? "";
+  const doAssign = (pairs: { imageId: string; toSceneId: string }[]) =>
+    void ctl.run("이미지 연결", () => studioApi.generate(p.id, "assign-frames", { moves: pairs.filter((x) => x.toSceneId) }));
   /** 보여 주는 이미지의 얼굴 검사 결과 (undefined = 검사 안 함) */
   const shownFace = (id: string) => (approvedOf(id) ?? frames(id).at(-1))?.faceCheck?.ok;
   const setScene = (id: string, patch: Partial<DramaScene>) => ctl.edit("scenario", { ...p.scenario, scenes: scenes.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
@@ -254,6 +265,36 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
         {uploading && <p className="mt-2 text-[12px] text-brand">{uploading}</p>}
       </SectionCard>
 
+      {orphans.length > 0 && (
+        <SectionCard title={`연결이 끊긴 이미지 · ${orphans.length}장`} description="시나리오를 다시 쓰기 전 장면에 붙어 있던 이미지입니다 (이미 비용을 낸 이미지 — 지우지 않았습니다). 쓸 장면을 골라 [연결]하면 그 장면 이미지가 됩니다." data-orphans>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="primary" disabled={Boolean(ctl.busy)} onClick={() => doAssign(orphans.map((img, k) => ({ imageId: img.id, toSceneId: targetOf(img.id, k) })))} data-assign-all>
+              고른 장면으로 모두 연결
+            </Button>
+            <span className="text-[12px] text-fg-subtle">기본값: 만든 순서대로 이미지가 없는 장면에 하나씩 (바꿀 수 있음)</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+            {orphans.map((img, k) => (
+              <div key={img.id} className="rounded-control border border-line p-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {ctl.urls[img.key] ? <img src={ctl.urls[img.key]} alt="" draggable={false} className="aspect-[9/16] w-full rounded bg-subtle object-cover" /> : <div className="aspect-[9/16] rounded bg-subtle" />}
+                <p className="mt-1 line-clamp-2 text-[10.5px] text-fg-subtle">{img.prompt.replace(/\[[A-Z &]+\]/g, "").slice(0, 90)}</p>
+                <Select
+                  value={targetOf(img.id, k)}
+                  options={[{ value: "", label: "장면 고르기" }, ...scenes.map((sc, i) => ({ value: sc.id, label: `#${i + 1} ${sc.title.slice(0, 12)}${frames(sc.id).length ? " (이미지 있음)" : ""}` }))]}
+                  onChange={(e) => setAssign((x) => ({ ...x, [img.id]: e.target.value }))}
+                  className="mt-1 h-8 text-[12px]"
+                  aria-label="연결할 장면"
+                />
+                <Button size="sm" variant="ghost" className="mt-1 w-full" disabled={!targetOf(img.id, k) || Boolean(ctl.busy)} onClick={() => doAssign([{ imageId: img.id, toSceneId: targetOf(img.id, k) }])}>
+                  연결
+                </Button>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
       {view === "grid" ? (
         <div className={cn("grid gap-3", p.settings.aspect === "9:16" ? "grid-cols-2 md:grid-cols-4 xl:grid-cols-5" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3")} data-storyboard>
           {scenes.map((s, i) => card(s, i))}
@@ -281,7 +322,10 @@ export function StoryboardStep({ ctl }: { ctl: ProjectCtl }) {
             {[...tasks].reverse().slice(0, 60).map((t) => (
               <li key={t.id} className="flex items-center gap-2 px-4 py-1.5">
                 <Badge tone={taskTone(t.status)}>{TASK_LABEL[t.status]}</Badge>
-                <span>#{t.target.type === "frame" ? scenes.findIndex((s) => t.target.type === "frame" && s.id === t.target.sceneId) + 1 : "?"}</span>
+                <span>{(() => {
+                  const n = t.target.type === "frame" ? scenes.findIndex((s) => t.target.type === "frame" && s.id === t.target.sceneId) + 1 : 0;
+                  return n ? `#${n}` : "지금 시나리오에 없는 장면 (위 '연결이 끊긴 이미지'에서 연결)";
+                })()}</span>
                 <span className="text-fg-subtle">{t.modelId}</span>
                 {t.error && <span className="truncate text-danger">{t.error}</span>}
                 <span className="ml-auto text-fg-subtle">{t.credits != null ? `실제 ${t.credits}` : t.estimatedCredits != null ? `예상 최소 ${t.estimatedCredits}` : ""}</span>
