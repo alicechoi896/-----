@@ -850,6 +850,20 @@ export const SHOTS = [
       3: (p) => p.locator("[role=dialog]").getByText("지금 조회").first(),
     },
   },
+  {
+    id: "09-analytics",
+    url: "/analytics",
+    prepare: async (p) => {
+      await p.locator("[data-analytics] [role=tab]", { hasText: "패턴 찾기" }).first().click();
+      await p.locator("[data-analytics-patterns]").waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(500);
+    },
+    marks: {
+      1: (p) => p.locator("[data-analytics] [role=radiogroup]").first(),
+      2: (p) => p.locator("[data-analytics] [role=tablist]").first(),
+      3: (p) => p.locator("[data-analytics-hyp]").first(),
+    },
+  },
 
   /* ───── 10 AI 학습 관리 ───── */
   {

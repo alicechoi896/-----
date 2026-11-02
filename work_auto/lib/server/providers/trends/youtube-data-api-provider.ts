@@ -37,6 +37,25 @@ const THUMB_FALLBACK = ["#dbe4ff", "#ffe3e3", "#d3f9d8", "#fff3bf", "#e5dbff", "
 
 const STOPWORDS = new Set(["the", "and", "with", "shorts", "short", "영상", "이것", "정말", "진짜", "그리고", "하는", "있는", "없는"]);
 
+/** videos.list 한 항목 → 채널 영상 (v0.9.151 공용) */
+function toChannelVideo(v: VideosResponse["items"][number]): Omit<import("@/lib/types/youtube-channel").YouTubeChannelVideo, "ratio"> {
+  const durationSec = parseIsoDuration(v.contentDetails?.duration ?? "");
+  const num = (x?: string) => (x == null ? null : Number(x));
+  return {
+    videoId: v.id,
+    title: v.snippet.title,
+    url: durationSec && durationSec <= SHORTS_MAX_SEC ? `https://www.youtube.com/shorts/${v.id}` : `https://www.youtube.com/watch?v=${v.id}`,
+    thumbnailUrl: v.snippet.thumbnails?.medium?.url ?? v.snippet.thumbnails?.default?.url ?? null,
+    publishedAt: v.snippet.publishedAt,
+    durationSec,
+    format: durationSec > 0 && durationSec <= SHORTS_MAX_SEC ? "shorts" : "long",
+    views: num(v.statistics?.viewCount),
+    likes: num(v.statistics?.likeCount),
+    comments: num(v.statistics?.commentCount),
+    tags: (v.snippet.tags ?? []).slice(0, 15),
+  };
+}
+
 interface SearchResponse {
   items: { id: { videoId?: string }; snippet?: { channelId?: string } }[];
   nextPageToken?: string;
@@ -387,23 +406,7 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
     for (let i = 0; i < ids.length; i += 50) {
       const res = await this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: ids.slice(i, i + 50).join(","), maxResults: 50 });
       units++;
-      for (const v of res.items) {
-        const durationSec = parseIsoDuration(v.contentDetails?.duration ?? "");
-        const num = (x?: string) => (x == null ? null : Number(x));
-        videos.push({
-          videoId: v.id,
-          title: v.snippet.title,
-          url: durationSec && durationSec <= SHORTS_MAX_SEC ? `https://www.youtube.com/shorts/${v.id}` : `https://www.youtube.com/watch?v=${v.id}`,
-          thumbnailUrl: v.snippet.thumbnails?.medium?.url ?? v.snippet.thumbnails?.default?.url ?? null,
-          publishedAt: v.snippet.publishedAt,
-          durationSec,
-          format: durationSec > 0 && durationSec <= SHORTS_MAX_SEC ? "shorts" : "long",
-          views: num(v.statistics?.viewCount),
-          likes: num(v.statistics?.likeCount),
-          comments: num(v.statistics?.commentCount),
-          tags: (v.snippet.tags ?? []).slice(0, 15),
-        });
-      }
+      for (const v of res.items) videos.push(toChannelVideo(v));
     }
     const thumbs = c.snippet?.thumbnails ?? {};
     return {
@@ -423,6 +426,25 @@ export class YouTubeDataApiProvider implements YouTubeTrendProvider {
       truncated,
       units,
     };
+  }
+
+  /** v0.9.151 성과 분석: 영상 50개까지 길이·게시 시각·조회수 (1 unit) */
+  async getVideoDetails(videoIds: string[]) {
+    const ids = [...new Set(videoIds)].slice(0, 50);
+    if (!ids.length) return [];
+    const res = await this.get<VideosResponse>("videos", { part: "snippet,statistics,contentDetails", id: ids.join(","), maxResults: 50 });
+    return res.items.map(toChannelVideo);
+  }
+
+  /** v0.9.151 채널 주소·@핸들·채널 ID → 채널 ID (핸들이면 channels.list 1 unit) */
+  async resolveChannelId(input: string): Promise<string | null> {
+    const s = input.trim();
+    const id = s.match(/UC[\w-]{22}/)?.[0];
+    if (id) return id;
+    const handle = s.match(/@([\w.\-가-힣%]{2,60})/)?.[1];
+    if (!handle) return null;
+    const res = await this.get<{ items?: { id: string }[] }>("channels", { part: "id", forHandle: `@${handle}` });
+    return res.items?.[0]?.id ?? null;
   }
 
   /** 영상 ID 로 트렌드 항목 1개 조회 (북마크·생성 화면의 참고 트렌드용, 2 units) */

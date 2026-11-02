@@ -142,6 +142,32 @@ export class MockYouTubeTrendProvider implements YouTubeTrendProvider {
     };
   }
 
+  /** 데모: 영상마다 정해진 길이·게시 시각·조회수 */
+  async getVideoDetails(videoIds: string[]) {
+    const stats = await this.getVideoStats(videoIds);
+    return videoIds.map((id, i) => {
+      const s = stats[id];
+      const durationSec = 12 + (seededNumber(`${id}-d`, 0, 50) | 0);
+      return {
+        videoId: id,
+        title: `데모 영상 ${i + 1}`,
+        url: `https://www.youtube.com/shorts/${id}`,
+        thumbnailUrl: null,
+        publishedAt: new Date(Date.now() - (i + 3) * 86_400_000 - seededNumber(`${id}-h`, 0, 86_400_000)).toISOString(),
+        durationSec,
+        format: "shorts" as const,
+        views: s.views,
+        likes: s.likes,
+        comments: s.comments,
+        tags: [],
+      };
+    });
+  }
+
+  async resolveChannelId(input: string): Promise<string | null> {
+    return input.match(/UC[\w-]{22}/)?.[0] ?? (input.includes("@") ? "UCdemoChannel00000000000" : null);
+  }
+
   async getVideoStats(videoIds: string[]): Promise<Record<string, VideoStats>> {
     const hours = Math.floor(Date.now() / 3_600_000);
     return Object.fromEntries(

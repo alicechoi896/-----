@@ -1,4 +1,4 @@
-import { BookOpen, Bookmark, Brain, CalendarCheck, Camera, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Bookmark, Brain, CalendarCheck, Camera, FileText, Film, MonitorPlay, Settings, ShieldCheck, Wrench } from "lucide-react";
 import type { ChannelDef, StandalonePageDef } from "./types";
 
 /**
@@ -124,6 +124,14 @@ export const STANDALONE_PAGES: StandalonePageDef[] = [
     description: "언제, 어느 채널에, 어떤 제품의 콘텐츠를 올렸는지 기록하고 월별 캘린더로 팀 전체 업로드 현황을 봅니다.",
     href: "/uploads",
     icon: CalendarCheck,
+    defaultTiers: ["silver", "gold", "vip"],
+  },
+  {
+    id: "analytics",
+    title: "성과 분석",
+    description: "내 유튜브 영상의 특징별 조회수 배수로 잘되는 패턴을 찾고, 경쟁 채널과 비교하고, 잘되는 Hook 구조를 연구합니다. AI 는 버튼을 누를 때만 씁니다.",
+    href: "/analytics",
+    icon: BarChart3,
     defaultTiers: ["silver", "gold", "vip"],
   },
   {

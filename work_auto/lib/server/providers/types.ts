@@ -127,6 +127,10 @@ export interface YouTubeTrendProvider extends BaseProvider {
   getChannelRecentVideoIds(channelId: string, count: number): Promise<string[]>;
   /** 채널 정보 + 최근 sinceDays 일 업로드 (v0.9.61, 최대 200개). units = 쓴 할당량 */
   getChannelInsight(channelId: string, sinceDays: number): Promise<{ channel: import("@/lib/types/youtube-channel").YouTubeChannelInfo; videos: Omit<import("@/lib/types/youtube-channel").YouTubeChannelVideo, "ratio">[]; truncated: boolean; units: number }>;
+  /** v0.9.151 성과 분석: 영상 50개까지 길이·게시 시각·조회수 (1 unit) */
+  getVideoDetails(videoIds: string[]): Promise<Omit<import("@/lib/types/youtube-channel").YouTubeChannelVideo, "ratio">[]>;
+  /** v0.9.151 채널 주소·@핸들·채널 ID → 채널 ID */
+  resolveChannelId(input: string): Promise<string | null>;
   /** Keyword Intelligence: 검색어 1개 → 관련 영상 (search.list 1회 100 units + videos.list 1회 1 unit) */
   keywordEvidence(seed: string, max: number): Promise<KeywordEvidenceVideo[]>;
 }
