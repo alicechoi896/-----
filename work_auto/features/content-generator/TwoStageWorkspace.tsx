@@ -259,13 +259,13 @@ export function TwoStageWorkspace({
                 )}
                 <Link
                   href={`/${stage1.featureId.startsWith("yt-") ? "youtube" : "naver-clip"}/video-production?contentId=${activeGroup.id}`}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-3 text-[13px] font-medium text-fg-muted hover:border-brand-line hover:text-brand"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-control bg-brand px-4 text-[13.5px] font-semibold text-white shadow-card hover:bg-brand-hover"
                   data-make-video
                 >
-                  <Film className="size-3.5" />
+                  <Film className="size-4" />
                   이 제목으로 영상 만들기
                 </Link>
-                <Button size="sm" variant="primary" icon={CalendarPlus} onClick={() => setScheduleFor(activeGroup)} data-schedule-upload-group>
+                <Button size="sm" variant="secondary" icon={CalendarPlus} onClick={() => setScheduleFor(activeGroup)} data-schedule-upload-group>
                   이 제목 업로드 예약하기
                 </Button>
               </span>

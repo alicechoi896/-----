@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, CalendarPlus, Play, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { CalendarClock, Film, CalendarPlus, Play, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { Badge, Button, CopyButton, EmptyState, ErrorState, Input, LoadingState, Modal, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
@@ -328,8 +328,8 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, ma
             <Field label="업로드 제목" value={it.title ?? ""} />
             {it.thumbnailTitle && <Field label="섬네일 제목 (대본 포맷 참고 · 영상 상단 제목 2번째 줄)" value={it.thumbnailTitle} />}
             {it.jobId && (
-              <a href={`/youtube/video-production?jobId=${it.jobId}&autoDate=${date}&autoItem=${it.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-3 text-[12.5px] font-medium text-fg-muted hover:border-brand-line hover:text-brand" data-auto-edit>
-                영상 편집 (GIF 위치·화살표·자막·클립 바꾸기)
+              <a href={`/youtube/video-production?jobId=${it.jobId}&autoDate=${date}&autoItem=${it.id}`} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-control bg-brand px-4 text-[14px] font-semibold text-white shadow-card hover:bg-brand-hover" data-auto-edit>
+                <Film className="size-4" /> 영상 편집하기 (GIF 위치·화살표·자막·클립 구간 바꾸기)
               </a>
             )}
             {it.script && <Field label={`대본 (${it.script.split("\n").filter(Boolean).length}줄 = 컷)`} value={it.script} multiline />}
