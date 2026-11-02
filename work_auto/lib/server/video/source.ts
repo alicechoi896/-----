@@ -58,7 +58,15 @@ export async function fetchSource(video: ReferenceVideo, dir: string, index: num
   } catch (e) {
     throw new SourceError("resolve", `${name} 재생 주소를 받지 못했습니다 (${e instanceof Error ? e.message : String(e)})`);
   }
-  const raw = resolved.streams.flatMap((s) => [s.url, ...s.backupUrls]).filter(Boolean);
+  // v0.9.141: 크기를 알면 제한(40MB) 안에서 가장 좋은 화질부터 — 가장 큰 고화질만 골라 80MB 를 넘던 문제
+  const LIMIT = 40 * 1024 * 1024;
+  const ordered = [...resolved.streams].sort((a, b) => {
+    const fa = a.size != null && a.size <= LIMIT ? 0 : a.size == null ? 1 : 2;
+    const fb = b.size != null && b.size <= LIMIT ? 0 : b.size == null ? 1 : 2;
+    if (fa !== fb) return fa - fb;
+    return fa === 0 ? (b.size ?? 0) - (a.size ?? 0) : (a.size ?? 0) - (b.size ?? 0);
+  });
+  const raw = ordered.flatMap((s) => [s.url, ...s.backupUrls]).filter(Boolean);
   // https 가 안 되면 http 로도 (TikHub 주소는 http 로 오는 경우가 있다)
   const urls = [...new Set(raw.flatMap((u) => [u, u.replace(/^https:\/\//, "http://")]))];
   let lastError = "재생 주소가 없습니다";
@@ -75,9 +83,9 @@ export async function fetchSource(video: ReferenceVideo, dir: string, index: num
         continue;
       }
       const len = Number(res.headers.get("content-length") ?? 0);
-      if (len > VIDEO_RENDER_CONFIG.maxSourceBytes) throw new Error("원본 영상이 너무 큽니다 (80MB 초과).");
+      if (len > VIDEO_RENDER_CONFIG.maxSourceBytes) throw new Error("원본 영상이 너무 큽니다 (200MB 초과).");
       const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > VIDEO_RENDER_CONFIG.maxSourceBytes) throw new Error("원본 영상이 너무 큽니다 (80MB 초과).");
+      if (buf.length > VIDEO_RENDER_CONFIG.maxSourceBytes) throw new Error("원본 영상이 너무 큽니다 (200MB 초과).");
       await writeFile(file, buf);
       const duration = (await mediaDuration(file)) || resolved.durationSec || 0;
       if (duration < 1) throw new Error("영상 길이를 읽지 못했습니다.");

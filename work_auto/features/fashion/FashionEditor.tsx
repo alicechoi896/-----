@@ -50,7 +50,7 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
   const failed = (pred: (t: (typeof p.tasks)[number]) => boolean) => p.tasks.filter((t) => pred(t) && t.status === "fail").slice(-3);
   const modelReady = Boolean(approvedOf(p.model.images));
 
-  async function upload(files: File[], kind: "image" | "audio", target: Record<string, unknown>) {
+  async function upload(files: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) {
     setUploading(true);
     try {
       await ctl.flush();
@@ -290,7 +290,7 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
   );
 }
 
-function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: { ctl: FashionCtl; uploading: boolean; upload: (f: File[], kind: "image" | "audio", target: Record<string, unknown>) => Promise<void>; onMusic: () => void; musicNote: string; setMusicNote: (v: string) => void }) {
+function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: { ctl: FashionCtl; uploading: boolean; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void>; onMusic: () => void; musicNote: string; setMusicNote: (v: string) => void }) {
   const p = ctl.project!;
   const s = p.settings;
   const ready = p.looks.filter((l) => approvedOf(l.images));
@@ -311,7 +311,7 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
         <div className="space-y-2 rounded-control border border-line p-3">
           <p className="text-[13px] font-semibold">릴스</p>
           <SegmentedControl value={s.reelStyle} onChange={(v) => ctl.edit("settings", { ...s, reelStyle: v as "a" | "b" })} options={[{ value: "a", label: "(가) 사진 + 움직임 · 무료" }, { value: "b", label: "(나) AI 영상 · 룩마다 약 $0.16" }]} />
-          {s.reelStyle === "b" && <LookClips ctl={ctl} />}
+          {s.reelStyle === "b" && <LookClips ctl={ctl} upload={upload} uploading={uploading} />}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={String(s.secPerLook)} options={[1.5, 2, 2.5, 3].map((x) => ({ value: String(x), label: `룩마다 ${x}초` }))} onChange={(e) => ctl.edit("settings", { ...s, secPerLook: Number(e.target.value) })} className="h-9 w-32" aria-label="룩 길이" />
             <Button variant="primary" icon={Clapperboard} disabled={!ready.length || renderingOf("reels") || Boolean(ctl.busy)} onClick={() => void ctl.run("릴스 만들기", () => fashionApi.render(p.id, "reels"))} data-render-reels>
@@ -411,7 +411,7 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
 }
 
 /** v0.9.120 릴스 (나): 룩마다 AI 영상 (Seedance 2.0 Mini 4초, 시작 화면 = 고른 룩 이미지) */
-function LookClips({ ctl }: { ctl: FashionCtl }) {
+function LookClips({ ctl, upload, uploading }: { ctl: FashionCtl; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void>; uploading: boolean }) {
   const p = ctl.project!;
   const [ask, setAsk] = useState<string[] | null>(null);
   const ready = p.looks.filter((l) => approvedOf(l.images));
@@ -447,6 +447,9 @@ function LookClips({ ctl }: { ctl: FashionCtl }) {
               <Button size="sm" variant="ghost" className="h-7 w-full px-1 text-[11px]" disabled={busyLook(l.id) || Boolean(ctl.busy)} onClick={() => setAsk([l.id])}>
                 {(l.clips ?? []).length ? "다시 만들기" : "영상 만들기"}
               </Button>
+              <UploadButton accept="video/mp4,video/quicktime,video/webm" disabled={uploading} onFiles={(f) => void upload(f.slice(0, 1), "video", { type: "lookclip", lookId: l.id })}>
+                영상 직접 올리기
+              </UploadButton>
               {fail && <p className="text-danger">실패: {fail.error}</p>}
             </div>
           );

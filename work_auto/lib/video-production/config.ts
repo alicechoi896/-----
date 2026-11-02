@@ -51,7 +51,8 @@ export const VIDEO_RENDER_CONFIG = {
   encodeParallel: 3,
 
   /** 원본 다운로드 제한 */
-  maxSourceBytes: 80 * 1024 * 1024,
+  // v0.9.141: 80 → 200MB (큰 원본은 받은 뒤 720p 로 줄여 보관)
+  maxSourceBytes: 200 * 1024 * 1024,
   maxScenes: 30,
 } as const;
 

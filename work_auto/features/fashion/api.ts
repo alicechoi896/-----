@@ -45,7 +45,7 @@ export const fashionApi = {
   sync: (id: string) => post<FashionLoaded & { changed: boolean }>(`/api/fashion/${id}/sync`),
   render: (id: string, kind: "feed" | "reels") => post<FashionLoaded>(`/api/fashion/${id}/render`, { kind }),
   /** 파일 올리기: 서명 주소로 Storage 에 바로 → 잇기 */
-  async upload(id: string, file: File, kind: "image" | "audio", target: Record<string, unknown>): Promise<FashionLoaded> {
+  async upload(id: string, file: File, kind: "image" | "audio" | "video", target: Record<string, unknown>): Promise<FashionLoaded> {
     const up = await post<{ key: string; url: string; method: "PUT" | "POST"; contentType: string }>(`/api/fashion/${id}/upload-url`, { kind, fileName: file.name, size: file.size });
     let res: Response;
     try {

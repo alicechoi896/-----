@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { VIDEO_RENDER_CONFIG } from "@/lib/video-production/config";
 import { fetchSource } from "./source";
+import { runFfmpeg } from "./ffmpeg";
 
 /**
  * 샤오홍슈 영구 링크 (v0.9.113) — 앱 [공유] 의 단축 링크 xhslink.com/… 는 몇 년이 지나도 살아 있고,
@@ -154,19 +155,33 @@ export async function fetchShareLinkViaTikhub(videoId: string): Promise<{ saved:
 export const srcKeyOf = (owner: string, videoId: string) => `${owner}/src/${videoId}.mp4`;
 
 /** 샤오홍슈 영상 원본을 받아 Storage 에 보관 (무료 경로만, TikHub 안 씀). 이미 있으면 건너뜀. 성공하면 true */
-export async function keepSource(videoId: string): Promise<{ kept: boolean; reason?: string }> {
+export async function keepSource(videoId: string, opts: { paid?: boolean } = {}): Promise<{ kept: boolean; reason?: string; paid?: boolean }> {
   const owner = await getCurrentUserId();
   const video = await getRepositories().videos.get(String(videoId));
   if (!video || video.userId !== owner) return { kept: false, reason: "영상을 찾지 못했습니다." };
   if (video.platform !== "xiaohongshu") return { kept: false, reason: "샤오홍슈 영상만 보관합니다." };
   if ((await storedVideoIds(owner)).has(video.id)) return { kept: true };
+  // v0.9.141 유료(TikHub 상세 1회, 확인 후) — 서버가 막힌 만료 링크용. 하루 한도 안에서만
+  if (opts.paid) {
+    const usage = await tikhubUsageToday(owner);
+    if (usage.calls >= usage.limit) return { kept: false, reason: `오늘 TikHub 한도(${usage.limit}회)를 다 썼습니다.` };
+    await videoStorage.put(usageKey(owner), Buffer.from(JSON.stringify({ calls: usage.calls + 1 })), "application/json", "0");
+  }
   const dir = await mkdtemp(path.join(os.tmpdir(), "keep_"));
   try {
-    const src = await runWithoutPaidFallback(() => fetchSource(video, dir, 0));
-    const size = (await stat(src.file).catch(() => null))?.size ?? 0;
+    const src = opts.paid ? await fetchSource(video, dir, 0) : await runWithoutPaidFallback(() => fetchSource(video, dir, 0));
+    let size = (await stat(src.file).catch(() => null))?.size ?? 0;
     if (!size) return { kept: false, reason: "원본을 받지 못했습니다." };
-    if (size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) return { kept: false, reason: "원본이 너무 큽니다 (45MB 초과)." };
-    await videoStorage.put(srcKeyOf(owner, video.id), await readFile(src.file), "video/mp4");
+    let file = src.file;
+    // v0.9.141: 크면 720p 로 줄여 보관 (화질은 쇼츠에 충분)
+    if (size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) {
+      const small = path.join(dir, "small.mp4");
+      await runFfmpeg(["-i", src.file, "-vf", "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-an", small], 240_000);
+      file = small;
+      size = (await stat(small).catch(() => null))?.size ?? 0;
+      if (!size || size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) return { kept: false, reason: "원본이 너무 커서 줄여도 45MB 를 넘습니다." };
+    }
+    await videoStorage.put(srcKeyOf(owner, video.id), await readFile(file), "video/mp4");
     console.info("[XhsKeep]", JSON.stringify({ videoId: video.id, bytes: size }));
     await enforceSourceQuota(owner).catch(() => undefined);
     return { kept: true };

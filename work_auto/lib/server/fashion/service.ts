@@ -1,4 +1,8 @@
 import "server-only";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { mediaDuration } from "../video/ffmpeg";
 import { approvedOf, backgroundEn, categoryLabel, DEFAULT_SETTINGS, emptyFashionProject, newFashionId } from "@/lib/fashion/prompts";
 import { FASHION_CATEGORIES, type FashionCategory, type FashionImage, type FashionItem, type FashionLook, type FashionProject, type FashionRender, type FashionSection } from "@/lib/fashion/types";
 import { AppError } from "../http";
@@ -22,8 +26,22 @@ const SECTIONS: FashionSection[] = ["title", "settings", "items", "model", "look
 const UPLOAD_RULES = {
   image: { exts: ["png", "jpg", "jpeg", "webp"], max: 15 * 1024 * 1024, type: (e: string) => (e === "png" ? "image/png" : e === "webp" ? "image/webp" : "image/jpeg") },
   audio: { exts: ["mp3", "m4a", "wav"], max: 20 * 1024 * 1024, type: (e: string) => (e === "wav" ? "audio/wav" : e === "m4a" ? "audio/mp4" : "audio/mpeg") },
+  // v0.9.141 룩 영상 직접 올리기 (릴스 나)
+  video: { exts: ["mp4", "mov", "webm"], max: 45 * 1024 * 1024, type: (e: string) => (e === "mov" ? "video/quicktime" : e === "webm" ? "video/webm" : "video/mp4") },
 } as const;
 type UploadKind = keyof typeof UPLOAD_RULES;
+
+/** 올린 영상 길이 (초) */
+async function videoSeconds(buf: Buffer): Promise<number> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "fs_len_"));
+  try {
+    const f = path.join(dir, "v.mp4");
+    await writeFile(f, buf);
+    return Number((await mediaDuration(f).catch(() => 0)).toFixed(2)) || 4;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
 
 async function open(id: string): Promise<{ owner: string; p: FashionProject }> {
   const owner = await getCurrentUserId();
@@ -392,7 +410,8 @@ export const fashionService = {
     const { owner, p } = await open(id);
     const key = String(body.key ?? "");
     if (!ownsFashionKey(owner, p.id, key)) throw new AppError("VALIDATION", "이 프로젝트에 올린 파일이 아닙니다.");
-    if (!(await videoStorage.download(key))) throw new AppError("NOT_FOUND", "올린 파일을 찾지 못했습니다. 다시 올려 주세요.", 404);
+    const uploaded = await videoStorage.download(key);
+    if (!uploaded) throw new AppError("NOT_FOUND", "올린 파일을 찾지 못했습니다. 다시 올려 주세요.", 404);
     const fileName = str(body.fileName, 120);
     const t = (body.target ?? {}) as { type?: string; itemId?: string; lookId?: string; category?: string; sourceUrl?: string };
     if (t.type === "item") {
@@ -418,6 +437,12 @@ export const fashionService = {
       if (!look) throw new AppError("VALIDATION", "룩을 찾지 못했습니다.");
       for (const i of look.images) i.approved = false;
       look.images.push({ id: newFashionId("im"), key, prompt: "", modelId: "upload", source: "upload", createdAt: now(), approved: true });
+    } else if (t.type === "lookclip") {
+      // v0.9.141 룩 영상 직접 올리기 — 그 룩의 새 버전으로 (승인)
+      const look = p.looks.find((l) => l.id === t.lookId);
+      if (!look) throw new AppError("VALIDATION", "룩을 찾지 못했습니다.");
+      for (const c of look.clips ?? []) c.approved = false;
+      (look.clips ??= []).push({ id: newFashionId("cl"), key, durationSec: await videoSeconds(uploaded), createdAt: now(), approved: true });
     } else if (t.type === "bgm") {
       p.tracks.push({ id: newFashionId("tr"), key, name: fileName.slice(0, 60) || "올린 음악", source: "upload", createdAt: now() });
       p.bgmKey = key;
