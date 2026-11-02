@@ -273,7 +273,6 @@ export function TwoStageWorkspace({
             <p className="mt-1 text-xs text-fg-muted">
               Hook · {activeGroup.context.workflow?.selected?.hook || "-"} &nbsp;/&nbsp; CTA · {activeGroup.context.workflow?.selected?.cta || "-"}
             </p>
-            {shown(activeGroup, "thumbnailTitles").length > 0 && <ThumbPicker key={activeGroup.id} content={activeGroup} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />}
             {activeGroup.context.workflow?.primaryKeyword && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
                 <Badge tone="brand">핵심 · {activeGroup.context.workflow.primaryKeyword}</Badge>
@@ -299,7 +298,13 @@ export function TwoStageWorkspace({
               }}
             />
           )}
-          <ResultPanel content={activeGroup} outputs={stage2Outputs} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
+          {/* v0.9.146 섬네일 제목은 결과 목록 대신 이 칸에서 고르고 고친다 (고른 것이 영상 상단 제목 2번째 줄) */}
+          {shown(activeGroup, "thumbnailTitles").length > 0 && (
+            <SectionCard title="섬네일 제목 (고르기·고치기)" icon={Star} description="후보를 누르면 그 문구로 정해지고, 직접 고쳐 저장할 수도 있습니다. 고른 섬네일 제목은 이 원고로 영상을 만들 때 상단 제목 2번째 줄에 들어갑니다." data-thumb-card>
+              <ThumbPicker key={activeGroup.id} content={activeGroup} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
+            </SectionCard>
+          )}
+          <ResultPanel content={activeGroup} outputs={stage2Outputs.filter((o) => o.key !== "thumbnailTitles")} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
         </div>
       )}
     </div>
@@ -336,11 +341,8 @@ function ThumbPicker({ content, onChange }: { content: GeneratedContent; onChang
     }
   }
   return (
-    <div className="mt-2 space-y-1.5 rounded-control border border-line bg-canvas p-2" data-thumb-picker>
-      <p className="flex items-center justify-between text-[12px] font-semibold text-fg">
-        섬네일 제목 고르기 · 고치기
-        <span className="font-normal text-fg-subtle">공백 빼고 {THUMB_MAX}자 이내 · 영상 상단 제목 2번째 줄에도 들어감</span>
-      </p>
+    <div className="space-y-2" data-thumb-picker>
+      <p className="text-[12px] text-fg-subtle">공백 빼고 {THUMB_MAX}자 이내 · 지금 고른 것: <b className="text-fg">{picked ?? "(아직 안 고름 — 첫 후보를 씀)"}</b></p>
       <div className="flex flex-wrap gap-1">
         {list.map((t) => (
           <button key={t} type="button" disabled={busy} onClick={() => void save(t)} className={cn("rounded-full border px-2.5 py-0.5 text-[12px]", picked === t ? "border-brand bg-brand-soft font-medium text-brand" : "border-line text-fg-muted hover:border-brand-line", thumbLen(t) > THUMB_MAX && "opacity-60")} title={thumbLen(t) > THUMB_MAX ? `${thumbLen(t)}자 — 고르면 ${THUMB_MAX}자로 자릅니다` : undefined}>

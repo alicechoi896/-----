@@ -117,7 +117,7 @@ const O = {
   hooks: (): OutputSection => ({ key: "hooks", label: "Hook 후보", format: "list", count: 10, description: "첫 3초 안에 시청자를 붙잡는 문장" }),
   ctas: (description = "마지막 행동 유도 문장"): OutputSection => ({ key: "ctas", label: "CTA 후보", format: "list", count: 10, description }),
   /** 섬네일에 크게 넣을 짧은 문구 (v0.9.63, 2단계 결과) */
-  thumbnailTitles: (): OutputSection => ({ key: "thumbnailTitles", label: "섬네일 제목 후보", format: "list", count: 10, description: "섬네일에 크게 넣을 짧고 강한 문구 (10자 이내)" }),
+  thumbnailTitles: (): OutputSection => ({ key: "thumbnailTitles", label: "섬네일 제목", format: "list", count: 10, description: "섬네일에 크게 넣을 짧고 강한 문구 (10자 이내)" }),
   // 대본은 3편: 좋은 부분을 골라 섞어 쓸 수 있게 (카드로 넘겨 본다, [추가 만들기]로 3편씩 더)
   script: (label = "대본"): OutputSection => ({ key: "script", label, format: "cards", count: 3, description: "서로 다른 대본 3편 · 좋은 부분을 골라 섞어 쓰세요" }),
   description: (): OutputSection => ({ key: "description", label: "설명글", format: "longtext" }),

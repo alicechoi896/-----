@@ -574,7 +574,7 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
       hook,
       cta,
       script: scriptText,
-      thumbnailTitle,
+      thumbnailTitle: done.plan.topLine2 || thumbnailTitle,
       ...(fitted.note ? { issues: [fitted.note, ...(done.qa?.issues ?? [])] } : {}),
       description: tidyDescription(String(out2.description ?? "")).slice(0, 5000),
       keywords: list(out2.keywords).slice(0, 30),

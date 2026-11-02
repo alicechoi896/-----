@@ -222,9 +222,12 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
 
   // v0.9.138 자동 제작 결과 편집: ?jobId= 로 열고, 다시 만든 영상이 끝나면 자동 제작 결과에 반영
   const linked = useRef<string | null>(null);
+  const optsReady = Boolean(opts);
   useEffect(() => {
-    if (initialJobId) void openJob(initialJobId);
-  }, [initialJobId]);
+    // 원고 목록을 불러온 뒤에 연다 (그 원고로 왼쪽을 맞추려고)
+    if (initialJobId && optsReady) void openJob(initialJobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialJobId, optsReady]);
   useEffect(() => {
     if (!autoLink || !job || job.id === initialJobId || linked.current === job.id) return;
     if (job.status !== "completed" && job.status !== "needs_review" && job.status !== "approved") return;
@@ -236,7 +239,12 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
   }, [autoLink, job, initialJobId]);
   async function openJob(id: string) {
     try {
-      setJob(await api.videoProduction.get(id));
+      const j = await api.videoProduction.get(id);
+      setJob(j);
+      // v0.9.146: 연 영상의 원고·영상 제목·섬네일 제목(상단 제목 2번째 줄)으로 왼쪽을 맞춘다 (전에는 첫 원고의 섬네일 후보가 보였다)
+      if (opts && j.plan.contentId && opts.contents.some((c) => c.id === j.plan.contentId)) pickContent(opts, j.plan.contentId);
+      setTitleText(j.plan.selectedTitle || "");
+      setThumbText(j.plan.topLine2 || "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
     }
