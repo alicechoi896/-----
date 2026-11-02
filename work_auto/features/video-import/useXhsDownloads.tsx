@@ -5,6 +5,7 @@ import { CircleCheck } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { downloadBlob } from "@/lib/photo-process";
 import { MediaBlockedError, downloadXhsMuted, type XhsStage } from "@/lib/xhs-download";
+import { api } from "@/lib/api-client";
 import { createZip } from "@/lib/zip";
 import { Badge } from "@/components/ui";
 
@@ -41,6 +42,8 @@ export function useXhsDownloads() {
       const onStage = (stage: XhsStage, progress?: number) => set({ stage, progress });
       const out = await downloadXhsMuted(v.shareUrl || v.url, onStage);
       if (save) downloadBlob(out.blob, out.name);
+      // v0.9.142: 받은 원본을 서버에도 보관 (추가 호출·비용 없음 — 받은 파일을 그대로 올림). 실패해도 다운로드는 그대로
+      if (v.platform === "xiaohongshu") void api.videos.keepDownloaded(v.id, out.blob).catch(() => false);
       const kind = v.platform === "douyin" ? "도우인 영상을" : "워터마크 없는 원본을";
       set({ stage: "done", note: save ? `${kind} 소리 없이 저장했습니다` : "받았습니다 (ZIP 에 담는 중)" });
       return out;

@@ -194,6 +194,26 @@ export async function keepSource(videoId: string, opts: { paid?: boolean } = {})
   }
 }
 
+/**
+ * v0.9.142 [다운로드]로 브라우저가 받은 원본을 그대로 보관 — 서버는 샤오홍슈·TikHub 를 부르지 않는다 (올릴 주소만).
+ */
+export async function keepUploadUrl(videoId: string, size: number): Promise<{ url: string; method: "PUT" | "POST" } | { skip: string }> {
+  const owner = await getCurrentUserId();
+  const video = await getRepositories().videos.get(String(videoId));
+  if (!video || video.userId !== owner) return { skip: "영상을 찾지 못했습니다." };
+  if (video.platform !== "xiaohongshu") return { skip: "샤오홍슈 영상만 보관합니다." };
+  if ((await storedVideoIds(owner)).has(video.id)) return { skip: "이미 보관했습니다." };
+  if (!(size > 0) || size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) return { skip: "45MB 를 넘어 보관하지 않습니다." };
+  return videoStorage.signedUpload(srcKeyOf(owner, video.id), "/api/videos/vault/upload");
+}
+
+/** 데모(Supabase 없음): 메모리에 올리기 */
+export async function keepUploadMemory(key: string, body: ArrayBuffer): Promise<void> {
+  const owner = await getCurrentUserId();
+  if (!key.startsWith(`${owner}/src/`) || key.includes("..")) throw new AppError("VALIDATION", "잘못된 주소입니다.");
+  await videoStorage.put(key, Buffer.from(body), "video/mp4");
+}
+
 /** 보관한 원본 합계가 한도를 넘으면 오래된 것부터 지운다 */
 export async function enforceSourceQuota(owner?: string): Promise<{ total: number; removed: number }> {
   const o = owner ?? (await getCurrentUserId());

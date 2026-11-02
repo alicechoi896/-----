@@ -457,6 +457,13 @@ export const api = {
     /** v0.9.134 원본 보관 현황 (보관한 영상 id) */
     vaultStatus: () => request<{ calls: number; limit: number; stored: string[] }>("/api/videos/vault"),
     /** v0.9.134 원본 받아 보관 (무료 경로만) */
+    /** v0.9.142 브라우저가 받은 원본을 보관 (올릴 주소 → 바로 올리기). 실패해도 다운로드에는 영향 없음 */
+    async keepDownloaded(videoId: string, blob: Blob): Promise<boolean> {
+      const up = await request<{ url: string; method: "PUT" | "POST" } | { skip: string }>("/api/videos/vault", { method: "POST", body: json({ videoId, keepUpload: true, size: blob.size }) });
+      if ("skip" in up) return false;
+      const res = await fetch(up.url, { method: up.method, body: blob, headers: { "Content-Type": "video/mp4" } });
+      return res.ok;
+    },
     keepSource: (videoId: string, paid = false) => request<{ kept: boolean; reason?: string }>("/api/videos/vault", { method: "POST", body: json({ videoId, keep: true, ...(paid ? { paid: true, confirmed: true } : {}) }) }),
     /** productId: 특정 제품 / "none" = 제품 연결 안 됨 / 생략 = 전체 */
     list: (productId?: string) => request<ReferenceVideo[]>(`/api/videos${qs({ productId })}`),
