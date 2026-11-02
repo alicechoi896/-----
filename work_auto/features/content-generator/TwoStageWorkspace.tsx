@@ -5,11 +5,12 @@ import { CalendarPlus, Check, Film, ListPlus, Loader2, RefreshCw, Search, Sparkl
 import type { OutputSection } from "@/lib/generators/types";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
-import { Badge, Button, Notice, SectionCard, Tabs, Tag } from "@/components/ui";
+import { Badge, Button, Input, Notice, SectionCard, Tabs, Tag } from "@/components/ui";
 import { ResultPanel } from "@/components/shared/ResultPanel";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
+import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
 
 const STAGE1_KEYS = new Set(["topics", "titles", "hooks", "ctas"]);
 const MAX_TITLES = 5;
@@ -272,6 +273,7 @@ export function TwoStageWorkspace({
             <p className="mt-1 text-xs text-fg-muted">
               Hook · {activeGroup.context.workflow?.selected?.hook || "-"} &nbsp;/&nbsp; CTA · {activeGroup.context.workflow?.selected?.cta || "-"}
             </p>
+            {shown(activeGroup, "thumbnailTitles").length > 0 && <ThumbPicker key={activeGroup.id} content={activeGroup} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />}
             {activeGroup.context.workflow?.primaryKeyword && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
                 <Badge tone="brand">핵심 · {activeGroup.context.workflow.primaryKeyword}</Badge>
@@ -300,6 +302,63 @@ export function TwoStageWorkspace({
           <ResultPanel content={activeGroup} outputs={stage2Outputs} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * v0.9.138 섬네일 제목 고르기·고치기 — 고른 것이 영상 만들기의 섬네일 제목(영상 상단 제목 2번째 줄)이 된다.
+ * 고르기 = picks.thumbnailTitles, 고치기 = userEdits.thumbnailTitles (후보 목록에서 그 문구만 바꿔 저장)
+ */
+function ThumbPicker({ content, onChange }: { content: GeneratedContent; onChange: (c: GeneratedContent) => void }) {
+  const list = shown(content, "thumbnailTitles").map(String);
+  const picked = content.context.picks?.thumbnailTitles?.values?.[0] ?? null;
+  const [text, setText] = useState(picked ?? list.find((t) => thumbLen(t) <= THUMB_MAX) ?? list[0] ?? "");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function save(value: string) {
+    const v = cutThumb(value);
+    if (!v) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      let next = content;
+      // 후보에 없는 문구면(고친 것) 후보 목록에 넣어 저장
+      if (!list.includes(v)) next = await api.contents.annotate(content.id, { edit: { key: "thumbnailTitles", value: [v, ...list.filter((x) => x !== picked)].slice(0, 12) } });
+      next = await api.contents.annotate(content.id, { pick: { key: "thumbnailTitles", values: [v] } });
+      setText(v);
+      onChange(next);
+      setNote("섬네일 제목을 저장했습니다. 이 원고로 영상을 만들면 상단 제목 2번째 줄에 들어갑니다.");
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mt-2 space-y-1.5 rounded-control border border-line bg-canvas p-2" data-thumb-picker>
+      <p className="flex items-center justify-between text-[12px] font-semibold text-fg">
+        섬네일 제목 고르기 · 고치기
+        <span className="font-normal text-fg-subtle">공백 빼고 {THUMB_MAX}자 이내 · 영상 상단 제목 2번째 줄에도 들어감</span>
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {list.map((t) => (
+          <button key={t} type="button" disabled={busy} onClick={() => void save(t)} className={cn("rounded-full border px-2.5 py-0.5 text-[12px]", picked === t ? "border-brand bg-brand-soft font-medium text-brand" : "border-line text-fg-muted hover:border-brand-line", thumbLen(t) > THUMB_MAX && "opacity-60")} title={thumbLen(t) > THUMB_MAX ? `${thumbLen(t)}자 — 고르면 ${THUMB_MAX}자로 자릅니다` : undefined}>
+            {picked === t && <Check className="mr-0.5 inline size-3" />}
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input value={text} onChange={(e) => setText(e.target.value)} className="h-8 max-w-xs text-[13px]" aria-label="섬네일 제목 고치기" />
+        <span className={cn("text-[11.5px]", thumbLen(text) > THUMB_MAX ? "text-danger" : "text-fg-subtle")}>
+          {thumbLen(text)}/{THUMB_MAX}
+        </span>
+        <Button size="sm" variant="secondary" loading={busy} disabled={!text.trim() || cutThumb(text) === picked} onClick={() => void save(text)}>
+          이 문구로 저장
+        </Button>
+      </div>
+      {note && <p className="text-[11.5px] text-fg-muted">{note}</p>}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-re
 import { signOut } from "@/app/(auth)/login/actions";
 import { clearApiCache } from "@/lib/api-client";
 import { ROLE_LABEL } from "@/lib/permissions";
-import { CHANNELS, STANDALONE_PAGES, getFeaturesByChannel, type ChannelDef } from "@/lib/registry";
+import { CHANNELS, STANDALONE_PAGES, getFeaturesByChannel, matchFeatureByPath, type ChannelDef } from "@/lib/registry";
 import type { SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -169,7 +169,9 @@ function NavLink({
 }
 
 function ChannelNav({ channel, pathname, allowed }: { channel: ChannelDef; pathname: string; allowed: Set<string> }) {
-  const inChannel = pathname === channel.href || pathname.startsWith(channel.href + "/");
+  // v0.9.138: 주소 앞부분이 아니라 그 기능이 속한 메뉴로 펼친다 (/youtube/video-production 은 영상 제작 메뉴)
+  const owner = matchFeatureByPath(pathname)?.channelId;
+  const inChannel = owner ? owner === channel.id : pathname === channel.href || pathname.startsWith(channel.href + "/");
   const features = getFeaturesByChannel(channel.id).filter(
     (f) => f.status !== "planned" && f.href !== channel.href && allowed.has(f.id),
   );

@@ -278,7 +278,7 @@ export function renderContentPrompt(
   }
   // 섬네일 제목 후보 (v0.9.63)
   if (config.outputs.some((o) => o.key === "thumbnailTitles"))
-    userInput.push(`섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 8~16자, 줄바꿈 1번까지, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 후보의 ${Math.round(formatStrength(ctx.scriptFormat).ratio * 100) || 50}% 이상은 그 구조·길이·리듬을 그대로 따라 단어만 바꾼다 (문장 통째 복사 금지).`);
+    userInput.push(`섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 공백 빼고 10자 이내(꼭 지킨다), 줄바꿈 없이 한 줄, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 후보의 ${Math.round(formatStrength(ctx.scriptFormat).ratio * 100) || 50}% 이상은 그 구조·길이·리듬을 그대로 따라 단어만 바꾼다 (문장 통째 복사 금지).`);
   // 설명글: 설명란에 그대로 붙여 넣을 글만 (v0.9.50)
   if (config.outputs.some((o) => o.key === "description") && ctx.scriptFormat?.captions?.length)
     userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. 구성·길이·말투·이모지·해시태그는 [대본 포맷 > 잘된 캡션] 중 하나를 100% 그대로 따른다 (아래 기본 구성 대신). 안내 문장·항목 이름·괄호 메모는 쓰지 않는다.");

@@ -1,5 +1,6 @@
 import { isGiphyUrl, type GiphyItem } from "../providers/giphy";
 import { enforceSourceQuota } from "./vault";
+import { fitThumbs } from "@/lib/video-production/thumb";
 import "server-only";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -75,6 +76,10 @@ export const videoJobService = {
         scripts: ((c.context.userEdits?.script?.value ?? c.output.script) as string[]).slice(0, 12),
         targetSec: targetFromLength(c.input?.length),
         createdAt: c.createdAt,
+        // v0.9.138 영상 제목·섬네일 제목 (원고에서 고른 것 먼저)
+        title: c.context.workflow?.selected?.title || c.headline,
+        thumbs: fitThumbs(((c.context.userEdits?.thumbnailTitles?.value ?? c.output.thumbnailTitles) as string[] | undefined)?.map(String) ?? []).slice(0, 10),
+        thumbPick: c.context.picks?.thumbnailTitles?.values?.[0] ?? null,
       })),
       videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null })),
       assets: videoAssets.summary(),
@@ -86,7 +91,7 @@ export const videoJobService = {
   },
 
   /** 컷 계획 (AI 1회 — 화면용 짧은 제목) */
-  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; maxPauseSec?: unknown; ttsEngine?: unknown; ttsEmotion?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown; scriptText?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
+  async plan(input: { contentId?: unknown; scriptIndex?: unknown; channelId?: unknown; sourceMode?: unknown; videoIds?: unknown; voice?: unknown; narrationOn?: unknown; captions?: unknown; aiCount?: unknown; voiceStyle?: unknown; voiceSpeed?: unknown; targetSec?: unknown; maxPauseSec?: unknown; ttsEngine?: unknown; ttsEmotion?: unknown; captionStyle?: unknown; titleStyle?: unknown; aiPrompt?: unknown; scriptText?: unknown; titleText?: unknown; thumbText?: unknown }): Promise<{ plan: VideoPlan; aiCalls: number }> {
     const userId = await getCurrentUserId();
     const channelId: VideoChannel = input.channelId === "naver-clip" ? "naver-clip" : "youtube";
     // v0.9.71: AI 영상 생성(AI 컷)은 뺐다 — 고른 샤오홍슈 영상만으로 만든다
@@ -101,7 +106,7 @@ export const videoJobService = {
     if (!picked.length)
       throw new AppError("NO_SOURCE", content.productId ? "이 제품에 연결된 샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 이 제품을 연결해 영상을 담아 주세요." : "샤오홍슈 영상이 없습니다. 영상 URL 가져오기에서 먼저 영상을 담아 주세요.", 400);
     const { ttsEngine, voice } = cleanVoice(input.ttsEngine, input.voice);
-    const built = await buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice, narrationOn: input.narrationOn !== false, captions: input.captions !== false, scriptText: typeof input.scriptText === "string" ? input.scriptText : undefined });
+    const built = await buildPlan({ content: content as GeneratedContent, scriptIndex: Number(input.scriptIndex ?? 0), channelId, sourceMode, videos: picked, voice, narrationOn: input.narrationOn !== false, captions: input.captions !== false, scriptText: typeof input.scriptText === "string" ? input.scriptText : undefined, titleText: typeof input.titleText === "string" ? input.titleText.slice(0, 120) : undefined, thumbText: typeof input.thumbText === "string" ? input.thumbText.slice(0, 40) : undefined });
     // 말투·자막 스타일·AI 공통 프롬프트 (v0.9.63)
     built.plan.voiceStyle = VOICE_STYLES.some((v) => v.value === input.voiceStyle) ? String(input.voiceStyle) : VOICE_STYLES[0].value;
     built.plan.captionStyle = cleanCaptionStyle(input.captionStyle);

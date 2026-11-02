@@ -1,4 +1,5 @@
 import "server-only";
+import { cutThumb, fitThumbs } from "@/lib/video-production/thumb";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoPlan, VideoScene, VideoSourceMode } from "@/lib/types/video-production";
 import { TOP_TITLE_TEMPLATE, VIDEO_RENDER_CONFIG, arrowSceneIndexes, attentionSceneIndexes, sfxSceneIndexes } from "@/lib/video-production/config";
@@ -95,6 +96,9 @@ export async function buildPlan(input: {
   captions?: boolean;
   /** v0.9.82: 화면에서 직접 고친 대본 (있으면 원고 대신) */
   scriptText?: string;
+  /** v0.9.138 화면에서 고친 영상 제목·섬네일 제목 (섬네일 = 상단 제목 2번째 줄) */
+  titleText?: string;
+  thumbText?: string;
 }): Promise<{ plan: VideoPlan; aiCalls: number }> {
   const { content } = input;
   const scripts = (content.context.userEdits?.script?.value ?? content.output.script) as string[] | string | undefined;
@@ -102,10 +106,15 @@ export async function buildPlan(input: {
   const script = input.scriptText?.trim() ? input.scriptText.slice(0, 6000) : (list[Math.max(0, Math.min(list.length - 1, input.scriptIndex))] ?? "");
   const phrases = splitScript(script);
   const wf = content.context.workflow;
-  const title = wf?.selected?.title || content.headline;
+  const title = input.titleText?.trim() || wf?.selected?.title || content.headline;
+  // v0.9.138: 섬네일 제목 — 화면에서 고친 것 > 원고에서 고른 것 > 후보 중 10자 이내 첫 번째
+  const thumbList = (content.context.userEdits?.thumbnailTitles?.value ?? content.output.thumbnailTitles) as string[] | string | undefined;
+  const thumbPicked = input.thumbText?.trim() || content.context.picks?.thumbnailTitles?.values?.[0] || fitThumbs(Array.isArray(thumbList) ? thumbList.map(String) : [])[0] || "";
   const hook = wf?.selected?.hook || "";
   const productName = content.context.product?.name ?? null;
-  const { line1, line2, aiCalls } = await shortTitles(title, productName, hook);
+  const short = await shortTitles(title, productName, hook);
+  const { line1, aiCalls } = short;
+  const line2 = thumbPicked ? cutThumb(thumbPicked) : short.line2;
   const emphasis = phrases.map((p, i) => (EMPHASIS.test(p) ? i : -1)).filter((i) => i >= 0);
   emphasis.push(phrases.length - 2); // CTA 직전
   const sfxFiles = videoAssets.sfx();

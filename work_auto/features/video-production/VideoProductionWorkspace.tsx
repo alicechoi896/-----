@@ -28,6 +28,7 @@ import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { GiphyPicker } from "./GiphyPicker";
+import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
@@ -40,7 +41,10 @@ const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: 
  * 영상 자동 제작 (v0.9.51) — YouTube·NAVER 클립 공통. docs/VIDEO_PRODUCTION.md
  * ① 대본 고르기(2단계 결과) → ② 영상 소재·음성 → [컷 계획 만들기] → ③ 컷 확인·클립 교체 → [영상 만들기] → ④ 결과·검수·승인
  */
-export function VideoProductionWorkspace({ channelId, initialContentId }: { channelId: VideoChannel; initialContentId?: string }) {
+export function VideoProductionWorkspace({ channelId, initialContentId, initialJobId, autoLink }: { channelId: VideoChannel; initialContentId?: string; initialJobId?: string; autoLink?: { date: string; itemId: string } }) {
+  // v0.9.138 영상 제목·섬네일 제목 (섬네일 = 영상 상단 제목 2번째 줄, 공백 빼고 10자 이내)
+  const [titleText, setTitleText] = useState("");
+  const [thumbText, setThumbText] = useState("");
   const [opts, setOpts] = useState<VideoProductionOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [contentId, setContentId] = useState(initialContentId ?? "");
@@ -79,6 +83,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setScriptText(null);
     setPlan(null);
     if (!c) return;
+    setTitleText(c.title ?? c.headline);
+    setThumbText(cutThumb(c.thumbPick ?? c.thumbs?.[0] ?? ""));
     // 영상 길이 기본값 = 대본을 만들 때 고른 길이
     setTargetSec(c.targetSec);
     const linked = o.videos.filter((v) => c.productId && v.productId === c.productId).slice(0, 8);
@@ -154,7 +160,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     setError(null);
     try {
       // v0.9.71: 고른 샤오홍슈 영상만으로 만든다 (AI 영상 생성 없음)
-      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle, scriptText: scriptText ?? undefined });
+      const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle, scriptText: scriptText ?? undefined, titleText: titleText.trim() || undefined, thumbText: thumbText.trim() || undefined });
       setPlan(r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
@@ -212,6 +218,20 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
     }
   }
 
+  // v0.9.138 자동 제작 결과 편집: ?jobId= 로 열고, 다시 만든 영상이 끝나면 자동 제작 결과에 반영
+  const linked = useRef<string | null>(null);
+  useEffect(() => {
+    if (initialJobId) void openJob(initialJobId);
+  }, [initialJobId]);
+  useEffect(() => {
+    if (!autoLink || !job || job.id === initialJobId || linked.current === job.id) return;
+    if (job.status !== "completed" && job.status !== "needs_review" && job.status !== "approved") return;
+    linked.current = job.id;
+    void fetch("/api/auto-video/item", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...autoLink, jobId: job.id }) })
+      .then((r) => r.json())
+      .then((j: { ok: boolean; error?: { message: string } }) => setError(j.ok ? null : (j.error?.message ?? "자동 제작 결과에 반영하지 못했습니다.")))
+      .catch(() => setError("자동 제작 결과에 반영하지 못했습니다."));
+  }, [autoLink, job, initialJobId]);
   async function openJob(id: string) {
     try {
       setJob(await api.videoProduction.get(id));
@@ -264,6 +284,32 @@ export function VideoProductionWorkspace({ channelId, initialContentId }: { chan
                     searchPlaceholder="제목으로 검색"
                   />
                 </FormField>
+                {content && (
+                  <div className="grid gap-2 sm:grid-cols-2" data-video-titles>
+                    <label className="space-y-1 sm:col-span-2">
+                      <span className="text-[12px] font-medium text-fg-muted">영상 제목 (업로드 제목)</span>
+                      <Input value={titleText} onChange={(e) => setTitleText(e.target.value)} className="h-9 text-[13px]" aria-label="영상 제목" />
+                    </label>
+                    <label className="space-y-1 sm:col-span-2">
+                      <span className="flex items-center justify-between text-[12px] font-medium text-fg-muted">
+                        섬네일 제목 (영상 상단 제목 2번째 줄 · 공백 빼고 {THUMB_MAX}자 이내)
+                        <span className={thumbLen(thumbText) > THUMB_MAX ? "text-danger" : "text-fg-subtle"}>
+                          {thumbLen(thumbText)}/{THUMB_MAX}
+                        </span>
+                      </span>
+                      <Input value={thumbText} onChange={(e) => setThumbText(cutThumb(e.target.value) === e.target.value.trim() ? e.target.value : cutThumb(e.target.value))} className="h-9 text-[13px]" aria-label="섬네일 제목" />
+                      {(content.thumbs ?? []).length > 0 && (
+                        <span className="flex flex-wrap gap-1">
+                          {(content.thumbs ?? []).map((t) => (
+                            <button key={t} type="button" onClick={() => setThumbText(cutThumb(t))} className={cn("rounded-full border px-2 py-0.5 text-[11.5px]", thumbText === t ? "border-brand bg-brand-soft text-brand" : "border-line text-fg-muted hover:border-brand-line")}>
+                              {t}
+                            </button>
+                          ))}
+                        </span>
+                      )}
+                    </label>
+                  </div>
+                )}
                 {content && (
                   <div className="space-y-2" data-script-picker>
                     {content.scripts.map((s, i) => (
@@ -499,6 +545,10 @@ function PlanEditor({
 }) {
   const [gifFor, setGifFor] = useState<number | null>(null);
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => onChange({ ...plan, scenes: plan.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+  // v0.9.138 컷 추가·삭제 (번호는 다시 매김)
+  const setScenes = (list: VideoPlan["scenes"]) => onChange({ ...plan, scenes: list.map((x, k) => ({ ...x, index: k })) });
+  const addAfter = (i: number) => setScenes([...plan.scenes.slice(0, i + 1), { index: i + 1, narration: "", sfx: null, arrow: false, attention: false, sourceVideoId: plan.scenes[i]?.sourceVideoId ?? null }, ...plan.scenes.slice(i + 1)]);
+  const removeAt = (i: number) => plan.scenes.length > 1 && setScenes(plan.scenes.filter((_, k) => k !== i));
   const clipOptions = videos.map((v) => ({ value: v.id, label: v.title.slice(0, 22) }));
   return (
     <SectionCard
@@ -533,7 +583,19 @@ function PlanEditor({
               <Input value={s.narration} onChange={(e) => setScene(i, { narration: e.target.value })} className="h-8 text-[13px]" aria-label={`${i + 1}번 컷 자막`} />
               <span className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-fg-subtle">
                 {s.sfx && <Badge tone="info">효과음 {s.sfx}</Badge>}
-                {s.arrow && <Badge tone="brand">↓ 제품 버튼 화살표</Badge>}
+                {i < plan.scenes.length - 1 && (
+                  <button type="button" onClick={() => setScene(i, { arrow: !s.arrow })} className={cn("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset", s.arrow ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-subtle ring-line hover:bg-subtle")} data-arrow-toggle>
+                    {s.arrow ? "↓ 제품 버튼 화살표" : "+ 화살표"}
+                  </button>
+                )}
+                <button type="button" onClick={() => addAfter(i)} className="rounded-full px-2 py-0.5 text-[11px] text-fg-subtle ring-1 ring-inset ring-line hover:bg-subtle hover:text-brand" title="이 컷 아래에 새 컷 추가 (자막을 적어 주세요)" data-plan-add>
+                  + 아래에 컷
+                </button>
+                {plan.scenes.length > 1 && (
+                  <button type="button" onClick={() => removeAt(i)} className="rounded-full px-2 py-0.5 text-[11px] text-fg-subtle ring-1 ring-inset ring-line hover:bg-danger-soft hover:text-danger" data-plan-remove>
+                    컷 삭제
+                  </button>
+                )}
                 {i < plan.scenes.length - 1 && (
                   <button
                     type="button"

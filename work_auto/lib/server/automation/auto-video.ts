@@ -1,5 +1,6 @@
 import "server-only";
 import { withClaude } from "../providers/ai-force";
+import { cutThumb, fitThumbs } from "@/lib/video-production/thumb";
 import type { GeneratedContent } from "@/lib/types";
 import type { VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { AppError } from "../http";
@@ -547,11 +548,11 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
     const fitted = await fitScriptLength(splitScriptLines(scripts[pick2.script] ?? ""), settings.length);
     const scriptText = splitScriptLines(fitted.text);
     // v0.9.131: 섬네일 제목 — 대본 포맷(⑦ 섬네일 제목)을 참고해 만든 후보 중 AI 가 고른다 → 영상 상단 제목 2번째 줄에도
-    const thumbs = (Array.isArray(s2.output.thumbnailTitles) ? s2.output.thumbnailTitles : []).map(String).filter(Boolean).slice(0, 10);
+    const thumbs = fitThumbs((Array.isArray(s2.output.thumbnailTitles) ? s2.output.thumbnailTitles : []).map(String).filter(Boolean)).slice(0, 10);
     const pick3 = thumbs.length ? await pickBest("pick3", `제목 '${title}' 영상의 섬네일에 크게 넣을 문구로 클릭을 가장 부르는 것을 고른다.`, { thumb: thumbs }) : { thumb: 0 };
     const thumbnailTitle = thumbs[pick3.thumb] ?? thumbs[0] ?? null;
     const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, scriptText, ...voice });
-    if (thumbnailTitle && thumbnailTitle.replace(/\s+/g, "").length <= 18) plan.topLine2 = thumbnailTitle;
+    if (thumbnailTitle) plan.topLine2 = cutThumb(thumbnailTitle);
     await addGifs(plan);
     (plan as VideoPlan & { auto?: boolean }).auto = true;
     await step("영상 만드는 중 (음성·자막·컷 편집)");
@@ -590,6 +591,18 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
 }
 
 /** 5분마다: 진행 중인 것이 없으면 다음 1개를 만든다. 오래 멈춘 것은 실패로 */
+/** v0.9.138: 편집해서 다시 만든 영상(새 작업)을 자동 제작 결과에 반영 — 영상 파일·확인 사항만 바꾼다 */
+export async function relinkItemJob(date: string, itemId: string, jobId: string): Promise<{ ok: true }> {
+  const run = await readRun(date);
+  const it = run?.items.find((x) => x.id === itemId);
+  if (!run || !it) throw new AppError("NOT_FOUND", "자동 제작 항목을 찾지 못했습니다.", 404);
+  const job = (await getRepositories().videoJobs.get(jobId)) as VideoJob | null;
+  if (!job || !job.outputPath || job.status === "failed") throw new AppError("VALIDATION", "다시 만든 영상이 아직 없습니다.");
+  if (job.plan.contentId !== (await getRepositories().videoJobs.get(it.jobId ?? ""))?.plan.contentId) throw new AppError("VALIDATION", "다른 원고의 영상입니다.");
+  await patchItem(date, itemId, { jobId: job.id, videoKey: job.outputPath, jobStatus: job.status, issues: job.qa?.issues ?? [], thumbnailTitle: job.plan.topLine2 || it.thumbnailTitle, title: job.plan.selectedTitle || it.title });
+  return { ok: true };
+}
+
 /** v0.9.125: 대기 항목 하나를 지금 만든다 ([지금 만들기]) */
 export async function produceNow(date: string, itemId: string): Promise<void> {
   const run = await readRun(date);

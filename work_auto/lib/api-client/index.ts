@@ -315,6 +315,8 @@ export const api = {
       titleStyle?: import("@/lib/video-production/config").TitleStyle;
       /** v0.9.82: 직접 고친 대본 */
       scriptText?: string;
+      titleText?: string;
+      thumbText?: string;
     }) =>
       request<{ plan: VideoPlan; aiCalls: number }>("/api/video-production/plan", { method: "POST", body: json(body) }),
     jobs: (channelId: VideoChannel) => request<VideoJob[]>(`/api/video-jobs?channelId=${channelId}`),
@@ -525,7 +527,7 @@ export const api = {
 
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
-  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number }[];
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number; title?: string; thumbs?: string[]; thumbPick?: string | null }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean; giphy?: boolean };
