@@ -172,13 +172,17 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
 
   // 5) Performance — 같은 채널 성과 상위
   const contentById = new Map(channelContents.map((c) => [c.id, c]));
-  const performanceHints = performance
-    .filter((m) => contentById.has(m.contentId))
+  // v0.9.149: 콘텐츠마다 가장 높은 기록 하나만 (1일·7일 기록이 겹치지 않게) + Hook·섬네일 제목도 함께 — 잘된 패턴을 그대로 참고
+  const bestById = new Map<string, (typeof performance)[number]>();
+  for (const m of performance) if (contentById.has(m.contentId) && (m.views ?? 0) > (bestById.get(m.contentId)?.views ?? -1)) bestById.set(m.contentId, m);
+  const performanceHints = [...bestById.values()]
     .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
     .slice(0, CONTEXT_LIMITS.performance)
     .map((m) => {
       const c = contentById.get(m.contentId)!;
-      return `"${c.headline}" — 조회 ${formatNumber(m.views ?? 0)}${m.ctr != null ? `, CTR ${m.ctr}%` : ""}`;
+      const sel = c.context.workflow?.selected;
+      const thumb = c.context.picks?.thumbnailTitles?.values?.[0];
+      return [`"${sel?.title || c.headline}" — 조회 ${formatNumber(m.views ?? 0)}${m.ctr != null ? `, CTR ${m.ctr}%` : ""}`, sel?.hook ? `Hook: ${sel.hook}` : "", thumb ? `섬네일: ${thumb}` : ""].filter(Boolean).join(" · ");
     });
 
   // 6) Trend / 참고 영상: 위에서 함께 조회함

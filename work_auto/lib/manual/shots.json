@@ -1749,6 +1749,27 @@
       }
     ]
   },
+  "A-costs": {
+    "file": "/manual/shots/A-costs.png",
+    "w": 1280,
+    "h": 1500,
+    "boxes": [
+      {
+        "n": 1,
+        "x": 303,
+        "y": 361,
+        "w": 922,
+        "h": 172
+      },
+      {
+        "n": 2,
+        "x": 457,
+        "y": 888,
+        "w": 58,
+        "h": 44
+      }
+    ]
+  },
   "A-errors": {
     "file": "/manual/shots/A-errors.png",
     "w": 1280,

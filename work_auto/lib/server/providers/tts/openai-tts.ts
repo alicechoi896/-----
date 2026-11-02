@@ -1,4 +1,5 @@
 import "server-only";
+import { TTS_USD_PER_CHAR, recordCostLater } from "../../costs/ledger";
 
 /**
  * AI 음성 (v0.9.51): OpenAI Text-to-Speech (POST /v1/audio/speech). API 연결 센터의 OpenAI 키를 그대로 쓴다.
@@ -27,6 +28,7 @@ export class OpenAITTSProvider implements TTSProvider {
       body: JSON.stringify({ model: TTS_MODEL, voice, input: text.slice(0, 600), instructions: instructions || INSTRUCTIONS, response_format: "mp3" }),
     });
     if (!res.ok) throw new Error(`AI 음성을 만들지 못했습니다 (OpenAI HTTP ${res.status}).`);
+    recordCostLater({ kind: "tts", provider: "openai-tts", model: TTS_MODEL, units: text.slice(0, 600).length, unit: "chars", usd: text.slice(0, 600).length * TTS_USD_PER_CHAR["openai-tts"] });
     return Buffer.from(await res.arrayBuffer());
   }
 }

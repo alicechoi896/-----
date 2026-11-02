@@ -221,7 +221,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
       ),
     );
   }
-  if (ctx.performanceHints.length) blocks.push(block("성과가 좋았던 콘텐츠", ctx.performanceHints));
+  if (ctx.performanceHints.length) blocks.push(block("성과가 좋았던 콘텐츠 (실제 조회수 높은 순 — 이 채널에서 통한 제목 구조·Hook 방식·섬네일 문구를 우선 참고, 문장은 그대로 쓰지 않는다)", ctx.performanceHints));
   if (ctx.trend) blocks.push(block("현재 트렌드", [`${ctx.trend.title} (키워드: ${ctx.trend.keywords.join(", ")})`]));
   if (ctx.referenceVideo) {
     blocks.push(block("참고 영상", [`${ctx.referenceVideo.title} — ${ctx.referenceVideo.channelName}`, ctx.referenceVideo.note ?? ""]));

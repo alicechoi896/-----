@@ -21,6 +21,7 @@ import {
   Wand2,
   Shirt,
   CalendarClock,
+  Wallet,
 } from "lucide-react";
 import type { MemberTier } from "@/lib/types";
 import type { FeatureDef } from "./types";
@@ -459,5 +460,21 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: [],
     inputs: ["기간", "종류", "검색"],
     outputs: ["오류 목록", "자세한 위치"],
+  },
+  {
+    id: "admin-costs",
+    channelId: "admin",
+    order: 6,
+    title: "비용 대시보드",
+    description: "AI 글·음성·Kie(영상·이미지·음악)·TikHub 비용을 하루·이번 달·30일로 보고, 월 예산을 넘기 전에 경고합니다.",
+    href: "/admin/costs",
+    icon: Wallet,
+    kind: "admin",
+    status: "live",
+    defaultTiers: [],
+    adminOnly: true,
+    requiredProviders: [],
+    inputs: ["월 예산"],
+    outputs: ["오늘·이번 달·30일 비용", "종류별·모델별 비용", "예산 경고"],
   },
 ];

@@ -1,4 +1,5 @@
 import "server-only";
+import { recordCostLater } from "../../costs/ledger";
 
 /**
  * TikHub 공용 HTTP (샤오홍슈·도우인 Provider 가 같이 쓴다). docs/SOCIAL_VIDEO_SOURCING.md
@@ -33,6 +34,8 @@ export async function tikhubRequest(
       if (v !== "") qs.set(k, String(v));
     } else body[k] = v;
   }
+  // v0.9.149 비용 기록 (도우인 공유 링크 $0.001, 그 밖 약 $0.01 — 추정)
+  recordCostLater({ kind: "tikhub", provider: "tikhub", model: path.split("/").slice(3, 5).join("/"), units: 1, unit: "calls", usd: /douyin/.test(path) ? 0.001 : 0.01, note: path.slice(0, 100) });
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let res: Response;

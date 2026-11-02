@@ -1,4 +1,5 @@
 import "server-only";
+import { aiUsd, recordCostLater } from "../costs/ledger";
 import { MockInstagramProvider, TikHubInstagramProvider, type InstagramProvider } from "./instagram/provider";
 import { GraphInstagramProvider, MockMetaInstagramProvider, type MetaInstagramProvider } from "./instagram/meta-graph";
 import { KieVideoProvider, MockVideoAIProvider, type VideoAIProvider } from "./video-ai/kie";
@@ -62,8 +63,38 @@ async function loadCredentials<P extends ProviderId>(provider: P): Promise<Provi
  *  2) 아니면 연결된 것 중 Claude → OpenAI 순
  *  3) 아무것도 없으면 Mock
  */
+/** v0.9.149 AI 호출마다 토큰 비용 기록 (비용 대시보드) */
+function withCostLog(p: AIProvider): AIProvider {
+  const log = (r: { model?: string; usage?: { inputTokens: number; outputTokens: number } }, task?: string) => {
+    if (!r.usage) return;
+    const model = r.model ?? p.model;
+    recordCostLater({ kind: "ai", provider: p.id, model, units: r.usage.inputTokens + r.usage.outputTokens, unit: "tokens", usd: aiUsd(model, r.usage.inputTokens, r.usage.outputTokens), note: task });
+  };
+  return new Proxy(p, {
+    get(target, prop, receiver) {
+      if (prop === "generateText")
+        return async (req: Parameters<AIProvider["generateText"]>[0]) => {
+          const r = await target.generateText(req);
+          log(r, req.task);
+          return r;
+        };
+      if (prop === "generateStructured")
+        return async (req: Parameters<AIProvider["generateStructured"]>[0]) => {
+          const r = await target.generateStructured(req);
+          log(r, req.task);
+          return r;
+        };
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as AIProvider;
+}
+
 export async function getAIProvider(): Promise<AIProvider> {
   if (serverConfig.providerMode !== "live") return mockAI;
+  return withCostLog(await pickAIProvider());
+}
+
+async function pickAIProvider(): Promise<AIProvider> {
   const [settings, claude, openai] = await Promise.all([
     // 설정 테이블이 아직 없는 등 실패해도 AI 선택은 계속되도록 기본값으로 대신한다
     settingsService.get().catch(() => ({ preferredAi: null })),

@@ -935,6 +935,7 @@ export const SHOTS = [
     },
   },
   { id: "A-users", url: "/admin/users", marks: { 1: (p) => p.locator("main select").first() } },
+  { id: "A-costs", url: "/admin/costs", viewport: { width: 1280, height: 1500 }, marks: { 1: (p) => p.locator("[data-cost-chart]"), 2: (p) => p.locator("[data-cost-budget-save]") } },
   { id: "A-permissions", url: "/admin/permissions", marks: { 1: (p) => btn(p, "기본값으로 되돌리기") } },
   {
     id: "A-errors",

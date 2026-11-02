@@ -1,4 +1,5 @@
 import "server-only";
+import { KIE_CREDIT_USD, recordCostLater } from "../../costs/ledger";
 import type { ConnectionTestResult } from "@/lib/types";
 import type { AiClipState } from "@/lib/types/video-production";
 import { AI_CLIP_CONFIG } from "@/lib/video-production/config";
@@ -123,7 +124,13 @@ export class KieVideoProvider implements VideoAIProvider {
 
   async status(taskId: string): Promise<ClipStatus> {
     const body = await this.call(`${API}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`, { method: "GET" });
-    return parseRecord(body.data as Obj | undefined);
+    const st = parseRecord(body.data as Obj | undefined);
+    // v0.9.149 비용 기록: 끝난 작업의 실제 크레딧 (작업마다 한 번)
+    if ((st.state === "success" || st.state === "fail") && st.credits) {
+      const model = String((body.data as Obj | undefined)?.model ?? "");
+      recordCostLater({ kind: "kie", provider: "kie", model, units: st.credits, unit: "credits", usd: st.credits * KIE_CREDIT_USD, dedupeId: `kie_${taskId}` });
+    }
+    return st;
   }
 
   async testConnection(): Promise<ConnectionTestResult> {

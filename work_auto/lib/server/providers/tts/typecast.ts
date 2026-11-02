@@ -1,4 +1,5 @@
 import "server-only";
+import { recordCostLater } from "../../costs/ledger";
 import type { ConnectionTestResult } from "@/lib/types";
 import { nowIso } from "@/lib/utils";
 import type { TTSProvider } from "./openai-tts";
@@ -62,6 +63,7 @@ export class TypecastTTSProvider implements TTSProvider {
   async synthesize(text: string, voice: string, _instructions?: string, opts?: { emotion?: string }): Promise<Buffer> {
     if (!TYPECAST_VOICE_ID.test(voice)) throw new Error("타입캐스트 목소리를 골라 주세요.");
     const emotion = TYPECAST_EMOTIONS.some((e) => e.value === opts?.emotion) ? opts!.emotion! : "normal";
+    recordCostLater({ kind: "tts", provider: "typecast", units: text.length, unit: "chars", usd: 0, note: "1글자 = 1크레딧" });
     const res = await fetch(`${BASE}/v1/text-to-speech`, {
       method: "POST",
       headers: this.headers(true),
@@ -84,6 +86,7 @@ export class TypecastTTSProvider implements TTSProvider {
   async synthesizeWithTimestamps(text: string, voice: string, opts?: { emotion?: string }): Promise<{ audio: Buffer; format: string; chars: { text: string; start: number; end: number }[]; duration: number }> {
     if (!TYPECAST_VOICE_ID.test(voice)) throw new Error("타입캐스트 목소리를 골라 주세요.");
     const emotion = TYPECAST_EMOTIONS.some((e) => e.value === opts?.emotion) ? opts!.emotion! : "normal";
+    recordCostLater({ kind: "tts", provider: "typecast", units: text.length, unit: "chars", usd: 0, note: "1글자 = 1크레딧" });
     const res = await fetch(`${BASE}/v1/text-to-speech/with-timestamps?granularity=char`, {
       method: "POST",
       headers: this.headers(true),
