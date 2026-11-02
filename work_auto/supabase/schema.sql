@@ -823,3 +823,32 @@ begin
     );
   end loop;
 end $$;
+
+-- ───────── v0.9.149 비용 기록 (비용 대시보드) ─────────
+create table if not exists public.cost_events (
+  id          text primary key,
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  kind        text not null,
+  provider    text not null,
+  model       text,
+  units       numeric not null default 0,
+  unit        text not null,
+  usd         numeric not null default 0,
+  note        text,
+  created_at  timestamptz not null default now()
+);
+create index if not exists idx_cost_events_created on public.cost_events (created_at desc);
+alter table public.cost_events enable row level security;
+drop policy if exists "cost_events_own" on public.cost_events;
+create policy "cost_events_own" on public.cost_events for all to authenticated
+  using ((select public.is_active()) and (user_id = (select auth.uid()) or (select public.is_admin())))
+  with check ((select public.is_active()) and (user_id = (select auth.uid()) or (select public.is_admin())));
+
+-- ───────── v0.9.148 속도: DB 에서 먼저 거르는 조회용 인덱스 ─────────
+create index if not exists idx_contents_user_channel   on public.generated_contents (user_id, channel_id, created_at desc);
+create index if not exists idx_videos_user_platform    on public.reference_videos (user_id, platform, created_at desc);
+create index if not exists idx_videos_product          on public.reference_videos (product_id);
+create index if not exists idx_video_jobs_user_channel on public.video_jobs (user_id, channel_id, created_at desc);
+create index if not exists idx_video_jobs_content      on public.video_jobs (content_id);
+create index if not exists idx_publications_user       on public.content_publications (user_id, created_at desc);
+create index if not exists idx_publications_product    on public.content_publications (product_id);
