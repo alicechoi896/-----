@@ -400,10 +400,12 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const file = gifFiles.get(s.index) ?? (memes.length ? memes[turn % memes.length] : null);
         turn++;
         if (!file) continue;
-        const first = Math.min(GIF_CONFIG.showSec, dur);
+        // v0.9.144: 컷마다 GIF 보여 줄 초 (없으면 기본 2.6초)
+        const showSec = s.gifSec && s.gifSec > 0 ? s.gifSec : GIF_CONFIG.showSec;
+        const first = Math.min(showSec, dur);
         const look = { pos: s.gifPos ?? "top", size: s.gifSize ?? "m", box: s.gifBox ?? null } as const;
         gifShow.set(k, [...(gifShow.get(k) ?? []), { file, from: 0, to: first, offset: 0, ...look }]);
-        const rest = GIF_CONFIG.showSec - first;
+        const rest = showSec - first;
         const next = picks.find((x) => x.k === k + 1);
         if (rest > 0.3 && next && !(job.plan.ending && next.k === scenes.length - 1) && !next.s.attention) {
           gifShow.set(next.k, [...(gifShow.get(next.k) ?? []), { file, from: 0, to: Math.min(rest, next.dur), offset: first, ...look }]);
@@ -467,23 +469,6 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         cur = label;
         idx++;
       };
-      // 상단 제목
-      add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1[t${k}]`, `t${k}`);
-      // 자막 (엔딩 컷은 '최저가 구매링크'가 자리를 쓴다). 1줄 조각을 음성 길이에 맞춰 차례로 (컷 안 시간)
-      if (job.plan.captions !== false && !(job.plan.ending && isLast)) {
-        const chunks = captionChunks(s.narration, CAPTION_TEMPLATE.maxCharsPerLine);
-        const speech = Math.min(dur, Math.max(0.3, audio[k]?.dur ?? dur));
-        const totalChars = chunks.reduce((n, c) => n + c.replace(/\s/g, "").length, 0) || 1;
-        let at = 0;
-        for (const [j, text] of chunks.entries()) {
-          const png = path.join(dir, `cap${k}_${j}.png`);
-          note(await renderCaption(png, text, cs), cs.font);
-          const end = j === chunks.length - 1 ? dur : at + (speech * text.replace(/\s/g, "").length) / totalChars;
-          const a0 = at;
-          add(["-loop", "1", "-i", png], (i, from) => `[${from}][${i}:v]overlay=0:${captionY(cs)}:shortest=1:enable='between(t,${a0.toFixed(3)},${(end - 0.001).toFixed(3)})'[c${k}_${j}]`, `c${k}_${j}`);
-          at = end;
-        }
-      }
       // 주목 효과: GIF 는 화면 가운데에 크게 (v0.9.120), GIF 가 없으면 컷 앞 1.4초 통통 튀는 스티커
       for (const [g, show] of (gifShow.get(k) ?? []).entries()) {
         // v0.9.137: 컷마다 위치(위·가운데·아래)·크기(작게·보통·크게)
@@ -515,6 +500,24 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const pl = ARROW_PLACEMENT[job.plan.channelId];
         const rad = (pl.angle * Math.PI) / 180;
         add(["-ignore_loop", "0", "-i", arrow], (i, from) => `[${i}:v]format=rgba,scale=${pl.size}:-1,rotate=${rad.toFixed(4)}:c=none:ow=rotw(${rad.toFixed(4)}):oh=roth(${rad.toFixed(4)})[ar${k}];[${from}][ar${k}]overlay=${pl.x}:${pl.y}:shortest=0:eof_action=pass[aw${k}]`, `aw${k}`);
+      }
+      // v0.9.144: 상단 제목·자막은 GIF·스티커·화살표보다 위에 (자막이 GIF 에 가려지던 문제)
+      // 상단 제목
+      add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1[t${k}]`, `t${k}`);
+      // 자막 (엔딩 컷은 '최저가 구매링크'가 자리를 쓴다). 1줄 조각을 음성 길이에 맞춰 차례로 (컷 안 시간)
+      if (job.plan.captions !== false && !(job.plan.ending && isLast)) {
+        const chunks = captionChunks(s.narration, CAPTION_TEMPLATE.maxCharsPerLine);
+        const speech = Math.min(dur, Math.max(0.3, audio[k]?.dur ?? dur));
+        const totalChars = chunks.reduce((n, c) => n + c.replace(/\s/g, "").length, 0) || 1;
+        let at = 0;
+        for (const [j, text] of chunks.entries()) {
+          const png = path.join(dir, `cap${k}_${j}.png`);
+          note(await renderCaption(png, text, cs), cs.font);
+          const end = j === chunks.length - 1 ? dur : at + (speech * text.replace(/\s/g, "").length) / totalChars;
+          const a0 = at;
+          add(["-loop", "1", "-i", png], (i, from) => `[${from}][${i}:v]overlay=0:${captionY(cs)}:shortest=1:enable='between(t,${a0.toFixed(3)},${(end - 0.001).toFixed(3)})'[c${k}_${j}]`, `c${k}_${j}`);
+          at = end;
+        }
       }
       // 엔딩 '최저가 구매링크' + 화살표 (마지막 컷 전체)
       if (job.plan.ending && isLast) {

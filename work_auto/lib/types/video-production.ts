@@ -30,6 +30,8 @@ export interface VideoScene {
   gifBox?: { x: number; y: number; w: number } | null;
   /** v0.9.139 사람이 고른 원본 구간 시작(초) — 대본과 장면을 딱 맞추고 싶을 때. 있으면 자동 구간 고르기 대신 */
   startAt?: number | null;
+  /** v0.9.144 GIF 보여 줄 초 (없으면 2.6초, 컷보다 길면 다음 컷 앞부분까지) */
+  gifSec?: number | null;
   /** 원본 영상 (reference_videos.id) */
   sourceVideoId: string | null;
   /** 사람이 고른 클립이면 자동 배치가 바꾸지 않는다 */

@@ -195,6 +195,7 @@ export const videoJobService = {
       pinned: Boolean(s.pinned),
       gifPos: s.gifPos === "center" || s.gifPos === "bottom" ? s.gifPos : ("top" as const),
       gifSize: s.gifSize === "s" || s.gifSize === "l" ? s.gifSize : ("m" as const),
+      gifSec: s.gifSec != null && Number.isFinite(Number(s.gifSec)) ? Math.min(8, Math.max(0.5, Number(Number(s.gifSec).toFixed(1)))) : null,
       startAt: s.startAt != null && Number.isFinite(Number(s.startAt)) ? Math.min(3600, Math.max(0, Number(Number(s.startAt).toFixed(2)))) : null,
       gifBox:
         s.gifBox && Number.isFinite(Number(s.gifBox.x)) && Number.isFinite(Number(s.gifBox.y)) && Number.isFinite(Number(s.gifBox.w))

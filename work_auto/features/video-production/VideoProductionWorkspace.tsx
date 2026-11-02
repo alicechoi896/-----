@@ -478,7 +478,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
 
         <div className="min-w-0 space-y-6">
           {job ? (
-            <JobPanel key={`${job.id}:${job.updatedAt}`} job={job} plan={plan} videoTitle={videoTitle} videos={opts.videos} onRerender={(p) => void render(p, job.id)} onChange={setJob} channelId={channelId} giphyReady={Boolean(opts.ready.giphy)} wide={!leftOpen} />
+            <JobPanel key={`${job.id}:${job.updatedAt}`} job={job} plan={plan} videoTitle={videoTitle} videos={opts.videos} onRerender={(p) => void render(p, job.id)} onChange={setJob} channelId={channelId} giphyReady={Boolean(opts.ready.giphy)} wide={!leftOpen} sfxList={opts.assets.sfx.map((f) => f.replace(/\.[^.]+$/, ""))} />
           ) : plan ? (
             <PlanEditor
               plan={plan}
@@ -489,6 +489,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
               titleStyle={titleStyle}
               channelId={channelId}
               giphyReady={Boolean(opts.ready.giphy)}
+              sfxList={opts.assets.sfx.map((f) => f.replace(/\.[^.]+$/, ""))}
             />
           ) : (
             <SectionCard>
@@ -538,6 +539,7 @@ function PlanEditor({
   titleStyle,
   channelId,
   giphyReady,
+  sfxList,
 }: {
   plan: VideoPlan;
   onChange: (p: VideoPlan) => void;
@@ -549,6 +551,7 @@ function PlanEditor({
   channelId: VideoChannel;
   /** GIPHY 연결됨 (v0.9.102) */
   giphyReady: boolean;
+  sfxList: string[];
 }) {
   const [gifFor, setGifFor] = useState<number | null>(null);
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => onChange({ ...plan, scenes: plan.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
@@ -604,7 +607,20 @@ function PlanEditor({
             <span className="min-w-0">
               <Input value={s.narration} onChange={(e) => setScene(i, { narration: e.target.value })} className="h-8 text-[13px]" aria-label={`${i + 1}번 컷 자막`} />
               <span className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-fg-subtle">
-                {s.sfx && <Badge tone="info">효과음 {s.sfx}</Badge>}
+                <span className="inline-flex items-center gap-1" data-plan-sfx>
+                  <button type="button" disabled={!sfxList.length} onClick={() => setScene(i, { sfx: s.sfx ? null : (sfxList[0] ?? null) })} className={cn("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset", s.sfx ? "bg-info-soft text-info ring-info/40" : "text-fg-subtle ring-line hover:bg-subtle")}>
+                    {s.sfx ? "♪ 효과음" : "+ 효과음"}
+                  </button>
+                  {s.sfx && (
+                    <select value={s.sfx} onChange={(e) => setScene(i, { sfx: e.target.value })} className="h-6 max-w-[150px] rounded border border-line bg-canvas px-1 text-[11px]" aria-label={`${i + 1}번 컷 효과음`}>
+                      {[...new Set([s.sfx, ...sfxList])].map((x) => (
+                        <option key={x} value={x}>
+                          {x}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </span>
                 {i < plan.scenes.length - 1 && (
                   <button type="button" onClick={() => setScene(i, { arrow: !s.arrow })} className={cn("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset", s.arrow ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-subtle ring-line hover:bg-subtle")} data-arrow-toggle>
                     {s.arrow ? "↓ 제품 버튼 화살표" : "+ 화살표"}
@@ -691,10 +707,12 @@ function JobPanel({
   channelId,
   giphyReady,
   wide,
+  sfxList,
 }: {
   channelId: VideoChannel;
   giphyReady: boolean;
   wide: boolean;
+  sfxList: string[];
   job: VideoJob & { fileUrl?: string | null };
   plan: VideoPlan | null;
   videoTitle: (id: string | null) => string;
@@ -711,7 +729,7 @@ function JobPanel({
   // v0.9.82: 제목·대본을 고쳤는지
   const textChanged = edited.topLine1 !== job.plan.topLine1 || edited.topLine2 !== job.plan.topLine2 || edited.scenes.some((s, i) => s.narration !== job.plan.scenes[i]?.narration);
   // v0.9.137: GIF·화살표 편집
-  const fxChanged = edited.scenes.length !== job.plan.scenes.length || edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m") || JSON.stringify(s.gifBox ?? null) !== JSON.stringify(o.gifBox ?? null) || (s.gif?.id ?? "") !== (o.gif?.id ?? "") || (s.startAt ?? null) !== (o.startAt ?? null); });
+  const fxChanged = edited.scenes.length !== job.plan.scenes.length || edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m") || JSON.stringify(s.gifBox ?? null) !== JSON.stringify(o.gifBox ?? null) || (s.gif?.id ?? "") !== (o.gif?.id ?? "") || (s.startAt ?? null) !== (o.startAt ?? null) || (s.sfx ?? null) !== (o.sfx ?? null) || (s.gifSec ?? null) !== (o.gifSec ?? null); });
   // v0.9.139 편집기: GIF 검색(GIPHY)·끌어다 놓기
   const [gifFor, setGifFor] = useState<number | null>(null);
   const [placeFor, setPlaceFor] = useState<number | null>(null);
@@ -867,10 +885,29 @@ function JobPanel({
                             </select>
                           </>
                         )}
+                        {s.attention && (
+                          <label className="flex items-center gap-1" title="GIF 가 나오는 시간 (컷보다 길면 다음 컷 앞부분까지)">
+                            GIF
+                            <input type="number" min={0.5} max={8} step={0.5} value={s.gifSec ?? 2.6} onChange={(e) => setScene(i, { gifSec: Math.min(8, Math.max(0.5, Number(e.target.value) || 2.6)) })} className="h-6 w-14 rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 GIF 초`} />초
+                          </label>
+                        )}
                         <label className="flex items-center gap-1">
                           <input type="checkbox" checked={s.arrow} onChange={(e) => setScene(i, { arrow: e.target.checked })} className="accent-[var(--color-brand)]" />
                           화살표
                         </label>
+                        <label className="flex items-center gap-1">
+                          <input type="checkbox" checked={Boolean(s.sfx)} disabled={!sfxList.length} onChange={(e) => setScene(i, { sfx: e.target.checked ? (s.sfx ?? sfxList[0] ?? null) : null })} className="accent-[var(--color-brand)]" />
+                          효과음
+                        </label>
+                        {s.sfx && (
+                          <select value={s.sfx} onChange={(e) => setScene(i, { sfx: e.target.value })} className="h-6 max-w-[160px] rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 효과음`}>
+                            {sfxList.map((x) => (
+                              <option key={x} value={x}>
+                                {x}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </span>
                     )}
                 </li>
