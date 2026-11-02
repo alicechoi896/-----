@@ -15,6 +15,8 @@ import {
   DEFAULT_TITLE_STYLE,
   DEFAULT_PAUSE,
   DEFAULT_VOICE_SPEED,
+  GIF_POSITIONS,
+  GIF_SIZES,
   PAUSE_OPTIONS,
   TITLE_BAR_COLORS,
   VIDEO_TARGETS,
@@ -611,6 +613,9 @@ function JobPanel({
   const changed = JSON.stringify(edited.scenes.map((s) => s.sourceVideoId)) !== JSON.stringify(job.plan.scenes.map((s) => s.sourceVideoId));
   // v0.9.82: 제목·대본을 고쳤는지
   const textChanged = edited.topLine1 !== job.plan.topLine1 || edited.topLine2 !== job.plan.topLine2 || edited.scenes.some((s, i) => s.narration !== job.plan.scenes[i]?.narration);
+  // v0.9.137: GIF·화살표 편집
+  const fxChanged = edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m"); });
+  const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const pool = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) }));
 
   async function download() {
@@ -703,11 +708,11 @@ function JobPanel({
             </div>
             <ol className="space-y-1" data-job-scenes>
               {edited.scenes.map((s, i) => (
-                <li key={i} className={cn("grid grid-cols-[24px_minmax(0,1fr)_170px] items-center gap-2 rounded-control border px-2 py-1.5 text-[12px]", s.issue ? "border-warning bg-warning-soft/40" : "border-line")}>
+                <li key={i} className={cn("grid grid-cols-[24px_minmax(0,1fr)_140px] items-center gap-2 rounded-control border px-2 py-1.5 text-[12px]", s.issue ? "border-warning bg-warning-soft/40" : "border-line")}>
                   <span className="tabular text-center text-fg-subtle">{i + 1}</span>
                   <span className="min-w-0">
                     <Input value={s.narration} onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, narration: e.target.value } : x)) })} className="h-7 text-[12.5px]" aria-label={`${i + 1}번 컷 대본`} />
-                    <span className="text-[11px] text-fg-subtle">
+                    <span className="line-clamp-2 text-[11px] text-fg-subtle" title={s.issue ?? undefined}>
                       {s.start != null ? `${s.start.toFixed(1)}초 · ` : ""}
                       {TREATMENT_LABEL[s.textTreatment ?? "unchecked"]}
                       {s.issue ? ` · ${s.issue}` : ""}
@@ -719,12 +724,42 @@ function JobPanel({
                     onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, sourceVideoId: e.target.value, pinned: true } : x)) })}
                     aria-label={`${i + 1}번 컷 클립 교체`}
                   />
+                    {i < edited.scenes.length - 1 && (
+                      <span className="col-span-3 flex flex-wrap items-center gap-2 pl-8 text-[11.5px]" data-job-fx>
+                        <label className="flex items-center gap-1">
+                          <input type="checkbox" checked={Boolean(s.attention)} onChange={(e) => setScene(i, { attention: e.target.checked })} className="accent-[var(--color-brand)]" />
+                          {s.gif ? "GIF" : "주목 효과"}
+                        </label>
+                        {s.attention && (
+                          <>
+                            <select value={s.gifPos ?? "top"} onChange={(e) => setScene(i, { gifPos: e.target.value as "top" | "center" | "bottom" })} className="h-6 rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 GIF 위치`}>
+                              {GIF_POSITIONS.map((x) => (
+                                <option key={x.value} value={x.value}>
+                                  위치 {x.label}
+                                </option>
+                              ))}
+                            </select>
+                            <select value={s.gifSize ?? "m"} onChange={(e) => setScene(i, { gifSize: e.target.value as "s" | "m" | "l" })} className="h-6 rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 GIF 크기`}>
+                              {GIF_SIZES.map((x) => (
+                                <option key={x.value} value={x.value}>
+                                  크기 {x.label}
+                                </option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                        <label className="flex items-center gap-1">
+                          <input type="checkbox" checked={s.arrow} onChange={(e) => setScene(i, { arrow: e.target.checked })} className="accent-[var(--color-brand)]" />
+                          화살표
+                        </label>
+                      </span>
+                    )}
                 </li>
               ))}
             </ol>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button size="sm" variant={changed || textChanged ? "primary" : "secondary"} icon={RefreshCw} onClick={() => onRerender(edited)}>
-                {textChanged ? "고친 제목·대본으로 다시 만들기" : changed ? "바꾼 클립으로 다시 만들기" : "다시 만들기"}
+              <Button size="sm" variant={changed || textChanged || fxChanged ? "primary" : "secondary"} icon={RefreshCw} onClick={() => onRerender(edited)} data-job-rerender>
+                {textChanged ? "고친 제목·대본으로 다시 만들기" : changed || fxChanged ? "고친 내용으로 다시 만들기" : "다시 만들기"}
               </Button>
             </div>
             <p className="text-[11px] text-fg-subtle">원본 {[...new Set(job.plan.scenes.map((s) => s.sourceVideoId))].map(videoTitle).join(", ").slice(0, 120)}</p>

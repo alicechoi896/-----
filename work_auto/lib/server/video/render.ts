@@ -381,7 +381,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     if (job.plan.ending) note(await renderEnding(endPng), ENDING_TEMPLATE.font);
     let attnTurn = 0;
     // v0.9.120: GIF 는 컷 앞에서 GIF_CONFIG.showSec 동안, 컷이 짧으면 남은 시간은 다음 컷 앞부분에 (같은 GIF 이어서)
-    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number }[]>();
+    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number; pos: "top" | "center" | "bottom"; size: "s" | "m" | "l" }[]>();
     {
       let turn = 0;
       for (const { k, s, dur } of picks) {
@@ -390,11 +390,12 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         turn++;
         if (!file) continue;
         const first = Math.min(GIF_CONFIG.showSec, dur);
-        gifShow.set(k, [...(gifShow.get(k) ?? []), { file, from: 0, to: first, offset: 0 }]);
+        const look = { pos: s.gifPos ?? "top", size: s.gifSize ?? "m" } as const;
+        gifShow.set(k, [...(gifShow.get(k) ?? []), { file, from: 0, to: first, offset: 0, ...look }]);
         const rest = GIF_CONFIG.showSec - first;
         const next = picks.find((x) => x.k === k + 1);
         if (rest > 0.3 && next && !(job.plan.ending && next.k === scenes.length - 1) && !next.s.attention) {
-          gifShow.set(next.k, [...(gifShow.get(next.k) ?? []), { file, from: 0, to: Math.min(rest, next.dur), offset: first }]);
+          gifShow.set(next.k, [...(gifShow.get(next.k) ?? []), { file, from: 0, to: Math.min(rest, next.dur), offset: first, ...look }]);
         }
       }
     }
@@ -474,10 +475,14 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       }
       // 주목 효과: GIF 는 화면 가운데에 크게 (v0.9.120), GIF 가 없으면 컷 앞 1.4초 통통 튀는 스티커
       for (const [g, show] of (gifShow.get(k) ?? []).entries()) {
-        const boxH = GIF_CONFIG.bottom - GIF_CONFIG.top;
-        const cy = Math.round((GIF_CONFIG.top + GIF_CONFIG.bottom) / 2);
+        // v0.9.137: 컷마다 위치(위·가운데·아래)·크기(작게·보통·크게)
+        const area = GIF_CONFIG.positions[show.pos] ?? GIF_CONFIG.positions.top;
+        const mul = GIF_CONFIG.sizes[show.size] ?? 1;
+        const boxH = Math.round((area.bottom - area.top) * mul);
+        const maxW = Math.min(W, Math.round(GIF_CONFIG.maxWidth * mul));
+        const cy = Math.round((area.top + area.bottom) / 2);
         const trim = show.offset > 0 ? `trim=start=${show.offset.toFixed(3)},setpts=PTS-STARTPTS,` : "";
-        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,scale=${GIF_CONFIG.maxWidth}:${boxH}:force_original_aspect_ratio=decrease[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=(W-w)/2:${cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
+        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,scale=${maxW}:${boxH}:force_original_aspect_ratio=decrease[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=(W-w)/2:${cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
       }
       if (s.attention && !isLast && !gifShow.has(k)) {
         const a = ATTENTION_CONFIG;

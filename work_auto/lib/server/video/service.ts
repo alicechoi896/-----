@@ -188,6 +188,8 @@ export const videoJobService = {
       gif: s.gif && isGiphyUrl(String(s.gif.url)) && isGiphyUrl(String(s.gif.preview)) ? { id: String(s.gif.id).slice(0, 40), url: String(s.gif.url), preview: String(s.gif.preview), title: String(s.gif.title ?? "").slice(0, 80) } : null,
       sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null,
       pinned: Boolean(s.pinned),
+      gifPos: s.gifPos === "center" || s.gifPos === "bottom" ? s.gifPos : ("top" as const),
+      gifSize: s.gifSize === "s" || s.gifSize === "l" ? s.gifSize : ("m" as const),
     }));
     if (!scenes.some((s) => s.narration)) throw new AppError("VALIDATION", "컷이 없습니다. 컷 계획을 다시 만들어 주세요.");
     const sourceIds = (Array.isArray(plan.sourceVideoIds) ? plan.sourceVideoIds : []).map(String).filter((id) => ok.has(id));

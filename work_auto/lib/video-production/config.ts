@@ -95,8 +95,9 @@ export const ENDING_TEMPLATE = {
  * YouTube Shorts·NAVER 클립 모두 제품 버튼이 화면 왼쪽 아래 → 기본은 아래(-90°).
  */
 export const ARROW_PLACEMENT: Record<VideoChannel, { x: number; y: number; size: number; angle: number }> = {
-  youtube: { x: 60, y: 1280, size: 300, angle: -90 },
-  "naver-clip": { x: 60, y: 1280, size: 300, angle: -90 },
+  // v0.9.137: 1280 → 760 (화면 왼쪽 가운데쯤 — 너무 아래라 잘 안 보였다)
+  youtube: { x: 60, y: 760, size: 300, angle: -90 },
+  "naver-clip": { x: 60, y: 760, size: 300, angle: -90 },
 };
 
 /** 엔딩 화살표 (assets/video/ending — 아래로 휘는 화살표를 왼쪽 아래로 기울임) */
@@ -125,7 +126,20 @@ export const GIF_CONFIG = {
   /** 위·아래 경계 (1080×1920 기준). 제목 띠 아래 ~ 자막 위 */
   top: 350,
   bottom: 1000,
+  /** v0.9.137 완성 후 편집: 위치(위·가운데·아래)별 세로 범위, 크기별 배율 */
+  positions: { top: { top: 350, bottom: 1000 }, center: { top: 640, bottom: 1280 }, bottom: { top: 1180, bottom: 1760 } },
+  sizes: { s: 0.6, m: 1, l: 1.15 },
 } as const;
+export const GIF_POSITIONS = [
+  { value: "top", label: "위" },
+  { value: "center", label: "가운데" },
+  { value: "bottom", label: "아래" },
+] as const;
+export const GIF_SIZES = [
+  { value: "s", label: "작게" },
+  { value: "m", label: "보통" },
+  { value: "l", label: "크게" },
+] as const;
 
 export const ATTENTION_CONFIG = {
   maxPerVideo: 4,

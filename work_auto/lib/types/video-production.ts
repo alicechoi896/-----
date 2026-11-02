@@ -23,6 +23,9 @@ export interface VideoScene {
   attention?: boolean;
   /** v0.9.102: 주목 효과에 쓸 GIPHY GIF (없으면 자료 폴더 GIF → 직접 그린 스티커) */
   gif?: { id: string; url: string; preview: string; title: string } | null;
+  /** v0.9.137 GIF 위치·크기 (완성 후 편집에서 바꿈, 없으면 위·보통) */
+  gifPos?: "top" | "center" | "bottom";
+  gifSize?: "s" | "m" | "l";
   /** 원본 영상 (reference_videos.id) */
   sourceVideoId: string | null;
   /** 사람이 고른 클립이면 자동 배치가 바꾸지 않는다 */
