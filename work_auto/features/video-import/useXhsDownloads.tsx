@@ -40,7 +40,7 @@ export function useXhsDownloads() {
     const set = (job: XhsJob) => setJobs((prev) => ({ ...prev, [v.id]: job }));
     try {
       const onStage = (stage: XhsStage, progress?: number) => set({ stage, progress });
-      const out = await downloadXhsMuted(v.shareUrl || v.url, onStage);
+      const out = await downloadXhsMuted(v.url, onStage);
       if (save) downloadBlob(out.blob, out.name);
       // v0.9.142: 받은 원본을 서버에도 보관 (추가 호출·비용 없음 — 받은 파일을 그대로 올림). 실패해도 다운로드는 그대로
       if (v.platform === "xiaohongshu") void api.videos.keepDownloaded(v.id, out.blob).catch(() => false);

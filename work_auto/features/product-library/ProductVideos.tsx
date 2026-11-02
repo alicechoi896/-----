@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowRight, Download, ExternalLink, Film, FolderDown, Link2, ListPlus, Unlink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Download, ExternalLink, Film, FolderDown, ListPlus, Unlink } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { PLATFORM_LABEL, canDirectDownload, parseVideoLinks } from "@/lib/video-links";
-import { Badge, Button, EmptyState, ErrorState, IconButton, Input, LoadingState, Notice, SectionCard, Textarea } from "@/components/ui";
+import { Badge, Button, EmptyState, ErrorState, IconButton, LoadingState, Notice, SectionCard, Textarea } from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { formatRelative } from "@/lib/utils";
 import { XhsJobStatus, useXhsDownloads } from "@/features/video-import/useXhsDownloads";
@@ -30,27 +30,18 @@ export function ProductVideos({ productId }: { productId: string }) {
 
   const videos = (list.data ?? []).filter((v) => v.productId === productId);
   const xhsVideos = videos.filter((v) => canDirectDownload(v.platform));
-  // v0.9.113: 샤오홍슈 공유 링크(xhslink)는 몇 년이 지나도 열려 영상 제작·새벽 자동 제작에 그대로 쓴다. 검색으로 가져온 긴 주소는 열쇠가 만료된다
-  const isShort = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*xhslink\.com\//i.test(url);
-  const linkOf = (v: ReferenceVideo) => v.shareUrl || v.url;
-  const expiring = videos.filter((v) => v.platform === "xiaohongshu" && !isShort(linkOf(v)));
-  const [relink, setRelink] = useState<{ id: string; url: string } | null>(null);
-  const [relinkBusy, setRelinkBusy] = useState(false);
-  const [relinkMsg, setRelinkMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
-  async function saveRelink() {
-    if (!relink) return;
-    setRelinkBusy(true);
-    try {
-      const v = await api.videos.relink(relink.id, relink.url);
-      list.setData((prev) => prev?.map((x) => (x.id === v.id ? v : x)) ?? null);
-      setRelinkMsg((m) => ({ ...m, [v.id]: { ok: true, text: "공유 링크로 바꿨습니다 (영구)" } }));
-      setRelink(null);
-    } catch (e) {
-      setRelinkMsg((m) => ({ ...m, [relink.id]: { ok: false, text: e instanceof Error ? e.message : "바꾸지 못했습니다." } }));
-    } finally {
-      setRelinkBusy(false);
-    }
-  }
+  // v0.9.143: 원본 보관 현황 ([다운로드]로 받은 원본은 서버에도 보관 — 링크가 만료돼도 영상 제작에 씀)
+  const vault = useAsync(() => api.videos.vaultStatus(), []);
+  const stored = new Set(vault.data?.stored ?? []);
+  const notKept = videos.filter((v) => v.platform === "xiaohongshu" && vault.data && !stored.has(v.id));
+  // 다운로드가 끝나면 (받은 원본을 올린 뒤) 보관 현황을 다시 읽는다
+  const doneCount = Object.values(xhs.jobs).filter((j) => j.stage === "done").length;
+  useEffect(() => {
+    if (!doneCount) return;
+    const t = setTimeout(() => vault.reload(), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doneCount]);
   const links = parseVideoLinks(text);
 
   async function handleImport() {
@@ -152,30 +143,9 @@ export function ProductVideos({ productId }: { productId: string }) {
                     {v.note ? ` · ${v.note}` : ""}
                   </p>
                   <XhsJobStatus job={xhs.jobs[v.id]} />
-                  {v.platform === "xiaohongshu" && (
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]" data-xhs-link>
-                      {isShort(linkOf(v)) ? (
-                        <Badge tone="success">영구 링크 ✓ (xhslink)</Badge>
-                      ) : (
-                        <>
-                          <Badge tone="warning">만료되는 링크</Badge>
-                          <Button size="sm" variant="ghost" icon={Link2} className="h-7 px-2 text-[12px]" onClick={() => setRelink({ id: v.id, url: "" })} data-xhs-relink>
-                            공유 링크 직접 넣기
-                          </Button>
-                        </>
-                      )}
-                      {relinkMsg[v.id] && <span className={relinkMsg[v.id].ok ? "text-success" : "text-danger"}>{relinkMsg[v.id].text}</span>}
-                    </div>
-                  )}
-                  {relink?.id === v.id && (
-                    <div className="mt-1.5 flex gap-1.5">
-                      <Input value={relink.url} onChange={(e) => setRelink({ id: v.id, url: e.target.value })} placeholder="샤오홍슈 앱 › [공유] › 링크 복사 (http://xhslink.com/o/…) — 공유 문구 통째로 붙여 넣어도 됩니다" className="h-8 flex-1 text-[12.5px]" aria-label="공유 링크" />
-                      <Button size="sm" variant="primary" loading={relinkBusy} disabled={!relink.url.trim()} onClick={() => void saveRelink()}>
-                        바꾸기
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setRelink(null)}>
-                        취소
-                      </Button>
+                  {v.platform === "xiaohongshu" && vault.data && (
+                    <div className="mt-1 text-[12px]" data-xhs-kept>
+                      {stored.has(v.id) ? <Badge tone="success">원본 보관 ✓</Badge> : <Badge tone="warning">원본 보관 안 됨 — [다운로드]를 누르면 보관</Badge>}
                     </div>
                   )}
                 </div>
@@ -212,9 +182,9 @@ export function ProductVideos({ productId }: { productId: string }) {
           })}
         </ul>
       )}
-      {expiring.length > 0 && (
+      {notKept.length > 0 && (
         <p className="border-t border-line px-5 py-2 text-[12px] text-warning">
-          만료되는 링크 {expiring.length}개 — 검색으로 가져온 주소는 시간이 지나면 열리지 않습니다. 샤오홍슈 앱에서 그 영상의 [공유] → 링크 복사(xhslink.com) 주소로 바꾸면 계속 쓸 수 있습니다 (새벽 자동 제작은 공유 링크 영상만 씁니다).
+          원본 보관 안 된 영상 {notKept.length}개 — [다운로드]를 누르면 받은 원본이 그대로 보관돼, 링크가 만료돼도 영상 제작·새벽 자동 제작에 씁니다 (추가 비용 없음).
         </p>
       )}
       <div className="border-t border-line px-5 py-2.5 text-right">

@@ -181,7 +181,7 @@ export function AutoVideo() {
   return (
     <div className="space-y-6" data-auto-video>
       {error && <Notice tone="warning">{error}</Notice>}
-      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 샤오홍슈 공유 링크(xhslink) 영상이 ${data.limits.minVideos}개 이상인 제품만 골라(연결 안 된·만료 링크뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만들어 결과가 남아 있거나 업로드 관리에 등록한 제품 제외 — 결과를 지우면 다시 고를 수 있음) 고르자마자 바로 만들기 시작합니다 (남은 것은 5분마다 이어서). 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
+      <SectionCard title="자동 제작 설정" icon={Settings2} description={`매일 05:00 AI 가 쓸 수 있는 샤오홍슈 영상(원본 보관)이 ${data.limits.minVideos}개 이상인 제품만 골라(원본이 보관 안 된 영상뿐인 제품은 만들지 않음, 최근 ${data.limits.repeatDays}일 안에 만들어 결과가 남아 있거나 업로드 관리에 등록한 제품 제외 — 결과를 지우면 다시 고를 수 있음) 고르자마자 바로 만들기 시작합니다 (남은 것은 5분마다 이어서). 목소리·자막·제목 스타일은 아래 '영상 스타일'에 저장한 값을 씁니다 (저장 전에는 가장 최근에 직접 만든 영상 설정). 샤오홍슈 영상은 무료로 받을 수 있는 것만 쓰고, TikHub(유료)가 필요한 영상은 건너뜁니다.`} data-auto-settings>
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-[14px] font-medium">
             <input type="checkbox" checked={s.enabled} disabled={Boolean(busy)} onChange={(e) => void save({ enabled: e.target.checked })} className="size-4 accent-[var(--color-brand)]" data-auto-enabled />
@@ -210,9 +210,9 @@ export function AutoVideo() {
             지금 만들 수 있는 제품 <b className={data.eligibility.eligible ? "text-success" : "text-danger"}>{data.eligibility.eligible}개</b> / 전체 {data.eligibility.total}개
             <span className="text-fg-subtle">
               {" "}
-              (제외: 공유 링크(xhslink) 영상 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
+              (제외: 원본 보관 영상 없음 {data.eligibility.noVideo}개 · {data.limits.minVideos}개 미만 {data.eligibility.fewVideo}개 · 최근 {data.limits.repeatDays}일 안에 만듦 {data.eligibility.recent}개)
             </span>
-            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고, 만료되는 링크는 샤오홍슈 앱 [공유] → 링크 복사 주소를 [공유 링크 직접 넣기]로 넣어 주세요.</span>}
+            {data.eligibility.eligible < s.count && <span className="text-warning"> — 하루 개수({s.count}개)보다 적어 그만큼만 만듭니다. 제품 상세 › 연결된 영상에서 샤오홍슈 영상을 연결하고 [다운로드]를 누르면 원본이 보관돼 쓸 수 있게 됩니다.</span>}
           </p>
         )}
         <div className="mt-3">

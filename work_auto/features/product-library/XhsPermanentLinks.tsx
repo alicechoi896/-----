@@ -22,7 +22,7 @@ export function XhsPermanentLinks() {
   const xhs = (list.data ?? []).filter((v) => v.platform === "xiaohongshu");
   if (list.loading || !xhs.length) return null;
   const stored = new Set(vault.data?.stored ?? []);
-  const usable = xhs.filter((v) => stored.has(v.id) || isShort(v.shareUrl || v.url));
+  const usable = xhs.filter((v) => stored.has(v.id) || isShort(v.url));
   const todo = xhs.filter((v) => !stored.has(v.id)).sort((a, b) => Number(Boolean(b.productId)) - Number(Boolean(a.productId)));
 
   async function keepAll() {
@@ -49,7 +49,7 @@ export function XhsPermanentLinks() {
     <Notice tone={todo.length ? "warning" : "info"}>
       <div className="flex flex-wrap items-center gap-2" data-xhs-permanent-all>
         <span>
-          샤오홍슈 영상 <b>{usable.length}</b> / {xhs.length}개 쓸 수 있음 (원본 보관 {stored.size}개 · 영구 링크 {xhs.filter((v) => isShort(v.shareUrl || v.url)).length}개)
+          샤오홍슈 영상 <b>{usable.length}</b> / {xhs.length}개 쓸 수 있음 (원본 보관 {stored.size}개)
         </span>
         {todo.length > 0 && (
           <Button size="sm" variant="secondary" icon={HardDriveDownload} loading={busy} disabled={busy} onClick={() => void keepAll()} data-xhs-keep-all>
