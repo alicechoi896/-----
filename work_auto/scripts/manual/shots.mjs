@@ -854,14 +854,13 @@ export const SHOTS = [
     id: "09-analytics",
     url: "/analytics",
     prepare: async (p) => {
-      await p.locator("[data-analytics] [role=tab]", { hasText: "패턴 찾기" }).first().click();
-      await p.locator("[data-analytics-patterns]").waitFor({ timeout: 15_000 });
+      await p.locator("[data-analytics-classify]").waitFor({ timeout: 15_000 });
       await p.waitForTimeout(500);
     },
     marks: {
       1: (p) => p.locator("[data-analytics] [role=radiogroup]").first(),
       2: (p) => p.locator("[data-analytics] [role=tablist]").first(),
-      3: (p) => p.locator("[data-analytics-hyp]").first(),
+      3: (p) => p.locator("[data-analytics-kind=broad]").first().locator("xpath=.."),
     },
   },
 

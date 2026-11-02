@@ -15,10 +15,27 @@ export interface AnalyticsVideo {
   thumbnailUrl: string | null;
   /** 우리 시스템에서 만든 콘텐츠면 연결 (Hook·섬네일 제목·대본 포맷·제품) */
   contentId: string | null;
+  /** v0.9.152 Hook = 영상 첫 3초에 나오는 말 (완성 영상의 컷 대사·시작 시각에서). 제목이 아니다 */
   hook: string | null;
+  /** 첫 화면 위쪽 제목 (topLine1 + topLine2) */
+  screenTitle: string | null;
+  /** v0.9.152 주 7개 계획의 구분 — 넓게 · 좁게 · 실험 (사람이 고르거나 AI 가 나눔) */
+  kind: VideoKind | null;
+  kindBy: "me" | "ai" | null;
   thumbTitle: string | null;
   formatName: string | null;
   productName: string | null;
+}
+
+export type VideoKind = "broad" | "narrow" | "experiment";
+export const KIND_LABEL: Record<VideoKind, string> = { broad: "넓게", narrow: "좁게", experiment: "실험" };
+
+/** 컷 대사·시작 시각 → 첫 3초에 나오는 말. 시작 시각이 없으면(렌더 전) 첫 컷만 */
+export function openingOf(scenes: { narration: string; start?: number }[], sec = 3): string | null {
+  const timed = scenes.some((s) => typeof s.start === "number");
+  const first = timed ? scenes.filter((s) => (s.start ?? 0) < sec) : scenes.slice(0, 1);
+  const text = first.map((s) => s.narration.trim()).filter(Boolean).join(" ");
+  return text || null;
 }
 
 export interface FeatureRow {
@@ -66,7 +83,7 @@ export function featuresOf(v: AnalyticsVideo): Record<string, string> {
   }
   if (v.hook) {
     const n = v.hook.replace(/\s/g, "").length;
-    f["Hook 길이"] = n <= 15 ? "15자 이하" : n <= 25 ? "16~25자" : "26자 이상";
+    f["첫 3초 말 길이"] = n <= 12 ? "12자 이하" : n <= 20 ? "13~20자" : "21자 이상";
   }
   if (v.publishedAt) {
     const { day, hour } = kst(v.publishedAt);
@@ -74,6 +91,7 @@ export function featuresOf(v: AnalyticsVideo): Record<string, string> {
     f["올린 시간 (한국)"] = hour < 6 ? "새벽 0~6시" : hour < 12 ? "오전 6~12시" : hour < 18 ? "오후 12~18시" : "저녁 18~24시";
   }
   if (v.formatName) f["대본 포맷"] = v.formatName;
+  if (v.kind) f["주제 넓이"] = KIND_LABEL[v.kind];
   return f;
 }
 
@@ -106,7 +124,7 @@ export function standouts(rows: FeatureRow[]): FeatureRow[] {
 
 /** 주간 7개 계획 (넓게 3 · 좁게 3 · 실험 1) — 개요 탭에서 보여 주는 기본 틀 */
 export const WEEKLY_PLAN = [
-  { kind: "넓게", count: 3, desc: "많은 사람이 공감하는 주제 (조회수·구독 유입)" },
-  { kind: "좁게", count: 3, desc: "살 사람(불스아이 고객)만 콕 집는 주제 (문의·구매)" },
-  { kind: "실험", count: 1, desc: "패턴 찾기에서 나온 가설 하나를 시험" },
+  { key: "broad", kind: "넓게", count: 3, desc: "많은 사람이 공감하는 주제 (조회수·구독 유입)" },
+  { key: "narrow", kind: "좁게", count: 3, desc: "살 사람(불스아이 고객)만 콕 집는 주제 (문의·구매)" },
+  { key: "experiment", kind: "실험", count: 1, desc: "패턴 찾기에서 나온 가설 하나를 시험" },
 ] as const;

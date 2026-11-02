@@ -1,5 +1,7 @@
 import "server-only";
-import { featureTable, median, standouts, type AnalyticsVideo, type FeatureRow } from "@/lib/domain/analytics";
+import { KIND_LABEL, featureTable, median, openingOf, standouts, type AnalyticsVideo, type FeatureRow, type VideoKind } from "@/lib/domain/analytics";
+import type { VideoJob } from "@/lib/types/video-production";
+import { videoStorage } from "../video/storage";
 import { getAIProvider, getYouTubeTrendProvider } from "../providers/registry";
 import { extractYouTubeId } from "../providers/trends/youtube-data-api-provider";
 import { AppError } from "../http";
@@ -15,6 +17,7 @@ import { nowIso } from "@/lib/utils";
  * - 같은 사람은 30분 기억 ([새로 불러오기]로 다시)
  * - AI 는 버튼을 누를 때만 1번 (가설 찾기 · 차이 가설 · 훅 분석). 자동 재시도 없음
  * - 올린 지 48시간이 안 된 영상은 조회수가 아직 덜 쌓여 패턴 계산에서 뺀다
+ * - v0.9.152 Hook = 첫 3초에 나오는 말 (완성 영상 컷 대사·시작 시각). 넓게·좁게·실험 구분은 {owner}/analytics/youtube-kinds.json (DB 변경 없음)
  */
 const TTL = 30 * 60 * 1000;
 const FRESH_MS = 48 * 3_600_000;
@@ -41,8 +44,32 @@ export interface CompareVideo {
   thumbnailUrl: string | null;
 }
 
+type KindMap = Record<string, { kind: VideoKind; by: "me" | "ai" }>;
+const kindsKey = (owner: string) => `${owner}/analytics/youtube-kinds.json`;
+async function readKinds(owner: string): Promise<KindMap> {
+  const buf = await videoStorage.download(kindsKey(owner)).catch(() => null);
+  try {
+    return buf ? (JSON.parse(buf.toString("utf8")) as KindMap) : {};
+  } catch {
+    return {};
+  }
+}
+async function writeKinds(owner: string, map: KindMap) {
+  await videoStorage.put(kindsKey(owner), Buffer.from(JSON.stringify(map)), "application/json", "0");
+}
+
+/** 캐시된 숫자 + 지금 구분(넓게·좁게·실험)을 붙여 표를 다시 계산 */
 async function myVideos(force = false): Promise<MyVideos> {
   const owner = await getCurrentUserId();
+  const base = await loadVideos(owner, force);
+  const kinds = await readKinds(owner);
+  const videos = base.videos.map((v) => ({ ...v, kind: kinds[v.videoId]?.kind ?? null, kindBy: kinds[v.videoId]?.by ?? null }));
+  const ripe = videos.filter((v) => Date.parse(base.at) - Date.parse(v.publishedAt) >= FRESH_MS);
+  const table = featureTable(ripe);
+  return { ...base, videos, rows: table.rows, standouts: standouts(table.rows) };
+}
+
+async function loadVideos(owner: string, force: boolean): Promise<MyVideos> {
   const hit = cache.get(owner);
   if (!force && hit && Date.now() - hit.at < TTL) return hit.value;
   const repo = getRepositories();
@@ -57,10 +84,18 @@ async function myVideos(force = false): Promise<MyVideos> {
   const contentIds = [...new Set(yt.map((p) => p.contentId).filter(Boolean) as string[])];
   const contents = contentIds.length ? await repo.contents.list((c) => contentIds.includes(c.id), { id: contentIds }).catch(() => []) : [];
   const contentById = new Map(contents.map((c) => [c.id, c]));
+  // 첫 3초 말: 그 콘텐츠로 만든 완성 영상의 컷 대사 (가장 최근 것)
+  const jobs = contentIds.length
+    ? ((await repo.videoJobs.list((j) => Boolean(j.contentId && contentIds.includes(j.contentId)), { contentId: contentIds }).catch(() => [])) as VideoJob[])
+    : [];
+  const jobByContent = new Map<string, VideoJob>();
+  for (const j of jobs.filter((x) => ["completed", "needs_review", "approved"].includes(x.status)).sort((a, b) => a.createdAt.localeCompare(b.createdAt))) jobByContent.set(j.contentId!, j);
   const videos: AnalyticsVideo[] = details.map((d) => {
     const pub = byVideo.get(d.videoId);
     const c = pub?.contentId ? contentById.get(pub.contentId) : undefined;
     const sel = c?.context.workflow?.selected;
+    const job = pub?.contentId ? jobByContent.get(pub.contentId) : undefined;
+    const screenTitle = job ? [job.plan.topLine1, job.plan.topLine2].filter(Boolean).join(" ").trim() || null : null;
     return {
       videoId: d.videoId,
       url: d.url,
@@ -72,7 +107,10 @@ async function myVideos(force = false): Promise<MyVideos> {
       comments: d.comments,
       thumbnailUrl: d.thumbnailUrl,
       contentId: pub?.contentId ?? null,
-      hook: sel?.hook || null,
+      hook: (job ? openingOf(job.plan.scenes ?? []) : null) ?? (sel?.hook || null),
+      screenTitle,
+      kind: null,
+      kindBy: null,
       thumbTitle: c?.context.picks?.thumbnailTitles?.values?.[0] ?? null,
       formatName: c?.context.scriptFormat?.name ?? null,
       productName: pub?.productName || null,
@@ -97,7 +135,7 @@ async function myVideos(force = false): Promise<MyVideos> {
 }
 
 const line = (v: { title: string; views: number | null; durationSec: number; hook?: string | null; thumbTitle?: string | null }) =>
-  [`"${v.title}"`, `조회 ${v.views ?? "?"}`, `${v.durationSec}초`, v.hook ? `Hook: ${v.hook}` : "", v.thumbTitle ? `섬네일: ${v.thumbTitle}` : ""].filter(Boolean).join(" · ");
+  [`"${v.title}"`, `조회 ${v.views ?? "?"}`, `${v.durationSec}초`, v.hook ? `첫 3초: ${v.hook}` : "", v.thumbTitle ? `섬네일: ${v.thumbTitle}` : ""].filter(Boolean).join(" · ");
 
 const SYSTEM = "당신은 한국 YouTube 쇼츠 제품 홍보 채널의 데이터 분석가다. 숫자로 확인된 것만 근거로 쓰고, 표본이 적으면 그렇다고 말한다. 조회수보다 문의·구매(매출)로 이어지는지를 함께 본다. 답은 JSON 객체 하나로만, 모든 문장은 존댓말 한국어.";
 
@@ -193,10 +231,10 @@ ${mine.map(line).join("\n") || "(아직 없음)"}
   },
 
   /** ④ 훅 연구소 — 모을 Hook 후보 (내 영상 Hook·제목 + 경쟁 제목은 화면에서 붙여 넣기) */
-  async hookSources(): Promise<{ hooks: { text: string; views: number | null; from: string }[] }> {
+  async hookSources(): Promise<{ hooks: { text: string; views: number | null; from: string }[]; missing: number }> {
     const mine = await myVideos();
-    const hooks = mine.videos.flatMap((v) => [v.hook ? { text: v.hook, views: v.views, from: "내 Hook" } : null, { text: v.title, views: v.views, from: "내 제목" }]).filter((x): x is { text: string; views: number | null; from: string } => Boolean(x));
-    return { hooks: hooks.slice(0, 100) };
+    const hooks = mine.videos.filter((v) => v.hook).map((v) => ({ text: v.hook!, views: v.views, from: "내 영상 첫 3초" }));
+    return { hooks: hooks.slice(0, 100), missing: mine.videos.length - hooks.length };
   },
 
   /** ④ 훅 분석 + 변형 10개 (누를 때 1번) */
@@ -210,11 +248,11 @@ ${mine.map(line).join("\n") || "(아직 없음)"}
         structures: [{ name: "숫자 약속", formula: "[숫자] + [얻는 것]", examples: hooks.slice(0, 2), share: `${hooks.length}개 중 일부` }],
         variants: Array.from({ length: 10 }, (_, i) => ({ text: `${topic || "이 제품"}, 모르면 손해 보는 ${i + 1}가지`, structure: "숫자 약속" })),
       };
-    const user = `[모은 Hook ${hooks.length}개 (조회수가 있으면 함께)]
+    const user = `[모은 Hook ${hooks.length}개 — 영상 첫 3초에 말하는 문장 (제목 아님). 조회수가 있으면 함께]
 ${hooks.map((h, i) => `${i + 1}. ${h.slice(0, 160)}`).join("\n")}
 
 1) structures: 이 Hook 들을 구조로 묶어 주세요 (3~6개). 각: name(구조 이름), formula(빈칸 공식, 예: "[대상]이 [실수]하면 [손해]"), examples(위에서 2~3개 그대로), share(몇 개가 이 구조인지).
-2) variants: ${topic ? `"${topic}" 주제로` : "같은 제품군 주제로"} 위 구조를 써서 새 Hook 10개. 첫 2초에 멈추게, 30자 안쪽, 존댓말, 과장·허위 금지. 각: text, structure(쓴 구조 이름).
+2) variants: ${topic ? `"${topic}" 주제로` : "같은 제품군 주제로"} 위 구조를 써서 영상 첫 3초에 말할 새 Hook 10개. 3초 안에 말할 수 있게 20자 안쪽, 스크롤을 멈추게, 존댓말, 과장·허위 금지. 각: text, structure(쓴 구조 이름).
 형식: {"structures":[{"name":"","formula":"","examples":[""],"share":""}],"variants":[{"text":"","structure":""}]}`;
     const data = await aiJson<{ structures: { name: string; formula: string; examples: string[]; share: string }[]; variants: { text: string; structure: string }[] }>(
       "hooks",
@@ -229,6 +267,58 @@ ${hooks.map((h, i) => `${i + 1}. ${h.slice(0, 160)}`).join("\n")}
       2400,
     );
     return { structures: (data.structures ?? []).slice(0, 6), variants: (data.variants ?? []).slice(0, 10) };
+  },
+
+  /** 개요: 영상 구분 정하기 (넓게·좁게·실험, null = 지우기) */
+  async setKind(input: { videoId?: unknown; kind?: unknown }): Promise<{ ok: true }> {
+    const owner = await getCurrentUserId();
+    const videoId = String(input.videoId ?? "");
+    if (!/^[\w-]{6,20}$/.test(videoId)) throw new AppError("VALIDATION", "영상을 확인해 주세요.");
+    const kind = input.kind == null || input.kind === "" ? null : String(input.kind);
+    if (kind && !(kind in KIND_LABEL)) throw new AppError("VALIDATION", "구분은 넓게·좁게·실험 중에서 골라 주세요.");
+    const map = await readKinds(owner);
+    if (kind) map[videoId] = { kind: kind as VideoKind, by: "me" };
+    else delete map[videoId];
+    await writeKinds(owner, map);
+    return { ok: true };
+  },
+
+  /** 개요: 아직 안 나눈 영상을 AI 가 넓게·좁게로 나눈다 (누를 때 1번. 실험은 사람이 정함) */
+  async classify(): Promise<{ classified: number }> {
+    const owner = await getCurrentUserId();
+    const mine = await myVideos();
+    const todo = mine.videos.filter((v) => !v.kind).slice(0, 60);
+    if (!todo.length) return { classified: 0 };
+    const ai = await getAIProvider();
+    let result: { videoId: string; kind: "broad" | "narrow" }[];
+    if (ai.id === "mock") result = todo.map((v, i) => ({ videoId: v.videoId, kind: i % 2 ? "narrow" : "broad" }));
+    else {
+      const user = `쇼츠 영상마다 주제 넓이를 나눠 주세요.
+- broad(넓게): 제품을 살 생각이 없는 사람도 공감·클릭할 넓은 주제 (예: "여름 전기세 줄이는 법", "자취 꿀템 5가지")
+- narrow(좁게): 이 제품을 살 사람·이미 고민하는 사람만 콕 집는 주제 (예: "원룸용 무선청소기 A vs B", "이 제습기 살 때 확인할 것")
+
+${todo.map((v) => `${v.videoId} | 제목: ${v.title}${v.hook ? ` | 첫 3초: ${v.hook}` : ""}${v.productName ? ` | 제품: ${v.productName}` : ""}`).join("\n")}
+
+형식: {"items":[{"videoId":"","kind":"broad"}]}`;
+      const data = await aiJson<{ items: { videoId: string; kind: "broad" | "narrow" }[] }>(
+        "classify",
+        user,
+        { type: "object", additionalProperties: false, required: ["items"], properties: { items: arrOf({ videoId: STR, kind: { type: "string", enum: ["broad", "narrow"] } }) } },
+        "items",
+        3000,
+      );
+      result = data.items ?? [];
+    }
+    const want = new Set(todo.map((v) => v.videoId));
+    const map = await readKinds(owner);
+    let n = 0;
+    for (const r of result) {
+      if (!want.has(r.videoId) || map[r.videoId] || (r.kind !== "broad" && r.kind !== "narrow")) continue;
+      map[r.videoId] = { kind: r.kind, by: "ai" };
+      n++;
+    }
+    await writeKinds(owner, map);
+    return { classified: n };
   },
 
   /** ④ 고른 Hook 을 대본 포맷의 Hook 목록에 더한다 (다음 원고부터 쓰인다) */

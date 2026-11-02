@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { BarChart3, FlaskConical, RefreshCw, Sparkles, Swords } from "lucide-react";
 import { Badge, Button, EmptyState, ErrorState, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, StatTile, Tabs, Textarea } from "@/components/ui";
-import { WEEKLY_PLAN, type AnalyticsVideo, type FeatureRow } from "@/lib/domain/analytics";
+import { KIND_LABEL, WEEKLY_PLAN, median, type AnalyticsVideo, type FeatureRow, type VideoKind } from "@/lib/domain/analytics";
 
 /**
  * 성과 분석 (v0.9.151) — 유튜브 먼저. 인스타그램은 준비 중, 네이버 클립·블로그는 나중에.
@@ -110,7 +110,7 @@ function YouTubeAnalytics() {
         </Button>
       </div>
       {data.missingUrl > 0 && <Notice tone="warning">업로드 관리에 유튜브 주소가 없는 업로드 {data.missingUrl}개는 분석에 넣지 못했습니다. 주소를 넣으면 다음부터 함께 계산합니다.</Notice>}
-      {tab === "overview" && <Overview data={data} />}
+      {tab === "overview" && <Overview data={data} onChanged={() => load()} />}
       {tab === "patterns" && <Patterns data={data} />}
       {tab === "compare" && <Compare />}
       {tab === "hooks" && <HookLab />}
@@ -129,7 +129,7 @@ function VideoList({ videos }: { videos: { title: string; url: string; views: nu
             <a href={v.url} target="_blank" rel="noreferrer" className="block truncate font-medium hover:underline">
               {v.title}
             </a>
-            {v.hook && <p className="truncate text-[11.5px] text-fg-subtle">Hook: {v.hook}</p>}
+            {v.hook && <p className="truncate text-[11.5px] text-fg-subtle">첫 3초: {v.hook}</p>}
           </div>
           <span className="text-[11.5px] text-fg-subtle">{v.durationSec}초</span>
           <span className="tabular w-20 text-right font-semibold">{num(v.views)}</span>
@@ -139,7 +139,7 @@ function VideoList({ videos }: { videos: { title: string; url: string; views: nu
   );
 }
 
-function Overview({ data }: { data: MyVideos }) {
+function Overview({ data, onChanged }: { data: MyVideos; onChanged: () => Promise<void> }) {
   if (!data.videos.length)
     return <EmptyState icon={BarChart3} title="분석할 유튜브 영상이 없습니다" description="업로드 관리에 유튜브 주소가 있는 '업로드 완료' 기록이 생기면 여기서 숫자를 봅니다. [유튜브에 올리기]로 올린 영상은 자동으로 기록됩니다." />;
   const total = data.videos.reduce((s, v) => s + (v.views ?? 0), 0);
@@ -152,22 +152,102 @@ function Overview({ data }: { data: MyVideos }) {
         <StatTile label="조회수 중앙값" value={num(data.overallMedian)} hint="배수의 기준 (×1.0)" />
         <StatTile label="최근 7일 올린 영상" value={`${week} / 7`} hint="주 7개 목표" />
       </div>
-      <SectionCard title="이번 주 7개 계획 틀" description="넓게(조회수) 3 · 좁게(살 사람) 3 · 실험 1. 실험 주제는 [패턴 찾기]의 AI 가설에서 고르세요. 조회수보다 문의·구매로 이어지는지가 목표입니다.">
+      <SectionCard title="이번 주 7개 (최근 7일)" description="넓게(조회수) 3 · 좁게(살 사람) 3 · 실험 1. 아래 영상 목록에서 구분을 정하면 여기 숫자가 채워집니다. 중앙값은 그 구분 영상 전체의 조회수 중앙값입니다.">
         <div className="grid gap-2 sm:grid-cols-3">
-          {WEEKLY_PLAN.map((p) => (
-            <div key={p.kind} className="rounded-control border border-line p-3">
-              <p className="text-[13px] font-semibold">
-                {p.kind} <span className="text-brand">{p.count}개</span>
-              </p>
-              <p className="mt-1 text-[12px] text-fg-subtle">{p.desc}</p>
-            </div>
-          ))}
+          {WEEKLY_PLAN.map((p) => {
+            const all = data.videos.filter((v) => v.kind === p.key);
+            const done = all.filter((v) => Date.parse(data.at) - Date.parse(v.publishedAt) < 7 * 86_400_000).length;
+            const views = all.map((v) => v.views).filter((x): x is number => x != null);
+            return (
+              <div key={p.key} className="rounded-control border border-line p-3" data-analytics-kind={p.key}>
+                <p className="text-[13px] font-semibold">
+                  {p.kind} <span className={done >= p.count ? "text-success" : "text-brand"}>{done} / {p.count}개</span>
+                </p>
+                <p className="mt-1 text-[12px] text-fg-subtle">{p.desc}</p>
+                <p className="mt-1 text-[12px]">
+                  전체 {all.length}개 · 조회 중앙값 <b>{num(views.length ? Math.round(median(views)) : null)}</b>
+                </p>
+              </div>
+            );
+          })}
         </div>
       </SectionCard>
-      <SectionCard title="잘된 영상 TOP 10" description="현재 조회수 순. 숫자는 YouTube 공개 통계입니다.">
-        <VideoList videos={data.videos.slice(0, 10)} />
-      </SectionCard>
+      <KindList data={data} onChanged={onChanged} />
     </div>
+  );
+}
+
+const KIND_TONE: Record<VideoKind, "info" | "success" | "warning"> = { broad: "info", narrow: "success", experiment: "warning" };
+
+/** 영상마다 넓게·좁게·실험 표시·바꾸기 + [AI 로 나누기] */
+function KindList({ data, onChanged }: { data: MyVideos; onChanged: () => Promise<void> }) {
+  const [sort, setSort] = useState<"new" | "views">("new");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const list = [...data.videos].sort((a, b) => (sort === "new" ? b.publishedAt.localeCompare(a.publishedAt) : (b.views ?? 0) - (a.views ?? 0))).slice(0, 60);
+  const untagged = data.videos.filter((v) => !v.kind).length;
+  async function setKind(videoId: string, kind: string) {
+    try {
+      await call({ action: "setKind", videoId, kind: kind || null });
+      await onChanged();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "저장하지 못했습니다.");
+    }
+  }
+  async function classify() {
+    if (!window.confirm(`구분이 없는 영상 ${untagged}개를 AI 가 넓게·좁게로 나눌까요? (AI 1번, 실험은 직접 정해 주세요)`)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await call<{ classified: number }>({ action: "classify" });
+      setMsg(`AI 가 ${r.classified}개를 나눴습니다. 틀린 것은 바로 고쳐 주세요.`);
+      await onChanged();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "나누지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <SectionCard title="영상별 구분" description="영상마다 넓게·좁게·실험을 정합니다. 'AI' 표시는 AI 가 나눈 것이고, 고르면 내 선택으로 바뀝니다. 첫 3초는 완성 영상의 첫 컷 대사입니다." data-analytics-kinds>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <SegmentedControl<"new" | "views"> size="sm" value={sort} onChange={setSort} options={[{ value: "new", label: "최신순" }, { value: "views", label: "조회수순" }]} />
+        <Button size="sm" variant="secondary" icon={Sparkles} loading={busy} disabled={!untagged} onClick={() => void classify()} data-analytics-classify>
+          AI 로 나누기 ({untagged}개)
+        </Button>
+        {msg && <span className="text-[12px] text-fg-subtle">{msg}</span>}
+      </div>
+      <ul className="divide-y divide-line">
+        {list.map((v) => (
+          <li key={v.videoId} className="flex items-center gap-3 py-2 text-[13px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {v.thumbnailUrl ? <img src={v.thumbnailUrl} alt="" className="h-10 w-16 shrink-0 rounded object-cover" /> : <div className="h-10 w-16 shrink-0 rounded bg-muted" />}
+            <div className="min-w-0 flex-1">
+              <a href={v.url} target="_blank" rel="noreferrer" className="block truncate font-medium hover:underline">
+                {v.title}
+              </a>
+              <p className="truncate text-[11.5px] text-fg-subtle">{v.hook ? `첫 3초: ${v.hook}` : "첫 3초: (완성 영상 기록 없음)"}</p>
+            </div>
+            {v.kind ? (
+              <Badge tone={KIND_TONE[v.kind]}>
+                {KIND_LABEL[v.kind]}
+                {v.kindBy === "ai" ? " · AI" : ""}
+              </Badge>
+            ) : (
+              <Badge tone="neutral">미정</Badge>
+            )}
+            <select value={v.kind ?? ""} onChange={(e) => void setKind(v.videoId, e.target.value)} className="h-7 rounded border border-line bg-canvas px-1 text-[12px]" aria-label="구분 바꾸기">
+              <option value="">미정</option>
+              <option value="broad">넓게</option>
+              <option value="narrow">좁게</option>
+              <option value="experiment">실험</option>
+            </select>
+            <span className="hidden text-[11.5px] text-fg-subtle sm:inline">{new Date(v.publishedAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}</span>
+            <span className="tabular w-20 text-right font-semibold">{num(v.views)}</span>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
 }
 
@@ -337,11 +417,13 @@ function HookLab() {
   const [formats, setFormats] = useState<{ id: string; name: string }[]>([]);
   const [formatId, setFormatId] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const count = hooks.split("\n").filter((h) => h.trim()).length;
   async function loadMine() {
     setLoadingMine(true);
     try {
-      const r = await call<{ hooks: { text: string }[] }>({ action: "hookSources" });
+      const r = await call<{ hooks: { text: string }[]; missing: number }>({ action: "hookSources" });
+      setNote(r.missing ? `완성 영상 기록이 없는 ${r.missing}개는 첫 3초 말을 알 수 없어 뺐습니다 (제목은 넣지 않습니다).` : null);
       const lines = [...new Set([...hooks.split("\n").map((h) => h.trim()).filter(Boolean), ...r.hooks.map((h) => h.text)])].slice(0, 100);
       setHooks(lines.join("\n"));
     } catch (e) {
@@ -381,15 +463,16 @@ function HookLab() {
   }
   return (
     <div className="space-y-4" data-analytics-hooks>
-      <SectionCard title="Hook 모으기" description="잘된 영상의 첫 문장·제목을 한 줄에 하나씩 최대 100개. [내 영상 Hook 불러오기]로 내 것을 넣고, 경쟁 채널 제목도 붙여 넣으세요.">
+      <SectionCard title="Hook 모으기 (영상 첫 3초)" description="Hook 은 제목이 아니라 영상 첫 3초에 말하는 문장입니다. 한 줄에 하나씩 최대 100개. [내 영상 첫 3초 불러오기]는 완성 영상의 첫 컷 대사를 넣고, 경쟁 영상은 첫 3초를 보고 받아 적어 붙여 넣으세요.">
         <div className="space-y-2">
           <Textarea rows={8} value={hooks} onChange={(e) => setHooks(e.target.value)} placeholder={"예: 이거 모르고 사면 10만 원 손해입니다\n에어컨 청소, 이 3곳만 하세요"} aria-label="Hook 목록" />
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="secondary" loading={loadingMine} onClick={() => void loadMine()} data-analytics-hook-mine>
-              내 영상 Hook 불러오기
+              내 영상 첫 3초 불러오기
             </Button>
             <span className="text-[12px] text-fg-subtle">{count} / 100개</span>
           </div>
+          {note && <p className="text-[12px] text-fg-subtle">{note}</p>}
           <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="새 Hook 을 만들 주제·제품 (예: 무선 청소기)" aria-label="주제" />
           <Button variant="primary" icon={FlaskConical} loading={busy} disabled={count < 3} onClick={() => void analyze()} data-analytics-hook-go>
             구조 분석 + 변형 10개 만들기

@@ -15,12 +15,12 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/analytics/youtube { action, ... } — 누를 때만 1번 (자동 재시도 없음)
- * action: hypotheses (AI) · competitor (YouTube) · compare (AI) · hookSources · hookLab (AI) · saveHooks
+ * action: hypotheses (AI) · competitor (YouTube) · compare (AI) · hookSources · hookLab (AI) · saveHooks · setKind · classify (AI)
  */
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("analytics");
-    const b = await readJson<{ action?: string; channel?: unknown; urls?: unknown; theirs?: unknown; mine?: unknown; hooks?: unknown; topic?: unknown; formatId?: unknown }>(request);
+    const b = await readJson<{ action?: string; channel?: unknown; urls?: unknown; theirs?: unknown; mine?: unknown; hooks?: unknown; topic?: unknown; formatId?: unknown; videoId?: unknown; kind?: unknown }>(request);
     switch (b.action) {
       case "hypotheses":
         return analyticsService.hypotheses();
@@ -32,6 +32,10 @@ export async function POST(request: Request) {
         return analyticsService.hookSources();
       case "hookLab":
         return analyticsService.hookLab(b);
+      case "setKind":
+        return analyticsService.setKind(b);
+      case "classify":
+        return analyticsService.classify();
       case "saveHooks":
         return analyticsService.saveHooks(b);
       default:

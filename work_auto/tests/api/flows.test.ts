@@ -526,6 +526,28 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(tk.items.some((r) => r.plays !== null)).toBe(true);
   });
 
+  it("성과 분석(유튜브): 영상 목록 → 넓게·좁게·실험 정하기·지우기 → AI 로 나누기 → 첫 3초 Hook 은 제목이 아님", async ({ skip }) => {
+    if (!reachable) skip();
+    type V = { videoId: string; title: string; hook: string | null; kind: string | null; kindBy: string | null };
+    const a = (await j<{ videos: V[] }>("/api/analytics/youtube")).data;
+    expect(Array.isArray(a.videos)).toBe(true);
+    if (!a.videos.length) return;
+    const id = a.videos[0].videoId;
+    expect((await post("/api/analytics/youtube", { action: "setKind", videoId: id, kind: "experiment" })).ok).toBe(true);
+    expect((await j<{ videos: V[] }>("/api/analytics/youtube")).data.videos.find((v) => v.videoId === id)).toMatchObject({ kind: "experiment", kindBy: "me" });
+    expect((await post("/api/analytics/youtube", { action: "setKind", videoId: id, kind: "wide" })).ok).toBe(false);
+    expect((await post("/api/analytics/youtube", { action: "setKind", videoId: id, kind: null })).ok).toBe(true);
+    expect((await post("/api/analytics/youtube", { action: "classify" })).ok).toBe(true);
+    const c = (await j<{ videos: V[] }>("/api/analytics/youtube")).data.videos;
+    expect(c.every((v) => v.kind === "broad" || v.kind === "narrow")).toBe(true);
+    expect(c.every((v) => v.kindBy === "ai")).toBe(true);
+    const h = (await post("/api/analytics/youtube", { action: "hookSources" })).data as { hooks: { text: string }[] };
+    const titles = new Set(c.map((v) => v.title));
+    expect(h.hooks.every((x) => !titles.has(x.text))).toBe(true);
+    // 다음 실행을 위해 되돌림
+    for (const v of c) await post("/api/analytics/youtube", { action: "setKind", videoId: v.videoId, kind: null });
+  });
+
   it("채널 정보·최근 6개월 뜬 영상: 중앙값 배수, 같은 채널 30분 기억(0 units)", async ({ skip }) => {
     if (!reachable) skip();
     type I = { channel: { title: string; subscribers: number | null }; videos: { ratio: number | null; format: string }[]; median: { shorts: number | null; long: number | null }; units: number; sinceDays: number };

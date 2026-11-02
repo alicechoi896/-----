@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { featureTable, featuresOf, hasLossWord, hasNumberTitle, isQuestion, median, standouts, type AnalyticsVideo } from "@/lib/domain/analytics";
+import { featureTable, featuresOf, hasLossWord, hasNumberTitle, isQuestion, median, openingOf, standouts, type AnalyticsVideo } from "@/lib/domain/analytics";
 
 const v = (title: string, views: number, durationSec = 25, extra: Partial<AnalyticsVideo> = {}): AnalyticsVideo => ({
   videoId: title,
@@ -13,6 +13,9 @@ const v = (title: string, views: number, durationSec = 25, extra: Partial<Analyt
   thumbnailUrl: null,
   contentId: null,
   hook: null,
+  screenTitle: null,
+  kind: null,
+  kindBy: null,
   thumbTitle: null,
   formatName: null,
   productName: null,
@@ -20,6 +23,16 @@ const v = (title: string, views: number, durationSec = 25, extra: Partial<Analyt
 });
 
 describe("성과 분석 (v0.9.151)", () => {
+  it("첫 3초 말: 시작 시각이 3초 전인 컷 대사, 시각이 없으면 첫 컷", () => {
+    expect(openingOf([{ narration: "이거 모르면 손해", start: 0 }, { narration: "두 번째", start: 1.8 }, { narration: "세 번째", start: 3.4 }])).toBe("이거 모르면 손해 두 번째");
+    expect(openingOf([{ narration: "첫 컷" }, { narration: "둘째" }])).toBe("첫 컷");
+    expect(openingOf([])).toBeNull();
+  });
+
+  it("주제 넓이는 특징이 된다", () => {
+    expect(featuresOf(v("a", 1, 20, { kind: "narrow" }))["주제 넓이"]).toBe("좁게");
+  });
+
   it("중앙값", () => {
     expect(median([])).toBe(0);
     expect(median([3, 1, 2])).toBe(2);
