@@ -56,6 +56,7 @@ interface Item {
   script?: string | null;
   thumbnailTitle?: string | null;
   jobId?: string | null;
+  thumbKeys?: { vertical: string; horizontal: string } | null;
   startedAt?: string | null;
   finishedAt?: string | null;
 }
@@ -249,7 +250,7 @@ export function AutoVideo() {
         ) : (
           <ol className="space-y-4">
             {items.map((it, k) => (
-              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} onMakeNow={() => void makeNow(it.id)} makeBusy={Boolean(busy) || items.some((x) => x.status === "running")} />
+              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} thumbUrls={data.urls} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} onMakeNow={() => void makeNow(it.id)} makeBusy={Boolean(busy) || items.some((x) => x.status === "running")} />
             ))}
           </ol>
         )}
@@ -281,7 +282,7 @@ export function AutoVideo() {
   );
 }
 
-function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, makeBusy }: { it: Item; k: number; url?: string; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void; onMakeNow: () => void; makeBusy: boolean }) {
+function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, onMakeNow, makeBusy }: { it: Item; k: number; url?: string; thumbUrls: Record<string, string>; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void; onMakeNow: () => void; makeBusy: boolean }) {
   const [at, setAt] = useState(() => defaultSlot(k));
   const [busy, setBusy] = useState(false);
   const st = STATUS[it.status];
@@ -327,6 +328,19 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, ma
             {it.issues && it.issues.length > 0 && <Notice tone="warning">{it.issues.slice(0, 3).join(" · ")}</Notice>}
             <Field label="업로드 제목" value={it.title ?? ""} />
             {it.thumbnailTitle && <Field label="섬네일 제목 (대본 포맷 참고 · 영상 상단 제목 2번째 줄)" value={it.thumbnailTitle} />}
+            {it.thumbKeys && (thumbUrls[it.thumbKeys.vertical] || thumbUrls[it.thumbKeys.horizontal]) && (
+              <div className="flex items-start gap-2" data-auto-thumb>
+                {[it.thumbKeys.vertical, it.thumbKeys.horizontal].map((k, j) =>
+                  thumbUrls[k] ? (
+                    <a key={k} href={thumbUrls[k]} download target="_blank" rel="noreferrer" className={j ? "flex-1" : "w-[28%] shrink-0"}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={thumbUrls[k]} alt="섬네일" className="w-full rounded ring-1 ring-line" />
+                      <span className="text-[11px] text-brand">{j ? "가로 섬네일 받기" : "세로 섬네일 받기"}</span>
+                    </a>
+                  ) : null,
+                )}
+              </div>
+            )}
             {it.jobId && (
               <a href={`/youtube/video-production?jobId=${it.jobId}&autoDate=${date}&autoItem=${it.id}`} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-control bg-brand px-4 text-[14px] font-semibold text-white shadow-card hover:bg-brand-hover" data-auto-edit>
                 <Film className="size-4" /> 영상 편집하기 (GIF 위치·화살표·자막·클립 구간 바꾸기)

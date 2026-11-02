@@ -296,6 +296,9 @@ export const api = {
   },
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
+    /** v0.9.147 섬네일 이미지 */
+    thumbnail: (jobId: string) => request<{ vertical: string | null; horizontal: string | null; sceneIndex: number; text: string } | null>(`/api/video-jobs/${jobId}/thumbnail`),
+    makeThumbnail: (jobId: string, body: { sceneIndex?: number; text?: string }) => request<{ vertical: string | null; horizontal: string | null; sceneIndex: number; text: string }>(`/api/video-jobs/${jobId}/thumbnail`, { method: "POST", body: json(body) }),
     /** v0.9.139 보관한 원본 미리보기 주소 */
     sourceUrl: (videoId: string) => request<{ url: string | null }>(`/api/video-production/source?videoId=${encodeURIComponent(videoId)}`),
     plan: (body: {

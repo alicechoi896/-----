@@ -44,6 +44,8 @@ const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: 
 export function VideoProductionWorkspace({ channelId, initialContentId, initialJobId, autoLink }: { channelId: VideoChannel; initialContentId?: string; initialJobId?: string; autoLink?: { date: string; itemId: string } }) {
   // v0.9.138 영상 제목·섬네일 제목 (섬네일 = 영상 상단 제목 2번째 줄, 공백 빼고 10자 이내)
   const [titleText, setTitleText] = useState("");
+  // v0.9.147 다시 만들기 전 영상 (전후 비교)
+  const [prevJob, setPrevJob] = useState<(VideoJob & { fileUrl?: string | null }) | null>(null);
   // v0.9.139 왼쪽 접기 (오른쪽 결과 화면을 넓게)
   const [leftOpen, setLeftOpen] = useState(true);
   const [thumbText, setThumbText] = useState("");
@@ -210,6 +212,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
       maxPauseSec: maxPause,
     };
     try {
+      if (rerenderOf && job?.id === rerenderOf) setPrevJob(job);
       const created = rerenderOf ? await api.videoProduction.rerender(rerenderOf, p) : await api.videoProduction.create(p);
       setJob(created);
       setJobs((prev) => [created, ...prev]);
@@ -245,6 +248,19 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
       if (opts && j.plan.contentId && opts.contents.some((c) => c.id === j.plan.contentId)) pickContent(opts, j.plan.contentId);
       setTitleText(j.plan.selectedTitle || "");
       setThumbText(j.plan.topLine2 || "");
+      // v0.9.147: 다시 만들 때 화면 기본값이 아니라 그 영상의 스타일·음성 설정 그대로
+      if (j.plan.titleStyle) setTitleStyle(j.plan.titleStyle);
+      if (j.plan.captionStyle) setCaptionStyle(j.plan.captionStyle);
+      if (j.plan.captions !== undefined) setCaptionsOn(j.plan.captions !== false);
+      if (j.plan.narrationOn !== undefined) setNarrationOn(j.plan.narrationOn !== false);
+      if (j.plan.ttsEngine) setTtsEngine(j.plan.ttsEngine);
+      if (j.plan.ttsEngine === "typecast" && j.plan.voice) setTcVoice(j.plan.voice);
+      else if (j.plan.voice) setVoice(j.plan.voice);
+      if (j.plan.ttsEmotion) setTcEmotion(j.plan.ttsEmotion);
+      if (j.plan.voiceStyle) setVoiceStyle(j.plan.voiceStyle);
+      if (j.plan.voiceSpeed !== undefined) setVoiceSpeed(j.plan.voiceSpeed);
+      if (j.plan.targetSec !== undefined) setTargetSec(j.plan.targetSec);
+      if (j.plan.maxPauseSec !== undefined) setMaxPause(j.plan.maxPauseSec);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
     }
@@ -486,7 +502,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
 
         <div className="min-w-0 space-y-6">
           {job ? (
-            <JobPanel key={`${job.id}:${job.updatedAt}`} job={job} plan={plan} videoTitle={videoTitle} videos={opts.videos} onRerender={(p) => void render(p, job.id)} onChange={setJob} channelId={channelId} giphyReady={Boolean(opts.ready.giphy)} wide={!leftOpen} sfxList={opts.assets.sfx.map((f) => f.replace(/\.[^.]+$/, ""))} />
+            <JobPanel key={`${job.id}:${job.updatedAt}`} job={job} plan={plan} videoTitle={videoTitle} videos={opts.videos} onRerender={(p) => void render(p, job.id)} onChange={setJob} channelId={channelId} giphyReady={Boolean(opts.ready.giphy)} wide={!leftOpen} sfxList={opts.assets.sfx.map((f) => f.replace(/\.[^.]+$/, ""))} prev={prevJob && prevJob.id !== job.id ? prevJob : null} />
           ) : plan ? (
             <PlanEditor
               plan={plan}
@@ -716,11 +732,13 @@ function JobPanel({
   giphyReady,
   wide,
   sfxList,
+  prev,
 }: {
   channelId: VideoChannel;
   giphyReady: boolean;
   wide: boolean;
   sfxList: string[];
+  prev: (VideoJob & { fileUrl?: string | null }) | null;
   job: VideoJob & { fileUrl?: string | null };
   plan: VideoPlan | null;
   videoTitle: (id: string | null) => string;
@@ -742,6 +760,17 @@ function JobPanel({
   const [gifFor, setGifFor] = useState<number | null>(null);
   const [placeFor, setPlaceFor] = useState<number | null>(null);
   const [startFor, setStartFor] = useState<number | null>(null);
+  const [compare, setCompare] = useState(true);
+  // v0.9.147 컷 순서 끌어서 바꾸기 (마지막 엔딩 컷은 그대로)
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const moveScene = (from: number, to: number) => {
+    const last = edited.scenes.length - 1;
+    if (from === to || from === last || to === last) return;
+    const list = [...edited.scenes];
+    const [x] = list.splice(from, 1);
+    list.splice(to, 0, x);
+    setEdited({ ...edited, scenes: list.map((s, k) => ({ ...s, index: k })) });
+  };
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const pool = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) }));
 
@@ -787,7 +816,24 @@ function JobPanel({
       ) : (
         <div className={cn("grid gap-5", wide ? "lg:grid-cols-[400px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]")}>
           <div>
-            {job.fileUrl ? (
+            {prev?.fileUrl && (
+              <label className="mb-1.5 flex items-center gap-1.5 text-[12px]">
+                <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} className="accent-[var(--color-brand)]" data-compare-toggle />
+                다시 만들기 전 영상과 나란히 보기
+              </label>
+            )}
+            {compare && prev?.fileUrl ? (
+              <div className="grid grid-cols-2 gap-1.5" data-compare>
+                <div>
+                  <p className="text-[11px] text-fg-subtle">전</p>
+                  <video src={prev.fileUrl} controls playsInline className="aspect-[9/16] w-full rounded-control bg-black" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-brand">후 (지금)</p>
+                  <video src={job.fileUrl ?? undefined} controls playsInline className="aspect-[9/16] w-full rounded-control bg-black" />
+                </div>
+              </div>
+            ) : job.fileUrl ? (
               <video src={job.fileUrl} controls playsInline className="aspect-[9/16] w-full rounded-control bg-black" data-video-preview />
             ) : (
               <div className="flex aspect-[9/16] items-center justify-center rounded-control bg-subtle p-4 text-center text-xs text-fg-subtle">{job.qa.fileDeleted ? "파일이 정리되었습니다 (1회 다운로드·7일 보관)." : "미리보기를 불러오지 못했습니다."}</div>
@@ -807,6 +853,7 @@ function JobPanel({
               )}
             </div>
             {note && <p className="mt-2 text-xs text-fg-muted">{note}</p>}
+            <ThumbMaker job={job} />
           </div>
           <div className="min-w-0 space-y-3">
             {job.qa.issues.length > 0 ? (
@@ -835,8 +882,27 @@ function JobPanel({
             </div>
             <ol className="space-y-1" data-job-scenes>
               {edited.scenes.map((s, i) => (
-                <li key={i} className={cn("grid grid-cols-[24px_minmax(0,1fr)_140px] items-center gap-2 rounded-control border px-2 py-1.5 text-[12px]", s.issue ? "border-warning bg-warning-soft/40" : "border-line")}>
-                  <span className="tabular text-center text-fg-subtle">{i + 1}</span>
+                <li
+                  key={i}
+                  draggable={i < edited.scenes.length - 1}
+                  onDragStart={() => setDragFrom(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragFrom !== null) moveScene(dragFrom, i);
+                    setDragFrom(null);
+                  }}
+                  className={cn("grid grid-cols-[48px_minmax(0,1fr)_140px] items-center gap-2 rounded-control border px-2 py-1.5 text-[12px]", s.issue ? "border-warning bg-warning-soft/40" : "border-line", dragFrom === i && "opacity-50", i < edited.scenes.length - 1 && "cursor-grab")}
+                  data-job-scene
+                >
+                  <span className="flex flex-col items-center gap-0.5">
+                    {job.fileUrl && job.plan.scenes[i]?.start != null ? (
+                      <video src={`${job.fileUrl}#t=${((job.plan.scenes[i].start ?? 0) + 0.3).toFixed(1)}`} muted playsInline preload="metadata" className="aspect-[9/16] w-10 rounded bg-black object-cover" aria-label={`${i + 1}번 컷 화면`} />
+                    ) : null}
+                    <span className="tabular text-fg-subtle" title={i < edited.scenes.length - 1 ? "끌어서 순서 바꾸기" : "엔딩 컷은 맨 끝 고정"}>
+                      {i < edited.scenes.length - 1 ? "⋮⋮ " : ""}
+                      {i + 1}
+                    </span>
+                  </span>
                   <span className="min-w-0">
                     <Input value={s.narration} onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, narration: e.target.value } : x)) })} className="h-7 text-[12.5px]" aria-label={`${i + 1}번 컷 대본`} />
                     <span className="line-clamp-2 text-[11px] text-fg-subtle" title={s.issue ?? undefined}>
@@ -963,6 +1029,79 @@ function JobPanel({
       )}
       {plan && null}
     </SectionCard>
+  );
+}
+
+/** v0.9.147 섬네일 이미지 만들기: 컷 하나의 화면 + 섬네일 제목을 크게 (세로 쇼츠 표지 · 가로 섬네일) */
+function ThumbMaker({ job }: { job: VideoJob }) {
+  const [scene, setScene] = useState(Math.min(1, job.plan.scenes.length - 1));
+  const [text, setText] = useState(job.plan.topLine2.replace(/[[\]]/g, ""));
+  const [r, setR] = useState<{ vertical: string | null; horizontal: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.videoProduction
+      .thumbnail(job.id)
+      .then((x) => {
+        if (!alive || !x) return;
+        setR(x);
+        setScene(x.sceneIndex);
+        setText(x.text);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [job.id]);
+  async function make() {
+    setBusy(true);
+    setErr(null);
+    try {
+      setR(await api.videoProduction.makeThumbnail(job.id, { sceneIndex: scene, text }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "만들지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mt-4 space-y-2 rounded-control border border-line p-2.5" data-thumb-maker>
+      <p className="text-[13px] font-semibold">섬네일 이미지</p>
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+        <select value={scene} onChange={(e) => setScene(Number(e.target.value))} className="h-7 max-w-[150px] rounded border border-line bg-canvas px-1" aria-label="섬네일 화면 컷">
+          {job.plan.scenes.map((s, i) => (
+            <option key={i} value={i}>
+              {i + 1}번 컷 · {s.narration.slice(0, 10)}
+            </option>
+          ))}
+        </select>
+        <Input value={text} onChange={(e) => setText(e.target.value)} className="h-7 w-32 text-[12px]" aria-label="섬네일 글자" />
+        <Button size="sm" variant="primary" loading={busy} onClick={() => void make()} data-thumb-make>
+          {r ? "다시 만들기" : "만들기"}
+        </Button>
+      </div>
+      {err && <p className="text-[11.5px] text-danger">{err}</p>}
+      {r && (
+        <div className="flex items-start gap-2">
+          {r.vertical && (
+            <a href={r.vertical} download target="_blank" rel="noreferrer" className="w-[38%] shrink-0" title="세로 1080×1920 받기">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={r.vertical} alt="세로 섬네일" className="w-full rounded ring-1 ring-line" />
+              <span className="text-[11px] text-brand">세로 받기</span>
+            </a>
+          )}
+          {r.horizontal && (
+            <a href={r.horizontal} download target="_blank" rel="noreferrer" className="flex-1" title="가로 1280×720 받기">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={r.horizontal} alt="가로 섬네일" className="w-full rounded ring-1 ring-line" />
+              <span className="text-[11px] text-brand">가로 받기</span>
+            </a>
+          )}
+        </div>
+      )}
+      <p className="text-[11px] text-fg-subtle">원본을 보관한 컷은 자막 없는 깨끗한 화면으로 만듭니다. 외부 비용 없음.</p>
+    </div>
   );
 }
 

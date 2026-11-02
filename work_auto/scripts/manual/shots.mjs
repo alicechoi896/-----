@@ -600,6 +600,7 @@ export const SHOTS = [
       2: (p) => p.locator("[data-job-place]").first(),
       3: (p) => p.locator("[data-job-start]").first(),
       4: (p) => p.locator("[data-job-rerender]"),
+      5: (p) => p.locator("[data-thumb-make]"),
     },
   },
   {

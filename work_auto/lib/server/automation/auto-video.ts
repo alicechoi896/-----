@@ -1,6 +1,7 @@
 import "server-only";
 import { withClaude } from "../providers/ai-force";
 import { cutThumb, fitThumbs } from "@/lib/video-production/thumb";
+import { makeThumbnail } from "../video/thumbnail";
 import type { GeneratedContent } from "@/lib/types";
 import type { VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { AppError } from "../http";
@@ -91,6 +92,8 @@ export interface AutoItem {
   script?: string | null;
   /** v0.9.131 섬네일 제목 (대본 포맷 참고 후보 중 AI 가 고름, 영상 상단 제목 2번째 줄에도) */
   thumbnailTitle?: string | null;
+  /** v0.9.147 섬네일 이미지 (세로·가로 Storage 키) */
+  thumbKeys?: { vertical: string; horizontal: string } | null;
   publicationId?: string | null;
 }
 export interface AutoRun {
@@ -580,7 +583,10 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
       keywords: list(out2.keywords).slice(0, 30),
       tags: list(out2.tags).slice(0, 30),
     });
-    console.info("[AutoVideo] done", JSON.stringify({ date, item: itemId, product: item.productId, ms: Date.now() - t0 }));
+    // v0.9.147: 섬네일 이미지도 자동으로 (실패해도 영상은 그대로)
+    const thumb = await makeThumbnail(done.id).catch(() => null);
+    if (thumb) await patchItem(date, itemId, { thumbKeys: thumb.keys });
+    console.info("[AutoVideo] done", JSON.stringify({ date, item: itemId, product: item.productId, ms: Date.now() - t0, thumb: Boolean(thumb) }));
     return finished!.items.find((x) => x.id === itemId)!;
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);
@@ -599,7 +605,8 @@ export async function relinkItemJob(date: string, itemId: string, jobId: string)
   const job = (await getRepositories().videoJobs.get(jobId)) as VideoJob | null;
   if (!job || !job.outputPath || job.status === "failed") throw new AppError("VALIDATION", "다시 만든 영상이 아직 없습니다.");
   if (job.plan.contentId !== (await getRepositories().videoJobs.get(it.jobId ?? ""))?.plan.contentId) throw new AppError("VALIDATION", "다른 원고의 영상입니다.");
-  await patchItem(date, itemId, { jobId: job.id, videoKey: job.outputPath, jobStatus: job.status, issues: job.qa?.issues ?? [], thumbnailTitle: job.plan.topLine2 || it.thumbnailTitle, title: job.plan.selectedTitle || it.title });
+  const thumb = await makeThumbnail(job.id).catch(() => null);
+  await patchItem(date, itemId, { thumbKeys: thumb?.keys ?? it.thumbKeys ?? null, jobId: job.id, videoKey: job.outputPath, jobStatus: job.status, issues: job.qa?.issues ?? [], thumbnailTitle: job.plan.topLine2 || it.thumbnailTitle, title: job.plan.selectedTitle || it.title });
   return { ok: true };
 }
 
@@ -632,7 +639,7 @@ export async function tick(date = kstDate(), source?: "schedule" | "test"): Prom
 
 /** 보고 화면용: 영상 보기 주소 */
 export async function videoUrls(run: AutoRun | null): Promise<Record<string, string>> {
-  const keys = (run?.items ?? []).map((x) => x.videoKey).filter((k): k is string => Boolean(k));
+  const keys = (run?.items ?? []).flatMap((x) => [x.videoKey, x.thumbKeys?.vertical, x.thumbKeys?.horizontal]).filter((k): k is string => Boolean(k));
   return keys.length ? videoStorage.urls(keys, 3600).catch(() => ({})) : {};
 }
 

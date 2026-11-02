@@ -136,6 +136,8 @@ export interface VideoQa {
   aiCalls?: number;
   /** 만든 사람 (관리자 공용 데이터에서 동시 1개 제한을 사람마다, v0.9.68) */
   createdBy?: string;
+  /** v0.9.147 섬네일 이미지 (Storage 키) */
+  thumbnail?: { vertical: string; horizontal: string; sceneIndex: number; text: string };
   issues: string[];
 }
 
