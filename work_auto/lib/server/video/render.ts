@@ -33,7 +33,7 @@ import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production
 import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
-import { SCAN_VERSION, boxesIn, coverAll, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { SCAN_VERSION, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
 import { isGiphyUrl } from "../providers/giphy";
 import { safeFetch } from "../security/safe-url";
@@ -294,7 +294,18 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       const others = [...sources.keys()].filter((id) => id !== s.sourceVideoId && (aiScene || !isAiSource(id)));
       const candidates = [s.sourceVideoId, ...others].filter((x): x is string => Boolean(x && sources.has(x)));
       let best: { id: string; start: number; tr: Treatment } | null = null;
-      if (aiScene && s.sourceVideoId && sources.has(s.sourceVideoId)) {
+      // v0.9.139: 사람이 고른 시작 초가 있으면 그 구간 그대로 (글자 처리는 그 구간 기준으로 다시 정함)
+      if (!aiScene && s.startAt != null && s.sourceVideoId && sources.has(s.sourceVideoId)) {
+        const src = sources.get(s.sourceVideoId)!;
+        const start = Math.max(0, Math.min(s.startAt, Math.max(0, src.duration - dur - 0.05)));
+        const boxes = [...boxesIn(src.scan, start, dur), ...persistentBoxes(src.scan)];
+        let tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId));
+        if (tr.kind === "rejected") {
+          const c = coverAll(boxes, aspects.get(s.sourceVideoId));
+          tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
+        }
+        best = { id: s.sourceVideoId, start, tr };
+      } else if (aiScene && s.sourceVideoId && sources.has(s.sourceVideoId)) {
         // AI 컷(5초, 글자 없음)은 여러 컷에 나눠 쓴다: 겹쳐도 되고, 쓸 때마다 시작 위치만 바꾼다
         const src = sources.get(s.sourceVideoId)!;
         const maxStart = Math.max(0, src.duration - dur - 0.1);
@@ -381,7 +392,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     if (job.plan.ending) note(await renderEnding(endPng), ENDING_TEMPLATE.font);
     let attnTurn = 0;
     // v0.9.120: GIF 는 컷 앞에서 GIF_CONFIG.showSec 동안, 컷이 짧으면 남은 시간은 다음 컷 앞부분에 (같은 GIF 이어서)
-    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number; pos: "top" | "center" | "bottom"; size: "s" | "m" | "l" }[]>();
+    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number; pos: "top" | "center" | "bottom"; size: "s" | "m" | "l"; box?: { x: number; y: number; w: number } | null }[]>();
     {
       let turn = 0;
       for (const { k, s, dur } of picks) {
@@ -390,7 +401,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         turn++;
         if (!file) continue;
         const first = Math.min(GIF_CONFIG.showSec, dur);
-        const look = { pos: s.gifPos ?? "top", size: s.gifSize ?? "m" } as const;
+        const look = { pos: s.gifPos ?? "top", size: s.gifSize ?? "m", box: s.gifBox ?? null } as const;
         gifShow.set(k, [...(gifShow.get(k) ?? []), { file, from: 0, to: first, offset: 0, ...look }]);
         const rest = GIF_CONFIG.showSec - first;
         const next = picks.find((x) => x.k === k + 1);
@@ -481,8 +492,12 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const boxH = Math.round((area.bottom - area.top) * mul);
         const maxW = Math.min(W, Math.round(GIF_CONFIG.maxWidth * mul));
         const cy = Math.round((area.top + area.bottom) / 2);
+        // v0.9.139 편집기에서 끌어다 놓은 자리: 가운데 (x·y) 와 너비
+        const bx = show.box ? Math.round(show.box.x * W) : null;
+        const byy = show.box ? Math.round(show.box.y * H) : null;
+        const bw = show.box ? Math.max(40, Math.round(show.box.w * W)) : null;
         const trim = show.offset > 0 ? `trim=start=${show.offset.toFixed(3)},setpts=PTS-STARTPTS,` : "";
-        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,scale=${maxW}:${boxH}:force_original_aspect_ratio=decrease[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=(W-w)/2:${cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
+        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,scale=${bw ?? maxW}:${bw ? Math.round(H * 0.9) : boxH}:force_original_aspect_ratio=decrease[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=${bx !== null ? `${bx}-w/2` : "(W-w)/2"}:${byy !== null ? byy : cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
       }
       if (s.attention && !isLast && !gifShow.has(k)) {
         const a = ATTENTION_CONFIG;

@@ -195,6 +195,11 @@ export const videoJobService = {
       pinned: Boolean(s.pinned),
       gifPos: s.gifPos === "center" || s.gifPos === "bottom" ? s.gifPos : ("top" as const),
       gifSize: s.gifSize === "s" || s.gifSize === "l" ? s.gifSize : ("m" as const),
+      startAt: s.startAt != null && Number.isFinite(Number(s.startAt)) ? Math.min(3600, Math.max(0, Number(Number(s.startAt).toFixed(2)))) : null,
+      gifBox:
+        s.gifBox && Number.isFinite(Number(s.gifBox.x)) && Number.isFinite(Number(s.gifBox.y)) && Number.isFinite(Number(s.gifBox.w))
+          ? { x: Math.min(1, Math.max(0, Number(s.gifBox.x))), y: Math.min(1, Math.max(0, Number(s.gifBox.y))), w: Math.min(1, Math.max(0.1, Number(s.gifBox.w))) }
+          : null,
     }));
     if (!scenes.some((s) => s.narration)) throw new AppError("VALIDATION", "컷이 없습니다. 컷 계획을 다시 만들어 주세요.");
     const sourceIds = (Array.isArray(plan.sourceVideoIds) ? plan.sourceVideoIds : []).map(String).filter((id) => ok.has(id));

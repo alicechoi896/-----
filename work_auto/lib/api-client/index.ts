@@ -296,6 +296,8 @@ export const api = {
   },
   videoProduction: {
     options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
+    /** v0.9.139 보관한 원본 미리보기 주소 */
+    sourceUrl: (videoId: string) => request<{ url: string | null }>(`/api/video-production/source?videoId=${encodeURIComponent(videoId)}`),
     plan: (body: {
       contentId: string;
       scriptIndex: number;

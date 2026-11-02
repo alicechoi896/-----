@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarPlus, Check, Clapperboard, Download, Film, Loader2, Play, RefreshCw, ScrollText, Video, Wand2 } from "lucide-react";
+import { CalendarPlus, PanelLeftClose, PanelLeftOpen, Check, Clapperboard, Download, Film, Loader2, Play, RefreshCw, ScrollText, Video, Wand2 } from "lucide-react";
 import type { VideoChannel, VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { VIDEO_STATUS_LABEL, isAiSource } from "@/lib/types/video-production";
 import {
@@ -44,6 +44,8 @@ const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: 
 export function VideoProductionWorkspace({ channelId, initialContentId, initialJobId, autoLink }: { channelId: VideoChannel; initialContentId?: string; initialJobId?: string; autoLink?: { date: string; itemId: string } }) {
   // v0.9.138 영상 제목·섬네일 제목 (섬네일 = 영상 상단 제목 2번째 줄, 공백 빼고 10자 이내)
   const [titleText, setTitleText] = useState("");
+  // v0.9.139 왼쪽 접기 (오른쪽 결과 화면을 넓게)
+  const [leftOpen, setLeftOpen] = useState(true);
   const [thumbText, setThumbText] = useState("");
   const [opts, setOpts] = useState<VideoProductionOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -263,8 +265,13 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
         </Notice>
       )}
 
-      <div className="grid items-start gap-6 xl:grid-cols-[440px_1fr]">
-        <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" icon={leftOpen ? PanelLeftClose : PanelLeftOpen} onClick={() => setLeftOpen((v) => !v)} data-left-toggle>
+          {leftOpen ? "왼쪽 접기 (결과 크게 보기)" : "왼쪽 펼치기"}
+        </Button>
+      </div>
+      <div className={cn("grid items-start gap-6", leftOpen ? "xl:grid-cols-[440px_1fr]" : "grid-cols-1")}>
+        <div className={cn("space-y-6", !leftOpen && "hidden")}>
           {/* ① 대본 */}
           <SectionCard title="① 대본 고르기" icon={ScrollText} description="2단계에서 만든 제목별 대본 중 하나를 고릅니다. 제목·Hook·CTA 는 그대로 씁니다.">
             {opts.contents.length === 0 ? (
@@ -471,7 +478,7 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
 
         <div className="min-w-0 space-y-6">
           {job ? (
-            <JobPanel key={`${job.id}:${job.updatedAt}`} job={job} plan={plan} videoTitle={videoTitle} videos={opts.videos} onRerender={(p) => void render(p, job.id)} onChange={setJob} />
+            <JobPanel key={`${job.id}:${job.updatedAt}`} job={job} plan={plan} videoTitle={videoTitle} videos={opts.videos} onRerender={(p) => void render(p, job.id)} onChange={setJob} channelId={channelId} giphyReady={Boolean(opts.ready.giphy)} wide={!leftOpen} />
           ) : plan ? (
             <PlanEditor
               plan={plan}
@@ -545,6 +552,8 @@ function PlanEditor({
 }) {
   const [gifFor, setGifFor] = useState<number | null>(null);
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => onChange({ ...plan, scenes: plan.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+  // v0.9.139 원본 구간 고르기
+  const [startFor, setStartFor] = useState<number | null>(null);
   // v0.9.138 컷 추가·삭제 (번호는 다시 매김)
   const setScenes = (list: VideoPlan["scenes"]) => onChange({ ...plan, scenes: list.map((x, k) => ({ ...x, index: k })) });
   const addAfter = (i: number) => setScenes([...plan.scenes.slice(0, i + 1), { index: i + 1, narration: "", sfx: null, arrow: false, attention: false, sourceVideoId: plan.scenes[i]?.sourceVideoId ?? null }, ...plan.scenes.slice(i + 1)]);
@@ -575,6 +584,19 @@ function PlanEditor({
         </div>
       </div>
       <GiphyPicker open={gifFor !== null} onClose={() => setGifFor(null)} channelId={channelId} sceneText={gifFor !== null ? plan.scenes[gifFor]?.narration ?? "" : ""} onPick={(g) => gifFor !== null && setScene(gifFor, { gif: g, attention: true })} />
+      {startFor !== null && plan.scenes[startFor]?.sourceVideoId && (
+        <SourceStartPicker
+          videoId={plan.scenes[startFor].sourceVideoId!}
+          videoTitle={videos.find((v) => v.id === plan.scenes[startFor].sourceVideoId)?.title ?? "원본"}
+          value={plan.scenes[startFor].startAt ?? null}
+          narration={plan.scenes[startFor].narration}
+          onClose={() => setStartFor(null)}
+          onSave={(sec) => {
+            setScene(startFor, { startAt: sec, pinned: true });
+            setStartFor(null);
+          }}
+        />
+      )}
       <ol className="space-y-1.5">
         {plan.scenes.map((s, i) => (
           <li key={i} className="grid grid-cols-[28px_minmax(0,1fr)_200px] items-center gap-2 rounded-control border border-line px-2 py-1.5 text-[12.5px]" data-plan-scene>
@@ -633,12 +655,19 @@ function PlanEditor({
                 {i === plan.scenes.length - 1 && plan.ending && <Badge tone="danger">최저가 구매링크</Badge>}
               </span>
             </span>
-            <Select
-              value={s.sourceVideoId ?? ""}
-              options={clipOptions}
-              onChange={(e) => setScene(i, { sourceVideoId: e.target.value, pinned: true })}
-              aria-label={`${i + 1}번 컷 클립`}
-            />
+            <span className="space-y-1">
+              <Select
+                value={s.sourceVideoId ?? ""}
+                options={clipOptions}
+                onChange={(e) => setScene(i, { sourceVideoId: e.target.value, pinned: true, startAt: null })}
+                aria-label={`${i + 1}번 컷 클립`}
+              />
+              {s.sourceVideoId && (
+                <button type="button" onClick={() => setStartFor(i)} className={cn("w-full rounded px-1.5 py-0.5 text-[11px] ring-1 ring-inset", s.startAt != null ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-subtle ring-line hover:text-brand")} data-plan-start>
+                  {s.startAt != null ? `구간 ${s.startAt}초부터` : "구간 고르기 (자동)"}
+                </button>
+              )}
+            </span>
           </li>
         ))}
       </ol>
@@ -659,7 +688,13 @@ function JobPanel({
   videos,
   onRerender,
   onChange,
+  channelId,
+  giphyReady,
+  wide,
 }: {
+  channelId: VideoChannel;
+  giphyReady: boolean;
+  wide: boolean;
   job: VideoJob & { fileUrl?: string | null };
   plan: VideoPlan | null;
   videoTitle: (id: string | null) => string;
@@ -676,7 +711,11 @@ function JobPanel({
   // v0.9.82: 제목·대본을 고쳤는지
   const textChanged = edited.topLine1 !== job.plan.topLine1 || edited.topLine2 !== job.plan.topLine2 || edited.scenes.some((s, i) => s.narration !== job.plan.scenes[i]?.narration);
   // v0.9.137: GIF·화살표 편집
-  const fxChanged = edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m"); });
+  const fxChanged = edited.scenes.length !== job.plan.scenes.length || edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m") || JSON.stringify(s.gifBox ?? null) !== JSON.stringify(o.gifBox ?? null) || (s.gif?.id ?? "") !== (o.gif?.id ?? "") || (s.startAt ?? null) !== (o.startAt ?? null); });
+  // v0.9.139 편집기: GIF 검색(GIPHY)·끌어다 놓기
+  const [gifFor, setGifFor] = useState<number | null>(null);
+  const [placeFor, setPlaceFor] = useState<number | null>(null);
+  const [startFor, setStartFor] = useState<number | null>(null);
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const pool = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) }));
 
@@ -720,7 +759,7 @@ function JobPanel({
           </Button>
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className={cn("grid gap-5", wide ? "lg:grid-cols-[400px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]")}>
           <div>
             {job.fileUrl ? (
               <video src={job.fileUrl} controls playsInline className="aspect-[9/16] w-full rounded-control bg-black" data-video-preview />
@@ -780,12 +819,19 @@ function JobPanel({
                       {s.issue ? ` · ${s.issue}` : ""}
                     </span>
                   </span>
-                  <Select
-                    value={s.sourceVideoId ?? ""}
-                    options={pool}
-                    onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, sourceVideoId: e.target.value, pinned: true } : x)) })}
-                    aria-label={`${i + 1}번 컷 클립 교체`}
-                  />
+                  <span className="space-y-1">
+                    <Select
+                      value={s.sourceVideoId ?? ""}
+                      options={pool}
+                      onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, sourceVideoId: e.target.value, pinned: true, startAt: null } : x)) })}
+                      aria-label={`${i + 1}번 컷 클립 교체`}
+                    />
+                    {s.sourceVideoId && (
+                      <button type="button" onClick={() => setStartFor(i)} className={cn("w-full rounded px-1.5 py-0.5 text-[11px] ring-1 ring-inset", s.startAt != null ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-subtle ring-line hover:text-brand")} data-job-start>
+                        {s.startAt != null ? `구간 ${s.startAt}초부터` : s.sourceStart != null ? `구간 ${s.sourceStart}초 (자동) · 바꾸기` : "구간 고르기"}
+                      </button>
+                    )}
+                  </span>
                     {i < edited.scenes.length - 1 && (
                       <span className="col-span-3 flex flex-wrap items-center gap-2 pl-8 text-[11.5px]" data-job-fx>
                         <label className="flex items-center gap-1">
@@ -794,6 +840,17 @@ function JobPanel({
                         </label>
                         {s.attention && (
                           <>
+                            <button type="button" disabled={!giphyReady} onClick={() => setGifFor(i)} className="rounded-full px-2 py-0.5 text-brand ring-1 ring-inset ring-brand/40 hover:bg-brand-soft disabled:text-fg-subtle disabled:ring-line" title={giphyReady ? "GIPHY 에서 GIF 검색" : "설정 › API 연결 센터에서 GIPHY 키를 넣으면 쓸 수 있습니다"} data-job-giphy>
+                              {s.gif ? "GIF 바꾸기 (검색)" : "GIF 검색"}
+                            </button>
+                            <button type="button" onClick={() => setPlaceFor(i)} className="rounded-full px-2 py-0.5 text-brand ring-1 ring-inset ring-brand/40 hover:bg-brand-soft" data-job-place>
+                              화면에서 끌어다 놓기
+                            </button>
+                            {s.gifBox && (
+                              <button type="button" onClick={() => setScene(i, { gifBox: null })} className="text-fg-subtle hover:text-danger" title="직접 놓은 자리를 지우고 위치·크기 선택으로">
+                                ✕ 직접 놓은 자리
+                              </button>
+                            )}
                             <select value={s.gifPos ?? "top"} onChange={(e) => setScene(i, { gifPos: e.target.value as "top" | "center" | "bottom" })} className="h-6 rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 GIF 위치`}>
                               {GIF_POSITIONS.map((x) => (
                                 <option key={x.value} value={x.value}>
@@ -828,11 +885,152 @@ function JobPanel({
           </div>
         </div>
       )}
+      <GiphyPicker open={gifFor !== null} onClose={() => setGifFor(null)} channelId={channelId} sceneText={gifFor !== null ? edited.scenes[gifFor]?.narration ?? "" : ""} onPick={(g) => gifFor !== null && setScene(gifFor, { gif: g, attention: true })} />
+      {startFor !== null && edited.scenes[startFor]?.sourceVideoId && (
+        <SourceStartPicker
+          videoId={edited.scenes[startFor].sourceVideoId!}
+          videoTitle={videoTitle(edited.scenes[startFor].sourceVideoId)}
+          value={edited.scenes[startFor].startAt ?? edited.scenes[startFor].sourceStart ?? null}
+          narration={edited.scenes[startFor].narration}
+          onClose={() => setStartFor(null)}
+          onSave={(sec) => {
+            setScene(startFor, { startAt: sec, pinned: true });
+            setStartFor(null);
+          }}
+        />
+      )}
+      {placeFor !== null && edited.scenes[placeFor] && (
+        <GifPlacer
+          videoUrl={job.fileUrl ?? null}
+          at={(job.plan.scenes[placeFor]?.start ?? 0) + 0.4}
+          gif={edited.scenes[placeFor].gif?.preview ?? null}
+          box={edited.scenes[placeFor].gifBox ?? { x: 0.5, y: 0.35, w: 0.8 }}
+          title={`${placeFor + 1}번 컷 · ${edited.scenes[placeFor].narration.slice(0, 20)}`}
+          onClose={() => setPlaceFor(null)}
+          onSave={(b) => {
+            setScene(placeFor, { gifBox: b, attention: true });
+            setPlaceFor(null);
+          }}
+        />
+      )}
       {scheduleOpen && (
         <PublicationForm open onClose={() => setScheduleOpen(false)} editing={null} presetContentId={job.contentId ?? undefined} presetStatus="scheduled" onSaved={() => setScheduleOpen(false)} />
       )}
       {plan && null}
     </SectionCard>
+  );
+}
+
+/**
+ * v0.9.139 원본 구간 고르기: 컷에 쓸 샤오홍슈 영상을 재생해 보고 '지금 위치부터'를 그 컷의 시작으로.
+ * 보관한 원본이 없으면 숫자로만 넣는다.
+ */
+function SourceStartPicker({ videoId, videoTitle, value, narration, onClose, onSave }: { videoId: string; videoTitle: string; value: number | null; narration: string; onClose: () => void; onSave: (sec: number | null) => void }) {
+  const [url, setUrl] = useState<string | null | undefined>(undefined);
+  const [sec, setSec] = useState<number>(value ?? 0);
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    let alive = true;
+    api.videoProduction
+      .sourceUrl(videoId)
+      .then((r) => alive && setUrl(r.url))
+      .catch(() => alive && setUrl(null));
+    return () => {
+      alive = false;
+    };
+  }, [videoId]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4" role="dialog" aria-label="원본 구간 고르기" data-source-start>
+      <div className="w-full max-w-md space-y-3 rounded-card bg-canvas p-4 shadow-card">
+        <p className="text-[14px] font-semibold">원본 구간 고르기 · {videoTitle}</p>
+        <p className="text-[12px] text-fg-muted">이 컷 대사: {narration || "(없음)"}</p>
+        {url === undefined ? (
+          <p className="text-xs text-fg-subtle">원본을 불러오는 중…</p>
+        ) : url ? (
+          <video ref={ref} src={url} controls playsInline className="mx-auto max-h-[60vh] w-full rounded bg-black" onLoadedMetadata={(e) => (e.currentTarget.currentTime = sec)} onTimeUpdate={(e) => setSec(Number(e.currentTarget.currentTime.toFixed(1)))} />
+        ) : (
+          <p className="rounded bg-subtle p-3 text-[12px] text-fg-muted">이 영상은 원본이 보관되지 않아 미리볼 수 없습니다. 시작 초를 숫자로 넣어 주세요 (영상 제작·제품 영상 자동 제작 화면의 [보관 안 된 영상 원본 받아 두기]로 받으면 미리볼 수 있습니다).</p>
+        )}
+        <label className="flex items-center gap-2 text-[12.5px]">
+          시작
+          <Input type="number" min={0} step={0.1} value={sec} onChange={(e) => setSec(Math.max(0, Number(e.target.value) || 0))} className="h-8 w-24" aria-label="시작 초" />초부터 이 컷 길이만큼 씁니다
+        </label>
+        <div className="flex justify-between gap-2">
+          <Button size="sm" variant="ghost" onClick={() => onSave(null)}>
+            자동으로 (지우기)
+          </Button>
+          <span className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              취소
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => onSave(Number(sec.toFixed(1)))} data-source-start-save>
+              {url ? "지금 위치부터 쓰기" : "이 초부터 쓰기"}
+            </Button>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * v0.9.139 GIF 끌어다 놓기 편집기: 완성 영상의 그 컷 화면 위에 GIF 를 끌어 놓고 크기를 정한다.
+ * 저장하면 컷에 gifBox(가운데 x·y, 너비 — 화면 비율)를 넣고 [고친 내용으로 다시 만들기]로 영상에 반영.
+ */
+function GifPlacer({ videoUrl, at, gif, box, title, onClose, onSave }: { videoUrl: string | null; at: number; gif: string | null; box: { x: number; y: number; w: number }; title: string; onClose: () => void; onSave: (b: { x: number; y: number; w: number }) => void }) {
+  const [b, setB] = useState(box);
+  const frame = useRef<HTMLDivElement>(null);
+  const drag = useRef(false);
+  const move = (e: React.PointerEvent) => {
+    if (!drag.current || !frame.current) return;
+    const r = frame.current.getBoundingClientRect();
+    setB((v) => ({ ...v, x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }));
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4" role="dialog" aria-label="GIF 끌어다 놓기" data-gif-placer>
+      <div className="w-full max-w-md space-y-3 rounded-card bg-canvas p-4 shadow-card">
+        <p className="text-[14px] font-semibold">GIF 자리 정하기 · {title}</p>
+        <div
+          ref={frame}
+          className="relative mx-auto aspect-[9/16] w-[300px] touch-none overflow-hidden rounded bg-black select-none"
+          onPointerMove={move}
+          onPointerUp={() => (drag.current = false)}
+          onPointerLeave={() => (drag.current = false)}
+        >
+          {videoUrl ? <video src={videoUrl} muted playsInline preload="auto" className="absolute inset-0 h-full w-full object-cover" onLoadedMetadata={(e) => (e.currentTarget.currentTime = at)} /> : <div className="absolute inset-0 flex items-center justify-center text-xs text-white/60">미리보기 없음</div>}
+          <div
+            className="absolute cursor-move ring-2 ring-brand"
+            style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, transform: "translate(-50%, -50%)" }}
+            onPointerDown={(e) => {
+              drag.current = true;
+              (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+            }}
+            data-gif-handle
+          >
+            {gif ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={gif} alt="GIF" draggable={false} className="pointer-events-none block w-full" />
+            ) : (
+              <div className="pointer-events-none flex aspect-video w-full items-center justify-center bg-warning-soft text-[12px] font-bold text-warning">주목 GIF</div>
+            )}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-[12.5px]">
+          크기
+          <input type="range" min={15} max={100} value={Math.round(b.w * 100)} onChange={(e) => setB({ ...b, w: Number(e.target.value) / 100 })} className="flex-1" aria-label="GIF 크기" />
+          {Math.round(b.w * 100)}%
+        </label>
+        <p className="text-[11.5px] text-fg-subtle">GIF 를 마우스로 끌어 원하는 자리에 놓으세요. 미리보기 영상에는 이전 GIF 가 보일 수 있습니다 — 저장한 뒤 [고친 내용으로 다시 만들기]를 누르면 영상에 반영됩니다.</p>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            취소
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => onSave({ x: Number(b.x.toFixed(3)), y: Number(b.y.toFixed(3)), w: Number(b.w.toFixed(3)) })} data-gif-place-save>
+            이 자리로 저장
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
