@@ -77,7 +77,7 @@ export const videoService = {
     const pid = filter.productId?.trim() || null;
     // 제품을 고른 경우는 그 제품 영상만 DB 에서 읽는다
     if (pid) return getRepositories().videos.listPage({ userId, productId: pid, limit: 500, offset: 0 });
-    return (await getRepositories().videos.list((v) => v.userId === userId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return (await getRepositories().videos.list((v) => v.userId === userId, { userId })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
   /** 기존 참고 영상 한 페이지 (영상 URL 가져오기 › 기존 참고 영상). 처음 열 때는 부르지 않는다 */

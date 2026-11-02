@@ -63,9 +63,9 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
   const [productRow, styles, featureContents, featureFeedback, channelContents, performance, trend, referenceVideo, profiles, scriptFormats] = await Promise.all([
     productId ? repo.products.get(productId) : Promise.resolve(null),
     repo.styles.list((s) => s.userId === userId && (s.isDefault || s.id === styleId)),
-    repo.contents.list((c) => c.userId === userId && c.featureId === featureId),
+    repo.contents.list((c) => c.userId === userId && c.featureId === featureId, { userId, featureId }),
     repo.feedback.list((f) => f.userId === userId && f.featureId === featureId),
-    repo.contents.list((c) => c.userId === userId && c.channelId === channelId),
+    repo.contents.list((c) => c.userId === userId && c.channelId === channelId, { userId, channelId }),
     repo.performance.list((m) => m.views != null),
     trendId ? trendService.findOption(trendId) : Promise.resolve(null),
     videoId ? repo.videos.get(videoId) : Promise.resolve(null),

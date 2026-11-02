@@ -26,9 +26,20 @@ export const isShortXhsLink = (url: string) => {
   }
 };
 
-/** 7일 임시 캐시에 원본이 있는 영상 id */
+/** v0.9.148 보관 목록은 1분 동안 기억 (저장소 폴더를 매번 읽지 않게). 보관·삭제하면 지운다 */
+const storedCache = new Map<string, { at: number; ids: Set<string> }>();
+export const forgetStored = (owner: string) => storedCache.delete(owner);
+
+/** 원본을 보관한 영상 id */
 export async function storedVideoIds(owner?: string): Promise<Set<string>> {
   const o = owner ?? (await getCurrentUserId());
+  const hit = storedCache.get(o);
+  if (hit && Date.now() - hit.at < 60_000) return new Set(hit.ids);
+  const out = await readStored(o);
+  storedCache.set(o, { at: Date.now(), ids: out });
+  return new Set(out);
+}
+async function readStored(o: string): Promise<Set<string>> {
   const out = new Set<string>();
   for (let offset = 0; offset < 20_000; offset += 1000) {
     const rows = await videoStorage.list(`${o}/src`, { limit: 1000, offset }).catch(() => []);
@@ -89,6 +100,7 @@ export async function keepSource(videoId: string): Promise<{ kept: boolean; reas
       if (!size || size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) return { kept: false, reason: "원본이 너무 커서 줄여도 45MB 를 넘습니다." };
     }
     await videoStorage.put(srcKeyOf(owner, video.id), await readFile(file), "video/mp4");
+    forgetStored(owner);
     console.info("[XhsKeep]", JSON.stringify({ videoId: video.id, bytes: size }));
     await enforceSourceQuota(owner).catch(() => undefined);
     return { kept: true };
@@ -111,6 +123,7 @@ export async function keepUploadUrl(videoId: string, size: number): Promise<{ ur
   if (video.platform !== "xiaohongshu") return { skip: "샤오홍슈 영상만 보관합니다." };
   if ((await storedVideoIds(owner)).has(video.id)) return { skip: "이미 보관했습니다." };
   if (!(size > 0) || size > VIDEO_RENDER_CONFIG.sourceCacheMaxBytes) return { skip: "45MB 를 넘어 보관하지 않습니다." };
+  forgetStored(owner);
   return videoStorage.signedUpload(srcKeyOf(owner, video.id), "/api/videos/vault/upload");
 }
 
@@ -137,6 +150,7 @@ export async function enforceSourceQuota(owner?: string): Promise<{ total: numbe
   for (const f of [...all].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))) {
     if (total <= limit * 0.9) break;
     await videoStorage.remove(f.key).catch(() => undefined);
+    forgetStored(o);
     total -= f.size ?? 0;
     removed++;
   }

@@ -103,11 +103,12 @@ export function AutoVideo() {
   const [busy, setBusy] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
   const [testCount, setTestCount] = useState(1);
-  const load = useCallback(async (d?: string) => {
+  const load = useCallback(async (d?: string, light = false) => {
     try {
       setError(null);
-      const r = await call<Data>(`/api/auto-video${d ? `?date=${d}` : ""}`);
-      setData(r);
+      const r = await call<Data>(`/api/auto-video?${d ? `date=${d}&` : ""}${light ? "light=1" : ""}`);
+      // v0.9.148: 새로고침(light)은 '만들 수 있는 제품' 계산을 건너뛴다 — 이전 값을 그대로
+      setData((prev) => (light && prev ? { ...r, eligibility: prev.eligibility } : r));
       setDate(r.date);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
@@ -120,7 +121,7 @@ export function AutoVideo() {
   const live = Boolean(data && data.date === data.today && data.run?.items.some((x) => x.status === "running" || x.status === "pending"));
   useEffect(() => {
     if (!live) return;
-    const t = setInterval(() => void load(date), 15_000);
+    const t = setInterval(() => void load(date, true), 15_000);
     return () => clearInterval(t);
   }, [live, load, date]);
 

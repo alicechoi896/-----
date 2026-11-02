@@ -292,7 +292,7 @@ export const memoryService = {
     let deleted = 0;
 
     if (kind === "contents") {
-      const mine = await repo.contents.list((c) => c.userId === userId && want.has(c.id));
+      const mine = await repo.contents.list((c) => c.userId === userId && want.has(c.id), { userId, id: [...want] });
       const mineIds = new Set(mine.map((c) => c.id));
       for (const f of await repo.feedback.list((f) => mineIds.has(f.contentId))) await repo.feedback.remove(f.id);
       for (const m of await repo.performance.list((m) => mineIds.has(m.contentId))) await repo.performance.remove(m.id);
@@ -330,7 +330,7 @@ export const memoryService = {
     const ids = new Set(contents.map((c) => c.id));
     const [feedback, publications, performance] = await Promise.all([
       repo.feedback.list((f) => f.userId === userId && ids.has(f.contentId)),
-      repo.publications.list((p) => p.userId === userId && p.contentId != null && ids.has(p.contentId)),
+      repo.publications.list((p) => p.userId === userId && p.contentId != null && ids.has(p.contentId), { userId }),
       repo.performance.list((m) => ids.has(m.contentId)),
     ]);
     return promptVersionStats({ contents, feedback, publications, performance });
@@ -344,7 +344,7 @@ export const memoryService = {
       repo.contentProfiles.list((p) => p.userId === userId),
       repo.products.list((p) => p.userId === userId),
       repo.styles.list((s) => s.userId === userId),
-      repo.contents.list((c) => c.userId === userId),
+      repo.contents.list((c) => c.userId === userId, { userId }),
       repo.feedback.list((f) => f.userId === userId),
       this.listPerformance(),
       // 대본 포맷 테이블이 아직 없어도(schema.sql 재실행 전) 화면은 열린다

@@ -48,7 +48,7 @@ async function ownJob(id: string): Promise<VideoJob> {
 
 /** 내 샤오홍슈 영상 (제품 연결 영상 먼저) */
 async function myVideos(userId: string, productId: string | null): Promise<ReferenceVideo[]> {
-  const rows = await getRepositories().videos.list((v) => v.userId === userId && v.platform === "xiaohongshu");
+  const rows = await getRepositories().videos.list((v) => v.userId === userId && v.platform === "xiaohongshu", { userId, platform: "xiaohongshu" });
   return rows.sort((a, b) => Number(b.productId === productId) - Number(a.productId === productId) || b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -60,7 +60,7 @@ export const videoJobService = {
     const userId = await getCurrentUserId();
     const repo = getRepositories();
     const features = new Set(VIDEO_SCRIPT_FEATURES[channelId]);
-    const contents = (await repo.contents.list((c) => c.userId === userId && features.has(c.featureId) && Array.isArray(c.output.script)))
+    const contents = (await repo.contents.list((c) => c.userId === userId && features.has(c.featureId) && Array.isArray(c.output.script), { userId, featureId: [...features] }))
       .filter((c) => c.context.workflow?.stage !== 1)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 40);
@@ -240,7 +240,7 @@ export const videoJobService = {
     await this.expire(userId);
     const actor = await getActorId();
     // 동시 1개는 사람마다 (관리자 공용 데이터에서도 서로 막지 않게, v0.9.68)
-    const running = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status) && (j.qa?.createdBy ?? j.userId) === (j.qa?.createdBy ? actor : userId));
+    const running = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status) && (j.qa?.createdBy ?? j.userId) === (j.qa?.createdBy ? actor : userId), { userId, status: [...IN_PROGRESS] });
     if (running.length) throw new AppError("BUSY", "이미 만들고 있는 영상이 있습니다. 끝난 뒤 다시 눌러 주세요.", 409);
     const plan = await this.sanitize(input.plan, userId);
     if (!plan.scenes.some((s) => s.sourceVideoId)) throw new AppError("NO_SOURCE", "컷에 쓸 영상이 없습니다. 샤오홍슈 영상을 골라 주세요.", 400);
@@ -303,7 +303,7 @@ export const videoJobService = {
     const userId = await getCurrentUserId();
     await this.expire(userId);
     await this.cleanup(userId);
-    return (await getRepositories().videoJobs.list((j) => j.userId === userId && j.channelId === channelId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 20);
+    return (await getRepositories().videoJobs.list((j) => j.userId === userId && j.channelId === channelId, { userId, channelId })).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 20);
   },
 
   /** 미리보기 주소 (10분, 다운로드 표시 안 함) */
@@ -337,7 +337,7 @@ export const videoJobService = {
   /** 멈춘 작업(10분 넘게 변화 없음)은 실패로 */
   async expire(userId: string): Promise<void> {
     const repo = getRepositories();
-    const stuck = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status) && Date.now() - Date.parse(j.updatedAt) > STALE_MS);
+    const stuck = await repo.videoJobs.list((j) => j.userId === userId && IN_PROGRESS.includes(j.status) && Date.now() - Date.parse(j.updatedAt) > STALE_MS, { userId, status: [...IN_PROGRESS] });
     for (const j of stuck) await repo.videoJobs.update(j.id, { status: "failed", error: "시간이 너무 오래 걸려 중단되었습니다. 컷 수를 줄이거나 다시 시도해 주세요.", updatedAt: nowIso() });
   },
 

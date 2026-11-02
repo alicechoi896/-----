@@ -212,7 +212,7 @@ async function recentProductIds(owner: string): Promise<Set<string>> {
     const run = await readRun(d).catch(() => null);
     for (const it of run?.items ?? []) if (it.status !== "failed" && it.status !== "skipped") out.add(it.productId);
   }
-  const pubs = await getRepositories().publications.list((x) => x.userId === owner && Boolean(x.productId) && Date.parse(x.createdAt) >= since).catch(() => []);
+  const pubs = await getRepositories().publications.list((x) => x.userId === owner && Boolean(x.productId) && Date.parse(x.createdAt) >= since, { userId: owner }).catch(() => []);
   for (const x of pubs) out.add(x.productId!);
   return out;
 }
@@ -236,7 +236,7 @@ async function linkedVideoCount(owner: string): Promise<Map<string, number>> {
   return m;
 }
 async function usableVideoIds(owner: string): Promise<Map<string, string[]>> {
-  const [videos, stored] = await Promise.all([getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId)), storedVideoIds(owner)]);
+  const [videos, stored] = await Promise.all([getRepositories().videos.list((v) => v.userId === owner && v.platform === "xiaohongshu" && Boolean(v.productId), { userId: owner, platform: "xiaohongshu" }), storedVideoIds(owner)]);
   const m = new Map<string, string[]>();
   for (const v of videos) if (usableXhsVideo(v, stored)) m.set(v.productId!, [...(m.get(v.productId!) ?? []), v.id]);
   return m;
@@ -461,7 +461,7 @@ async function pickBest(task: string, question: string, lists: Record<string, st
 
 /** 가장 최근에 직접 만든(자동이 아닌) 영상의 목소리·자막·제목 스타일 */
 async function lastVoiceSettings(owner: string): Promise<Partial<VideoPlan>> {
-  const jobs = await getRepositories().videoJobs.list((j) => j.userId === owner && j.channelId === "youtube" && (j.status === "completed" || j.status === "needs_review"));
+  const jobs = await getRepositories().videoJobs.list((j) => j.userId === owner && j.channelId === "youtube" && (j.status === "completed" || j.status === "needs_review"), { userId: owner, channelId: "youtube", status: ["completed", "needs_review"] });
   const last = jobs.filter((j) => !(j.plan as VideoPlan & { auto?: boolean }).auto).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   if (!last) return {};
   const p = last.plan;

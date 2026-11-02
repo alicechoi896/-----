@@ -82,7 +82,7 @@ export function compressContent(c: GeneratedContent, maxChars = 600): string {
 async function collectSignals(userId: string, profileId: string, since: string | null) {
   const repo = getRepositories();
   const features = new Set(featuresOf(profileId));
-  const contents = await repo.contents.list((c) => c.userId === userId && features.has(c.featureId));
+  const contents = await repo.contents.list((c) => c.userId === userId && features.has(c.featureId), { userId, featureId: [...features] });
   const ids = new Set(contents.map((c) => c.id));
   const [feedback, publications, performance] = await Promise.all([
     repo.feedback.list((f) => ids.has(f.contentId)),

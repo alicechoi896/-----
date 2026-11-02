@@ -24,8 +24,10 @@ function createCollection<K extends keyof StoreState>(key: K): Repository<StoreS
   const clone = <V>(v: V): V => structuredClone(v);
 
   return {
-    async list(filter) {
-      return clone(filter ? rows().filter(filter) : rows());
+    async list(filter, where) {
+      const w = Object.entries((where ?? {}) as Record<string, unknown>).filter(([, v]) => v !== undefined);
+      const match = (r: T) => w.every(([k, v]) => { const x = (r as unknown as Record<string, unknown>)[k] ?? null; return Array.isArray(v) ? v.includes(x as never) : x === v; });
+      return clone(rows().filter((r) => match(r) && (!filter || filter(r))));
     },
     async get(id) {
       const found = rows().find((r) => r.id === id);

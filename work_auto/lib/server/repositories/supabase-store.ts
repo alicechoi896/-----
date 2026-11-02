@@ -77,9 +77,20 @@ async function writeWithPendingColumns<R>(
 
 function createTable<T extends { id: string }>(table: string): Repository<T> {
   return {
-    async list(filter) {
+    async list(filter, where) {
       const db = await createSupabaseServerClient();
-      const { data, error } = await db.from(table).select("*").order("created_at", { ascending: false, nullsFirst: false });
+      // v0.9.148: 조건이 있으면 DB 에서 먼저 거른다 (표 전체를 읽지 않게 — 인덱스 user_id·feature_id·status 등)
+      let q = db.from(table).select("*");
+      for (const [k, v] of Object.entries((where ?? {}) as Record<string, unknown>)) {
+        if (v === undefined) continue;
+        const col = toSnake(k);
+        if (Array.isArray(v)) {
+          if (!v.length) return [];
+          q = q.in(col, v as (string | number)[]);
+        } else if (v === null) q = q.is(col, null);
+        else q = q.eq(col, v as string | number | boolean);
+      }
+      const { data, error } = await q.order("created_at", { ascending: false, nullsFirst: false });
       if (error) fail(table, "list", error);
       const rows = (data ?? []).map((r) => fromRow<T>(r));
       return filter ? rows.filter(filter) : rows;

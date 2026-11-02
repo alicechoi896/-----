@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const sp = new URL(request.url).searchParams;
     const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.get("date") ?? "") ? sp.get("date")! : kstDate();
     const run = await readRun(date);
-    return { settings: await readSettings(), dates: await listRuns(), date, today: kstDate(), run, urls: await videoUrls(run), limits: AUTO_LIMITS, eligibility: await eligibility().catch(() => null), ready: { automation: automationConfigured(), cron: Boolean(process.env.CRON_SECRET) } };
+    return { settings: await readSettings(), dates: await listRuns(), date, today: kstDate(), run, urls: await videoUrls(run), limits: AUTO_LIMITS, eligibility: sp.get("light") === "1" ? undefined : await eligibility().catch(() => null), ready: { automation: automationConfigured(), cron: Boolean(process.env.CRON_SECRET) } };
   });
 }
 

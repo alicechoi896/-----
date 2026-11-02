@@ -33,6 +33,7 @@ import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production
 import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
+import { forgetStored } from "./vault";
 import { SCAN_VERSION, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
 import { isGiphyUrl } from "../providers/giphy";
@@ -205,7 +206,10 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         if (!src) {
           src = await fetchSource(v, dir, k);
           const size = (await stat(src.file).catch(() => null))?.size ?? 0;
-          if (size > 0 && size <= C.sourceCacheMaxBytes) await videoStorage.put(srcKey(id), await readFile(src.file)).catch(() => undefined);
+          if (size > 0 && size <= C.sourceCacheMaxBytes) {
+            await videoStorage.put(srcKey(id), await readFile(src.file)).catch(() => undefined);
+            forgetStored(job.userId);
+          }
         }
         let scan: TextScan | null = null;
         const saved = await videoStorage.download(scanKey(id)).catch(() => null);

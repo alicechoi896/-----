@@ -11,7 +11,7 @@ export const HISTORY_LIMIT = 300;
  */
 export async function pruneContentHistory(userId: string): Promise<number> {
   const repo = getRepositories();
-  const mine = await repo.contents.list((c) => c.userId === userId);
+  const mine = await repo.contents.list((c) => c.userId === userId, { userId });
   if (mine.length <= HISTORY_LIMIT) return 0;
 
   const ids = new Set(mine.map((c) => c.id));

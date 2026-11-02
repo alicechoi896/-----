@@ -32,8 +32,11 @@ import type {
  * DB 구현으로 바꿀 때 조건 함수 필터는 SQL 로 옮길 수 없으므로,
  * 자주 쓰는 조회는 전용 메서드(예: contents.listExemplars(featureId))로 승격한다. (docs/DEVELOPMENT_GUIDE.md)
  */
+/** v0.9.148 DB 에서 먼저 거르는 조건 (같음 · 배열이면 그중 하나 · null 이면 비어 있음). 함수 필터는 그 뒤에 */
+export type Where<T> = Partial<{ [K in keyof T]: string | number | boolean | null | (string | number)[] }>;
+
 export interface Repository<T extends { id: string }> {
-  list(filter?: (item: T) => boolean): Promise<T[]>;
+  list(filter?: (item: T) => boolean, where?: Where<T>): Promise<T[]>;
   get(id: string): Promise<T | null>;
   insert(item: T): Promise<T>;
   update(id: string, patch: Partial<T>): Promise<T | null>;
