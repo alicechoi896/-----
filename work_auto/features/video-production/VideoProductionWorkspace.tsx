@@ -29,6 +29,7 @@ import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, Load
 import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { GiphyPicker } from "./GiphyPicker";
 import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
+import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
@@ -853,6 +854,11 @@ function JobPanel({
               )}
             </div>
             {note && <p className="mt-2 text-xs text-fg-muted">{note}</p>}
+            {job.channelId === "youtube" && job.outputPath && !job.qa.fileDeleted && (
+              <div className="mt-3">
+                <YouTubeUploadButton jobId={job.id} title={job.plan.selectedTitle} />
+              </div>
+            )}
             <ThumbMaker job={job} />
           </div>
           <div className="min-w-0 space-y-3">

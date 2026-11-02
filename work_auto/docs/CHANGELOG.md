@@ -2,6 +2,13 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.150] - 2026-11-02: 유튜브 자동 업로드
+
+### 추가
+- **유튜브 업로드 연결** (설정 › API 연결 센터 맨 위, 관리자): 구글 OAuth (youtube.upload) — 열쇠(refresh token)는 암호화해 서버 저장소에만 (GOOGLE_OAUTH_CLIENT_ID·GOOGLE_OAUTH_CLIENT_SECRET 환경변수 필요)
+- **[유튜브에 올리기]**: 완성 영상 화면·제품 영상 자동 제작 결과에서 바로 올리기(비공개·일부 공개·공개) 또는 예약 공개(private + publishAt). 확인 창, 1번 = 1번. 올리면 업로드 관리에 주소와 함께 기록 → 1일·7일 성과 자동 수집
+- 참고: 구글 감사를 받지 않은 API 프로젝트로 올린 영상은 유튜브가 비공개로 고정
+
 ## [0.9.149] - 2026-11-02: 성과 자동 수집 · 비용 대시보드
 
 ### 추가

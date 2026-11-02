@@ -6,6 +6,7 @@ import { Badge, Button, CopyButton, EmptyState, ErrorState, Input, LoadingState,
 import { cn } from "@/lib/utils";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { DEFAULT_CAPTION_STYLE, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
+import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
 import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
 import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker, VideoFontFaces } from "@/features/video-production/VideoProductionWorkspace";
 
@@ -342,6 +343,7 @@ function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, on
                 )}
               </div>
             )}
+            {it.jobId && it.status === "done" && <YouTubeUploadButton jobId={it.jobId} title={it.title ?? it.productName} description={it.description ?? ""} tags={it.tags ?? []} productId={it.productId} />}
             {it.jobId && (
               <a href={`/youtube/video-production?jobId=${it.jobId}&autoDate=${date}&autoItem=${it.id}`} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-control bg-brand px-4 text-[14px] font-semibold text-white shadow-card hover:bg-brand-hover" data-auto-edit>
                 <Film className="size-4" /> 영상 편집하기 (GIF 위치·화살표·자막·클립 구간 바꾸기)

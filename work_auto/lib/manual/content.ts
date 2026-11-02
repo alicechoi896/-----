@@ -110,6 +110,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
           "영상 AI 음성을 타입캐스트 목소리로 쓰려면 **타입캐스트** 카드에 API Key 를 넣습니다 (studio.typecast.ai › 개발자 API, [테스트]는 무료). 1글자 = 1크레딧, 무료 플랜은 상업적 사용 불가.",
           "AI 드라마 스튜디오(이미지·영상 만들기)를 쓰려면 **Kie AI** 카드에 API Key 를 넣습니다 ([테스트]는 무료, 잔액 표시).",
           "인스타그램 해시태그 검색을 무료로 쓰려면 **Instagram 공식 API (Meta)** 카드에 액세스 토큰과 Instagram 비즈니스 계정 ID 를 넣습니다 (광고 계정은 필요 없음, docs/INSTAGRAM_TRENDS.md 의 준비 순서 참고).",
+          "**유튜브 업로드 연결** (API 연결 센터 맨 위, 관리자): **[구글 계정으로 유튜브 연결]**을 누르면 완성 영상·제품 영상 자동 제작 결과의 **[유튜브에 올리기]**로 바로 올리거나 공개 시각을 예약할 수 있고, 올린 영상은 업로드 관리에 주소와 함께 기록돼 성과가 자동으로 모입니다. 먼저 Google Cloud 에서 YouTube Data API v3 와 OAuth 클라이언트를 만들고 Vercel 환경변수 GOOGLE_OAUTH_CLIENT_ID·GOOGLE_OAUTH_CLIENT_SECRET 을 넣어야 합니다. 구글 감사를 받지 않은 프로젝트로 올린 영상은 비공개로 고정됩니다.",
           "키에 문제가 있으면 상태가 **오류**로 바뀌고 이유가 표시됩니다.",
         ],
         next: "인스타그램 트렌드 찾기를 무료로 쓰려면 아래 'Instagram 공식 API 연결하기'를 따라 합니다 (선택). 아니면 02장으로 넘어갑니다.",
