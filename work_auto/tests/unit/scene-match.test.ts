@@ -37,3 +37,21 @@ describe("뜻이 맞는 장면 매핑 (v0.9.78)", () => {
     expect(pinned?.id).toBe("a");
   });
 });
+
+describe("영상별 구간 (v0.9.157)", () => {
+  const src = { id: "a", duration: 20, scan: scan(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]), assigned: true, pinned: true };
+  it("정한 구간 안에서만 고른다", () => {
+    for (let k = 0; k < 3; k++) {
+      const used = new Map<string, [number, number][]>([["a", [[6, 7.5]]]]);
+      const r = pickSegment({ narration: "x", dur: 1.5, sources: [{ ...src, range: { from: 5, to: 9 } }], used, want: null })!;
+      expect(r.start).toBeGreaterThanOrEqual(5);
+      expect(r.start + 1.5).toBeLessThanOrEqual(9);
+    }
+  });
+  it("구간이 짧아 빈 자리가 없으면 겹쳐도 구간 안에서", () => {
+    const used = new Map<string, [number, number][]>([["a", [[5, 6.6]]]]);
+    const r = pickSegment({ narration: "x", dur: 1.5, sources: [{ ...src, range: { from: 5, to: 6.6 } }], used, want: null })!;
+    expect(r.start).toBeGreaterThanOrEqual(5);
+    expect(r.start).toBeLessThanOrEqual(5.1);
+  });
+});

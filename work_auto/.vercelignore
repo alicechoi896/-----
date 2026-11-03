@@ -13,3 +13,5 @@ coverage
 *.mp4
 npm-debug.log*
 /reference/
+
+ref/

@@ -323,6 +323,8 @@ export interface SegmentSource {
   pinned?: boolean;
   /** 원본 가로÷세로 (꽉 채우기에서 잘리는 부분 계산, 없으면 9:16) */
   aspect?: number;
+  /** v0.9.157 사람이 정한 이 영상의 쓸 구간 (모든 컷 공통) */
+  range?: SourceRange | null;
 }
 /**
  * v0.9.82: 그 영상 어디서든 한 번이라도 보인 작은 글자·로고(화면의 12% 이하)는 모든 구간에 있다고 보고 가린다.
@@ -354,16 +356,24 @@ export function persistentBoxes(scan: TextScan): Box[] {
 
 /** v0.9.78: 대사와 뜻이 맞는 장면(want)을 품은 구간 보너스 */
 const WANT_BONUS = 6;
+/** v0.9.157 영상별 구간 (초) */
+export type SourceRange = { from: number; to: number };
+
 export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]>; want?: { id: string; t: number } | null }): { id: string; start: number; tr: Treatment; value: number } | null {
   const words = wordsOf(input.narration);
   let best: { id: string; start: number; tr: Treatment; value: number } | null = null;
   for (const src of input.sources) {
     const ranges = input.used.get(src.id) ?? [];
-    const maxStart = Math.max(0, src.duration - input.dur - 0.1);
-    const steps = Math.max(1, Math.floor(maxStart / 0.5));
+    // v0.9.157: 사람이 정한 영상별 구간(from~to) 안에서만 고른다. 구간이 짧아 빈 자리가 없으면 겹쳐도 구간 안에서
+    const lo = src.range ? Math.max(0, Math.min(src.range.from, src.duration - 0.1)) : 0;
+    const hi = Math.max(lo, (src.range ? Math.min(src.duration, src.range.to) : src.duration) - input.dur - 0.1);
+    const span = hi - lo;
+    const steps = Math.max(1, Math.floor(span / 0.5));
+    const free = (start: number) => !ranges.some(([a, b]) => start < b && start + input.dur > a);
+    const anyFree = src.range ? Array.from({ length: steps + 1 }, (_, n) => lo + (span * n) / steps).some(free) : true;
     for (let n = 0; n <= steps; n++) {
-      const start = (maxStart * n) / steps;
-      if (ranges.some(([a, b]) => start < b && start + input.dur > a)) continue;
+      const start = lo + (span * n) / steps;
+      if (anyFree && !free(start)) continue;
       const tr = decideTreatment([...boxesIn(src.scan, start, input.dur), ...persistentBoxes(src.scan)], src.scan.checked, src.aspect);
       if (tr.kind === "rejected") continue;
       // 이 구간의 장면들 (없으면 가장 가까운 장면)

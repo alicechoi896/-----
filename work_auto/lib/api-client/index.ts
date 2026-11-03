@@ -229,8 +229,10 @@ export const api = {
     annotate: (id: string, body: { edit?: { key: string; value: string | string[] }; pick?: { key: string; values: string[] } }) =>
       request<GeneratedContent>(`/api/contents/${id}/annotations`, { method: "PATCH", body: json(body) }),
     /** 결과의 한 항목만 다시 만들기 (블로그 본문은 소제목도 함께) */
-    regenerate: (id: string, key: string) =>
-      request<GeneratedContent>(`/api/contents/${id}/regenerate`, { method: "POST", body: json({ key }) }),
+    regenerate: (id: string, key: string, ask?: string) =>
+      request<GeneratedContent>(`/api/contents/${id}/regenerate`, { method: "POST", body: json({ key, request: ask || undefined }) }),
+    /** v0.9.157 한 줄 요청을 대본 포맷 규칙으로 */
+    saveFormatRule: (id: string, text: string) => request<{ formatName: string; added: boolean }>(`/api/contents/${id}/format-rule`, { method: "POST", body: json({ text }) }),
     setExemplar: (id: string, isExemplar: boolean) =>
       request<GeneratedContent>(`/api/contents/${id}`, { method: "PATCH", body: json({ isExemplar }) }),
   },

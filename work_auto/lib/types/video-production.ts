@@ -114,6 +114,8 @@ export interface VideoPlan {
   meme: boolean;
   /** AI 컷 (섞기·AI만, v0.9.60). 결과 영상은 Kie 에 14일 — 렌더할 때 taskId 로 받아 쓰고 남기지 않는다 */
   aiClips?: AiClip[];
+  /** v0.9.157 영상별 쓸 구간 (초, 그 영상을 쓰는 모든 컷 공통). 컷의 '지금 위치부터'(startAt)가 더 우선 */
+  sourceRanges?: Record<string, { from: number; to: number }>;
   /** v0.9.156 AI 숙소 영상: 숙소 사진으로 만든 AI 컷만 쓰고(샤오홍슈 없음), 끝 화면 없음 */
   stay?: boolean;
   /** v0.9.156 상단 제목을 처음 몇 초만 (없으면 끝까지) */

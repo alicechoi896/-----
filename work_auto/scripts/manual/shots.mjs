@@ -598,7 +598,7 @@ export const SHOTS = [
     marks: {
       1: (p) => p.locator("[data-left-toggle]"),
       2: (p) => p.locator("[data-job-place]").first(),
-      3: (p) => p.locator("[data-job-start]").first(),
+      3: (p) => p.locator("[data-range-open]").first(),
       4: (p) => p.locator("[data-job-rerender]"),
       5: (p) => p.locator("[data-thumb-make]"),
     },

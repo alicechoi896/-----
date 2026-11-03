@@ -192,7 +192,7 @@ function ChannelNav({ channel, pathname, allowed }: { channel: ChannelDef; pathn
       {inChannel && features.length > 0 && (
         <div className="mt-0.5 mb-1 ml-[19px] flex flex-col gap-0.5 border-l border-line pl-2">
           {features.map((f) => {
-            const active = pathname === f.href || pathname.startsWith(f.href + "/");
+            const active = pathname === f.href || pathname.startsWith(f.href + "/") || matchFeatureByPath(pathname)?.menuParent === f.id;
             return (
               <Link
                 key={f.id}

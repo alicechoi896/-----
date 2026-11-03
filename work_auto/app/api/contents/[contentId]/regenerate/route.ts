@@ -7,13 +7,13 @@ import { contentGenerationService } from "@/lib/server/services/content-generati
 /** 실제 AI 응답은 수십 초 걸릴 수 있어 함수 실행 시간을 늘린다 */
 export const maxDuration = 120;
 
-/** POST /api/contents/:id/regenerate { key } — 결과의 한 항목만 다른 것으로 다시 만든다 (AI 1회) */
+/** POST /api/contents/:id/regenerate { key, request? } — 결과의 한 항목만 다른 것으로 다시 만든다 (AI 1회). request = 한 줄 요청 (v0.9.157) */
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/contents/[contentId]/regenerate">) {
   const { contentId } = await ctx.params;
   return handle(async () => {
     await requireSession();
     await rateLimit("ai-generate");
-    const { key } = await readJson<{ key: string }>(request);
-    return contentGenerationService.regenerateSection(contentId, String(key ?? ""));
+    const { key, request: ask } = await readJson<{ key: string; request?: string }>(request);
+    return contentGenerationService.regenerateSection(contentId, String(key ?? ""), typeof ask === "string" ? ask : undefined);
   });
 }

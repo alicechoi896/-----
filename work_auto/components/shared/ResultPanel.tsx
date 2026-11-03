@@ -8,6 +8,7 @@ import { CARD_SEPARATOR, isListFormat, splitCards, type OutputSection } from "@/
 import { SKELETON_CHECKS, scriptMetaKey, type PreciseQuality } from "@/lib/generators/quality";
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
+import { AskRegenerate } from "./AskRegenerate";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -80,13 +81,13 @@ export function ResultPanel({
     }
   }
 
-  async function regenerate(key: string) {
+  async function regenerate(key: string, ask?: string) {
     setRegenerating(key);
     setRegenError(null);
     setAdded(null);
     try {
       const before = new Set(shownList(content, key).map(candidateKey));
-      const next = await api.contents.regenerate(content.id, key);
+      const next = await api.contents.regenerate(content.id, key, ask);
       if (APPENDABLE_KEYS.has(key)) setAdded({ key, items: new Set(shownList(next, key).filter((x) => !before.has(candidateKey(x)))) });
       onChange?.(next);
     } catch (e) {
@@ -168,6 +169,8 @@ export function ResultPanel({
           photos={photos}
           // 소제목은 본문을 다시 만들 때 함께 바뀐다
           onRegenerate={onChange && section.key !== "headings" ? () => void regenerate(section.key) : undefined}
+          onAsk={onChange && section.key !== "headings" ? (r) => regenerate(section.key, r) : undefined}
+          contentId={content.id}
           regenerating={regenerating === section.key || (regenerating === "body" && section.key === "headings")}
           busy={Boolean(regenerating)}
           error={regenError?.key === section.key ? regenError.message : null}
@@ -202,6 +205,8 @@ function OutputBlock({
   onSaveEdit,
   photos,
   onRegenerate,
+  onAsk,
+  contentId,
   regenerating,
   busy,
   error,
@@ -218,6 +223,9 @@ function OutputBlock({
   onSaveEdit?: (value: string | string[]) => Promise<void>;
   photos: ProcessedPhoto[];
   onRegenerate?: () => void;
+  /** v0.9.157 한 줄 요청으로 다시 만들기 */
+  onAsk?: (request: string) => Promise<void>;
+  contentId?: string;
   regenerating?: boolean;
   busy?: boolean;
   error?: string | null;
@@ -306,6 +314,7 @@ function OutputBlock({
             </Button>
           )}
           <CopyButton value={section.format === "tags" ? list.join(" ") : toText(value, isCards)} label={isCards ? "전체 복사" : undefined} />
+          {onAsk && contentId && !editing && <AskRegenerate contentId={contentId} label={section.label} onRun={onAsk} />}
         </div>
       </header>
       {error && <p className="border-b border-line bg-danger/5 px-5 py-2 text-xs text-danger">{error}</p>}

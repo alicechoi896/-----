@@ -323,7 +323,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           dur,
           used: usedRanges,
           want: want && (!s.pinned || want.id === s.sourceVideoId) ? want : null,
-          sources: candidates.filter((id) => !isAiSource(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === s.sourceVideoId, pinned: Boolean(s.pinned) && id === s.sourceVideoId, aspect: aspects.get(id) })),
+          sources: candidates.filter((id) => !isAiSource(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === s.sourceVideoId, pinned: Boolean(s.pinned) && id === s.sourceVideoId, aspect: aspects.get(id), range: job.plan.sourceRanges?.[id] ?? null })),
         });
       }
       // 샤오홍슈 원본을 하나도 쓸 수 없으면(받기 실패·글자를 못 가림) AI 컷으로 대신

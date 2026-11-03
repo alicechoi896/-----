@@ -31,7 +31,7 @@ export interface ContextSummary {
   /** 사용자가 고른 후보 (예: 제목 후보 중 실제로 쓴 제목) */
   picks?: Record<string, { values: string[]; at: ISODate }>;
   /** [다시 만들기]·[추가 만들기](mode "append") 기록 (항목 key, 시각) — 최근 20개 */
-  regenerated?: { key: string; at: ISODate; provider: string; mode?: "append" }[];
+  regenerated?: { key: string; at: ISODate; provider: string; mode?: "append"; /** v0.9.157 한 줄 요청 */ request?: string }[];
   /** 이번 생성에 실제로 보낸 스타일 표본 (v0.9.9~, 예전 결과에는 없다) */
   styleSamples?: StyleSampleSnapshot | null;
   /** 정밀 생성 (v0.9.31~): 앵글·추천 제목 TOP 5·대본별 뼈대 체크·검토 메모 */

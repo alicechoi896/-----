@@ -384,8 +384,8 @@ export function YouTubeTrendExplorer() {
             iconOnly
             label="이 트렌드로 영상 만들기"
             items={[
-              { label: "제품 홍보 영상 원고", href: productVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis)) },
-              { label: "정보성 영상 원고", href: infoVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis)) },
+              { label: "영상 원고(제품 홍보)", href: productVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis)) },
+              { label: "영상 원고(정보성)", href: infoVideoHref(trendPrefill(r, savedByVideo.get(r.videoId)?.analysis)) },
             ]}
           />
         </div>

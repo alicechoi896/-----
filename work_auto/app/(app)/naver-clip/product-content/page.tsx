@@ -1,5 +1,6 @@
 import { FeaturePage } from "@/components/layout/FeaturePage";
 import { ContentGenerator } from "@/features/content-generator/ContentGenerator";
+import { ScriptTypeSwitch } from "@/features/content-generator/ScriptTypeSwitch";
 import { getFeature } from "@/lib/registry";
 import { pickStringParams } from "@/lib/search-params";
 
@@ -15,6 +16,7 @@ export default async function Page({ searchParams }: PageProps<"/naver-clip/prod
   const initialValues = pickStringParams(await searchParams);
   return (
     <FeaturePage featureId={FEATURE_ID} width="wide">
+      <ScriptTypeSwitch current="product" productHref="/naver-clip/product-content" infoHref="/naver-clip/info-content" />
       <ContentGenerator featureId={FEATURE_ID} initialValues={initialValues} />
     </FeaturePage>
   );

@@ -34,6 +34,22 @@ const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const fileKey = (j: Pick<VideoJob, "userId" | "id">) => `${j.userId}/${j.id}.mp4`;
 
 /** 음성 엔진·목소리 검사 (v0.9.73): 타입캐스트면 tc_…/uc_… id, 아니면 OpenAI 목소리 */
+/** v0.9.157 영상별 구간: 고른 영상만, 0~3600초, 최소 0.5초 */
+export function cleanRanges(raw: unknown, ok: Set<string>): Record<string, { from: number; to: number }> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, { from: number; to: number }> = {};
+  for (const [id, r] of Object.entries(raw as Record<string, { from?: unknown; to?: unknown }>)) {
+    if (!ok.has(id)) continue;
+    const from = Number(r?.from);
+    const to = Number(r?.to);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
+    const a = Math.max(0, Math.min(3600, from));
+    const b = Math.max(0, Math.min(3600, to));
+    if (b - a >= 0.5) out[id] = { from: Number(a.toFixed(1)), to: Number(b.toFixed(1)) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** 원고에서 체크한 대본의 번호 (고친 대본 목록 기준, 없으면 0) */
 export function scriptPickIndex(c: Pick<GeneratedContent, "output" | "context">): number {
   const list = ((c.context.userEdits?.script?.value ?? c.output.script) as string[] | undefined) ?? [];
@@ -293,6 +309,7 @@ export const videoJobService = {
       maxPauseSec: cleanPause(plan.maxPauseSec),
       targetSec: cleanTarget(plan.targetSec),
       meme: false,
+      sourceRanges: cleanRanges(plan.sourceRanges, new Set(sourceIds)),
     };
   },
 

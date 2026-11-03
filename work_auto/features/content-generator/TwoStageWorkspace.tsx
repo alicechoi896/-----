@@ -7,6 +7,7 @@ import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { Badge, Button, Input, Notice, SectionCard, Tabs, Tag } from "@/components/ui";
 import { ResultPanel } from "@/components/shared/ResultPanel";
+import { AskRegenerate } from "@/components/shared/AskRegenerate";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
@@ -71,13 +72,13 @@ export function TwoStageWorkspace({
   }
 
   /** 1단계 후보 [추가 만들기] (같은 1단계 결과에 더한다, 플랫폼 API 0회) */
-  async function addCandidates(key: "titles" | "hooks" | "ctas") {
+  async function addCandidates(key: "titles" | "hooks" | "ctas", ask?: string) {
     if (busy.current) return;
     busy.current = true;
     setAdding(key);
     setAddError(null);
     try {
-      onStage1Change(await api.contents.regenerate(stage1.id, key));
+      onStage1Change(await api.contents.regenerate(stage1.id, key, ask));
     } catch (e) {
       setAddError(e instanceof Error ? e.message : "추가로 만들지 못했습니다.");
     } finally {
@@ -179,7 +180,7 @@ export function TwoStageWorkspace({
         )}
 
         <div className="space-y-5">
-          <CandidateBlock title={`제목 후보 · ${titles.length}개`} hint={`여러 개 고를 수 있습니다 (최대 ${MAX_TITLES}개)`} onAdd={() => void addCandidates("titles")} adding={adding === "titles"}>
+          <CandidateBlock title={`제목 후보 · ${titles.length}개`} hint={`여러 개 고를 수 있습니다 (최대 ${MAX_TITLES}개)`} onAdd={() => void addCandidates("titles")} adding={adding === "titles"} ask={{ contentId: stage1.id, label: "제목", onRun: (r) => addCandidates("titles", r) }}>
             {orderedTitles.map((t) => {
               const on = pickedTitles.includes(t);
               return (
@@ -198,12 +199,12 @@ export function TwoStageWorkspace({
             })}
           </CandidateBlock>
           <div className="grid gap-5 md:grid-cols-2">
-            <CandidateBlock title={`Hook 후보 · ${hooks.length}개`} hint="1개 고르기 — 대본 첫 줄" onAdd={() => void addCandidates("hooks")} adding={adding === "hooks"}>
+            <CandidateBlock title={`Hook 후보 · ${hooks.length}개`} hint="1개 고르기 — 대본 첫 줄" onAdd={() => void addCandidates("hooks")} adding={adding === "hooks"} ask={{ contentId: stage1.id, label: "Hook", onRun: (r) => addCandidates("hooks", r) }}>
               {hooks.map((h) => (
                 <RadioRow key={h} name={`hook-${stage1.id}`} checked={hook === h} onChange={() => setHook(h)} text={h} sub={refs?.hooks[h] ? <FormatRef model={refs.hooks[h]} /> : null} />
               ))}
             </CandidateBlock>
-            <CandidateBlock title={`CTA 후보 · ${ctas.length}개`} hint="1개 고르기 — 대본 마지막" onAdd={() => void addCandidates("ctas")} adding={adding === "ctas"}>
+            <CandidateBlock title={`CTA 후보 · ${ctas.length}개`} hint="1개 고르기 — 대본 마지막" onAdd={() => void addCandidates("ctas")} adding={adding === "ctas"} ask={{ contentId: stage1.id, label: "CTA", onRun: (r) => addCandidates("ctas", r) }}>
               {ctas.map((c) => (
                 <RadioRow key={c} name={`cta-${stage1.id}`} checked={cta === c} onChange={() => setCta(c)} text={c} />
               ))}
@@ -311,6 +312,16 @@ export function TwoStageWorkspace({
           {shown(activeGroup, "thumbnailTitles").length > 0 && (
             <SectionCard title="섬네일 제목 (고르기·고치기)" icon={Star} description="후보를 누르면 그 문구로 정해지고, 직접 고쳐 저장할 수도 있습니다. 고른 섬네일 제목은 이 원고로 영상을 만들 때 상단 제목 2번째 줄에 들어갑니다." data-thumb-card>
               <ThumbPicker key={activeGroup.id} content={activeGroup} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
+              <div className="mt-2">
+                <AskRegenerate
+                  contentId={activeGroup.id}
+                  label="섬네일 제목"
+                  onRun={async (r) => {
+                    const next = await api.contents.regenerate(activeGroup.id, "thumbnailTitles", r);
+                    onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)));
+                  }}
+                />
+              </div>
             </SectionCard>
           )}
           <ResultPanel content={activeGroup} outputs={stage2Outputs.filter((o) => o.key !== "thumbnailTitles")} onChange={(next) => onGroupsChange(groups.map((g) => (g.id === next.id ? next : g)))} />
@@ -374,17 +385,20 @@ function ThumbPicker({ content, onChange }: { content: GeneratedContent; onChang
   );
 }
 
-function CandidateBlock({ title, hint, onAdd, adding, children }: { title: string; hint: string; onAdd: () => void; adding: boolean; children: React.ReactNode }) {
+function CandidateBlock({ title, hint, onAdd, adding, children, ask }: { title: string; hint: string; onAdd: () => void; adding: boolean; children: React.ReactNode; ask?: { contentId: string; label: string; onRun: (r: string) => Promise<void> } }) {
   return (
     <div>
-      <div className="mb-1.5 flex items-start justify-between gap-2">
+      <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
         <p className="min-w-0 text-[13px] font-semibold text-fg">
           {title}
           <span className="block text-xs font-normal text-fg-subtle">{hint}</span>
         </p>
-        <Button size="sm" variant="ghost" icon={ListPlus} loading={adding} onClick={onAdd}>
-          추가 만들기
-        </Button>
+        <span className="flex flex-wrap items-center gap-1">
+          <Button size="sm" variant="ghost" icon={ListPlus} loading={adding} onClick={onAdd}>
+            추가 만들기
+          </Button>
+          {ask && <AskRegenerate contentId={ask.contentId} label={ask.label} onRun={ask.onRun} />}
+        </span>
       </div>
       <div className="max-h-[360px] space-y-0.5 overflow-y-auto">{children}</div>
     </div>

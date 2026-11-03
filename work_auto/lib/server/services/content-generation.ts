@@ -274,6 +274,26 @@ async function collectIntel(p: Prepared, requestId?: string): Promise<KeywordInt
 }
 const listOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
+/** v0.9.157 [이 요청을 포맷 규칙으로 저장]: 이 원고가 쓴 대본 포맷 가이드라인 끝 '사용자 요청 규칙'에 한 줄 더한다 */
+export async function saveRequestAsRule(contentId: string, text: unknown): Promise<{ formatName: string; added: boolean }> {
+  const rule = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  if (!rule) throw new AppError("VALIDATION", "저장할 요청이 없습니다.");
+  const userId = await getCurrentUserId();
+  const content = await getRepositories().contents.get(contentId);
+  if (!content || content.userId !== userId) throw new AppError("NOT_FOUND", "콘텐츠를 찾을 수 없습니다.", 404);
+  const formatId = content.context.scriptFormat?.id;
+  if (!formatId || formatId.includes("+")) throw new AppError("VALIDATION", "이 원고는 대본 포맷 하나를 쓰지 않아 저장할 곳이 없습니다.");
+  const { scriptFormatService } = await import("./script-formats");
+  const f = (await scriptFormatService.list()).find((x) => x.id === formatId);
+  if (!f) throw new AppError("NOT_FOUND", "대본 포맷을 찾을 수 없습니다.", 404);
+  const HEAD = "[사용자 요청 규칙]";
+  const line = `- ${rule}`;
+  if (f.guideline.includes(line)) return { formatName: f.name, added: false };
+  const guideline = f.guideline.includes(HEAD) ? `${f.guideline.trimEnd()}\n${line}` : `${f.guideline.trimEnd()}\n\n${HEAD}\n${line}`.trim();
+  await scriptFormatService.update(f.id, { ...f, guideline: guideline.slice(0, 8000) });
+  return { formatName: f.name, added: true };
+}
+
 /** v0.9.153 AI 가 적은 "이 후보는 포맷의 어느 문장을 따랐다" — 포맷 원문에 실제로 있는 것만 남긴다 (후보 문장 → 포맷 원문) */
 export function pickRefs(raw: unknown, candidates: string[], formatList: string[]): Record<string, string> {
   const norm = (x: string) => x.replace(/\s+/g, "").trim();
@@ -473,7 +493,8 @@ export const contentGenerationService = {
    * - 글(대본·설명글·본문 …): **다시 만들기** — 다른 내용으로 바꾼다 (블로그 본문은 소제목도 함께)
    * - 같은 입력·Context 로 다시 조립한다 (스타일 표본은 새로 뽑힌다)
    */
-  async regenerateSection(contentId: string, key: string): Promise<GeneratedContent> {
+  async regenerateSection(contentId: string, key: string, request?: string): Promise<GeneratedContent> {
+    const ask = String(request ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
     const repo = getRepositories();
     const userId = await getCurrentUserId();
     const content = await repo.contents.get(contentId);
@@ -544,6 +565,12 @@ export const contentGenerationService = {
         .join("\n"),
     });
 
+    // v0.9.157: 사용자가 적은 한 줄 요청 — 마지막에 둬서 가장 세게 따르게 (규칙·정직성·말끝은 그대로)
+    if (ask)
+      messages.push({
+        role: "user",
+        content: `[사용자 요청 — 이번에 가장 먼저 지킨다] ${ask}\n이 요청대로 ${sections.map((o) => o.label).join(", ")}을(를) 만든다. 단, 사실·정직성 규칙·대본 포맷의 말끝 규칙·형식(개수·JSON)은 그대로 지킨다.`,
+      });
     const ai = await getAIProvider();
     const result = await ai.generateStructured<Record<string, unknown>>({
       task: `content-regenerate:${content.featureId}`,
@@ -579,7 +606,7 @@ export const contentGenerationService = {
       const violations = findHonestyViolations(JSON.stringify(fresh));
       if (violations.length) notes.push(`정직성 검사 경고(${append ? "추가 만들기" : "다시 만들기"}): "${violations.join('", "')}" 표현 확인 필요`);
     }
-    const regenerated = [...(content.context.regenerated ?? []), { key, at: nowIso(), provider: result.provider, ...(append ? { mode: "append" as const } : {}) }].slice(-20);
+    const regenerated = [...(content.context.regenerated ?? []), { key, at: nowIso(), provider: result.provider, ...(append ? { mode: "append" as const } : {}), ...(ask ? { request: ask } : {}) }].slice(-20);
     const updated = await repo.contents.update(content.id, { output, headline, context: { ...content.context, notes, regenerated, userEdits, picks } });
     if (!updated) throw new AppError("NOT_FOUND", "콘텐츠를 찾을 수 없습니다.", 404);
     return updated;

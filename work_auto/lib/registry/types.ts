@@ -64,6 +64,8 @@ export interface FeatureDef {
   tags?: string[];
   /** v0.9.122: 메뉴·허브 카드에 보이지 않음 (다른 화면의 버튼으로만 들어감, 권한·주소는 그대로) */
   hideInMenu?: boolean;
+  /** v0.9.157: 메뉴에서 숨긴 기능이 열려 있을 때 대신 강조할 메뉴 (예: 정보성 원고 → 영상 원고) */
+  menuParent?: string;
 }
 
 /** 채널에 속하지 않는 단독 페이지 (사이드바 노출용) */
