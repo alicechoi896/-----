@@ -77,6 +77,15 @@ export function StayStudio() {
   const [msg, setMsg] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
   const [job, setJob] = useState<(VideoJob & { fileUrl?: string | null }) | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // v0.9.159 제품 라이브러리의 숙소 (분류 '숙소')
+  const [stays, setStays] = useState<{ id: string; name: string }[] | null>(null);
+  const [stayPick, setStayPick] = useState("");
+  useEffect(() => {
+    void api.products
+      .list()
+      .then((l) => setStays(l.filter((x) => x.productGroup === "stay").map((x) => ({ id: x.id, name: x.name }))))
+      .catch(() => setStays([]));
+  }, []);
 
   const open = useCallback(async (id: string) => {
     setMsg(null);
@@ -182,8 +191,36 @@ export function StayStudio() {
       ) : (
         <>
           <SectionCard title="① 숙소 사진" icon={ImagePlus} description={`사진 3~${STAY_MAX_PHOTOS}장 · 영상 컷 순서대로 (화살표로 순서 바꾸기). 사진은 9:16 으로 가운데를 꽉 채워 자릅니다. 쿠팡 주소는 한 번 시도하고, 막히면 사진을 저장해 올려 주세요.`} data-stay-photos>
+            <div className="mb-3 rounded-control border border-brand-line bg-brand-soft/30 p-2.5" data-stay-product>
+              <p className="text-[12.5px] font-semibold">제품 라이브러리에서 가져오기 (추천)</p>
+              {stays && stays.length ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <Select className="w-64" value={stayPick} placeholder="숙소 고르기" onChange={(e) => setStayPick(e.target.value)} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="제품 라이브러리 숙소" />
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={busy === "product"}
+                    disabled={!stayPick || p.photos.length >= STAY_MAX_PHOTOS}
+                    onClick={() =>
+                      void run("product", async () => {
+                        const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: p.id, productId: stayPick });
+                        setP(r.project);
+                        setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장과 숙소 정보(이름·사실 메모)를 가져왔습니다. 더 필요한 사진은 [사진 올리기]로 넣어 주세요.` : `가져올 사진이 없습니다 (제품 사진 ${r.found}장). [사진 올리기]로 넣어 주세요.` });
+                      })
+                    }
+                    data-stay-product-go
+                  >
+                    사진·정보 가져오기
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-1 text-[12px] text-fg-muted">
+                  숙소를 <b>제품 상세페이지 학습</b>으로 저장한 뒤, 제품 상세 위쪽 <b>분류</b>를 <b>숙소</b>로 바꾸면 여기에서 고를 수 있습니다 (사진·이름·특징을 한 번에).
+                </p>
+              )}
+            </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <Input defaultValue={p.name} onBlur={(e) => e.target.value !== p.name && void save({ name: e.target.value })} placeholder="숙소 이름 (예: 가평 ○○ 글램핑)" aria-label="숙소 이름" />
+              <Input key={`n${p.updatedAt}`} defaultValue={p.name} onBlur={(e) => e.target.value !== p.name && void save({ name: e.target.value })} placeholder="숙소 이름 (예: 가평 ○○ 글램핑)" aria-label="숙소 이름" />
               <div className="flex gap-1.5">
                 <Input id="stay-coupang" defaultValue={p.coupangUrl} placeholder="쿠팡 숙소 주소 (선택)" aria-label="쿠팡 주소" />
                 <Button
@@ -205,7 +242,7 @@ export function StayStudio() {
                 </Button>
               </div>
             </div>
-            <Textarea className="mt-2" rows={2} defaultValue={p.note} onBlur={(e) => e.target.value !== p.note && void save({ note: e.target.value })} placeholder="사실 메모 (선택, 대본에 그대로 근거로 씀) — 예: 해발 300m, 개별 노천탕, 서울에서 1시간 반" aria-label="숙소 메모" />
+            <Textarea key={`m${p.updatedAt}`} className="mt-2" rows={2} defaultValue={p.note} onBlur={(e) => e.target.value !== p.note && void save({ note: e.target.value })} placeholder="사실 메모 (선택, 대본에 그대로 근거로 씀) — 예: 해발 300m, 개별 노천탕, 서울에서 1시간 반" aria-label="숙소 메모" />
             <input
               ref={fileRef}
               type="file"

@@ -17,7 +17,7 @@ export interface RemoteOption {
 const LOADERS: Record<RemoteSource, (param?: string) => Promise<RemoteOption[]>> = {
   products: async () =>
     // v0.9.135: 패션 제품은 AI 패션에서만 — 원고 화면에는 가전만
-    (await api.products.list()).filter((p) => p.productGroup !== "fashion").map((p) => ({ value: p.id, label: `${p.name} · ${p.brand}`, description: p.oneLiner })),
+    (await api.products.list()).filter((p) => p.productGroup !== "fashion" && p.productGroup !== "stay").map((p) => ({ value: p.id, label: `${p.name} · ${p.brand}`, description: p.oneLiner })),
   // 찜한 영상(★)이 먼저, 그다음 기본 검색 조건의 상위 영상
   "youtube-trends": async () =>
     (await api.trends.options("youtube")).map((t) => ({

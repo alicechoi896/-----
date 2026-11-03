@@ -131,13 +131,16 @@ export interface Product {
   productGroup?: ProductGroup;
 }
 
-export type ProductGroup = "appliance" | "fashion";
+export type ProductGroup = "appliance" | "fashion" | "stay";
 export const PRODUCT_GROUPS: { value: ProductGroup; label: string }[] = [
   { value: "appliance", label: "가전" },
   { value: "fashion", label: "패션" },
+  // v0.9.159 숙소: AI 숙소 영상에서만 (원고·영상 자동 제작 제품 고르기에는 안 나옴)
+  { value: "stay", label: "숙소" },
 ];
 /** 분류 값이 없으면 가전 */
-export const groupOf = (p: Pick<Product, "productGroup">): ProductGroup => (p.productGroup === "fashion" ? "fashion" : "appliance");
+export const groupOf = (p: Pick<Product, "productGroup">): ProductGroup => (p.productGroup === "fashion" || p.productGroup === "stay" ? p.productGroup : "appliance");
+export const cleanGroup = (v: unknown): ProductGroup => (v === "fashion" || v === "stay" ? v : "appliance");
 
 export interface ProductDetail {
   product: Product;

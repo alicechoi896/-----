@@ -249,7 +249,7 @@ async function usableVideoIds(owner: string): Promise<Map<string, string[]>> {
 /** 화면 안내: 전체 제품 중 만들 수 있는 제품 수 (외부 호출 없음) */
 export async function eligibility(): Promise<{ total: number; eligible: number; noVideo: number; fewVideo: number; recent: number }> {
   const owner = await getCurrentUserId();
-  const [products, count, recent] = await Promise.all([productService.list().then((l) => l.filter((p) => p.productGroup !== "fashion")), linkedVideoCount(owner), recentProductIds(owner)]);
+  const [products, count, recent] = await Promise.all([productService.list().then((l) => l.filter((p) => p.productGroup !== "fashion" && p.productGroup !== "stay")), linkedVideoCount(owner), recentProductIds(owner)]);
   let noVideo = 0;
   let fewVideo = 0;
   let rec = 0;
@@ -266,7 +266,7 @@ export async function eligibility(): Promise<{ total: number; eligible: number; 
 
 export async function chooseProducts(count: number, exclude: Set<string> = new Set()): Promise<{ picks: { productId: string; productName: string; keyword: string; reason: string; videos: number }[]; note: string | null; aiCalls: number }> {
   const owner = await getCurrentUserId();
-  const [products, videoCount, recent] = await Promise.all([productService.list().then((l) => l.filter((p) => p.productGroup !== "fashion")), linkedVideoCount(owner), recentProductIds(owner)]);
+  const [products, videoCount, recent] = await Promise.all([productService.list().then((l) => l.filter((p) => p.productGroup !== "fashion" && p.productGroup !== "stay")), linkedVideoCount(owner), recentProductIds(owner)]);
   const pool = products.filter((p) => (videoCount.get(p.id) ?? 0) >= AUTO_LIMITS.minVideos && !recent.has(p.id) && !exclude.has(p.id));
   if (!pool.length) return { picks: [], note: `만들 수 있는 제품이 없습니다 (원본을 보관한 샤오홍슈 영상 ${AUTO_LIMITS.minVideos}개 이상 + 최근 ${AUTO_LIMITS.repeatDays}일 안에 만들지 않은 제품). 제품 상세 › 연결된 영상에서 [다운로드]를 누르면 원본이 보관됩니다.`, aiCalls: 0 };
   const cands: Candidate[] = [];

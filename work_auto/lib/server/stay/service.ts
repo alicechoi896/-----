@@ -9,7 +9,7 @@ import { lastVoiceSettings } from "../automation/auto-video";
 import { AppError } from "../http";
 import { getAIProvider, getVideoAIProvider } from "../providers/registry";
 import { VideoAIError } from "../providers/video-ai/kie";
-import { getCurrentUserId } from "../repositories";
+import { getCurrentUserId, getRepositories } from "../repositories";
 import { safeFetch } from "../security/safe-url";
 import { aiClipService } from "../video/ai-clips";
 import { videoJobService } from "../video/service";
@@ -48,6 +48,8 @@ export interface StayProject {
   clips: AiClip[];
   /** AI 컷 id → 사진 key */
   clipKeys: Record<string, string>;
+  /** v0.9.159 가져온 제품 라이브러리 숙소 */
+  productId?: string | null;
   jobId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -200,6 +202,40 @@ export const stayService = {
     console.info("[Stay] coupang", JSON.stringify({ status: res?.status ?? 0, found: found.length, added }));
     await save(owner, list, p);
     return { project: await withUrls(p), added, blocked: !res || !res.ok, status: res?.status ?? 0 };
+  },
+
+  /** v0.9.159 제품 라이브러리의 숙소(분류 '숙소')에서 사진·이름·사실 메모 가져오기 (무료, 외부 AI 없음) */
+  async fromProduct(input: { id?: unknown; productId?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const productId = String(input.productId ?? "");
+    const repo = getRepositories();
+    const product = await repo.products.get(productId);
+    if (!product || product.userId !== owner) throw new AppError("NOT_FOUND", "제품을 찾을 수 없습니다.", 404);
+    const sources = await repo.productSources.list((x) => x.productId === productId, { productId }).catch(() => []);
+    const analysis = (await repo.productAnalyses.list((a) => a.productId === productId, { productId }).catch(() => [])).sort((a, b) => b.version - a.version)[0];
+    const urls = [...new Set([product.imageUrl, ...sources.flatMap((x) => x.raw?.imageUrls ?? [])].filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)))].slice(0, STAY_MAX_PHOTOS - p.photos.length);
+    let added = 0;
+    for (const u of urls) {
+      try {
+        const r = await safeFetch(u, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Accept: "image/*" } });
+        if (!r.ok) continue;
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 15_000 || buf.length > MAX_IMAGE_BYTES) continue;
+        await addPhoto(owner, p, buf);
+        added++;
+      } catch {
+        // 못 받은 사진은 건너뛴다
+      }
+    }
+    p.productId = productId;
+    if (!p.name || p.name === "새 숙소 영상") p.name = product.name.slice(0, 60);
+    if (!p.note.trim() && analysis) {
+      const sm = analysis.summary;
+      p.note = [sm.oneLiner, ...(sm.keyFeatures ?? []), ...(sm.differentiators ?? [])].filter(Boolean).join(" / ").slice(0, 1000);
+    }
+    await save(owner, list, p);
+    return { project: await withUrls(p), added, found: urls.length };
   },
 
   /** [대본 만들기] AI 1번: 사진을 보고 제목 2줄 + 컷마다 대사·움직임 */
