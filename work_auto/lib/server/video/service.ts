@@ -10,6 +10,7 @@ import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { aiSourceId } from "@/lib/types/video-production";
 import { sanitizeClips } from "./ai-clips";
+import { readFrames } from "./frames";
 import { STAY_MAX_PHOTOS, cleanFrame, VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
@@ -139,6 +140,7 @@ export const videoJobService = {
       if (want && want.userId === userId && features.has(want.featureId) && Array.isArray(want.output.script)) contents.unshift(want);
     }
     const videos = await myVideos(userId, null);
+    const frames = await readFrames(userId).catch(() => ({}) as Awaited<ReturnType<typeof readFrames>>);
     const [ai, tts, typecast] = await Promise.all([getAIProvider(), getTTSProvider(), getTTSProvider("typecast").catch(() => null)]);
     return {
       contents: contents.map((c) => ({
@@ -159,7 +161,7 @@ export const videoJobService = {
         hook: c.context.workflow?.selected?.hook || null,
         cta: c.context.workflow?.selected?.cta || null,
       })),
-      videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null, note: v.note ?? null })),
+      videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null, note: v.note ?? null, frame: frames[v.id] ?? null })),
       assets: videoAssets.summary(),
       ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, typecast: Boolean(typecast), giphy: Boolean(await getGiphyProvider().catch(() => null)) },
       typecastEmotions: TYPECAST_EMOTIONS,
@@ -273,13 +275,13 @@ export const videoJobService = {
       sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null,
       pinned: Boolean(s.pinned),
       gifPos: s.gifPos === "center" || s.gifPos === "bottom" ? s.gifPos : ("top" as const),
-      gifSize: s.gifSize === "s" || s.gifSize === "l" ? s.gifSize : ("m" as const),
+      gifSize: s.gifSize === "s" || s.gifSize === "l" || s.gifSize === "xl" || s.gifSize === "xxl" ? s.gifSize : ("m" as const),
       gifSec: s.gifSec != null && Number.isFinite(Number(s.gifSec)) ? Math.min(8, Math.max(0.5, Number(Number(s.gifSec).toFixed(1)))) : null,
       startAt: s.startAt != null && Number.isFinite(Number(s.startAt)) ? Math.min(3600, Math.max(0, Number(Number(s.startAt).toFixed(2)))) : null,
       frame: cleanFrame(s.frame),
       gifBox:
         s.gifBox && Number.isFinite(Number(s.gifBox.x)) && Number.isFinite(Number(s.gifBox.y)) && Number.isFinite(Number(s.gifBox.w))
-          ? { x: Math.min(1, Math.max(0, Number(s.gifBox.x))), y: Math.min(1, Math.max(0, Number(s.gifBox.y))), w: Math.min(1, Math.max(0.1, Number(s.gifBox.w))) }
+          ? { x: Math.min(1, Math.max(0, Number(s.gifBox.x))), y: Math.min(1, Math.max(0, Number(s.gifBox.y))), w: Math.min(2, Math.max(0.1, Number(s.gifBox.w))) }
           : null,
     }));
     if (!scenes.some((s) => s.narration)) throw new AppError("VALIDATION", "컷이 없습니다. 컷 계획을 다시 만들어 주세요.");

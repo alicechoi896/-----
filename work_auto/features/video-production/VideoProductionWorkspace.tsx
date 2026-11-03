@@ -30,6 +30,7 @@ import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { GiphyPicker } from "./GiphyPicker";
 import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
 import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
+import { frameStyle } from "./FrameDialog";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
@@ -37,7 +38,7 @@ const VOICE_PREFS_KEY = "vp-voice-prefs:v1";
 /** 미리보기 글꼴 (v0.9.78): 영상에 쓰는 글꼴 파일을 그대로 받아 미리보기도 같은 글꼴로 */
 const previewFont = (key: string | undefined) => ({ fontFamily: `"vp-${key ?? "pretendard"}", "Pretendard", sans-serif`, fontWeight: key === "pretendard" ? 900 : 400 });
 const FONT_FACES = CAPTION_FONTS.map((f) => `@font-face{font-family:"vp-${f.value}";src:url(/api/video-production/font/${f.value});font-display:swap}`).join("");
-const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: "확대로 제거", blur: "블러", rejected: "확인 필요", unchecked: "검사 안 됨" };
+const TREATMENT_LABEL: Record<string, string> = { clean: "글자 없음", crop: "확대로 제거", blur: "확대 (글자 일부 남음)", rejected: "확인 필요", unchecked: "검사 안 됨" };
 /**
  * 영상 자동 제작 (v0.9.51) — YouTube·NAVER 클립 공통. docs/VIDEO_PRODUCTION.md
  * ① 대본 고르기(2단계 결과) → ② 영상 소재·음성 → [컷 계획 만들기] → ③ 컷 확인·클립 교체 → [영상 만들기] → ④ 결과·검수·승인
@@ -964,7 +965,7 @@ function JobPanel({
                                 </option>
                               ))}
                             </select>
-                            <select value={s.gifSize ?? "m"} onChange={(e) => setScene(i, { gifSize: e.target.value as "s" | "m" | "l" })} className="h-6 rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 GIF 크기`}>
+                            <select value={s.gifSize ?? "m"} onChange={(e) => setScene(i, { gifSize: e.target.value as NonNullable<VideoPlan["scenes"][number]["gifSize"]> })} className="h-6 rounded border border-line bg-canvas px-1" aria-label={`${i + 1}번 컷 GIF 크기`}>
                               {GIF_SIZES.map((x) => (
                                 <option key={x.value} value={x.value}>
                                   크기 {x.label}
@@ -1312,17 +1313,6 @@ function RangeDialog({ videos, scenes, ranges, onClose, onSave }: { videos: Clip
   );
 }
 
-/** 9:16 결과 미리보기에 확대·위치를 그대로 보여 주는 CSS (렌더의 자를 창과 같은 계산) */
-function frameStyle(f: Frame): React.CSSProperties {
-  const z = Math.min(2.4, Math.max(1, f.zoom));
-  const w = 1 / z;
-  const x0 = Math.min(1 - w, Math.max(0, f.x - w / 2));
-  const y0 = Math.min(1 - w, Math.max(0, f.y - w / 2));
-  const ox = z > 1.001 ? (x0 / (1 - w)) * 100 : 50;
-  const oy = z > 1.001 ? (y0 / (1 - w)) * 100 : 50;
-  return { transform: `scale(${z})`, transformOrigin: `${ox}% ${oy}%` };
-}
-
 /**
  * 후보 영상 미리보기: 보관한 원본을 재생 (외부 호출 없음, 1시간 주소)
  * 왼쪽 = 이 컷에 실제로 나올 9:16 화면. 시간 막대로 구간을 보고 [지금 위치부터], 배율·끌기로 화면을 정한다
@@ -1402,7 +1392,7 @@ function ClipGallery({ videos, current, startAt, frame, narration, onClose, onPi
                   muted
                   playsInline
                   className="pointer-events-none size-full object-cover"
-                  style={manual ? frameStyle(fr) : undefined}
+                  style={manual ? frameStyle(fr) : pick.frame ? frameStyle(pick.frame) : undefined}
                   onLoadedMetadata={(e) => {
                     setDur(e.currentTarget.duration || 0);
                     e.currentTarget.currentTime = sec;
@@ -1418,7 +1408,11 @@ function ClipGallery({ videos, current, startAt, frame, narration, onClose, onPi
                   <span className="relative rounded bg-canvas/85 px-2 py-1">{pick && pick.id in urls ? "원본을 보관하지 않아 재생은 안 됩니다 (표지만)" : "불러오는 중…"}</span>
                 </div>
               )}
-              {manual && <span className="pointer-events-none absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] text-white">끌어서 위치 · {fr.zoom.toFixed(1)}배</span>}
+              {manual ? (
+                <span className="pointer-events-none absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] text-white">끌어서 위치 · {fr.zoom.toFixed(1)}배</span>
+              ) : pick?.frame ? (
+                <span className="pointer-events-none absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] text-white">영상 기본 화면 {pick.frame.zoom.toFixed(1)}배</span>
+              ) : null}
             </div>
             {pick && urls[pick.id] && (
               <div className="space-y-1.5" data-clip-seek>
@@ -1458,7 +1452,7 @@ function ClipGallery({ videos, current, startAt, frame, narration, onClose, onPi
                 <Button size="sm" variant="primary" className="w-full" onClick={() => onPick(result())} data-clip-pick>
                   {pick.id === current ? "이 설정으로 이 컷에 쓰기" : "이 컷에 쓰기"}
                 </Button>
-                <p className="text-[11px] text-fg-subtle">화면을 직접 정하면 그 컷은 자동 확대·블러 대신 이 화면 그대로 만듭니다.</p>
+                <p className="text-[11px] text-fg-subtle">화면을 직접 정하면 그 컷은 자동 확대 대신 이 화면 그대로 만듭니다.</p>
               </>
             )}
           </div>
@@ -1585,7 +1579,7 @@ function GifPlacer({ videoUrl, at, gif, box, title, onClose, onSave }: { videoUr
         </div>
         <label className="flex items-center gap-2 text-[12.5px]">
           크기
-          <input type="range" min={15} max={100} value={Math.round(b.w * 100)} onChange={(e) => setB({ ...b, w: Number(e.target.value) / 100 })} className="flex-1" aria-label="GIF 크기" />
+          <input type="range" min={15} max={200} value={Math.round(b.w * 100)} onChange={(e) => setB({ ...b, w: Number(e.target.value) / 100 })} className="flex-1" aria-label="GIF 크기" />
           {Math.round(b.w * 100)}%
         </label>
         <p className="text-[11.5px] text-fg-subtle">GIF 를 마우스로 끌어 원하는 자리에 놓으세요. 미리보기 영상에는 이전 GIF 가 보일 수 있습니다 — 저장한 뒤 [고친 내용으로 다시 만들기]를 누르면 영상에 반영됩니다.</p>

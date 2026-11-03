@@ -25,7 +25,7 @@ export interface VideoScene {
   gif?: { id: string; url: string; preview: string; title: string } | null;
   /** v0.9.137 GIF 위치·크기 (완성 후 편집에서 바꿈, 없으면 위·보통) */
   gifPos?: "top" | "center" | "bottom";
-  gifSize?: "s" | "m" | "l";
+  gifSize?: "s" | "m" | "l" | "xl" | "xxl";
   /** v0.9.139 편집기에서 끌어다 놓은 GIF 자리 (가운데 x·y, 너비 w — 화면 비율 0~1). 있으면 gifPos·gifSize 대신 */
   gifBox?: { x: number; y: number; w: number } | null;
   /** v0.9.139 사람이 고른 원본 구간 시작(초) — 대본과 장면을 딱 맞추고 싶을 때. 있으면 자동 구간 고르기 대신 */

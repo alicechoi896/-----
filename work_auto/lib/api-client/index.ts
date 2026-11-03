@@ -297,6 +297,8 @@ export const api = {
     status: (tasks: import("@/lib/types/drama").DramaTask[]) => request<{ tasks: import("@/lib/types/drama").DramaTask[] }>("/api/drama-test/status", { method: "POST", body: json({ tasks }) }),
   },
   videoProduction: {
+    frames: () => request<Record<string, { zoom: number; x: number; y: number }>>("/api/video-production/frames"),
+    setFrame: (videoId: string, frame: { zoom: number; x: number; y: number } | null) => request<Record<string, { zoom: number; x: number; y: number }>>("/api/video-production/frames", { method: "PUT", body: json({ videoId, frame }) }),
     options: (channelId: VideoChannel, contentId?: string) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}${contentId ? `&contentId=${encodeURIComponent(contentId)}` : ""}`),
     /** v0.9.147 섬네일 이미지 */
     thumbnail: (jobId: string) => request<{ vertical: string | null; horizontal: string | null; sceneIndex: number; text: string } | null>(`/api/video-jobs/${jobId}/thumbnail`),
@@ -537,7 +539,7 @@ export const api = {
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
   contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number; title?: string; thumbs?: string[]; thumbPick?: string | null; scriptPick?: number; hook?: string | null; cta?: string | null }[];
-  videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null; /** v0.9.155 영상 가져올 때 남긴 메모 */ note?: string | null }[];
+  videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null; /** v0.9.155 영상 가져올 때 남긴 메모 */ note?: string | null; /** v0.9.161 영상 URL 가져오기에서 정한 기본 화면 */ frame?: { zoom: number; x: number; y: number } | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean; giphy?: boolean };
   typecastEmotions: readonly { value: string; label: string }[];

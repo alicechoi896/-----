@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, Download, FolderDown, History, ListPlus, ShieldCheck, Sparkles, Terminal, Trash2 } from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
@@ -28,6 +28,7 @@ import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatRelative } from "@/lib/utils";
 import { XhsJobStatus, useXhsDownloads } from "./useXhsDownloads";
 import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
+import { FrameDialog, type Frame } from "@/features/video-production/FrameDialog";
 import { SocialSearchPanel } from "./SocialSearchPanel";
 
 const MAX_BATCH = 20;
@@ -163,6 +164,15 @@ export function VideoImport() {
     if (direct.length) await xhs.runAll(direct, "참고영상");
   }
 
+  // v0.9.161 영상별 기본 화면 (확대·위치)
+  const [frames, setFrames] = useState<Record<string, Frame>>({});
+  const [frameFor, setFrameFor] = useState<ReferenceVideo | null>(null);
+  useEffect(() => {
+    void api.videoProduction
+      .frames()
+      .then(setFrames)
+      .catch(() => undefined);
+  }, []);
   const columns: Column<ReferenceVideo>[] = [
     {
       key: "title",
@@ -200,6 +210,19 @@ export function VideoImport() {
       ),
     },
     { key: "note", header: "메모", render: (v) => <span className="text-fg-muted">{v.note ?? "-"}</span> },
+    {
+      key: "frame",
+      header: "화면",
+      width: "110px",
+      render: (v) =>
+        v.platform === "xiaohongshu" || v.platform === "douyin" ? (
+          <button type="button" onClick={() => setFrameFor(v)} className={cn("whitespace-nowrap rounded px-2 py-1 text-[12px] ring-1 ring-inset", frames[v.id] ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-muted ring-line hover:text-brand")} title="로고·글자가 안 보이게 확대·위치를 정해 둡니다" data-frame-open>
+            {frames[v.id] ? `화면 ${frames[v.id].zoom.toFixed(1)}배` : "화면 정하기"}
+          </button>
+        ) : (
+          <span className="text-fg-subtle">-</span>
+        ),
+    },
     { key: "createdAt", header: "가져온 시각", render: (v) => <span className="whitespace-nowrap text-fg-muted">{formatRelative(v.createdAt)}</span> },
     {
       key: "actions",
@@ -271,6 +294,23 @@ export function VideoImport() {
 
   return (
     <div className="space-y-5">
+      {frameFor && (
+        <FrameDialog
+          videoId={frameFor.id}
+          title={frameFor.title}
+          initial={frames[frameFor.id] ?? null}
+          onClose={() => setFrameFor(null)}
+          onSaved={(fr) => {
+            setFrames((m) => {
+              const n = { ...m };
+              if (fr) n[frameFor.id] = fr;
+              else delete n[frameFor.id];
+              return n;
+            });
+            setFrameFor(null);
+          }}
+        />
+      )}
       <XhsPermanentLinks />
       <SectionCard
         title="영상 가져오기"

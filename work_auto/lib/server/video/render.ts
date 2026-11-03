@@ -34,6 +34,7 @@ import { groupLines, splitByChars, splitBySilence } from "@/lib/video-production
 import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
+import { readFrames } from "./frames";
 import { forgetStored } from "./vault";
 import { SCAN_VERSION, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
@@ -43,7 +44,7 @@ import { captionY, endingY, renderCaption, renderEnding, renderSticker, renderTi
 
 /**
  * 영상 렌더 엔진 (v0.9.51) — Vercel 함수 1번 안에서 끝낸다 (임시 폴더에서 만들고 지운다).
- * 순서: 원본 받기 → 원본 글자 검사 → AI 음성(마디마다, 앞뒤 무음 정리) → 컷마다 구간 고르기·크롭·블러 → 컷 잇기
+ * 순서: 원본 받기 → 원본 글자 검사 → AI 음성(마디마다, 앞뒤 무음 정리) → 컷마다 구간 고르기·크롭 (블러는 v0.9.160 부터 끔, C.blurText) → 컷 잇기
  *      → 상단 제목·자막·화살표·엔딩 → 배경음악·효과음 → mp4 → 자동 검사
  * 외부 호출: AI(이미지 읽기·음성)만. TikHub 검색·Bright Data·YouTube·NAVER = 0 (샤오홍슈 재생 주소가 막힐 때만 TikHub 상세 1회).
  */
@@ -287,6 +288,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     timing.match = Date.now() - t0;
     const usedRanges = new Map<string, [number, number][]>();
     let t = 0;
+    const defaultFrames = await readFrames(job.userId).catch(() => ({}) as Record<string, { zoom: number; x: number; y: number }>);
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number }[] = [];
     for (const [k, s] of scenes.entries()) {
       const isLast = k === scenes.length - 1;
@@ -344,11 +346,13 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const fb = sources.get(id);
         const tr = fb?.scan.checked ? coverAll([...boxesIn(fb.scan, 0, dur), ...persistentBoxes(fb.scan)], aspects.get(id)) : null;
         best = { id, start: 0, tr: tr && tr.kind !== "clean" ? { ...tr, kind: "rejected" } : { kind: "rejected" } };
-        s.issue = "원본 글자가 많아 확대·블러로 최대한 가렸습니다. 다른 클립으로 바꾸면 더 깔끔합니다.";
+        s.issue = "원본 글자가 많아 확대로 최대한 가렸습니다 (일부 보일 수 있음). 다른 클립이나 [영상 보며 고르기]의 화면 직접 정하기로 바꾸면 더 깔끔합니다.";
       }
-      // v0.9.156: 사람이 화면(확대·위치)을 정했으면 자동 확대·블러 대신 그대로 (같은 원본일 때만)
-      if (s.frame && !isAiSource(best.id) && best.id === s.sourceVideoId) {
-        best = { ...best, tr: { kind: "crop", crop: frameCrop(s.frame) } };
+      // v0.9.156: 사람이 화면(확대·위치)을 정했으면 자동 확대 대신 그대로 (같은 원본일 때만)
+      // v0.9.161: 컷에서 안 정했으면 영상 URL 가져오기에서 정한 그 영상의 기본 화면
+      const manual = s.frame && best.id === s.sourceVideoId ? s.frame : defaultFrames[best.id];
+      if (manual && !isAiSource(best.id)) {
+        best = { ...best, tr: { kind: "crop", crop: frameCrop(manual) } };
         s.issue = null;
       }
       const src = sources.get(best.id)!;
@@ -358,7 +362,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       s.start = Number(t.toFixed(2));
       s.duration = Number(dur.toFixed(2));
       s.textTreatment = best.tr.kind as TextTreatment;
-      if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 가렸습니다 (확대 또는 블러 · AI 이미지 읽기 연결 필요).";
+      if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 확대로 잘랐습니다 (AI 이미지 읽기 연결 필요).";
       t += dur;
 
       picks.push({ k, s, src, best, dur });
@@ -402,7 +406,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     if (job.plan.ending) note(await renderEnding(endPng), ENDING_TEMPLATE.font);
     let attnTurn = 0;
     // v0.9.120: GIF 는 컷 앞에서 GIF_CONFIG.showSec 동안, 컷이 짧으면 남은 시간은 다음 컷 앞부분에 (같은 GIF 이어서)
-    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number; pos: "top" | "center" | "bottom"; size: "s" | "m" | "l"; box?: { x: number; y: number; w: number } | null }[]>();
+    const gifShow = new Map<number, { file: string; from: number; to: number; offset: number; pos: "top" | "center" | "bottom"; size: "s" | "m" | "l" | "xl" | "xxl"; box?: { x: number; y: number; w: number } | null }[]>();
     {
       let turn = 0;
       for (const { k, s, dur } of picks) {
@@ -444,14 +448,14 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const c = best.tr.crop;
         vf.push(`crop=${Math.round(size.width * c.w)}:${Math.round(size.height * c.h)}:${Math.round(size.width * c.x)}:${Math.round(size.height * c.y)}`);
       }
-      vf.push(`scale=${W}:${H}:force_original_aspect_ratio=increase`, `crop=${W}:${H}`, `fps=${C.fps}`, "setsar=1");
+      vf.push(`scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos`, `crop=${W}:${H}`, "unsharp=5:5:0.45:5:5:0", `fps=${C.fps}`, "setsar=1");
       // 원본이 컷보다 짧으면(AI 컷 5초 등) 반복해서 채운다
       const loop = src.duration < best.start + dur + 0.05 ? ["-stream_loop", "-1"] : [];
       const inputs: string[] = [...loop, "-ss", String(best.start), "-t", dur.toFixed(3), "-i", src.file];
       let idx = 1;
       let filter = `[0:v]${vf.join(",")}[base]`;
       let cur = "base";
-      const blurBoxes = best.tr.blurs ?? (best.tr.blur ? [best.tr.blur] : []);
+      const blurBoxes = C.blurText ? (best.tr.blurs ?? (best.tr.blur ? [best.tr.blur] : [])) : [];
       if (blurBoxes.length && size.width) {
         // 블러 상자를 출력 좌표로 (원본 → 꽉 채우기 비율). 상자마다 따로 (v0.9.66)
         // v0.9.120: 확대 창이 있으면 그 창 기준 좌표로 바꾼다
@@ -495,14 +499,14 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const area = GIF_CONFIG.positions[show.pos] ?? GIF_CONFIG.positions.top;
         const mul = GIF_CONFIG.sizes[show.size] ?? 1;
         const boxH = Math.round((area.bottom - area.top) * mul);
-        const maxW = Math.min(W, Math.round(GIF_CONFIG.maxWidth * mul));
+        const maxW = Math.round(GIF_CONFIG.maxWidth * mul);
         const cy = Math.round((area.top + area.bottom) / 2);
         // v0.9.139 편집기에서 끌어다 놓은 자리: 가운데 (x·y) 와 너비
         const bx = show.box ? Math.round(show.box.x * W) : null;
         const byy = show.box ? Math.round(show.box.y * H) : null;
-        const bw = show.box ? Math.max(40, Math.round(show.box.w * W)) : null;
+        const bw = show.box ? Math.max(40, Math.round(Math.min(2, show.box.w) * W)) : null;
         const trim = show.offset > 0 ? `trim=start=${show.offset.toFixed(3)},setpts=PTS-STARTPTS,` : "";
-        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,scale=${bw ?? maxW}:${bw ? Math.round(H * 0.9) : boxH}:force_original_aspect_ratio=decrease[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=${bx !== null ? `${bx}-w/2` : "(W-w)/2"}:${byy !== null ? byy : cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
+        add(["-ignore_loop", "0", "-i", show.file], (i, from) => `[${i}:v]${trim}format=rgba,${bw ? `scale=${bw - (bw % 2)}:-2` : `scale=${maxW}:${boxH}:force_original_aspect_ratio=decrease`}[gf${k}_${g}];[${from}][gf${k}_${g}]overlay=${bx !== null ? `${bx}-w/2` : "(W-w)/2"}:${byy !== null ? byy : cy}-h/2:shortest=0:eof_action=pass:enable='between(t,${show.from.toFixed(3)},${show.to.toFixed(3)})'[gg${k}_${g}]`, `gg${k}_${g}`);
       }
       if (s.attention && !isLast && !gifShow.has(k)) {
         const a = ATTENTION_CONFIG;

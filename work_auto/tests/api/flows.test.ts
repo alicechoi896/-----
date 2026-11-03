@@ -526,6 +526,20 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(tk.items.some((r) => r.plays !== null)).toBe(true);
   });
 
+  it("영상별 기본 화면: 저장 → 목록·영상 만들기 준비에 보임 → 1배면 지움 (v0.9.161)", async ({ skip }) => {
+    if (!reachable) skip();
+    const vids = ((await j<{ id: string; platform: string }[]>("/api/videos")).data ?? []).filter((v) => v.platform === "xiaohongshu");
+    if (!vids.length) return;
+    const id = vids[0].id;
+    const r = (await post("/api/video-production/frames", { videoId: id, frame: { zoom: 1.6, x: 0.4, y: 0.6 } }, "PUT")).data as Record<string, { zoom: number }>;
+    expect(r[id].zoom).toBe(1.6);
+    type O = { videos: { id: string; frame?: { zoom: number } | null }[] };
+    expect((await j<O>("/api/video-production/options?channelId=youtube")).data.videos.find((v) => v.id === id)?.frame?.zoom).toBe(1.6);
+    const cleared = (await post("/api/video-production/frames", { videoId: id, frame: { zoom: 1, x: 0.5, y: 0.5 } }, "PUT")).data as Record<string, unknown>;
+    expect(cleared[id]).toBeUndefined();
+    expect((await post("/api/video-production/frames", { videoId: "nope", frame: null }, "PUT")).ok).toBe(false);
+  });
+
   it("AI 숙소 영상(데모): 사진 3장 → 제목·대사(AI) → 살아 움직이게(확인 필수) → 상태 → 영상 만들기 (v0.9.157)", async ({ skip }) => {
     if (!reachable) skip();
     const { createCanvas } = await import("@napi-rs/canvas");

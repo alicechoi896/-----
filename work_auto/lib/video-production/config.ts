@@ -10,8 +10,9 @@ export const VIDEO_RENDER_CONFIG = {
   height: 1920,
   fps: 30,
   /** libx264 품질 (낮을수록 고화질·큰 파일) */
-  crf: 23,
-  preset: "superfast",
+  // v0.9.161 화질: 23 → 20 (낮을수록 고화질), 확대는 lanczos + 약한 선명 보정
+  crf: 20,
+  preset: "veryfast",
 
   /** 무음 정리: 마디마다 앞뒤 무음을 자르고, 마디 사이는 짧은 호흡만 */
   silenceThresholdDb: -35,
@@ -30,6 +31,8 @@ export const VIDEO_RENDER_CONFIG = {
   // v0.9.85: 1.8 → 2.0 (자막·로고가 있으면 더 확대)
   // v0.9.120: 2.0 → 2.4 (자막·로고가 보이면 블러보다 확대가 먼저)
   maxCropZoom: 2.4,
+  /** v0.9.160: 남은 글자·로고 블러 끔 (확대해도 블러 자국이 보여 오히려 불편하다는 요청). 글자는 구간 고르기·확대로만 피한다 */
+  blurText: false,
   textMaskPadding: 0.04,
   textMaskTimePaddingSec: 0.3,
   /** 원본 글자 검사: 클립마다 몇 장을 볼지 (AI Vision 1회) */
@@ -130,7 +133,8 @@ export const GIF_CONFIG = {
   bottom: 1000,
   /** v0.9.137 완성 후 편집: 위치(위·가운데·아래)별 세로 범위, 크기별 배율 */
   positions: { top: { top: 350, bottom: 1000 }, center: { top: 640, bottom: 1280 }, bottom: { top: 1180, bottom: 1760 } },
-  sizes: { s: 0.6, m: 1, l: 1.15 },
+  // v0.9.161: 아주 크게(1.5배)·최대(2배) — 화면보다 커도 된다 (밖은 잘림)
+  sizes: { s: 0.6, m: 1, l: 1.15, xl: 1.5, xxl: 2 },
 } as const;
 export const GIF_POSITIONS = [
   { value: "top", label: "위" },
@@ -141,6 +145,8 @@ export const GIF_SIZES = [
   { value: "s", label: "작게" },
   { value: "m", label: "보통" },
   { value: "l", label: "크게" },
+  { value: "xl", label: "아주 크게" },
+  { value: "xxl", label: "최대" },
 ] as const;
 
 export const ATTENTION_CONFIG = {

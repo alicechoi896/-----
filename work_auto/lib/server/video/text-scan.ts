@@ -309,7 +309,8 @@ export const TREATMENT_RANK: Record<TextTreatment, number> = { clean: 0, crop: 1
  * 이미 쓴 구간과 겹치지 않고, 가릴 수 없는 글자(rejected)는 건너뛴다. 같은 점수면 앞 구간.
  */
 // v0.9.76: 자막·로고는 확대로 가리는 것을 블러보다 먼저
-const PENALTY: Record<TextTreatment, number> = { clean: 0, crop: 0.7, blur: 1.5, unchecked: 2, rejected: 99 };
+// v0.9.160: 블러를 끄면 'blur' 구간은 글자가 그대로 보이므로 크게 깎는다 (글자 없거나 확대로 피하는 구간을 먼저)
+const PENALTY: Record<TextTreatment, number> = { clean: 0, crop: 0.7, blur: VIDEO_RENDER_CONFIG.blurText ? 1.5 : 6, unchecked: 2, rejected: 99 };
 const JOSA = /(으로|에서|까지|부터|처럼|이에요|예요|해요|하죠|이죠|은|는|이|가|을|를|에|도|로|의|만|요|죠|고|다)$/;
 export const wordsOf = (text: string) =>
   [...new Set(text.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).map((w) => w.replace(JOSA, "")).filter((w) => w.length >= 2))];
