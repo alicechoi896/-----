@@ -1,6 +1,7 @@
 import {
   AudioLines,
   BedDouble,
+  GalleryHorizontal,
   BookOpen,
   Clapperboard,
   Film,
@@ -195,6 +196,21 @@ export const FEATURES: FeatureDef[] = [
   },
 
   // ───────── Instagram ─────────
+  {
+    id: "product-carousel",
+    channelId: "instagram",
+    order: 2,
+    title: "제품 캐러셀",
+    description: "제품 사진·직접 올린 사진·연결된 샤오홍슈 영상 장면 위에 AI 가 쓴 Hook·장점·행동 유도 글을 얹어 인스타그램 피드 캐러셀(4:5, 5~7장)과 설명글·해시태그를 만듭니다. 영상 원고를 고르면 그 대본으로 만듭니다.",
+    href: "/instagram/carousel",
+    icon: GalleryHorizontal,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["openai"],
+    inputs: ["제품 (제품 라이브러리)", "사진 (제품 사진 · 올리기 · 영상 장면)", "영상 원고 (선택)"],
+    outputs: ["캐러셀 PNG 4:5 (1080×1350) · ZIP", "피드 설명글 · 해시태그"],
+  },
   {
     id: "ig-trends",
     channelId: "instagram",

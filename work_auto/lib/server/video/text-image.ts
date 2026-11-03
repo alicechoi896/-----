@@ -58,6 +58,8 @@ function strokeFill(ctx: SKRSContext2D, text: string, x: number, y: number, fill
 
 /** v0.9.147 섬네일 이미지 글꼴 (상단 제목과 같은 도현체) */
 export const thumbFamily = () => family("dohyeon").name;
+/** v0.9.163 제품 캐러셀: 글꼴 키 → 등록한 글꼴 이름 */
+export const fontFamilyOf = (key: string) => family(key).name;
 
 export interface TextImages {
   fallbackFonts: string[];

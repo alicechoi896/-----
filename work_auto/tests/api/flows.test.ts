@@ -540,6 +540,34 @@ describe("트렌드·스타일·오류 기록", () => {
     expect((await post("/api/video-production/frames", { videoId: "nope", frame: null }, "PUT")).ok).toBe(false);
   });
 
+  it("제품 캐러셀(데모): 제품 → 사진 3장 → 글(AI) → 장 고치기 → 이미지 4:5 (v0.9.163)", async ({ skip }) => {
+    if (!reachable) skip();
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const jpg = (color: string) => {
+      const c = createCanvas(900, 1200);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 900, 1200);
+      return "data:image/jpeg;base64," + c.toBuffer("image/jpeg").toString("base64");
+    };
+    const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;
+    type P = { id: string; photos: string[]; slides: { photoKey: string; text: string; pos: string }[]; rendered: string[]; caption: string; urls: Record<string, string> };
+    let p = (await post("/api/carousel", { action: "create", productId: pid })).data as P;
+    for (const c of ["#a0b0c0", "#c0a0b0", "#b0c0a0"]) p = (await post("/api/carousel", { action: "upload", id: p.id, dataUrl: jpg(c) })).data as P;
+    expect(p.photos).toHaveLength(3);
+    p = (await post("/api/carousel", { action: "write", id: p.id, count: 5 })).data as P;
+    expect(p.slides).toHaveLength(5);
+    expect(p.caption).toBeTruthy();
+    p = (await post("/api/carousel", { action: "update", id: p.id, slides: p.slides.map((x, i) => (i === 1 ? { ...x, text: "직접 고친 글", pos: "top" } : x)) })).data as P;
+    expect(p.slides[1]).toMatchObject({ text: "직접 고친 글", pos: "top" });
+    p = (await post("/api/carousel", { action: "render", id: p.id })).data as P;
+    expect(p.rendered).toHaveLength(5);
+    const u = p.urls[p.rendered[0]];
+    const png = await fetch(u.startsWith("http") ? u : BASE + u).then((r) => r.arrayBuffer());
+    expect(new Uint8Array(png).slice(1, 4)).toEqual(new Uint8Array([0x50, 0x4e, 0x47]));
+    await post("/api/carousel", { action: "remove", id: p.id });
+  });
+
   it("AI 숙소 영상(데모): 사진 3장 → 제목·대사(AI) → 살아 움직이게(확인 필수) → 상태 → 영상 만들기 (v0.9.157)", async ({ skip }) => {
     if (!reachable) skip();
     const { createCanvas } = await import("@napi-rs/canvas");
