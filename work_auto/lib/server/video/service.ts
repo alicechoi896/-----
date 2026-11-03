@@ -81,7 +81,7 @@ export const videoJobService = {
         thumbs: fitThumbs(((c.context.userEdits?.thumbnailTitles?.value ?? c.output.thumbnailTitles) as string[] | undefined)?.map(String) ?? []).slice(0, 10),
         thumbPick: c.context.picks?.thumbnailTitles?.values?.[0] ?? null,
       })),
-      videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null })),
+      videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null, note: v.note ?? null })),
       assets: videoAssets.summary(),
       ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, typecast: Boolean(typecast), giphy: Boolean(await getGiphyProvider().catch(() => null)) },
       typecastEmotions: TYPECAST_EMOTIONS,

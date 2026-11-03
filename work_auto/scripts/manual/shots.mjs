@@ -604,6 +604,30 @@ export const SHOTS = [
     },
   },
   {
+    id: "05-clip-gallery",
+    url: "/youtube/video-production",
+    viewport: { width: 1440, height: 1100 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (path, body) => p.request.post(abs(path), { data: body }).then((r) => r.json());
+      const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
+      const xhs = (await api("/api/videos/social-search", { keyword: "청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data;
+      await api("/api/videos/batch", { items: xhs.items.slice(6, 9).map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec } })), productId: pid, note: "흡입력 장면 좋음 · 3초부터" });
+      const s1 = (await api("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: "manual-gallery" })).data;
+      const s2 = (await api("/api/contents/stage2", { stage1Id: s1.id, title: s1.output.titles[0], hook: s1.output.hooks[0], cta: s1.output.ctas[0] })).data;
+      await p.goto(abs(`/youtube/video-production?contentId=${s2.id}`));
+      await p.locator("[data-make-plan]").click();
+      await p.locator("[data-plan-scene]").first().waitFor({ timeout: 20_000 });
+      await p.locator("[data-clip-gallery-open]").first().click();
+      await p.locator("[data-clip-card]").first().waitFor({ timeout: 10_000 });
+      await p.waitForTimeout(1500);
+    },
+    marks: {
+      1: (p) => p.locator("[data-clip-card]").first(),
+      2: (p) => p.locator("[data-clip-pick]"),
+    },
+  },
+  {
     id: "05-clip-form",
     viewport: { width: 1280, height: 1130 },
     url: "/naver-clip/product-content",

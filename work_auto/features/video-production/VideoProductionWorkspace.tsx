@@ -586,7 +586,6 @@ function PlanEditor({
   const setScenes = (list: VideoPlan["scenes"]) => onChange({ ...plan, scenes: list.map((x, k) => ({ ...x, index: k })) });
   const addAfter = (i: number) => setScenes([...plan.scenes.slice(0, i + 1), { index: i + 1, narration: "", sfx: null, arrow: false, attention: false, sourceVideoId: plan.scenes[i]?.sourceVideoId ?? null }, ...plan.scenes.slice(i + 1)]);
   const removeAt = (i: number) => plan.scenes.length > 1 && setScenes(plan.scenes.filter((_, k) => k !== i));
-  const clipOptions = videos.map((v) => ({ value: v.id, label: v.title.slice(0, 22) }));
   return (
     <SectionCard
       title={`③ 컷 계획 · ${plan.scenes.length}컷`}
@@ -697,12 +696,7 @@ function PlanEditor({
               </span>
             </span>
             <span className="space-y-1">
-              <Select
-                value={s.sourceVideoId ?? ""}
-                options={clipOptions}
-                onChange={(e) => setScene(i, { sourceVideoId: e.target.value, pinned: true, startAt: null })}
-                aria-label={`${i + 1}번 컷 클립`}
-              />
+              <ClipChooser value={s.sourceVideoId} videos={videos} narration={s.narration} label={`${i + 1}번 컷 클립`} onPick={(id) => setScene(i, { sourceVideoId: id, pinned: true, startAt: null })} />
               {s.sourceVideoId && (
                 <button type="button" onClick={() => setStartFor(i)} className={cn("w-full rounded px-1.5 py-0.5 text-[11px] ring-1 ring-inset", s.startAt != null ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-subtle ring-line hover:text-brand")} data-plan-start>
                   {s.startAt != null ? `구간 ${s.startAt}초부터` : "구간 고르기 (자동)"}
@@ -773,7 +767,7 @@ function JobPanel({
     setEdited({ ...edited, scenes: list.map((s, k) => ({ ...s, index: k })) });
   };
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
-  const pool = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id)).map((v) => ({ value: v.id, label: v.title.slice(0, 20) }));
+  const poolVideos = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id));
 
   async function download() {
     setNote(null);
@@ -918,11 +912,12 @@ function JobPanel({
                     </span>
                   </span>
                   <span className="space-y-1">
-                    <Select
-                      value={s.sourceVideoId ?? ""}
-                      options={pool}
-                      onChange={(e) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, sourceVideoId: e.target.value, pinned: true, startAt: null } : x)) })}
-                      aria-label={`${i + 1}번 컷 클립 교체`}
+                    <ClipChooser
+                      value={s.sourceVideoId}
+                      videos={poolVideos}
+                      narration={s.narration}
+                      label={`${i + 1}번 컷 클립 교체`}
+                      onPick={(id) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, sourceVideoId: id, pinned: true, startAt: null } : x)) })}
                     />
                     {s.sourceVideoId && (
                       <button type="button" onClick={() => setStartFor(i)} className={cn("w-full rounded px-1.5 py-0.5 text-[11px] ring-1 ring-inset", s.startAt != null ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-subtle ring-line hover:text-brand")} data-job-start>
@@ -1107,6 +1102,112 @@ function ThumbMaker({ job }: { job: VideoJob }) {
         </div>
       )}
       <p className="text-[11px] text-fg-subtle">원본을 보관한 컷은 자막 없는 깨끗한 화면으로 만듭니다. 외부 비용 없음.</p>
+    </div>
+  );
+}
+
+type ClipVideo = VideoProductionOptions["videos"][number];
+const clipTip = (v: ClipVideo | undefined) => (v ? [v.title, v.note ? `메모: ${v.note}` : "메모 없음", `${Math.round(v.durationSec)}초`].join("\n") : "");
+
+/**
+ * v0.9.155 컷 클립 고르기: 칸에 마우스를 올리면 영상 이름·가져올 때 남긴 메모, [영상 보며 고르기]로 후보를 재생해 보고 바꾼다
+ */
+function ClipChooser({ value, videos, narration, label, onPick }: { value: string | null; videos: ClipVideo[]; narration: string; label: string; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const cur = videos.find((v) => v.id === value);
+  return (
+    <>
+      <span className="block" title={clipTip(cur)} data-clip-tip>
+        <Select value={value ?? ""} options={videos.map((v) => ({ value: v.id, label: `${v.title.slice(0, 20)}${v.note ? " ✎" : ""}` }))} onChange={(e) => onPick(e.target.value)} aria-label={label} />
+      </span>
+      {cur?.note && <span className="block truncate text-[10.5px] text-fg-subtle" title={cur.note}>✎ {cur.note}</span>}
+      <button type="button" onClick={() => setOpen(true)} className="w-full rounded px-1.5 py-0.5 text-[11px] text-fg-subtle ring-1 ring-line ring-inset hover:text-brand" data-clip-gallery-open>
+        ▶ 영상 보며 고르기
+      </button>
+      {open && (
+        <ClipGallery
+          videos={videos}
+          current={value}
+          narration={narration}
+          onClose={() => setOpen(false)}
+          onPick={(id) => {
+            onPick(id);
+            setOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/** 후보 영상 미리보기: 섬네일 대신 보관한 원본을 바로 재생 (외부 호출 없음, 1시간 주소) */
+function ClipGallery({ videos, current, narration, onClose, onPick }: { videos: ClipVideo[]; current: string | null; narration: string; onClose: () => void; onPick: (id: string) => void }) {
+  const [urls, setUrls] = useState<Record<string, string | null>>({});
+  const [sel, setSel] = useState<string | null>(current ?? videos[0]?.id ?? null);
+  useEffect(() => {
+    let alive = true;
+    void Promise.all(videos.slice(0, 30).map(async (v) => [v.id, await api.videoProduction.sourceUrl(v.id).then((r) => r.url).catch(() => null)] as const)).then((rows) => alive && setUrls(Object.fromEntries(rows)));
+    return () => {
+      alive = false;
+    };
+  }, [videos]);
+  const pick = videos.find((v) => v.id === sel);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4" role="dialog" aria-label="영상 보며 고르기" data-clip-gallery onClick={onClose}>
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col gap-3 overflow-hidden rounded-card bg-canvas p-4 shadow-card" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold">영상 보며 고르기 · 후보 {videos.length}개</p>
+            <p className="truncate text-[12px] text-fg-muted">이 컷 대사: {narration || "(없음)"}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-[13px] text-fg-subtle hover:text-fg" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(0,260px)_1fr]">
+          <div className="space-y-2">
+            {pick && urls[pick.id] ? (
+              <video key={pick.id} src={urls[pick.id]!} controls autoPlay muted playsInline className="mx-auto max-h-[52vh] w-full rounded bg-black" />
+            ) : (
+              <div className="relative flex aspect-[9/16] max-h-[52vh] w-full items-center justify-center overflow-hidden rounded bg-muted text-[12px] text-fg-subtle">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {pick?.thumbnailUrl && <img src={pick.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover" />}
+                <span className="relative rounded bg-canvas/85 px-2 py-1">{pick && pick.id in urls ? "원본을 보관하지 않아 재생은 안 됩니다 (표지만)" : "불러오는 중…"}</span>
+              </div>
+            )}
+            {pick && (
+              <>
+                <p className="text-[12.5px] font-semibold">{pick.title}</p>
+                <p className="text-[12px] whitespace-pre-wrap text-fg-muted">{pick.note ? `메모: ${pick.note}` : "메모 없음"}</p>
+                <Button size="sm" variant="primary" className="w-full" disabled={pick.id === current} onClick={() => onPick(pick.id)} data-clip-pick>
+                  {pick.id === current ? "지금 이 컷에 쓰는 영상" : "이 컷에 쓰기"}
+                </Button>
+              </>
+            )}
+          </div>
+          <ul className="grid min-h-0 grid-cols-3 content-start gap-2 overflow-y-auto sm:grid-cols-4">
+            {videos.map((v) => (
+              <li key={v.id}>
+                <button type="button" onClick={() => setSel(v.id)} title={clipTip(v)} className={cn("w-full rounded-control p-1 text-left ring-1 ring-inset", v.id === sel ? "bg-brand-soft ring-brand" : "ring-line hover:bg-subtle")} data-clip-card>
+                  {urls[v.id] ? (
+                    <video src={`${urls[v.id]}#t=1`} muted playsInline preload="metadata" className="aspect-[9/16] w-full rounded bg-black object-cover" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} />
+                  ) : v.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="aspect-[9/16] w-full rounded bg-muted object-cover" />
+                  ) : (
+                    <div className="aspect-[9/16] w-full rounded bg-muted" />
+                  )}
+                  <span className="mt-1 block truncate text-[11px] font-medium">
+                    {v.id === current ? "✓ " : ""}
+                    {v.title}
+                  </span>
+                  <span className="block truncate text-[10.5px] text-fg-subtle">{v.note || "메모 없음"}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

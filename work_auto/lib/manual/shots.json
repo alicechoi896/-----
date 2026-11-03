@@ -888,6 +888,27 @@
       }
     ]
   },
+  "05-clip-gallery": {
+    "file": "/manual/shots/05-clip-gallery.png",
+    "w": 1440,
+    "h": 1100,
+    "boxes": [
+      {
+        "n": 1,
+        "x": 554,
+        "y": 290,
+        "w": 154,
+        "h": 294
+      },
+      {
+        "n": 2,
+        "x": 282,
+        "y": 813,
+        "w": 272,
+        "h": 44
+      }
+    ]
+  },
   "05-precise-result": {
     "file": "/manual/shots/05-precise-result.png",
     "w": 528,
