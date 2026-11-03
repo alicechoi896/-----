@@ -1,6 +1,6 @@
 import "server-only";
 import { CLAUDE_ONLY_FEATURES, forcedAi, withClaude } from "../providers/ai-force";
-import { banmalRatio, endingTarget, followShare, yoRatio } from "@/lib/script-format";
+import { NO_RATING_RULE, banmalRatio, endingTarget, followShare, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
@@ -403,6 +403,7 @@ export const contentGenerationService = {
     const messages = renderContentPrompt(p.template, { ...p.config, outputs }, p.input, p.context);
     const tagKey = outputs.some((o) => o.key === "tags") ? "tags" : outputs.some((o) => o.key === "hashtags") ? "hashtags" : null;
     const isInfo = p.featureId.includes("info");
+    const hasFormat = Boolean(p.context.scriptFormat && p.context.scriptFormatUse === "full");
     messages.push({
       role: "user",
       content: [
@@ -413,12 +414,15 @@ export const contentGenerationService = {
         "규칙:",
         "1. 대본 3편은 모두 이 제목의 약속을 실제로 전달한다 (예: '3가지'면 대본 안에 실제 3가지, '카메라가 달라진 이유'면 카메라가 중심).",
         "2. 대본 3편의 첫 줄은 선택한 Hook(또는 그 변형), 마지막은 선택한 CTA 로 끝낸다.",
-        isInfo
-          ? "3. 3편은 설득 구조가 다르다: ① 가장 중요한 정보부터 ② 궁금증·반전형 ③ 체크리스트·정리형. script_structures 에 각 편의 구조 이름을 쓴다."
-          : "3. 3편은 설득 구조가 다르다: ① 문제 해결형 ② 핵심 장점·결론 먼저 ③ 비교·구매 판단형. script_structures 에 각 편의 구조 이름을 쓴다.",
+        hasFormat
+          ? "3. 3편 모두 [대본 포맷]의 가이드라인 단계 순서와 참고 대본의 구조·문장 길이·리듬·연결어를 따른다 (사용자가 참고 대본과 나란히 봐도 같은 틀). 편마다 강조 포인트·장면·예시만 다르게 한다. 새 구조를 만들지 않는다. script_structures 에 각 편이 따른 포맷 단계 흐름을 짧게 쓴다."
+          : isInfo
+            ? "3. 3편은 설득 구조가 다르다: ① 가장 중요한 정보부터 ② 궁금증·반전형 ③ 체크리스트·정리형. script_structures 에 각 편의 구조 이름을 쓴다."
+            : "3. 3편은 설득 구조가 다르다: ① 문제 해결형 ② 핵심 장점·결론 먼저 ③ 비교·구매 판단형. script_structures 에 각 편의 구조 이름을 쓴다.",
         "4. primary_keyword 는 이 제목의 검색 의도에 맞는 핵심 키워드 1개, related_keywords 는 제목·대본 방향에 맞는 관련 키워드(검색 의도 intent: purchase·info·compare·review·howto 중 하나). Keyword Intelligence 의 실제 표현을 우선 쓰고, 제목과 관계없는 키워드는 넣지 않는다. 사용자가 주요 키워드를 여러 개 넣었으면 그 키워드를 모두 포함하고 각각에서 파생된 키워드를 고르게 섞어 related_keywords 를 20~29개 만든다.",
         tagKey ? `5. ${tagKey} 는 최종 키워드(primary_keyword + related_keywords)에서 만든다. 중복·의미 없는 일반 단어는 뺀다.` : "",
         "6. 설명(description)은 이 제목과 대본에 실제로 나온 내용만 쓴다. 제품 스펙은 [제품 정보] 범위 안에서만.",
+        isInfo ? "" : `7. ${NO_RATING_RULE}`,
       ]
         .filter(Boolean)
         .join("\n"),

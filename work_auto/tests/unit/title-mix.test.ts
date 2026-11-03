@@ -61,3 +61,13 @@ describe("대본 포맷 따르기 (v0.9.65)", async () => {
     expect(chooseScriptFormat(rows, "product", "youtube", "", null)?.id).toBe("big");
   });
 });
+
+describe("평점 이야기 거르기 (v0.9.154)", async () => {
+  const { isRatingTalk } = await import("@/lib/script-format");
+  it("평점·별점·리뷰 수·판매량·순위는 걸러 낸다", () => {
+    for (const t of ["평점 4.8점", "별점 만점 후기", "리뷰 12,000개", "3만 개 후기가 증명", "누적 판매 10만", "쿠팡 1위", "베스트셀러 등극", "★4.9"]) expect(isRatingTalk(t)).toBe(true);
+  });
+  it("기능·상황 이야기는 그대로", () => {
+    for (const t of ["380g이라 가방에 쏙", "소음이 도서관 수준", "필터 물세척 가능", "30분 만에 방 전체 제습", "주위 소음 걱정 없어요"]) expect(isRatingTalk(t)).toBe(false);
+  });
+});

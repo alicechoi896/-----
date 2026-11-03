@@ -6,7 +6,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { endingTarget, followShare, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
+import { NO_RATING_RULE, isRatingTalk, endingTarget, followShare, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -40,19 +40,22 @@ function contextBlocks(ctx: GenerationContext): string[] {
   const p = ctx.product;
   if (p) {
     const a = p.analysis;
+    // v0.9.154: 평점·리뷰 수·판매량·순위 이야기는 보내지 않는다 (대본에 자꾸 나와서). 포맷에 Hook 이 있으면 제품 분석의 '추천 Hook' 은 빼고 포맷 Hook 만
+    const clean = (xs: string[] | undefined) => (xs ?? []).filter((x) => x && !isRatingTalk(x));
+    const formatHooks = Boolean(ctx.scriptFormat?.hooks?.length);
     blocks.push(
       block("제품 정보", [
         `제품명: ${a.basicInfo.name} (${a.basicInfo.brand})`,
-        `한 줄 설명: ${a.summary.oneLiner}`,
-        `핵심 특징: ${a.summary.keyFeatures.join(", ")}`,
-        `핵심 장점: ${a.summary.keyBenefits.join(", ")}`,
-        `차별점: ${a.summary.differentiators.join(", ")}`,
-        a.summary.buyingPoints?.length ? `구매 포인트 (제품 라이브러리에서 학습): ${a.summary.buyingPoints.join(" / ")}` : "",
+        isRatingTalk(a.summary.oneLiner) ? "" : `한 줄 설명: ${a.summary.oneLiner}`,
+        `핵심 특징: ${clean(a.summary.keyFeatures).join(", ")}`,
+        `핵심 장점: ${clean(a.summary.keyBenefits).join(", ")}`,
+        `차별점: ${clean(a.summary.differentiators).join(", ")}`,
+        clean(a.summary.buyingPoints).length ? `구매 포인트 (제품 라이브러리에서 학습): ${clean(a.summary.buyingPoints).join(" / ")}` : "",
         `추천 대상: ${a.summary.targetAudience.join(", ")}`,
         `주의할 점: ${a.summary.cautions.join(", ")}`,
-        `영상 강조 포인트: ${a.contentData.videoPoints.join(", ")}`,
-        `블로그 강조 포인트: ${a.contentData.blogPoints.join(", ")}`,
-        `추천 Hook: ${a.contentData.hooks.join(" / ")}`,
+        `영상 강조 포인트: ${clean(a.contentData.videoPoints).join(", ")}`,
+        `블로그 강조 포인트: ${clean(a.contentData.blogPoints).join(", ")}`,
+        formatHooks || !clean(a.contentData.hooks).length ? "" : `추천 Hook: ${clean(a.contentData.hooks).join(" / ")}`,
       ]),
       block("사용 금지 표현", a.contentData.forbiddenExpressions),
     );
@@ -256,9 +259,15 @@ export function renderContentPrompt(
     userInput.push(`스타일 섞기: 고른 스타일 ${input.style.length}가지(${input.style.map((x) => optionLabel("style", x)).join(" / ")})를 골고루 섞는다 — 제목·Hook·CTA 후보는 유형별로 나눠 만들고, 대본(또는 본문)도 편마다 다른 유형을 따른다.`);
 
   // v0.9.122: 제품 영상 대본의 제품 장점·설명 부분은 제품 라이브러리에서 학습한 구매 포인트로 (지어낸 장점 대신)
-  const buying = ctx.product?.analysis.summary.buyingPoints?.filter(Boolean) ?? [];
+  const buying = (ctx.product?.analysis.summary.buyingPoints ?? []).filter((x) => x && !isRatingTalk(x));
+  const fullFormat = Boolean(ctx.scriptFormat && ctx.scriptFormatUse === "full");
   if (buying.length && config.outputs.some((o) => o.key === "script"))
-    userInput.push(`제품 설명 구성: 대본에서 제품 장점·설명 부분은 '구매 포인트'(${buying.join(" / ")})로 구성한다 — 포인트마다 한 줄(한 컷)씩, 시청자 말투로 풀어 쓰되 내용은 바꾸거나 지어내지 않는다. 포인트가 많으면 Hook·제목과 가장 잘 맞는 것부터 고른다. 구매 포인트에 없는 장점·숫자는 넣지 않는다.`);
+    userInput.push(
+      fullFormat
+        ? `제품 설명 재료: 대본의 단계 순서·문장 리듬은 [대본 포맷]을 따르고, 그중 제품 장점을 말하는 자리에만 '구매 포인트'(${buying.join(" / ")})에서 Hook·제목과 맞는 것을 골라 시청자 말투로 넣는다. 포인트를 나열하려고 포맷 구조를 바꾸지 않는다. 구매 포인트에 없는 장점·숫자는 지어내지 않는다.`
+        : `제품 설명 구성: 대본에서 제품 장점·설명 부분은 '구매 포인트'(${buying.join(" / ")})로 구성한다 — 포인트마다 한 줄(한 컷)씩, 시청자 말투로 풀어 쓰되 내용은 바꾸거나 지어내지 않는다. 포인트가 많으면 Hook·제목과 가장 잘 맞는 것부터 고른다. 구매 포인트에 없는 장점·숫자는 넣지 않는다.`,
+    );
+  if (ctx.product) userInput.push(NO_RATING_RULE);
 
   // 제목 후보 구성: AI 추천 · 내 대본 포맷 패턴 · 실제 플랫폼 트렌드 (v0.9.50)
   const titleSec = config.outputs.find((o) => o.key === "titles");
@@ -295,7 +304,7 @@ export function renderContentPrompt(
     block("사용자 입력", userInput),
     outputFormat(config.outputs),
     ctx.psychology ? block("마케팅 심리 원칙 (켜져 있음 — 대본 포맷·말끝 규칙이 우선)", PSYCHOLOGY_GUIDE) : "",
-    ending ? block("마지막 확인 — 대본 말끝 (가장 중요)", [ending, "출력하기 전에 대본의 줄마다 말끝을 다시 보고, 규칙과 다르면 내용은 그대로 두고 말끝만 고친다. Hook·CTA·제목도 같은 말끝으로."]) : "",
+    ending ? block("마지막 확인 — 대본 말끝 (가장 중요)", [ending, "출력하기 전에 대본의 줄마다 말끝을 다시 보고, 규칙과 다르면 내용은 그대로 두고 말끝만 고친다. Hook·CTA·제목도 같은 말끝으로.", ...(ctx.product ? [NO_RATING_RULE] : [])]) : "",
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -14,6 +14,7 @@ import { videoJobService } from "../video/service";
 import { videoStorage } from "../video/storage";
 import { storedVideoIds, usableXhsVideo } from "../video/vault";
 import { loadScriptFormats } from "../services/script-formats";
+import { isRatingTalk } from "@/lib/script-format";
 
 /**
  * 제품 홍보 영상 자동 제작 (v0.9.107). docs/AUTO_VIDEO.md
@@ -92,6 +93,9 @@ export interface AutoItem {
   script?: string | null;
   /** v0.9.131 섬네일 제목 (대본 포맷 참고 후보 중 AI 가 고름, 영상 상단 제목 2번째 줄에도) */
   thumbnailTitle?: string | null;
+  /** v0.9.154 고른 제목·Hook 이 따라 한 대본 포맷 원문 (없으면 포맷을 따르지 않은 후보) */
+  titleRef?: string | null;
+  hookRef?: string | null;
   /** v0.9.147 섬네일 이미지 (세로·가로 Storage 키) */
   thumbKeys?: { vertical: string; horizontal: string } | null;
   publicationId?: string | null;
@@ -350,10 +354,10 @@ export async function addItems(date: string, count: number, source: "schedule" |
 
 /* ───── 2) 1개 만들기 ───── */
 /** 우리 채널 제품 대본 포맷의 Hook·CTA (기본 포맷 먼저) */
-async function formatPersuasion(owner: string): Promise<{ hooks: string[]; ctas: string[] }> {
+async function formatPersuasion(owner: string): Promise<{ hooks: string[]; ctas: string[]; thumbs: string[] }> {
   const rows = await loadScriptFormats(owner, "product", "").catch(() => []);
   const list = rows.filter((f) => f.contentType === "product").sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
-  return { hooks: list.flatMap((f) => f.hooks ?? []).slice(0, 200), ctas: list.flatMap((f) => f.ctas ?? []).slice(0, 200) };
+  return { hooks: list.flatMap((f) => f.hooks ?? []).slice(0, 200), ctas: list.flatMap((f) => f.ctas ?? []).slice(0, 200), thumbs: list.flatMap((f) => f.thumbnailTitles ?? []).slice(0, 300) };
 }
 const bigrams = (t: string) => {
   const x = t.replace(/\s+/g, "");
@@ -375,6 +379,16 @@ export function preferFormat(cands: string[], format: string[]): string[] {
   const hit = cands.filter((c) => format.some((f) => similar(c, f) >= 0.45));
   return hit.length ? hit : cands;
 }
+/**
+ * v0.9.154 AI 가 고를 후보: 1단계에서 대본 포맷을 따라 쓴 것(formatRefs)을 먼저.
+ * 포맷을 따른 후보가 없으면 예전처럼 (제목은 클릭률 TOP, 없으면 앞에서 n개)
+ */
+export function formatFirstPool(cands: string[], refs: Record<string, string> | undefined, top: string[] = [], n = 5): string[] {
+  const followed = cands.filter((c) => refs?.[c]);
+  if (!followed.length) return top.length ? top.slice(0, n) : cands.slice(0, n);
+  return [...new Set([...top.filter((t) => refs?.[t]), ...followed])].slice(0, n);
+}
+
 /** 대본을 문장마다 한 줄로 (이미 4줄 이상이면 그대로) — 한 줄 = 한 컷 */
 export function splitScriptLines(text: string): string {
   const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
@@ -528,19 +542,29 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
     const ctas = (Array.isArray(out1.ctas) ? out1.ctas : []).map(String);
     await step("AI 가 제목·Hook·CTA 고르는 중", { stage1Id: s1.id });
     // v0.9.117: 대본 포맷의 Hook·CTA 를 그대로(또는 거의 그대로) 쓴 후보를 우선 (포맷이 없으면 전체)
+    // v0.9.154: 1단계가 '포맷 따라 씀'으로 표시한 제목·Hook 중에서 고른다 (제품 홍보 영상 화면과 같은 기준)
     const fmt = await formatPersuasion(owner);
-    const hookPool = preferFormat(hooks.slice(0, 10), fmt.hooks);
+    const refs = s1.context.quality?.formatRefs;
+    const titlePool = formatFirstPool(titles, refs?.titles, top);
+    const hookPool = hooks.some((h) => refs?.hooks[h]) ? formatFirstPool(hooks, refs?.hooks, [], 10) : preferFormat(hooks.slice(0, 10), fmt.hooks);
     const ctaPool = preferFormat(ctas.slice(0, 10), fmt.ctas);
-    const pick1 = await pickBest("pick1", "이 제품 쇼츠에 쓸 제목·첫 문장(Hook)·마무리(CTA)를 하나씩 고른다. Hook·CTA 는 우리 채널 대본 포맷에서 온 문장이다.", { title: top.length ? top : titles.slice(0, 5), hook: hookPool, cta: ctaPool });
-    const title = (top.length ? top : titles)[pick1.title] ?? titles[0];
+    const pick1 = await pickBest("pick1", "이 제품 쇼츠에 쓸 제목·첫 3초 문장(Hook)·마무리(CTA)를 하나씩 고른다. 후보는 우리 채널 대본 포맷의 잘된 제목·Hook 틀을 따라 쓴 것이다.", { title: titlePool, hook: hookPool, cta: ctaPool });
+    const title = titlePool[pick1.title] ?? titles[0];
     if (!title) throw new Error("제목 후보를 만들지 못했습니다.");
     await step("원고 2단계 (대본 3편·설명·태그)");
     const hook = hookPool[pick1.hook] ?? hooks[0] ?? "";
+    const titleRef = refs?.titles[title] ?? null;
+    const hookRef = refs?.hooks[hook] ?? null;
+    console.info("[AutoVideo] format follow", JSON.stringify({ item: itemId, title: Boolean(titleRef), hook: Boolean(hookRef) }));
     const cta = ctaPool[pick1.cta] ?? ctas[0] ?? "";
     const s2 = (await contentGenerationService.stage2({ stage1Id: s1.id, title, hook, cta })) as GeneratedContent;
     const scripts = (Array.isArray(s2.output.script) ? s2.output.script : []).map(String);
     await step("AI 가 대본 고르는 중", { contentId: s2.id, title });
-    const pick2 = await pickBest("pick2", `제목 '${title}' 에 가장 잘 맞고 끝까지 보게 만드는 대본을 고른다.`, { script: scripts });
+    // v0.9.154: 평점·리뷰 수·판매량 이야기가 없는 대본을 먼저, 대본 포맷 구조에 가장 가까운 것을
+    const cleanIdx = scripts.map((t, i) => (isRatingTalk(t) ? -1 : i)).filter((i) => i >= 0);
+    const pool2 = cleanIdx.length ? cleanIdx : scripts.map((_, i) => i);
+    const picked2 = await pickBest("pick2", `제목 '${title}' 에 가장 잘 맞고, 우리 대본 포맷(참고 대본)의 구조·리듬에 가장 가깝고, 끝까지 보게 만드는 대본을 고른다. 평점·리뷰 수·판매량 이야기가 있는 대본은 고르지 않는다.`, { script: pool2.map((i) => scripts[i]) });
+    const pick2 = { script: pool2[picked2.script] ?? pool2[0] ?? 0 };
     await step("컷 계획 (샤오홍슈 영상 매칭·주목 효과·GIF)");
     // v0.9.121: 자동 제작 화면에서 저장한 스타일이 먼저, 없으면 가장 최근에 직접 만든 영상 설정
     const voice: Partial<VideoPlan> = settings.style ?? (await lastVoiceSettings(owner));
@@ -551,7 +575,8 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
     const fitted = await fitScriptLength(splitScriptLines(scripts[pick2.script] ?? ""), settings.length);
     const scriptText = splitScriptLines(fitted.text);
     // v0.9.131: 섬네일 제목 — 대본 포맷(⑦ 섬네일 제목)을 참고해 만든 후보 중 AI 가 고른다 → 영상 상단 제목 2번째 줄에도
-    const thumbs = fitThumbs((Array.isArray(s2.output.thumbnailTitles) ? s2.output.thumbnailTitles : []).map(String).filter(Boolean)).slice(0, 10);
+    // v0.9.154: 섬네일도 포맷 섬네일 제목과 닮은 후보를 먼저
+    const thumbs = preferFormat(fitThumbs((Array.isArray(s2.output.thumbnailTitles) ? s2.output.thumbnailTitles : []).map(String).filter(Boolean)).slice(0, 10), fmt.thumbs);
     const pick3 = thumbs.length ? await pickBest("pick3", `제목 '${title}' 영상의 섬네일에 크게 넣을 문구로 클릭을 가장 부르는 것을 고른다.`, { thumb: thumbs }) : { thumb: 0 };
     const thumbnailTitle = thumbs[pick3.thumb] ?? thumbs[0] ?? null;
     const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, scriptText, ...voice });
@@ -576,6 +601,8 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
       title: done.plan.selectedTitle || title,
       hook,
       cta,
+      titleRef,
+      hookRef,
       script: scriptText,
       thumbnailTitle: done.plan.topLine2 || thumbnailTitle,
       ...(fitted.note ? { issues: [fitted.note, ...(done.qa?.issues ?? [])] } : {}),

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-const { preferFormat, splitScriptLines, tidyDescription } = await import("@/lib/server/automation/auto-video");
+const { formatFirstPool, preferFormat, splitScriptLines, tidyDescription } = await import("@/lib/server/automation/auto-video");
 
 describe("제품 영상 자동 제작 (v0.9.117)", () => {
   it("한 덩어리 대본은 문장마다 줄로 나눈다 (한 줄 = 한 컷)", () => {
@@ -18,6 +18,13 @@ describe("제품 영상 자동 제작 (v0.9.117)", () => {
     expect(preferFormat(cands, format)).toEqual(["이 마사지건 모르고 사면 무조건 후회합니다"]);
     expect(preferFormat(cands, [])).toEqual(cands);
     expect(preferFormat(["전혀 다른 문장"], format)).toEqual(["전혀 다른 문장"]);
+  });
+  it("고를 후보는 1단계에서 포맷을 따라 쓴 것 먼저 — TOP 중 포맷 것 → 나머지 포맷 것, 없으면 예전대로 (v0.9.154)", () => {
+    const cands = ["A 포맷", "B 새것", "C 포맷", "D 새것"];
+    const refs = { "A 포맷": "원문1", "C 포맷": "원문2" };
+    expect(formatFirstPool(cands, refs, ["B 새것", "C 포맷"])).toEqual(["C 포맷", "A 포맷"]);
+    expect(formatFirstPool(cands, {}, ["B 새것"])).toEqual(["B 새것"]);
+    expect(formatFirstPool(cands, undefined, [], 2)).toEqual(["A 포맷", "B 새것"]);
   });
   it("설명: 문장마다 줄, 해시태그는 맨 아래", () => {
     const d = tidyDescription("가방에 쏙 들어가는 미니 마사지건. 저소음이라 사무실에서도 좋아요. #마사지건 #꿀템");

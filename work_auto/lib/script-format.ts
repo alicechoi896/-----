@@ -171,6 +171,11 @@ export function formatStrength(f: { examples?: ScriptExample[]; titlePatterns?: 
 /** v0.9.153 제목·Hook·섬네일 후보 중 포맷 구조를 그대로 따를 몫 (대본 전체 비율 formatStrength.ratio 와 따로) */
 export const followShare = (f: Parameters<typeof formatStrength>[0]) => (f ? (formatStrength(f).heavy ? 0.8 : 0.7) : 0);
 
+/** v0.9.154 평점·별점·리뷰 수·판매량·순위 이야기 (사용자가 원하지 않음 — 원고·대본에 쓰지 않는다) */
+export const isRatingTalk = (t: string) =>
+  /평점|별점|★|리뷰\s*[\d,.]+|후기\s*[\d,.]+|[\d,.]+\s*(만\s*)?(개|건)?\s*(의\s*)?(리뷰|후기)|리뷰\s*(수|개수|가 많|폭발)|[\d.]+\s*점\s*(만점|대)|만점|누적\s*판매|판매량|[\d,.]+\s*(개|만\s*개)\s*(팔|판매)|\d+\s*위|랭킹|베스트\s*셀러|구매\s*후기\s*[\d,.]/.test(t);
+export const NO_RATING_RULE = "평점·별점·리뷰 수·판매량·순위(○위·랭킹·베스트셀러) 이야기는 제목·Hook·대본·설명 어디에도 쓰지 않는다 (사용자가 원하지 않음). 제품 자체의 기능·상황·사용 장면으로 설득한다.";
+
 /** 무작위 n 개 (생성할 때마다 다른 표본) */
 export function sampleList<T>(xs: T[], n: number): T[] {
   return xs.length <= n ? [...xs] : [...xs].sort(() => Math.random() - 0.5).slice(0, n);
