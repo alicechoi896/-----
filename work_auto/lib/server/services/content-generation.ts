@@ -1,6 +1,6 @@
 import "server-only";
 import { CLAUDE_ONLY_FEATURES, forcedAi, withClaude } from "../providers/ai-force";
-import { banmalRatio, endingTarget, yoRatio } from "@/lib/script-format";
+import { banmalRatio, endingTarget, followShare, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
@@ -274,6 +274,19 @@ async function collectIntel(p: Prepared, requestId?: string): Promise<KeywordInt
 }
 const listOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
+/** v0.9.153 AI 가 적은 "이 후보는 포맷의 어느 문장을 따랐다" — 포맷 원문에 실제로 있는 것만 남긴다 (후보 문장 → 포맷 원문) */
+export function pickRefs(raw: unknown, candidates: string[], formatList: string[]): Record<string, string> {
+  const norm = (x: string) => x.replace(/\s+/g, "").trim();
+  const byNorm = new Map(formatList.map((t) => [norm(t), t]));
+  const out: Record<string, string> = {};
+  for (const r of Array.isArray(raw) ? raw : []) {
+    const cand = candidates[Number((r as { index?: unknown })?.index) - 1];
+    const model = byNorm.get(norm(String((r as { model?: unknown })?.model ?? "")));
+    if (cand && model && norm(cand) !== norm(model)) out[cand] = model;
+  }
+  return out;
+}
+
 export const contentGenerationService = {
   /** 한 번에 생성 (블로그·예전 방식). 블로그는 생성 직전에 NAVER Keyword Intelligence 를 모아 넣는다 */
   async generate(req: GenerateContentRequest & { clientRequestId?: string }): Promise<GeneratedContent> {
@@ -310,13 +323,28 @@ export const contentGenerationService = {
     if (intel.note) p.context.summary.notes.push(intel.note);
     const outputs = p.config.outputs.filter((o) => STAGE1_KEYS.has(o.key));
     const messages = renderContentPrompt(p.template, { ...p.config, outputs }, p.input, p.context);
+    // v0.9.153: 대본 포맷이 있으면 제목·Hook 은 포맷 구조가 먼저 (마지막 지시가 가장 세게 먹어서, 여기서 다시 못 박는다)
+    const f = p.context.scriptFormat;
+    const fTitles = f ? [...new Set([...f.examples.map((e) => e.title.trim()).filter(Boolean), ...(f.titlePatterns ?? [])])] : [];
+    const fHooks = f?.hooks ?? [];
+    const share = Math.round(followShare(f) * 100);
+    const titleCount = outputs.find((o) => o.key === "titles")?.count ?? 10;
+    const hookCount = outputs.find((o) => o.key === "hooks")?.count ?? 5;
     messages.push({
       role: "user",
       content: [
         "[1단계] 제목 후보·Hook 후보·CTA 후보만 만든다. 대본·설명·키워드·태그는 아직 쓰지 않는다 (사용자가 제목을 고른 뒤 2단계에서 만든다).",
-        "제목은 Keyword Intelligence 의 실제 표현과 제품·주제의 사실을 활용하고, 서로 다른 약속(구매 판단·기능·비교·후회 방지 등)을 하게 만든다.",
+        fTitles.length
+          ? `제목: ${titleCount}개 중 ${Math.round((titleCount * share) / 100)}개 이상은 [대본 포맷 > 잘된 제목] 중 하나를 골라 그 구조·어순·길이·말투를 그대로 두고 제품·주제·숫자 단어만 바꾼다 (사용자가 원본과 나란히 놓고 봐도 같은 틀이라고 느낄 만큼). Keyword Intelligence 표현은 그 틀의 빈칸에 넣는 단어로만 쓴다. 나머지만 새 방식으로 쓰고, 서로 다른 약속(구매 판단·기능·비교·후회 방지 등)을 하게 만든다.`
+          : "제목은 Keyword Intelligence 의 실제 표현과 제품·주제의 사실을 활용하고, 서로 다른 약속(구매 판단·기능·비교·후회 방지 등)을 하게 만든다.",
+        fHooks.length
+          ? `Hook: 영상 첫 3초에 말하는 문장이다. ${hookCount}개 중 ${Math.round((hookCount * share) / 100)}개 이상은 [대본 포맷 > Hook] 중 하나의 문장 구조·길이·말끝을 그대로 두고 내용 단어만 바꾼다.`
+          : "",
+        fTitles.length || fHooks.length
+          ? "format_refs 에 따라 쓴 것을 적는다: titles·hooks 각각 {index: 1부터 센 번호, model: 따라 한 포맷 원문 그대로}. 포맷을 따르지 않은 후보는 적지 않는다. 원문에 없는 문장을 model 로 쓰지 않는다."
+          : "",
         "제목을 다 쓴 뒤 클릭률이 가장 높을 5개를 골라 title_top 에 1부터 센 번호와 이유를 쓴다.",
-      ].join("\n"),
+      ].filter(Boolean).join("\n"),
     });
     const ai = await getAIProvider();
     const schema = outputSchema(outputs) as { properties: Record<string, unknown>; required: string[] };
@@ -326,6 +354,11 @@ export const contentGenerationService = {
       items: { type: "object", additionalProperties: false, required: ["index", "reason"], properties: { index: { type: "integer" }, reason: { type: "string" } } },
     };
     schema.required = [...schema.required, "title_top"];
+    const refItem = { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "model"], properties: { index: { type: "integer" }, model: { type: "string" } } } };
+    if (fTitles.length || fHooks.length) {
+      schema.properties.format_refs = { type: "object", additionalProperties: false, required: ["titles", "hooks"], properties: { titles: refItem, hooks: refItem } };
+      schema.required = [...schema.required, "format_refs"];
+    }
     const result = await ai.generateStructured<Record<string, unknown>>({
       task: `content-stage1:${p.featureId}`,
       messages,
@@ -339,8 +372,14 @@ export const contentGenerationService = {
       .map((t) => ({ title: titles[Number((t as { index?: unknown })?.index) - 1] ?? "", reason: str((t as { reason?: unknown })?.reason, 200) }))
       .filter((t, i, arr) => t.title && arr.findIndex((x) => x.title === t.title) === i)
       .slice(0, TOP_TITLE_COUNT);
+    const refs = (result.data.format_refs ?? {}) as { titles?: unknown; hooks?: unknown };
+    const formatRefs = {
+      titles: pickRefs(refs.titles, titles, fTitles),
+      hooks: pickRefs(refs.hooks, Array.isArray(output.hooks) ? output.hooks : [], fHooks),
+    };
+    console.info("[Stage1] format follow", JSON.stringify({ format: f?.name ?? null, titles: `${Object.keys(formatRefs.titles).length}/${titles.length}`, hooks: `${Object.keys(formatRefs.hooks).length}/${Array.isArray(output.hooks) ? output.hooks.length : 0}` }));
     const workflow: ContentWorkflow = { id: createId("wf"), stage: 1, keywordIntelligence: compactIntel(intel) };
-    return finish(p, output, result, { quality: { mode: "precise", angles: [], titleTop, scripts: [] }, workflow });
+    return finish(p, output, result, { quality: { mode: "precise", angles: [], titleTop, scripts: [], formatRefs }, workflow });
   },
 
   /**

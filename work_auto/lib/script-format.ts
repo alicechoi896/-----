@@ -168,6 +168,9 @@ export function formatStrength(f: { examples?: ScriptExample[]; titlePatterns?: 
   return { total, heavy, ratio: heavy ? 0.8 : 0.5 };
 }
 
+/** v0.9.153 제목·Hook·섬네일 후보 중 포맷 구조를 그대로 따를 몫 (대본 전체 비율 formatStrength.ratio 와 따로) */
+export const followShare = (f: Parameters<typeof formatStrength>[0]) => (f ? (formatStrength(f).heavy ? 0.8 : 0.7) : 0);
+
 /** 무작위 n 개 (생성할 때마다 다른 표본) */
 export function sampleList<T>(xs: T[], n: number): T[] {
   return xs.length <= n ? [...xs] : [...xs].sort(() => Math.random() - 0.5).slice(0, n);
@@ -195,12 +198,12 @@ export function promptTitles(examples: ScriptExample[], max = 20): string[] {
 export const formatTitleCount = (examples: ScriptExample[]) => examples.filter((e) => e.title.trim()).length;
 
 /**
- * 제목 후보 구성 (v0.9.50, 10개 기준). 포맷 제목이 100개 이하면 AI 4 · 포맷 4 · 트렌드 2, 넘으면 AI 2 · 포맷 7 · 트렌드 1.
+ * 제목 후보 구성 (v0.9.50, 10개 기준). v0.9.153: 포맷 제목이 있으면 AI 2 · 포맷 7 · 트렌드 1, 100개 넘으면 AI 1 · 포맷 8 · 트렌드 1.
  * 포맷·트렌드 제목이 없으면 그 몫은 AI 추천으로 돌린다. 다른 개수(예: 20개)는 비율대로 늘린다.
  */
 export function titleMix(total: number, formatTitles: number, trendTitles: number): { ai: number; format: number; trend: number } {
   // v0.9.65: 포맷 제목이 100개를 넘으면 80% (AI 1 · 포맷 8 · 트렌드 1)
-  const base = formatTitles > 100 ? { ai: 1, format: 8, trend: 1 } : { ai: 4, format: 4, trend: 2 };
+  const base = formatTitles > 100 ? { ai: 1, format: 8, trend: 1 } : formatTitles ? { ai: 2, format: 7, trend: 1 } : { ai: 8, format: 0, trend: 2 };
   const scale = total / 10;
   let format = formatTitles ? Math.round(base.format * scale) : 0;
   let trend = trendTitles ? Math.round(base.trend * scale) : 0;

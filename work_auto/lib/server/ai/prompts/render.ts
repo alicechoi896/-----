@@ -6,7 +6,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { endingTarget, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
+import { endingTarget, followShare, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -141,8 +141,8 @@ function contextBlocks(ctx: GenerationContext): string[] {
   if (ctx.scriptFormat && ctx.scriptFormatUse === "full") {
     const f = ctx.scriptFormat;
     const st = formatStrength(f);
-    const pct = Math.round(st.ratio * 100);
-    const n = st.heavy ? 25 : 10;
+    const pct = Math.round(followShare(f) * 100);
+    const n = st.heavy ? 25 : 15;
     // CTA 는 포맷 100% (v0.9.66): 후보·대본 마지막 문장 모두 포맷의 CTA 문장을 그대로 고른다
     const ctas = f.ctas ?? [];
     if (ctas.length) {
@@ -179,7 +179,9 @@ function contextBlocks(ctx: GenerationContext): string[] {
     const where = ki.source === "youtube" ? `YouTube 관련 영상 ${ki.sampleSize}개` : `NAVER 블로그 글 ${ki.sampleSize}개`;
     blocks.push(
       block(`Keyword Intelligence — '${ki.seed}' 실제 ${where}에서 반복된 표현 (근거 있는 키워드 후보)`, [
-        "제목·Hook·키워드는 아래 실제 표현을 우선 활용한다. 목록에 없는 검색량·순위·점수는 만들지 않는다. 제품·주제와 관계없는 표현은 쓰지 않는다.",
+        ctx.scriptFormat
+          ? "키워드·태그는 아래 실제 표현을 우선 활용한다. 제목·Hook 은 [대본 포맷]의 구조가 먼저이고, 아래 표현은 그 구조의 빈칸에 넣는 단어로만 쓴다. 목록에 없는 검색량·순위·점수는 만들지 않는다. 제품·주제와 관계없는 표현은 쓰지 않는다."
+          : "제목·Hook·키워드는 아래 실제 표현을 우선 활용한다. 목록에 없는 검색량·순위·점수는 만들지 않는다. 제품·주제와 관계없는 표현은 쓰지 않는다.",
         ...ki.candidates.slice(0, 15).map((c) => `- ${c.keyword} (${c.evidence})`),
         ...(ki.trendSignals.length
           ? ["NAVER 데이터랩 상대 관심도 (0~100, 검색량 아님):", ...ki.trendSignals.map((t) => `- ${t.keyword}: ${t.relativeInterest} (${t.direction === "up" ? "최근 상승" : t.direction === "down" ? "최근 하락" : "비슷"})`)]
@@ -278,7 +280,7 @@ export function renderContentPrompt(
   }
   // 섬네일 제목 후보 (v0.9.63)
   if (config.outputs.some((o) => o.key === "thumbnailTitles"))
-    userInput.push(`섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 공백 빼고 10자 이내(꼭 지킨다), 줄바꿈 없이 한 줄, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 후보의 ${Math.round(formatStrength(ctx.scriptFormat).ratio * 100) || 50}% 이상은 그 구조·길이·리듬을 그대로 따라 단어만 바꾼다 (문장 통째 복사 금지).`);
+    userInput.push(`섬네일 제목 후보(thumbnailTitles): 섬네일 이미지에 크게 넣을 짧은 문구다. 공백 빼고 10자 이내(꼭 지킨다), 줄바꿈 없이 한 줄, 영상 제목을 그대로 줄이지 말고 궁금증·손해 회피·숫자·반전으로 멈추게 만든다. [대본 포맷 > 잘된 섬네일 제목]이 있으면 후보의 ${Math.round(followShare(ctx.scriptFormat) * 100) || 50}% 이상은 그 구조·길이·리듬을 그대로 따라 단어만 바꾼다 (문장 통째 복사 금지).`);
   // 설명글: 설명란에 그대로 붙여 넣을 글만 (v0.9.50)
   if (config.outputs.some((o) => o.key === "description") && ctx.scriptFormat?.captions?.length)
     userInput.push("설명글(description): 영상 설명란에 바로 복사해 올릴 완성된 글만 쓴다. 구성·길이·말투·이모지·해시태그는 [대본 포맷 > 잘된 캡션] 중 하나를 100% 그대로 따른다 (아래 기본 구성 대신). 안내 문장·항목 이름·괄호 메모는 쓰지 않는다.");

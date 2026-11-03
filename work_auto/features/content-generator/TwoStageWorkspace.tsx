@@ -45,6 +45,9 @@ export function TwoStageWorkspace({
   const topSet = new Map(top.map((t) => [t.title, t.reason]));
   const orderedTitles = [...top.map((t) => t.title), ...titles.filter((t) => !topSet.has(t))];
   const ki = stage1.context.workflow?.keywordIntelligence ?? null;
+  // v0.9.153 후보가 따라 한 대본 포맷 원문 (있을 때만)
+  const refs = stage1.context.quality?.formatRefs;
+  const formatName = stage1.context.scriptFormat?.name ?? null;
 
   const [pickedTitles, setPickedTitles] = useState<string[]>([]);
   const [hook, setHook] = useState(hooks[0] ?? "");
@@ -131,6 +134,11 @@ export function TwoStageWorkspace({
         icon={Sparkles}
         description="마음에 드는 제목(여러 개 가능)과 Hook·CTA 를 고르면, 2단계에서 제목마다 대본 3편·키워드·태그·설명을 만듭니다."
       >
+        {formatName && refs && (
+          <p className="mb-3 text-[12.5px] text-fg-muted" data-format-follow>
+            대본 포맷 <b>&lsquo;{formatName}&rsquo;</b> 참고 · 제목 {titles.filter((t) => refs.titles[t]).length}/{titles.length}개, Hook {hooks.filter((h) => refs.hooks[h]).length}/{hooks.length}개가 포맷 문장 구조를 따랐습니다 (파란 글씨 = 따라 한 원문).
+          </p>
+        )}
         {ki && (
           <div className="mb-4 rounded-control border border-line bg-subtle/60 px-3.5 py-3" data-keyword-intel>
             <p className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
@@ -181,6 +189,7 @@ export function TwoStageWorkspace({
                     {topSet.has(t) && <Star className="mr-1 inline size-3.5 fill-brand text-brand" />}
                     <span className="text-fg">{t}</span>
                     {topSet.get(t) && <span className="block text-[11.5px] text-fg-subtle">{topSet.get(t)}</span>}
+                    {refs?.titles[t] && <FormatRef model={refs.titles[t]} />}
                     {done.has(t) && <span className="ml-1.5 text-[11px] font-medium text-success">대본 있음</span>}
                     {failed[t] && <span className="block text-[11.5px] text-danger">{failed[t]}</span>}
                   </span>
@@ -191,7 +200,7 @@ export function TwoStageWorkspace({
           <div className="grid gap-5 md:grid-cols-2">
             <CandidateBlock title={`Hook 후보 · ${hooks.length}개`} hint="1개 고르기 — 대본 첫 줄" onAdd={() => void addCandidates("hooks")} adding={adding === "hooks"}>
               {hooks.map((h) => (
-                <RadioRow key={h} name={`hook-${stage1.id}`} checked={hook === h} onChange={() => setHook(h)} text={h} />
+                <RadioRow key={h} name={`hook-${stage1.id}`} checked={hook === h} onChange={() => setHook(h)} text={h} sub={refs?.hooks[h] ? <FormatRef model={refs.hooks[h]} /> : null} />
               ))}
             </CandidateBlock>
             <CandidateBlock title={`CTA 후보 · ${ctas.length}개`} hint="1개 고르기 — 대본 마지막" onAdd={() => void addCandidates("ctas")} adding={adding === "ctas"}>
@@ -382,11 +391,23 @@ function CandidateBlock({ title, hint, onAdd, adding, children }: { title: strin
   );
 }
 
-function RadioRow({ name, checked, onChange, text }: { name: string; checked: boolean; onChange: () => void; text: string }) {
+/** "포맷 따라 씀: 원문" 표시 */
+function FormatRef({ model }: { model: string }) {
+  return (
+    <span className="mt-0.5 block text-[11.5px] text-brand" title="대본 포맷의 이 문장 구조를 따라 단어만 바꿨습니다" data-format-ref>
+      포맷 따라 씀: {model}
+    </span>
+  );
+}
+
+function RadioRow({ name, checked, onChange, text, sub }: { name: string; checked: boolean; onChange: () => void; text: string; sub?: React.ReactNode }) {
   return (
     <label className={cn("flex cursor-pointer items-start gap-2 rounded-control px-2 py-1.5 text-[13px]", checked ? "bg-brand-soft/60 text-fg" : "text-fg-muted hover:bg-subtle")}>
       <input type="radio" name={name} checked={checked} onChange={onChange} className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]" />
-      <span>{text}</span>
+      <span>
+        {text}
+        {sub}
+      </span>
     </label>
   );
 }

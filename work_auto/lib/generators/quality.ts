@@ -23,6 +23,8 @@ export interface PreciseQuality {
   titleTop: { title: string; reason: string }[];
   /** 대본별: 앵글 · 뼈대 체크 · 검토 메모. key = scriptMetaKey(대본) */
   scripts: { key: string; angle: string; checks: Record<SkeletonCheck, boolean>; review: string }[];
+  /** v0.9.153 1단계 후보가 따라 한 대본 포맷 원문 (후보 문장 → 포맷 제목·Hook). 원문에 있는 것만 */
+  formatRefs?: { titles: Record<string, string>; hooks: Record<string, string> };
 }
 
 /** 2단계 생성 기능: 대본·제목·Hook 이 모두 있는 영상·클립 */
