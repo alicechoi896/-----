@@ -9,6 +9,7 @@ import { SKELETON_CHECKS, scriptMetaKey, type PreciseQuality } from "@/lib/gener
 import type { GeneratedContent, GeneratedValue } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { AskRegenerate } from "./AskRegenerate";
+import { ItemFeedback } from "./ItemFeedback";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -355,7 +356,7 @@ function OutputBlock({
         ) : list.length === 0 ? (
           <p className="text-sm text-fg-subtle">결과 없음</p>
         ) : isCards ? (
-          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} meta={section.key === "script" ? quality?.scripts : undefined} onEditItem={itemEdit} />
+          <ScriptCards items={list} picks={picks} onTogglePick={onTogglePick} added={added} meta={section.key === "script" ? quality?.scripts : undefined} onEditItem={itemEdit} contentId={section.key === "script" ? contentId : undefined} why={quality?.reasons?.script} />
         ) : section.format === "tags" ? (
           <div className="flex flex-wrap gap-1.5">
             {list.map((t) => (
@@ -480,6 +481,8 @@ function ScriptCards({
   added,
   meta,
   onEditItem,
+  contentId,
+  why,
 }: {
   items: string[];
   picks?: string[];
@@ -489,6 +492,9 @@ function ScriptCards({
   meta?: PreciseQuality["scripts"];
   /** 대본 하나만 직접 수정 */
   onEditItem?: (index: number, text: string) => Promise<void>;
+  /** v0.9.164 [왜?]·👍·👎 */
+  contentId?: string;
+  why?: Record<string, string>;
 }) {
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
@@ -612,6 +618,11 @@ function ScriptCards({
                 <p className="border-t border-line bg-canvas px-3.5 py-2 text-[12px] leading-relaxed text-fg-muted">
                   <span className="font-semibold text-fg">검토 메모</span> {m.review}
                 </p>
+              )}
+              {contentId && (
+                <div className="border-t border-line px-3 py-1.5">
+                  <ItemFeedback contentId={contentId} itemKey="script" item={text} why={why?.[text] || m?.angle || null} onUseFix={onEditItem ? (x) => onEditItem(i, x) : undefined} />
+                </div>
               )}
               {onTogglePick && (
                 <label className="flex cursor-pointer items-center gap-2 border-t border-line px-3.5 py-2 text-[12.5px] text-fg-muted">

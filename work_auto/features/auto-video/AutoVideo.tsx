@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { DEFAULT_CAPTION_STYLE, DEFAULT_GROUP_STYLES, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type GroupVideoStyle, type TitleStyle } from "@/lib/video-production/config";
 import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
+import { ItemFeedback } from "@/components/shared/ItemFeedback";
 import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
 import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker, VideoFontFaces } from "@/features/video-production/VideoProductionWorkspace";
 
@@ -59,6 +60,7 @@ interface Item {
   script?: string | null;
   thumbnailTitle?: string | null;
   titleRef?: string | null;
+  contentId?: string | null;
   hookRef?: string | null;
   jobId?: string | null;
   thumbKeys?: { vertical: string; horizontal: string } | null;
@@ -335,6 +337,7 @@ function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, on
             {it.issues && it.issues.length > 0 && <Notice tone="warning">{it.issues.slice(0, 3).join(" · ")}</Notice>}
             <Field label="업로드 제목" value={it.title ?? ""} />
             {it.titleRef && <p className="-mt-1 text-[11.5px] text-brand" data-format-ref>포맷 따라 씀: {it.titleRef}</p>}
+            {it.contentId && it.title && <ItemFeedback contentId={it.contentId} itemKey="titles" item={it.title} formatRef={it.titleRef ?? null} className="-mt-1" />}
             {it.thumbnailTitle && <Field label="섬네일 제목 (대본 포맷 참고 · 영상 상단 제목 2번째 줄)" value={it.thumbnailTitle} />}
             {it.thumbKeys && (thumbUrls[it.thumbKeys.vertical] || thumbUrls[it.thumbKeys.horizontal]) && (
               <div className="flex items-start gap-2" data-auto-thumb>
@@ -358,6 +361,7 @@ function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, on
             {it.script && <Field label={`대본 (${it.script.split("\n").filter(Boolean).length}줄 = 컷)`} value={it.script} multiline />}
             {(it.hook || it.cta) && <Field label="Hook · CTA (대본 포맷에서 고름)" value={[it.hook ? `Hook: ${it.hook}` : "", it.cta ? `CTA: ${it.cta}` : ""].filter(Boolean).join("\n")} multiline />}
             {it.hookRef && <p className="-mt-1 text-[11.5px] text-brand" data-format-ref>Hook 포맷 따라 씀: {it.hookRef}</p>}
+            {it.contentId && it.hook && <ItemFeedback contentId={it.contentId} itemKey="hooks" item={it.hook} formatRef={it.hookRef ?? null} className="-mt-1" />}
             <Field label="설명 (YouTube 설명란)" value={it.description ?? ""} multiline />
             <Field label={`키워드 ${it.keywords?.length ?? 0}개`} value={(it.keywords ?? []).join(", ")} />
             <Field label={`태그 ${it.tags?.length ?? 0}개`} value={(it.tags ?? []).join(", ")} />

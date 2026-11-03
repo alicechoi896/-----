@@ -46,6 +46,8 @@ export interface GenerationContext {
   scriptFormatUse: "full" | "titles";
   /** v0.9.118 마케팅 심리 원칙 적용 (AI 학습 관리에서 켜고 끔) */
   psychology?: boolean;
+  /** v0.9.164 피드백 학습에서 배운 규칙 (항목별, 사용자가 승인한 것만) */
+  learnedRules?: { key: string; text: string }[];
   /** Keyword Intelligence (v0.9.40): 1단계·블로그 생성 직전에 모은 실제 플랫폼 키워드 후보. 2단계는 1단계 것을 재사용 */
   keywordIntel?: KeywordIntelligence | null;
   /** 정직성 가드레일 활성화 여부 (실제 경험 미입력) */

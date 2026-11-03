@@ -71,3 +71,10 @@ describe("평점 이야기 거르기 (v0.9.154)", async () => {
     for (const t of ["380g이라 가방에 쏙", "소음이 도서관 수준", "필터 물세척 가능", "30분 만에 방 전체 제습", "주위 소음 걱정 없어요"]) expect(isRatingTalk(t)).toBe(false);
   });
 });
+
+describe("[왜?] 후보별 이유 (v0.9.164)", async () => {
+  const { pickWhy } = await import("@/lib/server/services/content-generation");
+  it("번호로 후보에 붙이고, 없는 번호·빈 이유는 버린다", () => {
+    expect(pickWhy([{ index: 2, why: "숫자 약속 — 380g" }, { index: 9, why: "x" }, { index: 1, why: " " }], ["가", "나"])).toEqual({ 나: "숫자 약속 — 380g" });
+  });
+});

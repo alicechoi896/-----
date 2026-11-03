@@ -996,6 +996,30 @@ export const SHOTS = [
     },
   },
   {
+    id: "10-feedback-learning",
+    url: "/ai-learning?tab=feedbackLearning",
+    viewport: { width: 1280, height: 1500 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (path, body) => p.request.post(abs(path), { data: body }).then((r) => r.json());
+      const cur = (await (await p.request.get(abs("/api/feedback-learning"))).json()).data;
+      if (!cur.items.length) {
+        const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
+        const s1 = (await api("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: `manual-fb-${Date.now()}` })).data;
+        const fb = (await api("/api/feedback-learning", { action: "critique", contentId: s1.id, key: "titles", item: s1.output.titles[0], reasons: ["너무 길다", "뻔하다"] })).data;
+        await api("/api/feedback-learning", { action: "learn", feedbackId: fb.id });
+        await api("/api/feedback-learning", { action: "up", contentId: s1.id, key: "hooks", item: s1.output.hooks[0] });
+      }
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-rule]").first().waitFor({ timeout: 15_000 });
+    },
+    marks: {
+      1: (p) => p.locator("[data-feedback-list] > li").first(),
+      2: (p) => p.locator("[data-feedback-list] > li").filter({ hasText: "규칙 제안" }).first(),
+      3: (p) => p.locator("[data-rule]").first(),
+    },
+  },
+  {
     id: "10-learning",
     url: "/ai-learning",
     prepare: async (p) => {

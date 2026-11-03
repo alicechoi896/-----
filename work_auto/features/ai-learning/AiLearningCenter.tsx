@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AiOptionsCard } from "./AiOptionsCard";
-import { BarChart3, Compass, FileText, GraduationCap, Hash, History, MessageSquare, Package, Palette, Plus } from "lucide-react";
+import { BarChart3, Compass, FileText, GraduationCap, Hash, History, Lightbulb, MessageSquare, Package, Palette, Plus } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { StatTile, Tabs, type TabItem } from "@/components/ui";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ContentHistoryTab } from "./ContentHistoryTab";
 import { ContentProfileTab } from "./ContentProfileTab";
 import { FeedbackTab } from "./FeedbackTab";
+import { FeedbackLearningTab } from "./FeedbackLearningTab";
 import { LearningProfileTab } from "./LearningProfileTab";
 import { PerformanceTab } from "./PerformanceTab";
 import { ProductMemoryTab } from "./ProductMemoryTab";
@@ -17,7 +18,7 @@ import { ScriptFormatTab } from "./ScriptFormatTab";
 import { KeywordTab } from "./KeywordTab";
 import { StyleTab } from "./StyleTab";
 
-type TabKey = "profiles" | "products" | "styles" | "formats" | "keywords" | "contents" | "feedback" | "performance" | "learning";
+type TabKey = "profiles" | "products" | "styles" | "formats" | "keywords" | "contents" | "feedback" | "feedbackLearning" | "performance" | "learning";
 
 /** 생성 시 Context 로 들어가는 순서 (docs/AI_LEARNING_SYSTEM.md) */
 const FLOW = ["고정 프롬프트", "콘텐츠 프로필", "스타일 데이터", "대본 포맷", "제품 데이터", "현재 트렌드", "학습 프로필", "좋은 예시(요약)", "피드백"];
@@ -26,7 +27,7 @@ const FLOW = ["고정 프롬프트", "콘텐츠 프로필", "스타일 데이터
  * AI 학습 관리 — "학습" = Fine-tuning 이 아니라, 저장 데이터를 생성 시 Context 로 주입하는 것.
  * 이 화면에서 각 Memory 를 확인하고 관리한다.
  */
-const TAB_KEYS: TabKey[] = ["profiles", "products", "styles", "formats", "keywords", "contents", "feedback", "performance", "learning"];
+const TAB_KEYS: TabKey[] = ["profiles", "products", "styles", "formats", "keywords", "contents", "feedback", "feedbackLearning", "performance", "learning"];
 
 export function AiLearningCenter({
   initialTab,
@@ -51,6 +52,7 @@ export function AiLearningCenter({
     { value: "keywords", label: "키워드 관리", icon: Hash },
     { value: "contents", label: "콘텐츠 히스토리", icon: History, count: c?.contents },
     { value: "feedback", label: "피드백", icon: MessageSquare, count: c?.feedback },
+    { value: "feedbackLearning", label: "피드백 학습", icon: Lightbulb },
     { value: "performance", label: "성과 데이터", icon: BarChart3, count: c?.performance },
     { value: "learning", label: "학습 프로필", icon: GraduationCap },
   ];
@@ -91,6 +93,7 @@ export function AiLearningCenter({
           {tab === "keywords" && <KeywordTab />}
           {tab === "contents" && <ContentHistoryTab onChanged={overview.reload} />}
           {tab === "feedback" && <FeedbackTab onChanged={overview.reload} />}
+          {tab === "feedbackLearning" && <FeedbackLearningTab />}
           {tab === "performance" && <PerformanceTab onChanged={overview.reload} />}
           {tab === "learning" && <LearningProfileTab isAdmin={isAdmin} />}
         </div>

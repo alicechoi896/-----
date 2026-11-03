@@ -25,6 +25,8 @@ export interface PreciseQuality {
   scripts: { key: string; angle: string; checks: Record<SkeletonCheck, boolean>; review: string }[];
   /** v0.9.153 1단계 후보가 따라 한 대본 포맷 원문 (후보 문장 → 포맷 제목·Hook). 원문에 있는 것만 */
   formatRefs?: { titles: Record<string, string>; hooks: Record<string, string> };
+  /** v0.9.164 [왜?] 후보마다 AI 가 적은 이유 (항목 → 후보 문장 → 이유). 만들 때 같은 호출에서 */
+  reasons?: Partial<Record<string, Record<string, string>>>;
 }
 
 /** 2단계 생성 기능: 대본·제목·Hook 이 모두 있는 영상·클립 */

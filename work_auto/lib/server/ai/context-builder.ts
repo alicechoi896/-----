@@ -1,4 +1,5 @@
 import "server-only";
+import { activeRules } from "./feedback-learning";
 import { readAiOptions } from "../settings/ai-options";
 import type { GeneratorConfig } from "@/lib/generators/types";
 import type { ChannelId, ContextSummary } from "@/lib/types";
@@ -209,8 +210,10 @@ export async function buildGenerationContext({ userId, featureId, channelId, con
 
   // v0.9.118 마케팅 심리 원칙 (AI 학습 관리 › 켜기/끄기, 모든 원고·새벽 자동 제작 공통)
   const psychology = (await readAiOptions(userId).catch(() => null))?.psychology ?? false;
+  const learnedRules = await activeRules(userId).catch(() => []);
+  if (learnedRules.length) notes.push(`피드백 학습에서 배운 규칙 ${learnedRules.length}개 적용`);
   if (psychology) notes.push("마케팅 심리 원칙 적용 (AI 학습 관리에서 켜 둠)");
-  return { contentProfile, product, style, styleContext, exemplars, examples, learning, avoid, performanceHints, trend, referenceVideo, scriptFormat, scriptFormatUse, honestyGuard, summary, psychology };
+  return { contentProfile, product, style, styleContext, exemplars, examples, learning, avoid, performanceHints, trend, referenceVideo, scriptFormat, scriptFormatUse, honestyGuard, summary, psychology, learnedRules };
 }
 
 /** 가중치 무작위 뽑기 (중복 없이 n개) */

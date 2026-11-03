@@ -8,6 +8,7 @@ import { api } from "@/lib/api-client";
 import { Badge, Button, Input, Notice, SectionCard, Tabs, Tag } from "@/components/ui";
 import { ResultPanel } from "@/components/shared/ResultPanel";
 import { AskRegenerate } from "@/components/shared/AskRegenerate";
+import { ItemFeedback } from "@/components/shared/ItemFeedback";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
@@ -48,6 +49,14 @@ export function TwoStageWorkspace({
   const ki = stage1.context.workflow?.keywordIntelligence ?? null;
   // v0.9.153 후보가 따라 한 대본 포맷 원문 (있을 때만)
   const refs = stage1.context.quality?.formatRefs;
+  const why = stage1.context.quality?.reasons;
+  /** v0.9.164 [이걸로 쓰기]: 고친 후보를 그 목록 맨 앞에 더한다 (직접 수정으로 저장) */
+  async function applyFix(key: "titles" | "hooks" | "ctas", text: string) {
+    const cur = shown(stage1, key).map(String);
+    onStage1Change(await api.contents.annotate(stage1.id, { edit: { key, value: [text, ...cur.filter((x) => x !== text)] } }));
+    if (key === "hooks") setHook(text);
+    if (key === "ctas") setCta(text);
+  }
   const formatName = stage1.context.scriptFormat?.name ?? null;
 
   const [pickedTitles, setPickedTitles] = useState<string[]>([]);
@@ -191,6 +200,7 @@ export function TwoStageWorkspace({
                     <span className="text-fg">{t}</span>
                     {topSet.get(t) && <span className="block text-[11.5px] text-fg-subtle">{topSet.get(t)}</span>}
                     {refs?.titles[t] && <FormatRef model={refs.titles[t]} />}
+                    <ItemFeedback contentId={stage1.id} itemKey="titles" item={t} why={why?.titles?.[t] ?? topSet.get(t) ?? null} formatRef={refs?.titles[t] ?? null} onUseFix={(x) => applyFix("titles", x)} />
                     {done.has(t) && <span className="ml-1.5 text-[11px] font-medium text-success">대본 있음</span>}
                     {failed[t] && <span className="block text-[11.5px] text-danger">{failed[t]}</span>}
                   </span>
@@ -201,12 +211,12 @@ export function TwoStageWorkspace({
           <div className="grid gap-5 md:grid-cols-2">
             <CandidateBlock title={`Hook 후보 · ${hooks.length}개`} hint="1개 고르기 — 대본 첫 줄" onAdd={() => void addCandidates("hooks")} adding={adding === "hooks"} ask={{ contentId: stage1.id, label: "Hook", onRun: (r) => addCandidates("hooks", r) }}>
               {hooks.map((h) => (
-                <RadioRow key={h} name={`hook-${stage1.id}`} checked={hook === h} onChange={() => setHook(h)} text={h} sub={refs?.hooks[h] ? <FormatRef model={refs.hooks[h]} /> : null} />
+                <RadioRow key={h} name={`hook-${stage1.id}`} checked={hook === h} onChange={() => setHook(h)} text={h} sub={<>{refs?.hooks[h] ? <FormatRef model={refs.hooks[h]} /> : null}<ItemFeedback contentId={stage1.id} itemKey="hooks" item={h} why={why?.hooks?.[h] ?? null} formatRef={refs?.hooks[h] ?? null} onUseFix={(x) => applyFix("hooks", x)} /></>} />
               ))}
             </CandidateBlock>
             <CandidateBlock title={`CTA 후보 · ${ctas.length}개`} hint="1개 고르기 — 대본 마지막" onAdd={() => void addCandidates("ctas")} adding={adding === "ctas"} ask={{ contentId: stage1.id, label: "CTA", onRun: (r) => addCandidates("ctas", r) }}>
               {ctas.map((c) => (
-                <RadioRow key={c} name={`cta-${stage1.id}`} checked={cta === c} onChange={() => setCta(c)} text={c} />
+                <RadioRow key={c} name={`cta-${stage1.id}`} checked={cta === c} onChange={() => setCta(c)} text={c} sub={<ItemFeedback contentId={stage1.id} itemKey="ctas" item={c} why={why?.ctas?.[c] ?? null} onUseFix={(x) => applyFix("ctas", x)} />} />
               ))}
             </CandidateBlock>
           </div>
@@ -360,6 +370,7 @@ function ThumbPicker({ content, onChange }: { content: GeneratedContent; onChang
       setBusy(false);
     }
   }
+  const thumbWhy = content.context.quality?.reasons?.thumbnailTitles ?? {};
   return (
     <div className="space-y-2" data-thumb-picker>
       <p className="text-[12px] text-fg-subtle">공백 빼고 {THUMB_MAX}자 이내 · 지금 고른 것: <b className="text-fg">{picked ?? "(아직 안 고름 — 첫 후보를 씀)"}</b></p>
@@ -381,6 +392,7 @@ function ThumbPicker({ content, onChange }: { content: GeneratedContent; onChang
         </Button>
       </div>
       {note && <p className="text-[11.5px] text-fg-muted">{note}</p>}
+      {text && <ItemFeedback contentId={content.id} itemKey="thumbnailTitles" item={text} why={thumbWhy[text] ?? null} onUseFix={(x) => save(x)} />}
     </div>
   );
 }

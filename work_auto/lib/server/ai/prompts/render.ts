@@ -235,6 +235,14 @@ function contextBlocks(ctx: GenerationContext): string[] {
   return blocks.filter(Boolean);
 }
 
+/** v0.9.164 피드백 학습에서 배운 규칙 — 이번에 만드는 항목 것만, 마지막 쪽에 (대본 포맷·정직성 규칙과 부딪히면 그쪽이 우선) */
+const LEARNED_LABEL: Record<string, string> = { titles: "제목", hooks: "Hook", ctas: "CTA", script: "대본", thumbnailTitles: "섬네일 제목" };
+function learnedBlock(ctx: GenerationContext, keys: string[]): string {
+  const rules = (ctx.learnedRules ?? []).filter((r) => keys.includes(r.key));
+  if (!rules.length) return "";
+  return block("배운 규칙 (사용자가 '별로예요' 피드백으로 승인한 것 — 꼭 지킨다. 대본 포맷·정직성 규칙과 부딪히면 그쪽이 우선)", rules.map((r) => `${LEARNED_LABEL[r.key] ?? r.key}: ${r.text}`));
+}
+
 export function renderContentPrompt(
   template: PromptTemplate,
   config: GeneratorConfig,
@@ -304,6 +312,7 @@ export function renderContentPrompt(
     block("사용자 입력", userInput),
     outputFormat(config.outputs),
     ctx.psychology ? block("마케팅 심리 원칙 (켜져 있음 — 대본 포맷·말끝 규칙이 우선)", PSYCHOLOGY_GUIDE) : "",
+    learnedBlock(ctx, config.outputs.map((o) => o.key)),
     ending ? block("마지막 확인 — 대본 말끝 (가장 중요)", [ending, "출력하기 전에 대본의 줄마다 말끝을 다시 보고, 규칙과 다르면 내용은 그대로 두고 말끝만 고친다. Hook·CTA·제목도 같은 말끝으로.", ...(ctx.product ? [NO_RATING_RULE] : [])]) : "",
   ]
     .filter(Boolean)

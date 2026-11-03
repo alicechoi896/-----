@@ -294,6 +294,17 @@ export async function saveRequestAsRule(contentId: string, text: unknown): Promi
   return { formatName: f.name, added: true };
 }
 
+/** v0.9.164 [왜?] AI 가 적은 후보별 이유 (후보 문장 → 이유, 60자) */
+export function pickWhy(raw: unknown, candidates: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const r of Array.isArray(raw) ? raw : []) {
+    const cand = candidates[Number((r as { index?: unknown })?.index) - 1];
+    const why = String((r as { why?: unknown })?.why ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (cand && why) out[cand] = why;
+  }
+  return out;
+}
+
 /** v0.9.153 AI 가 적은 "이 후보는 포맷의 어느 문장을 따랐다" — 포맷 원문에 실제로 있는 것만 남긴다 (후보 문장 → 포맷 원문) */
 export function pickRefs(raw: unknown, candidates: string[], formatList: string[]): Record<string, string> {
   const norm = (x: string) => x.replace(/\s+/g, "").trim();
@@ -364,6 +375,7 @@ export const contentGenerationService = {
           ? "format_refs 에 따라 쓴 것을 적는다: titles·hooks 각각 {index: 1부터 센 번호, model: 따라 한 포맷 원문 그대로}. 포맷을 따르지 않은 후보는 적지 않는다. 원문에 없는 문장을 model 로 쓰지 않는다."
           : "",
         "제목을 다 쓴 뒤 클릭률이 가장 높을 5개를 골라 title_top 에 1부터 센 번호와 이유를 쓴다.",
+        "reasons 에 후보마다 왜 이렇게 썼는지 한 줄(40자 안쪽)을 적는다: titles·hooks·ctas 각각 {index: 1부터 센 번호, why: 노린 구조·심리 + 근거(포맷·제품 사실·키워드)}. 예: '숫자 약속 + 구매 직전 고민 — 구매 포인트 380g'.",
       ].filter(Boolean).join("\n"),
     });
     const ai = await getAIProvider();
@@ -375,6 +387,9 @@ export const contentGenerationService = {
     };
     schema.required = [...schema.required, "title_top"];
     const refItem = { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "model"], properties: { index: { type: "integer" }, model: { type: "string" } } } };
+    const whyItem = { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "why"], properties: { index: { type: "integer" }, why: { type: "string" } } } };
+    schema.properties.reasons = { type: "object", additionalProperties: false, required: ["titles", "hooks", "ctas"], properties: { titles: whyItem, hooks: whyItem, ctas: whyItem } };
+    schema.required = [...schema.required, "reasons"];
     if (fTitles.length || fHooks.length) {
       schema.properties.format_refs = { type: "object", additionalProperties: false, required: ["titles", "hooks"], properties: { titles: refItem, hooks: refItem } };
       schema.required = [...schema.required, "format_refs"];
@@ -397,9 +412,15 @@ export const contentGenerationService = {
       titles: pickRefs(refs.titles, titles, fTitles),
       hooks: pickRefs(refs.hooks, Array.isArray(output.hooks) ? output.hooks : [], fHooks),
     };
+    const rs = (result.data.reasons ?? {}) as Record<string, unknown>;
+    const reasons = {
+      titles: pickWhy(rs.titles, titles),
+      hooks: pickWhy(rs.hooks, Array.isArray(output.hooks) ? output.hooks : []),
+      ctas: pickWhy(rs.ctas, Array.isArray(output.ctas) ? output.ctas : []),
+    };
     console.info("[Stage1] format follow", JSON.stringify({ format: f?.name ?? null, titles: `${Object.keys(formatRefs.titles).length}/${titles.length}`, hooks: `${Object.keys(formatRefs.hooks).length}/${Array.isArray(output.hooks) ? output.hooks.length : 0}` }));
     const workflow: ContentWorkflow = { id: createId("wf"), stage: 1, keywordIntelligence: compactIntel(intel) };
-    return finish(p, output, result, { quality: { mode: "precise", angles: [], titleTop, scripts: [], formatRefs }, workflow });
+    return finish(p, output, result, { quality: { mode: "precise", angles: [], titleTop, scripts: [], formatRefs, reasons }, workflow });
   },
 
   /**
@@ -442,6 +463,7 @@ export const contentGenerationService = {
         "4. primary_keyword 는 이 제목의 검색 의도에 맞는 핵심 키워드 1개, related_keywords 는 제목·대본 방향에 맞는 관련 키워드(검색 의도 intent: purchase·info·compare·review·howto 중 하나). Keyword Intelligence 의 실제 표현을 우선 쓰고, 제목과 관계없는 키워드는 넣지 않는다. 사용자가 주요 키워드를 여러 개 넣었으면 그 키워드를 모두 포함하고 각각에서 파생된 키워드를 고르게 섞어 related_keywords 를 20~29개 만든다.",
         tagKey ? `5. ${tagKey} 는 최종 키워드(primary_keyword + related_keywords)에서 만든다. 중복·의미 없는 일반 단어는 뺀다.` : "",
         "6. 설명(description)은 이 제목과 대본에 실제로 나온 내용만 쓴다. 제품 스펙은 [제품 정보] 범위 안에서만.",
+        "8. script_reasons 에 대본 편마다, thumb_reasons 에 섬네일 제목 후보마다(index 1부터) 왜 이렇게 썼는지 한 줄(40자 안쪽, 노린 것 + 근거)을 적는다.",
         isInfo ? "" : `7. ${NO_RATING_RULE}`,
       ]
         .filter(Boolean)
@@ -454,7 +476,11 @@ export const contentGenerationService = {
       items: { type: "object", additionalProperties: false, required: ["keyword", "intent"], properties: { keyword: { type: "string" }, intent: { type: "string" } } },
     };
     schema.properties.script_structures = { type: "array", items: { type: "string" }, description: "대본 3편 각각의 설득 구조 이름" };
-    schema.required = [...schema.required, "primary_keyword", "related_keywords", "script_structures"];
+    // v0.9.164 [왜?] 대본·섬네일 제목 후보마다 이유 한 줄
+    schema.properties.script_reasons = { type: "array", items: { type: "string" }, description: "대본 편마다 왜 이렇게 썼는지 한 줄 (40자 안쪽, 노린 것 + 근거)" };
+    const hasThumbs = outputs.some((o) => o.key === "thumbnailTitles");
+    if (hasThumbs) schema.properties.thumb_reasons = { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "why"], properties: { index: { type: "integer" }, why: { type: "string" } } } };
+    schema.required = [...schema.required, "primary_keyword", "related_keywords", "script_structures", "script_reasons", ...(hasThumbs ? ["thumb_reasons"] : [])];
     const ai = await getAIProvider();
     const result = await ai.generateStructured<Record<string, unknown>>({
       task: `content-stage2:${p.featureId}`,
@@ -481,6 +507,16 @@ export const contentGenerationService = {
       angles: [],
       titleTop: [],
       scripts: scripts.map((s, i) => ({ key: scriptMetaKey(s), angle: structures[i] ?? "", checks: { hook: true, openLoop: true, answer: true }, review: "" })),
+    };
+    // [왜?] 1단계에서 고른 제목·Hook·CTA 의 이유도 이어서 (2단계 결과 화면에서 보이게)
+    const r1 = s1.context.quality?.reasons ?? {};
+    const scriptWhy = listOf(result.data.script_reasons).map((x) => str(x, 80));
+    quality.reasons = {
+      titles: r1.titles?.[title] ? { [title]: r1.titles[title] } : {},
+      hooks: hook && r1.hooks?.[hook] ? { [hook]: r1.hooks[hook] } : {},
+      ctas: cta && r1.ctas?.[cta] ? { [cta]: r1.ctas[cta] } : {},
+      script: Object.fromEntries(scripts.map((t, i) => [t, scriptWhy[i] ?? ""]).filter(([, w]) => w)),
+      thumbnailTitles: pickWhy(result.data.thumb_reasons, Array.isArray(output.thumbnailTitles) ? output.thumbnailTitles.map(String) : []),
     };
     const workflow: ContentWorkflow = { id: s1.context.workflow.id, stage: 2, stage1Id: s1.id, selected: { title, hook, cta }, primaryKeyword, relatedKeywords };
     return finish(p, output, result, { headline: title, quality, workflow });

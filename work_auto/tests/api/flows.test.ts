@@ -540,6 +540,27 @@ describe("트렌드·스타일·오류 기록", () => {
     expect((await post("/api/video-production/frames", { videoId: "nope", frame: null }, "PUT")).ok).toBe(false);
   });
 
+  it("피드백 학습: 👎 고치고 배우기 → 규칙 배우기 → 다음 생성에 규칙이 들어감 → 끄기·지우기 (v0.9.164)", async ({ skip }) => {
+    if (!reachable) skip();
+    const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;
+    type C = { id: string; output: Record<string, string[]>; context: { notes: string[]; quality?: { reasons?: Record<string, Record<string, string>> } } };
+    const s1 = (await post("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: `fb-${Date.now()}` })).data as C;
+    const title = s1.output.titles[0];
+    expect((await post("/api/feedback-learning", { action: "critique", contentId: s1.id, key: "titles", item: title })).ok).toBe(false);
+    const fb = (await post("/api/feedback-learning", { action: "critique", contentId: s1.id, key: "titles", item: title, reasons: ["너무 길다"] })).data as { id: string; why: string; fixes: string[]; rule: string };
+    expect(fb.why).toBeTruthy();
+    expect(fb.fixes.length).toBe(3);
+    expect(fb.rule).toBeTruthy();
+    const rule = (await post("/api/feedback-learning", { action: "learn", feedbackId: fb.id })).data as { id: string; on: boolean };
+    expect(rule.on).toBe(true);
+    const again = (await post("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: `fb2-${Date.now()}` })).data as C;
+    expect(again.context.notes.some((n) => n.includes("배운 규칙"))).toBe(true);
+    const list = (await j<{ rules: { id: string }[]; items: { id: string }[] }>("/api/feedback-learning")).data;
+    expect(list.rules.some((r) => r.id === rule.id)).toBe(true);
+    await post("/api/feedback-learning", { action: "rule", id: rule.id, remove: true });
+    await post("/api/feedback-learning", { action: "removeItem", id: fb.id });
+  });
+
   it("제품 캐러셀(데모): 제품 → 사진 3장 → 글(AI) → 장 고치기 → 이미지 4:5 (v0.9.163)", async ({ skip }) => {
     if (!reachable) skip();
     const { createCanvas } = await import("@napi-rs/canvas");
