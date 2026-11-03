@@ -295,7 +295,7 @@ export const api = {
     status: (tasks: import("@/lib/types/drama").DramaTask[]) => request<{ tasks: import("@/lib/types/drama").DramaTask[] }>("/api/drama-test/status", { method: "POST", body: json({ tasks }) }),
   },
   videoProduction: {
-    options: (channelId: VideoChannel) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}`),
+    options: (channelId: VideoChannel, contentId?: string) => request<VideoProductionOptions>(`/api/video-production/options?channelId=${channelId}${contentId ? `&contentId=${encodeURIComponent(contentId)}` : ""}`),
     /** v0.9.147 섬네일 이미지 */
     thumbnail: (jobId: string) => request<{ vertical: string | null; horizontal: string | null; sceneIndex: number; text: string } | null>(`/api/video-jobs/${jobId}/thumbnail`),
     makeThumbnail: (jobId: string, body: { sceneIndex?: number; text?: string }) => request<{ vertical: string | null; horizontal: string | null; sceneIndex: number; text: string }>(`/api/video-jobs/${jobId}/thumbnail`, { method: "POST", body: json(body) }),
@@ -534,7 +534,7 @@ export const api = {
 
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
-  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number; title?: string; thumbs?: string[]; thumbPick?: string | null }[];
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number; title?: string; thumbs?: string[]; thumbPick?: string | null; scriptPick?: number; hook?: string | null; cta?: string | null }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null; /** v0.9.155 영상 가져올 때 남긴 메모 */ note?: string | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean; giphy?: boolean };

@@ -474,7 +474,7 @@ async function pickBest(task: string, question: string, lists: Record<string, st
 }
 
 /** 가장 최근에 직접 만든(자동이 아닌) 영상의 목소리·자막·제목 스타일 */
-async function lastVoiceSettings(owner: string): Promise<Partial<VideoPlan>> {
+export async function lastVoiceSettings(owner: string): Promise<Partial<VideoPlan>> {
   const jobs = await getRepositories().videoJobs.list((j) => j.userId === owner && j.channelId === "youtube" && (j.status === "completed" || j.status === "needs_review"), { userId: owner, channelId: "youtube", status: ["completed", "needs_review"] });
   const last = jobs.filter((j) => !(j.plan as VideoPlan & { auto?: boolean }).auto).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   if (!last) return {};

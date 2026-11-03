@@ -613,7 +613,8 @@ export const SHOTS = [
       const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
       const xhs = (await api("/api/videos/social-search", { keyword: "청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data;
       await api("/api/videos/batch", { items: xhs.items.slice(6, 9).map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec } })), productId: pid, note: "흡입력 장면 좋음 · 3초부터" });
-      const s1 = (await api("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: "manual-gallery" })).data;
+      const s1 = (await api("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: `manual-gallery-${Date.now()}` })).data;
+      if (!s1?.id) throw new Error("1단계 실패: " + JSON.stringify(s1).slice(0, 200));
       const s2 = (await api("/api/contents/stage2", { stage1Id: s1.id, title: s1.output.titles[0], hook: s1.output.hooks[0], cta: s1.output.ctas[0] })).data;
       await p.goto(abs(`/youtube/video-production?contentId=${s2.id}`));
       await p.locator("[data-make-plan]").click();
@@ -621,10 +622,18 @@ export const SHOTS = [
       await p.locator("[data-clip-gallery-open]").first().click();
       await p.locator("[data-clip-card]").first().waitFor({ timeout: 10_000 });
       await p.waitForTimeout(1500);
+      await p.locator("[data-clip-card]:has(video)").last().click().catch(() => undefined);
+      await p.waitForTimeout(1200);
+      const manual = p.locator("[data-clip-manual]");
+      if (await manual.count()) {
+        await manual.check();
+        await p.locator("[data-clip-zoom] input").fill("1.6").catch(() => undefined);
+      }
+      await p.waitForTimeout(600);
     },
     marks: {
       1: (p) => p.locator("[data-clip-card]").first(),
-      2: (p) => p.locator("[data-clip-pick]"),
+      2: (p) => p.locator("[data-clip-frame]"),
     },
   },
   {

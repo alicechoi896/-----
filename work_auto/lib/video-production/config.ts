@@ -195,6 +195,23 @@ export const AI_CLIP_CONFIG = {
   imageHeight: 1280,
 } as const;
 
+/** v0.9.156 컷 화면 직접 조정: 배율·중심 → 원본에서 자를 창 (정사각 비율 창, 렌더가 9:16 으로 채운다) */
+export function frameCrop(frame: { zoom: number; x: number; y: number }): { x: number; y: number; w: number; h: number } {
+  const z = Math.min(VIDEO_RENDER_CONFIG.maxCropZoom, Math.max(1, frame.zoom));
+  const w = 1 / z;
+  const clamp = (v: number) => Math.min(1 - w, Math.max(0, v - w / 2));
+  return { x: Number(clamp(frame.x).toFixed(4)), y: Number(clamp(frame.y).toFixed(4)), w: Number(w.toFixed(4)), h: Number(w.toFixed(4)) };
+}
+export function cleanFrame(raw: unknown): { zoom: number; x: number; y: number } | null {
+  const r = raw as { zoom?: unknown; x?: unknown; y?: unknown } | null;
+  if (!r || !Number.isFinite(Number(r.zoom)) || !Number.isFinite(Number(r.x)) || !Number.isFinite(Number(r.y))) return null;
+  const one = (v: unknown) => Math.min(1, Math.max(0, Number(Number(v).toFixed(3))));
+  return { zoom: Math.min(VIDEO_RENDER_CONFIG.maxCropZoom, Math.max(1, Number(Number(r.zoom).toFixed(2)))), x: one(r.x), y: one(r.y) };
+}
+
+/** v0.9.156 AI 숙소 영상: 사진 최대 장수 (사진 1장 = AI 컷 1개 = Kie 1회 과금) */
+export const STAY_MAX_PHOTOS = 12;
+
 /** 예상 비용 (모르는 모델은 null) */
 export function estimateAiClipUsd(modes: ("product" | "text")[]): { usd: number; unknown: number } {
   let usd = 0;

@@ -76,11 +76,11 @@ export function placeClips(plan: VideoPlan, clips: AiClip[], aiOnly: boolean): V
 }
 
 /** 사용자가 보낸 AI 컷을 믿지 않고 정리 */
-export function sanitizeClips(raw: unknown, allowedImages: Set<string>): AiClip[] {
+export function sanitizeClips(raw: unknown, allowedImages: Set<string>, max: number = AI_CLIP_CONFIG.maxCount): AiClip[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   return raw
-    .slice(0, AI_CLIP_CONFIG.maxCount)
+    .slice(0, max)
     .map((c: Partial<AiClip>): AiClip | null => {
       const id = String(c?.id ?? "");
       if (!CLIP_ID.test(id) || seen.has(id)) return null;

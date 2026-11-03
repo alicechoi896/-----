@@ -32,6 +32,8 @@ export interface VideoScene {
   startAt?: number | null;
   /** v0.9.144 GIF 보여 줄 초 (없으면 2.6초, 컷보다 길면 다음 컷 앞부분까지) */
   gifSec?: number | null;
+  /** v0.9.156 사람이 정한 화면: 확대 배율(1~2.4)·화면 중심(0~1). 있으면 자동 확대·블러 대신 이대로 자른다 (자막·로고를 못 잡을 때) */
+  frame?: { zoom: number; x: number; y: number } | null;
   /** 원본 영상 (reference_videos.id) */
   sourceVideoId: string | null;
   /** 사람이 고른 클립이면 자동 배치가 바꾸지 않는다 */
@@ -112,6 +114,10 @@ export interface VideoPlan {
   meme: boolean;
   /** AI 컷 (섞기·AI만, v0.9.60). 결과 영상은 Kie 에 14일 — 렌더할 때 taskId 로 받아 쓰고 남기지 않는다 */
   aiClips?: AiClip[];
+  /** v0.9.156 AI 숙소 영상: 숙소 사진으로 만든 AI 컷만 쓰고(샤오홍슈 없음), 끝 화면 없음 */
+  stay?: boolean;
+  /** v0.9.156 상단 제목을 처음 몇 초만 (없으면 끝까지) */
+  titleSec?: number | null;
 }
 
 export interface VideoQa {

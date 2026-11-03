@@ -8,7 +8,9 @@ import path from "node:path";
 import { runFfmpeg } from "./ffmpeg";
 import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
-import { VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
+import { aiSourceId } from "@/lib/types/video-production";
+import { sanitizeClips } from "./ai-clips";
+import { STAY_MAX_PHOTOS, cleanFrame, VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider, getTypecastProvider, getGiphyProvider } from "../providers/registry";
@@ -32,6 +34,57 @@ const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const fileKey = (j: Pick<VideoJob, "userId" | "id">) => `${j.userId}/${j.id}.mp4`;
 
 /** 음성 엔진·목소리 검사 (v0.9.73): 타입캐스트면 tc_…/uc_… id, 아니면 OpenAI 목소리 */
+/** 원고에서 체크한 대본의 번호 (고친 대본 목록 기준, 없으면 0) */
+export function scriptPickIndex(c: Pick<GeneratedContent, "output" | "context">): number {
+  const list = ((c.context.userEdits?.script?.value ?? c.output.script) as string[] | undefined) ?? [];
+  const picked = c.context.picks?.script?.values?.[0];
+  if (!picked) return 0;
+  const norm = (x: string) => x.replace(/\s+/g, "");
+  const i = list.findIndex((t) => norm(String(t)) === norm(picked));
+  return i >= 0 ? i : 0;
+}
+
+/**
+ * v0.9.156 AI 숙소 영상 계획 검사: 컷마다 숙소 사진 AI 컷(ai1~)만, 샤오홍슈 배정·끝 화면 없음, 제목은 처음 titleSec 초
+ */
+export function sanitizeStayPlan(plan: VideoPlan): VideoPlan {
+  const clips = sanitizeClips(plan.aiClips, new Set(), STAY_MAX_PHOTOS).filter((c) => c.taskId && c.state === "success");
+  const ok = new Set(clips.map((c) => aiSourceId(c.id)));
+  const scenes = (Array.isArray(plan.scenes) ? plan.scenes : [])
+    .slice(0, STAY_MAX_PHOTOS)
+    .map((s, i) => ({ index: i, narration: String(s.narration ?? "").replace(/\s+/g, " ").trim().slice(0, 80), sfx: null, arrow: false, attention: false, gif: null, sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null, pinned: true }))
+    .filter((s) => s.narration && s.sourceVideoId)
+    .map((s, i) => ({ ...s, index: i }));
+  if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷이 없습니다. 사진을 살아 움직이게 만든 뒤 눌러 주세요.");
+  return {
+    contentId: null,
+    channelId: "youtube",
+    selectedTitle: String(plan.selectedTitle ?? "").slice(0, 200),
+    topLine1: String(plan.topLine1 ?? "").slice(0, 30),
+    topLine2: String(plan.topLine2 ?? "").slice(0, 36),
+    script: scenes.map((x) => x.narration).join("\n"),
+    sourceMode: "ai",
+    sourceVideoIds: [],
+    scenes,
+    ending: false,
+    bgm: null,
+    ...cleanVoice(plan.ttsEngine, plan.voice),
+    ttsEmotion: cleanEmotion(plan.ttsEmotion),
+    narrationOn: plan.narrationOn !== false,
+    captions: plan.captions !== false,
+    voiceStyle: VOICE_STYLES.some((v) => v.value === plan.voiceStyle) ? plan.voiceStyle : VOICE_STYLES[0].value,
+    captionStyle: { ...cleanCaptionStyle(plan.captionStyle), position: "center" },
+    titleStyle: { ...cleanTitleStyle(plan.titleStyle), bar: "none" },
+    voiceSpeed: cleanVoiceSpeed(plan.voiceSpeed),
+    maxPauseSec: cleanPause(plan.maxPauseSec),
+    targetSec: cleanTarget(plan.targetSec),
+    meme: false,
+    aiClips: clips,
+    stay: true,
+    titleSec: plan.titleSec != null && Number.isFinite(Number(plan.titleSec)) ? Math.min(10, Math.max(1, Number(plan.titleSec))) : 2.5,
+  };
+}
+
 function cleanVoice(engine: unknown, voice: unknown): { ttsEngine: "openai" | "typecast"; voice: string } {
   if (engine === "typecast" && typeof voice === "string" && TYPECAST_VOICE_ID.test(voice)) return { ttsEngine: "typecast", voice };
   return { ttsEngine: "openai", voice: VOICE_OPTIONS.some((v) => v.value === voice) ? String(voice) : VOICE_OPTIONS[0].value };
@@ -56,7 +109,7 @@ const giphyCache = new Map<string, { at: number; list: GiphyItem[] }>();
 
 export const videoJobService = {
   /** 화면 준비: 고를 수 있는 대본(2단계 결과)·영상 소재·자료 상태 */
-  async options(channelId: VideoChannel) {
+  async options(channelId: VideoChannel, wantId?: string | null) {
     const userId = await getCurrentUserId();
     const repo = getRepositories();
     const features = new Set(VIDEO_SCRIPT_FEATURES[channelId]);
@@ -64,6 +117,11 @@ export const videoJobService = {
       .filter((c) => c.context.workflow?.stage !== 1)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 40);
+    // v0.9.156: 원고 화면에서 [영상 만들기]로 연 원고가 최근 40개 밖이면 다른 원고가 열리던 문제 → 그 원고를 꼭 넣는다
+    if (wantId && !contents.some((c) => c.id === wantId)) {
+      const want = await repo.contents.get(wantId).catch(() => null);
+      if (want && want.userId === userId && features.has(want.featureId) && Array.isArray(want.output.script)) contents.unshift(want);
+    }
     const videos = await myVideos(userId, null);
     const [ai, tts, typecast] = await Promise.all([getAIProvider(), getTTSProvider(), getTTSProvider("typecast").catch(() => null)]);
     return {
@@ -80,6 +138,10 @@ export const videoJobService = {
         title: c.context.workflow?.selected?.title || c.headline,
         thumbs: fitThumbs(((c.context.userEdits?.thumbnailTitles?.value ?? c.output.thumbnailTitles) as string[] | undefined)?.map(String) ?? []).slice(0, 10),
         thumbPick: c.context.picks?.thumbnailTitles?.values?.[0] ?? null,
+        // v0.9.156: 원고에서 고른 대본(체크한 것) — 영상 만들기가 늘 1번 대본으로 열리던 문제
+        scriptPick: scriptPickIndex(c),
+        hook: c.context.workflow?.selected?.hook || null,
+        cta: c.context.workflow?.selected?.cta || null,
       })),
       videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null, note: v.note ?? null })),
       assets: videoAssets.summary(),
@@ -177,6 +239,7 @@ export const videoJobService = {
   },
 
   async sanitize(plan: VideoPlan, userId: string): Promise<VideoPlan> {
+    if (plan.stay) return sanitizeStayPlan(plan);
     const videos = await myVideos(userId, null);
     // v0.9.71: 샤오홍슈만 (예전에 만든 AI 컷 계획이 들어와도 AI 컷은 쓰지 않는다)
     const sourceMode: VideoSourceMode = "xhs";
@@ -197,6 +260,7 @@ export const videoJobService = {
       gifSize: s.gifSize === "s" || s.gifSize === "l" ? s.gifSize : ("m" as const),
       gifSec: s.gifSec != null && Number.isFinite(Number(s.gifSec)) ? Math.min(8, Math.max(0.5, Number(Number(s.gifSec).toFixed(1)))) : null,
       startAt: s.startAt != null && Number.isFinite(Number(s.startAt)) ? Math.min(3600, Math.max(0, Number(Number(s.startAt).toFixed(2)))) : null,
+      frame: cleanFrame(s.frame),
       gifBox:
         s.gifBox && Number.isFinite(Number(s.gifBox.x)) && Number.isFinite(Number(s.gifBox.y)) && Number.isFinite(Number(s.gifBox.w))
           ? { x: Math.min(1, Math.max(0, Number(s.gifBox.x))), y: Math.min(1, Math.max(0, Number(s.gifBox.y))), w: Math.min(1, Math.max(0.1, Number(s.gifBox.w))) }

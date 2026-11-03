@@ -21,6 +21,7 @@ import {
   cleanCaptionStyle,
   cleanTitleStyle,
   voiceInstructions,
+  frameCrop,
 } from "@/lib/video-production/config";
 import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
@@ -345,6 +346,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         best = { id, start: 0, tr: tr && tr.kind !== "clean" ? { ...tr, kind: "rejected" } : { kind: "rejected" } };
         s.issue = "원본 글자가 많아 확대·블러로 최대한 가렸습니다. 다른 클립으로 바꾸면 더 깔끔합니다.";
       }
+      // v0.9.156: 사람이 화면(확대·위치)을 정했으면 자동 확대·블러 대신 그대로 (같은 원본일 때만)
+      if (s.frame && !isAiSource(best.id) && best.id === s.sourceVideoId) {
+        best = { ...best, tr: { kind: "crop", crop: frameCrop(s.frame) } };
+        s.issue = null;
+      }
       const src = sources.get(best.id)!;
       usedRanges.set(best.id, [...(usedRanges.get(best.id) ?? []), [best.start, best.start + dur]]);
       s.sourceVideoId = best.id;
@@ -418,6 +424,16 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     }
     const sceneFiles: string[] = new Array(picks.length);
     const sceneAudio: string[] = new Array(picks.length);
+    // v0.9.156: 컷이 영상 전체에서 시작하는 시각 (제목을 처음 몇 초만 보여 줄 때)
+    const startOf = new Map<number, number>();
+    {
+      let acc = 0;
+      for (const p of picks) {
+        startOf.set(p.k, acc);
+        acc += p.dur;
+      }
+    }
+    const titleSec = job.plan.titleSec && job.plan.titleSec > 0 ? job.plan.titleSec : null;
     let done = 0;
     const encode = async ({ k, s, src, best, dur }: (typeof picks)[number]) => {
       const isLast = k === scenes.length - 1;
@@ -507,7 +523,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       }
       // v0.9.144: 상단 제목·자막은 GIF·스티커·화살표보다 위에 (자막이 GIF 에 가려지던 문제)
       // 상단 제목
-      add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1[t${k}]`, `t${k}`);
+      {
+        const from0 = startOf.get(k) ?? 0;
+        if (!titleSec) add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1[t${k}]`, `t${k}`);
+        else if (from0 < titleSec) add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1:enable='between(t,0,${(titleSec - from0).toFixed(3)})'[t${k}]`, `t${k}`);
+      }
       // 자막 (엔딩 컷은 '최저가 구매링크'가 자리를 쓴다). 1줄 조각을 음성 길이에 맞춰 차례로 (컷 안 시간)
       if (job.plan.captions !== false && !(job.plan.ending && isLast)) {
         const chunks = captionChunks(s.narration, CAPTION_TEMPLATE.maxCharsPerLine);

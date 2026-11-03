@@ -526,6 +526,28 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(tk.items.some((r) => r.plays !== null)).toBe(true);
   });
 
+  it("원고에서 고친·고른 것이 영상 만들기로 넘어온다: 고른 대본·섬네일 제목·Hook·CTA (v0.9.156)", async ({ skip }) => {
+    if (!reachable) skip();
+    const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;
+    type C = { id: string; output: Record<string, string[]>; context: Record<string, unknown> };
+    const s1 = (await post("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: "carry-test" })).data as C;
+    const s2 = (await post("/api/contents/stage2", { stage1Id: s1.id, title: s1.output.titles[0], hook: s1.output.hooks[0], cta: s1.output.ctas[0] })).data as C;
+    const scripts = s2.output.script;
+    const mine = scripts[1] + "\n직접 고친 줄";
+    await post(`/api/contents/${s2.id}/annotations`, { edit: { key: "script", value: [scripts[0], mine, ...scripts.slice(2)] } }, "PATCH");
+    await post(`/api/contents/${s2.id}/annotations`, { pick: { key: "script", values: [mine] } }, "PATCH");
+    await post(`/api/contents/${s2.id}/annotations`, { pick: { key: "thumbnailTitles", values: ["고친섬네일"] } }, "PATCH");
+    type O = { contents: { id: string; scripts: string[]; scriptPick?: number; thumbPick?: string | null; hook?: string | null; cta?: string | null }[] };
+    const o = (await j<O>(`/api/video-production/options?channelId=youtube&contentId=${s2.id}`)).data;
+    const c = o.contents.find((x) => x.id === s2.id)!;
+    expect(c).toBeTruthy();
+    expect(c.scriptPick).toBe(1);
+    expect(c.scripts[1]).toContain("직접 고친 줄");
+    expect(c.thumbPick).toBe("고친섬네일");
+    expect(c.hook).toBe(s1.output.hooks[0]);
+    expect(c.cta).toBe(s1.output.ctas[0]);
+  });
+
   it("성과 분석(유튜브): 영상 목록 → 넓게·좁게·실험 정하기·지우기 → AI 로 나누기 → 첫 3초 Hook 은 제목이 아님", async ({ skip }) => {
     if (!reachable) skip();
     type V = { videoId: string; title: string; hook: string | null; kind: string | null; kindBy: string | null };
