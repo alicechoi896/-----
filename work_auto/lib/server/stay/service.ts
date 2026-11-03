@@ -1,0 +1,365 @@
+import "server-only";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
+import type { SessionInfo } from "@/lib/types";
+import type { AiClip, VideoJob, VideoPlan } from "@/lib/types/video-production";
+import { aiSourceId } from "@/lib/types/video-production";
+import { AI_CLIP_CONFIG, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
+import { createId, nowIso } from "@/lib/utils";
+import { lastVoiceSettings } from "../automation/auto-video";
+import { AppError } from "../http";
+import { getAIProvider, getVideoAIProvider } from "../providers/registry";
+import { VideoAIError } from "../providers/video-ai/kie";
+import { getCurrentUserId } from "../repositories";
+import { safeFetch } from "../security/safe-url";
+import { aiClipService } from "../video/ai-clips";
+import { videoJobService } from "../video/service";
+import { videoStorage } from "../video/storage";
+
+/**
+ * AI 숙소 영상 (v0.9.156) — 숙소 사진을 살아 움직이게(Kie 이미지→영상) 이어 붙이고, 처음 몇 초 위쪽 제목 + 가운데 자막 + AI 내레이션
+ * - 사진: 직접 올리기(기본) 또는 쿠팡 주소 한 번 시도 (막히면 그대로 알림, 다시 부르지 않음)
+ * - 사진은 9:16 으로 꽉 채워 우리 저장소에 둔다({owner}/stay/{id}/p{n}.jpg) → Kie 에는 만들 때 올린다 (Kie 사진은 24시간이라)
+ * - [대본 만들기] AI 1번 (사진을 보고 컷마다 짧은 대사·움직임 설명) / [살아 움직이게] 사진 1장 = Kie 1회 과금 (확인 후, 자동 재시도 없음)
+ * - 프로젝트는 {owner}/stay/projects.json (DB 변경 없음). 상태 확인은 무료
+ */
+const W = 720;
+const H = 1280;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+const MOTION_RULE =
+  "Locked-off static camera on a tripod, no camera movement (at most a very slow subtle push-in). Keep the scene, room layout, furniture and colors exactly as in the photo. Only natural ambient motion: rising steam, gentle rain, rippling water, flickering fire or candle light, swaying leaves and curtains, drifting clouds or fog, as fits the photo. Photorealistic, calm and cinematic. No people appear unless already in the photo. No text, no captions, no logos, no watermark.";
+
+export interface StayPhoto {
+  key: string;
+  /** 컷 대사 (자막·내레이션) */
+  line: string;
+  /** AI 움직임 설명 (영어) */
+  motion: string;
+}
+export interface StayProject {
+  id: string;
+  name: string;
+  coupangUrl: string;
+  note: string;
+  titleSmall: string;
+  titleBig: string;
+  titleSec: number;
+  photos: StayPhoto[];
+  clips: AiClip[];
+  /** AI 컷 id → 사진 key */
+  clipKeys: Record<string, string>;
+  jobId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const listKey = (owner: string) => `${owner}/stay/projects.json`;
+async function readAll(owner: string): Promise<StayProject[]> {
+  const buf = await videoStorage.download(listKey(owner)).catch(() => null);
+  try {
+    return buf ? (JSON.parse(buf.toString("utf8")) as StayProject[]) : [];
+  } catch {
+    return [];
+  }
+}
+async function writeAll(owner: string, list: StayProject[]) {
+  await videoStorage.put(listKey(owner), Buffer.from(JSON.stringify(list.slice(0, 30))), "application/json", "0");
+}
+async function own(owner: string, id: unknown): Promise<{ list: StayProject[]; p: StayProject }> {
+  const list = await readAll(owner);
+  const p = list.find((x) => x.id === String(id ?? ""));
+  if (!p) throw new AppError("NOT_FOUND", "숙소 영상 프로젝트를 찾을 수 없습니다.", 404);
+  return { list, p };
+}
+async function save(owner: string, list: StayProject[], p: StayProject): Promise<StayProject> {
+  p.updatedAt = nowIso();
+  await writeAll(owner, [p, ...list.filter((x) => x.id !== p.id)]);
+  return p;
+}
+
+/** 사진 → 9:16 꽉 채우기 (가운데 기준으로 자름) */
+async function coverJpeg(buf: Buffer): Promise<Buffer> {
+  const img = await loadImage(buf).catch(() => {
+    throw new AppError("VALIDATION", "사진을 읽지 못했습니다.");
+  });
+  const c = createCanvas(W, H);
+  const ctx = c.getContext("2d");
+  const s = Math.max(W / img.width, H / img.height);
+  ctx.drawImage(img, (W - img.width * s) / 2, (H - img.height * s) / 2, img.width * s, img.height * s);
+  return c.toBuffer("image/jpeg", 90);
+}
+async function smallJpeg(buf: Buffer, w = 360): Promise<string> {
+  const img = await loadImage(buf);
+  const c = createCanvas(w, Math.round((w * img.height) / img.width));
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toBuffer("image/jpeg", 80).toString("base64");
+}
+
+async function addPhoto(owner: string, p: StayProject, buf: Buffer) {
+  if (p.photos.length >= STAY_MAX_PHOTOS) throw new AppError("VALIDATION", `사진은 ${STAY_MAX_PHOTOS}장까지입니다.`);
+  const key = `${owner}/stay/${p.id}/p${createId("ph").slice(-8)}.jpg`;
+  await videoStorage.put(key, await coverJpeg(buf), "image/jpeg");
+  p.photos.push({ key, line: "", motion: "" });
+}
+
+/** 화면용: 사진 미리보기 주소 (1시간) */
+async function withUrls(p: StayProject): Promise<StayProject & { photoUrls: Record<string, string> }> {
+  const photoUrls = p.photos.length ? await videoStorage.urls(p.photos.map((x) => x.key), 3600).catch(() => ({})) : {};
+  return { ...p, photoUrls };
+}
+
+export const stayService = {
+  async list(): Promise<StayProject[]> {
+    return readAll(await getCurrentUserId());
+  },
+
+  async get(id: unknown) {
+    const owner = await getCurrentUserId();
+    const { p } = await own(owner, id);
+    return withUrls(p);
+  },
+
+  async create(input: { name?: unknown }) {
+    const owner = await getCurrentUserId();
+    const list = await readAll(owner);
+    const p: StayProject = { id: createId("stay"), name: String(input.name ?? "").trim().slice(0, 60) || "새 숙소 영상", coupangUrl: "", note: "", titleSmall: "", titleBig: "", titleSec: 2.5, photos: [], clips: [], clipKeys: {}, jobId: null, createdAt: nowIso(), updatedAt: nowIso() };
+    return withUrls(await save(owner, list, p));
+  },
+
+  async remove(id: unknown): Promise<void> {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, id);
+    for (const ph of p.photos) await videoStorage.remove(ph.key).catch(() => undefined);
+    await writeAll(owner, list.filter((x) => x.id !== p.id));
+  },
+
+  /** 이름·메모·제목·대사·움직임·사진 순서 고치기 (사진 지우기 포함) */
+  async update(input: { id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const str = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+    if (input.name !== undefined) p.name = str(input.name, 60) || p.name;
+    if (input.note !== undefined) p.note = String(input.note ?? "").slice(0, 1000);
+    if (input.titleSmall !== undefined) p.titleSmall = str(input.titleSmall, 20);
+    if (input.titleBig !== undefined) p.titleBig = str(input.titleBig, 24);
+    if (input.titleSec !== undefined && Number.isFinite(Number(input.titleSec))) p.titleSec = Math.min(10, Math.max(1, Number(input.titleSec)));
+    if (Array.isArray(input.photos)) {
+      const byKey = new Map(p.photos.map((x) => [x.key, x]));
+      const next = (input.photos as Partial<StayPhoto>[])
+        .map((x) => {
+          const old = byKey.get(String(x?.key ?? ""));
+          return old ? { key: old.key, line: str(x.line, 60), motion: String(x.motion ?? "").replace(/\s+/g, " ").trim().slice(0, 600) } : null;
+        })
+        .filter((x): x is StayPhoto => Boolean(x));
+      const keep = new Set(next.map((x) => x.key));
+      for (const old of p.photos) if (!keep.has(old.key)) await videoStorage.remove(old.key).catch(() => undefined);
+      // 지운 사진의 AI 컷도 뺀다 (컷 id 는 사진 key 로 잇는다)
+      p.clips = p.clips.filter((c) => keep.has(p.clipKeys?.[c.id] ?? ""));
+      p.photos = next;
+    }
+    return withUrls(await save(owner, list, p));
+  },
+
+  /** 사진 직접 올리기 (data URL, 여러 장은 화면이 한 장씩) */
+  async upload(input: { id?: unknown; dataUrl?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const m = String(input.dataUrl ?? "").match(/^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) throw new AppError("VALIDATION", "JPG·PNG·WEBP 사진만 올릴 수 있습니다.");
+    const buf = Buffer.from(m[2], "base64");
+    if (buf.length > MAX_IMAGE_BYTES) throw new AppError("VALIDATION", "사진이 너무 큽니다 (10MB 이하).");
+    await addPhoto(owner, p, buf);
+    return withUrls(await save(owner, list, p));
+  },
+
+  /** 쿠팡 주소 한 번 시도 (무료, 다시 부르지 않음). 막히면 직접 올리기로 */
+  async fromCoupang(input: { id?: unknown; url?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const url = String(input.url ?? "").trim();
+    if (!/^https:\/\/([\w-]+\.)*coupang\.com\//i.test(url)) throw new AppError("VALIDATION", "쿠팡 주소(https://…coupang.com/…)를 넣어 주세요.");
+    p.coupangUrl = url.slice(0, 500);
+    const res = await safeFetch(url, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" } }).catch(() => null);
+    const html = res && res.ok ? await res.text().catch(() => "") : "";
+    const found = [...new Set([...(html.match(/https?:\/\/[\w.-]*coupangcdn\.com\/[^"'\s)\\]+?\.(?:jpe?g|png|webp)/gi) ?? [])].map((u) => u.replace(/^http:/, "https:")))]
+      .filter((u) => !/(icon|logo|sprite|badge|blank)/i.test(u))
+      .slice(0, STAY_MAX_PHOTOS - p.photos.length);
+    let added = 0;
+    for (const u of found) {
+      try {
+        const r = await safeFetch(u, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Referer: url, Accept: "image/*" } });
+        if (!r.ok) continue;
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 15_000 || buf.length > MAX_IMAGE_BYTES) continue; // 너무 작은 건 아이콘
+        await addPhoto(owner, p, buf);
+        added++;
+      } catch {
+        // 못 받은 사진은 건너뛴다
+      }
+    }
+    console.info("[Stay] coupang", JSON.stringify({ status: res?.status ?? 0, found: found.length, added }));
+    await save(owner, list, p);
+    return { project: await withUrls(p), added, blocked: !res || !res.ok, status: res?.status ?? 0 };
+  },
+
+  /** [대본 만들기] AI 1번: 사진을 보고 제목 2줄 + 컷마다 대사·움직임 */
+  async script(input: { id?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    if (p.photos.length < 3) throw new AppError("VALIDATION", "사진을 3장 이상 넣어 주세요.");
+    const ai = await getAIProvider();
+    const n = p.photos.length;
+    let data: { titleSmall: string; titleBig: string; cuts: { line: string; motion: string }[] };
+    if (ai.id === "mock") {
+      data = { titleSmall: "비 오는 날", titleBig: `${p.name.slice(0, 12)} 히노끼탕`, cuts: p.photos.map((_, i) => ({ line: ["여기 진짜 숙소인데", "통창 앞 노천탕이", "료칸 그대로예요", "밤엔 불멍까지", "지금 저장해두세요"][i % 5], motion: "gentle steam rising, light rain" })) };
+    } else {
+      const images = await Promise.all(p.photos.map(async (ph) => smallJpeg((await videoStorage.download(ph.key))!)));
+      const parts = [
+        { type: "text" as const, text: `숙소: ${p.name}${p.note ? `\n메모(사실 정보): ${p.note}` : ""}\n아래 사진 ${n}장이 영상 컷 순서다. 사진마다 번호를 붙여 보낸다.` },
+        ...images.flatMap((data, i) => [{ type: "text" as const, text: `[사진 ${i + 1}]` }, { type: "image" as const, mediaType: "image/jpeg" as const, data }]),
+        {
+          type: "text" as const,
+          text: `세로 숏폼 숙소 소개 영상(약 ${Math.round(n * 1.5)}초)을 만든다. 컷 하나 = 사진 하나 = 1~2초.
+- titleSmall: 영상 처음 2~3초 위쪽 작은 줄 (상황·날씨·계절, 8자 이내, 예: "비 오는 날")
+- titleBig: 위쪽 큰 줄 (숙소의 가장 센 한 방, 12자 이내, 예: "액자창 앞 히노끼탕")
+- cuts: 사진 순서대로 ${n}개. line = 그 사진 위 가운데 자막이자 내레이션. 4~14자, 한 호흡, 존댓말 구어체("~예요/~고요/~거죠"). 컷을 이어 읽으면 한 문장 흐름이 되게 (예: "글램핑인데" → "돌 노천탕이" → "료칸 그대로예요" → … → "지금 저장해두세요"). 첫 컷은 궁금하게, 마지막 컷은 저장·예약 유도.
+- 사진에 실제로 보이는 것과 메모의 사실만 말한다. 가격·평점·리뷰 수·순위·할인은 쓰지 않는다.
+- motion: 그 사진에서 자연스럽게 움직일 것만 영어로 (예: "steam rising from the hot spring, light rain falling, water rippling"). 카메라는 움직이지 않는다. 사진에 없는 사람·물건을 더하지 않는다.`,
+        },
+      ];
+      const r = await ai.generateStructured<typeof data>({
+        task: "stay-script",
+        messages: [
+          { role: "system", content: "당신은 한국 숙소 숏폼(릴스·쇼츠) 작가다. 짧고 감성적인 구어체로, 사진에 보이는 것만 근거로 쓴다. 답은 JSON 하나." },
+          { role: "user", content: parts },
+        ],
+        outputKeys: ["titleSmall", "titleBig", "cuts"],
+        jsonSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["titleSmall", "titleBig", "cuts"],
+          properties: {
+            titleSmall: { type: "string" },
+            titleBig: { type: "string" },
+            cuts: { type: "array", items: { type: "object", additionalProperties: false, required: ["line", "motion"], properties: { line: { type: "string" }, motion: { type: "string" } } } },
+          },
+        },
+        variables: { stay: p.name, photos: n },
+        maxTokens: 2500,
+      });
+      data = r.data;
+    }
+    p.titleSmall = String(data.titleSmall ?? "").trim().slice(0, 20);
+    p.titleBig = String(data.titleBig ?? "").trim().slice(0, 24);
+    p.photos = p.photos.map((ph, i) => ({ ...ph, line: String(data.cuts?.[i]?.line ?? ph.line).trim().slice(0, 60), motion: String(data.cuts?.[i]?.motion ?? ph.motion).trim().slice(0, 600) }));
+    return withUrls(await save(owner, list, p));
+  },
+
+  /** 예상 비용 (아직 안 만든 사진만) */
+  estimate(p: StayProject): { count: number; usd: number } {
+    const todo = p.photos.filter((ph) => !clipOf(p, ph.key) || clipOf(p, ph.key)!.state === "fail");
+    return { count: todo.length, usd: estimateAiClipUsd(todo.map(() => "product" as const)).usd };
+  },
+
+  /** [살아 움직이게] 아직 안 만든(또는 실패한) 사진만 Kie 작업 — 사진 1장 = 1회 과금. 확인(confirmed) 필수 */
+  async animate(input: { id?: unknown; confirmed?: unknown }) {
+    if (input.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "확인 창에서 [만들기]를 눌러 주세요.", 409);
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const provider = await getVideoAIProvider();
+    if (!provider) throw new AppError("KIE_NOT_CONNECTED", "Kie AI 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 Kie AI 키를 넣어 주세요.", 409);
+    let created = 0;
+    for (const ph of p.photos) {
+      const old = clipOf(p, ph.key);
+      if (old && old.state !== "fail") continue;
+      const id = old?.id ?? nextClipId(p);
+      const clip: AiClip = old ?? { id, mode: "product", prompt: "", imageUrl: null, taskId: null, state: "draft", model: null, credits: null, error: null };
+      try {
+        const buf = await videoStorage.download(ph.key);
+        if (!buf) throw new AppError("NOT_FOUND", "사진 파일이 없습니다. 다시 올려 주세요.", 404);
+        const imageUrl = await provider.uploadImage(buf);
+        const prompt = `Vertical 9:16 video made from this photo of a Korean accommodation. ${ph.motion || "Subtle natural ambient motion."} ${MOTION_RULE}`.slice(0, 1500);
+        const r = await provider.createTask(AI_CLIP_CONFIG.product.model, { prompt, image_urls: [imageUrl], duration: AI_CLIP_CONFIG.product.duration, resolution: AI_CLIP_CONFIG.product.resolution, audio: false });
+        Object.assign(clip, { prompt: ph.motion.slice(0, 500), imageUrl, taskId: r.taskId, model: r.model, state: "waiting", error: null, credits: null });
+        created++;
+        console.info("[Stay] clip", JSON.stringify({ project: p.id, clip: id, taskId: r.taskId }));
+      } catch (e) {
+        Object.assign(clip, { state: "fail", taskId: null, error: e instanceof Error ? e.message.slice(0, 200) : "만들지 못했습니다." });
+        if (e instanceof VideoAIError && (e.code === "AUTH" || e.code === "PAYMENT")) {
+          setClip(p, ph.key, clip);
+          break;
+        }
+      }
+      setClip(p, ph.key, clip);
+    }
+    return { project: await withUrls(await save(owner, list, p)), created };
+  },
+
+  /** 상태 확인 (무료) */
+  async status(input: { id?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const busy = p.clips.filter((c) => c.state === "waiting" || c.state === "generating");
+    if (busy.length) {
+      const r = await aiClipService.status({ clips: p.clips });
+      const byId = new Map(r.clips.map((c) => [c.id, c]));
+      p.clips = p.clips.map((c) => ({ ...c, ...(byId.get(c.id) ?? {}), imageUrl: c.imageUrl }));
+      await save(owner, list, p);
+    }
+    return withUrls(p);
+  },
+
+  /** [영상 만들기]: 완성된 AI 컷으로 계획을 만들어 렌더 작업을 만든다 (렌더는 응답 뒤) */
+  async render(input: { id?: unknown }, session: SessionInfo): Promise<VideoJob> {
+    void session;
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const voice = await lastVoiceSettings(owner).catch(() => ({}) as Partial<VideoPlan>);
+    const scenes = p.photos
+      .map((ph, i) => {
+        const c = clipOf(p, ph.key);
+        return c && c.state === "success" && ph.line ? { index: i, narration: ph.line, sfx: null, arrow: false, attention: false, sourceVideoId: aiSourceId(c.id), pinned: true } : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+    if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷과 대사가 있는 사진이 없습니다.");
+    const plan = {
+      contentId: null,
+      channelId: "youtube",
+      selectedTitle: `${p.titleSmall} ${p.titleBig}`.trim() || p.name,
+      topLine1: p.titleSmall,
+      topLine2: p.titleBig,
+      script: scenes.map((s) => s.narration).join("\n"),
+      sourceMode: "ai",
+      sourceVideoIds: [],
+      scenes,
+      ending: false,
+      bgm: null,
+      ...voice,
+      narrationOn: true,
+      captions: true,
+      meme: false,
+      aiClips: p.clips,
+      stay: true,
+      titleSec: p.titleSec,
+    } as unknown as VideoPlan;
+    const job = await videoJobService.create({ plan });
+    p.jobId = job.id;
+    await save(owner, list, p);
+    return job;
+  },
+};
+
+// AI 컷 ↔ 사진 잇기 (clipKeys: 컷 id → 사진 key)
+function clipOf(p: StayProject, key: string): AiClip | undefined {
+  const id = Object.entries(p.clipKeys ?? {}).find(([, k]) => k === key)?.[0];
+  return id ? p.clips.find((c) => c.id === id) : undefined;
+}
+function setClip(p: StayProject, key: string, clip: AiClip) {
+  p.clipKeys = { ...(p.clipKeys ?? {}), [clip.id]: key };
+  p.clips = [...p.clips.filter((c) => c.id !== clip.id), clip];
+}
+function nextClipId(p: StayProject): string {
+  const used = new Set(p.clips.map((c) => c.id));
+  for (let i = 1; i <= 99; i++) if (!used.has(`ai${i}`)) return `ai${i}`;
+  throw new AppError("VALIDATION", "AI 컷이 너무 많습니다.");
+}

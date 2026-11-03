@@ -526,6 +526,47 @@ describe("트렌드·스타일·오류 기록", () => {
     expect(tk.items.some((r) => r.plays !== null)).toBe(true);
   });
 
+  it("AI 숙소 영상(데모): 사진 3장 → 제목·대사(AI) → 살아 움직이게(확인 필수) → 상태 → 영상 만들기 (v0.9.157)", async ({ skip }) => {
+    if (!reachable) skip();
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const jpg = (color: string) => {
+      const c = createCanvas(800, 600);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 800, 600);
+      return "data:image/jpeg;base64," + c.toBuffer("image/jpeg").toString("base64");
+    };
+    type P = { id: string; photos: { key: string; line: string }[]; clips: { state: string }[]; titleBig: string; photoUrls: Record<string, string> };
+    let p = (await post("/api/stay", { action: "create", name: "시험 숙소" })).data as P;
+    for (const c of ["#335577", "#557733", "#775533"]) p = (await post("/api/stay", { action: "upload", id: p.id, dataUrl: jpg(c) })).data as P;
+    expect(p.photos).toHaveLength(3);
+    expect(Object.keys(p.photoUrls)).toHaveLength(3);
+    p = (await post("/api/stay", { action: "script", id: p.id })).data as P;
+    expect(p.titleBig).toBeTruthy();
+    expect(p.photos.every((x) => x.line)).toBe(true);
+    expect((await post("/api/stay", { action: "animate", id: p.id })).ok).toBe(false);
+    const a = (await post("/api/stay", { action: "animate", id: p.id, confirmed: true })).data as { project: P; created: number };
+    expect(a.created).toBe(3);
+    // 다시 눌러도 이미 만든 사진은 다시 과금하지 않는다
+    expect(((await post("/api/stay", { action: "animate", id: p.id, confirmed: true })).data as { created: number }).created).toBe(0);
+    for (let i = 0; i < 10; i++) {
+      p = (await post("/api/stay", { action: "status", id: p.id })).data as P;
+      if (p.clips.every((c) => c.state === "success")) break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    expect(p.clips.every((c) => c.state === "success")).toBe(true);
+    const job = (await post("/api/stay", { action: "render", id: p.id })).data as { id: string; plan: { stay: boolean; titleSec: number; scenes: unknown[] } };
+    expect(job.plan.stay).toBe(true);
+    expect(job.plan.scenes).toHaveLength(3);
+    let st = "";
+    for (let i = 0; i < 90 && !["completed", "needs_review", "failed"].includes(st); i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      st = ((await j<{ status: string }>(`/api/video-jobs/${job.id}`)).data).status;
+    }
+    expect(["completed", "needs_review"]).toContain(st);
+    await post("/api/stay", { action: "remove", id: p.id });
+  }, 240_000);
+
   it("원고에서 고친·고른 것이 영상 만들기로 넘어온다: 고른 대본·섬네일 제목·Hook·CTA (v0.9.156)", async ({ skip }) => {
     if (!reachable) skip();
     const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;

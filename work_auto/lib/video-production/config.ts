@@ -57,12 +57,13 @@ export const VIDEO_RENDER_CONFIG = {
 } as const;
 
 /** 상단 제목 (검은 띠 + 2줄). 1줄 흰색, 2줄 연두색 — 브루 템플릿 그대로 */
+// v0.9.158: 상단 제목 크게 (1줄 96→112, 2줄 92→128). 너비를 넘으면 자동으로 줄여 맞춘다
 export const TOP_TITLE_TEMPLATE = {
-  barHeight: 330,
+  barHeight: 340,
   barColor: "black",
   font: "dohyeon",
-  line1: { size: 96, color: "white", y: 46, maxChars: 14 },
-  line2: { size: 92, color: "0xC8FF00", y: 180, maxChars: 16 },
+  line1: { size: 112, color: "white", y: 34, maxChars: 14 },
+  line2: { size: 128, color: "0xC8FF00", y: 168, maxChars: 16 },
   borderW: 0,
 } as const;
 

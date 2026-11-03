@@ -637,6 +637,39 @@ export const SHOTS = [
     },
   },
   {
+    id: "05-stay",
+    url: "/video/stay",
+    viewport: { width: 1280, height: 1900 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (body) => p.request.post(abs("/api/stay"), { data: body }).then((r) => r.json());
+      const list = (await (await p.request.get(abs("/api/stay"))).json()).data ?? [];
+      if (!list.length) {
+        const { createCanvas } = await import("@napi-rs/canvas");
+        const proj = (await api({ action: "create", name: "가평 글램핑 노천탕" })).data;
+        for (const c of ["#4a6b5d", "#6b5d4a", "#3f5a78", "#7a6a55"]) {
+          const cv = createCanvas(900, 1200);
+          const ctx = cv.getContext("2d");
+          const g = ctx.createLinearGradient(0, 0, 0, 1200);
+          g.addColorStop(0, c);
+          g.addColorStop(1, "#1d2a24");
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, 900, 1200);
+          await api({ action: "upload", id: proj.id, dataUrl: "data:image/jpeg;base64," + cv.toBuffer("image/jpeg").toString("base64") });
+        }
+        await api({ action: "script", id: proj.id });
+      }
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-stay-photo]").first().waitFor({ timeout: 15_000 });
+    },
+    marks: {
+      1: (p) => p.locator("[data-stay-upload]"),
+      2: (p) => p.locator("[data-stay-script-go]"),
+      3: (p) => p.locator("[data-stay-animate-go]"),
+      4: (p) => p.locator("[data-stay-render-go]"),
+    },
+  },
+  {
     id: "05-clip-form",
     viewport: { width: 1280, height: 1130 },
     url: "/naver-clip/product-content",

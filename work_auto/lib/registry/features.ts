@@ -1,5 +1,6 @@
 import {
   AudioLines,
+  BedDouble,
   BookOpen,
   Clapperboard,
   Film,
@@ -208,6 +209,21 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: ["meta-instagram", "tikhub"],
     inputs: ["해시태그 (공식 API, 무료·7일 30개)", "검색어 (TikHub, 한국어 그대로)"],
     outputs: ["릴스 목록 (조회수·좋아요·댓글·게시일·작성자)", "해시태그", "대본 포맷에 담기", "YouTube 영상 원고 만들기"],
+  },
+  {
+    id: "ai-stay",
+    channelId: "video",
+    order: 6,
+    title: "AI 숙소 영상",
+    description: "숙소 사진(직접 올리기 또는 쿠팡 주소)을 AI 로 살아 움직이게 만들어(김·비·물결·불빛) 이어 붙이고, 처음 몇 초 위쪽 제목과 가운데 자막·AI 내레이션을 넣은 9:16 숏폼을 만듭니다.",
+    href: "/video/stay",
+    icon: BedDouble,
+    kind: "tool",
+    status: "live",
+    defaultTiers: ALL,
+    requiredProviders: ["kie"],
+    inputs: ["숙소 사진 3~12장 (올리기 / 쿠팡 주소)", "숙소 이름·메모"],
+    outputs: ["제목 2줄·컷별 대사 (AI)", "사진별 AI 움직임 영상 (Kie)", "9:16 mp4 (자막·내레이션)"],
   },
   {
     id: "ig-fashion",
