@@ -169,8 +169,10 @@ function exposed(win: Box, aspect: number, barFrac: number): Box {
  * 글자·로고가 보이지 않게 하는 가장 덜 확대한 창 (v0.9.76). 없으면 null.
  * 배율 1 → maxZoom 으로 조금씩 키우며, 같은 배율이면 화면 가운데에 가까운 창.
  */
-export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.maxCropZoom): Box | null {
-  const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+/** 상단 제목 띠가 가리는 위쪽 비율 (기본). v0.9.162: 상단 제목을 끈 계획만 0 을 넘긴다 — 가전 등 기본은 그대로 */
+export const TITLE_BAR_FRAC = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+
+export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.maxCropZoom, barFrac: number = TITLE_BAR_FRAC): Box | null {
   const step = 0.01;
   for (let s = 1; s >= 1 / maxZoom - 1e-9; s -= step) {
     const room = Math.max(0, 1 - s);
@@ -201,34 +203,33 @@ const decided = new Map<string, Treatment>();
  * 우선순위 (v0.9.76): 글자·로고 없음(또는 상단 띠·꽉 채우기로 이미 안 보임) → 확대로 안 보이게 → 블러 → 사용 안 함.
  * 좌표는 원본 비율(0~1). aspect = 원본 가로÷세로 (꽉 채우기에서 잘리는 양옆·위아래 계산).
  */
-export function decideTreatment(boxes: Box[], checked: boolean, aspect = OUT_ASPECT): Treatment {
-  const key = `${checked ? 1 : 0}|${aspect.toFixed(3)}|${boxes.map((b) => `${b.x.toFixed(3)},${b.y.toFixed(3)},${b.w.toFixed(3)},${b.h.toFixed(3)}`).join(";")}`;
+export function decideTreatment(boxes: Box[], checked: boolean, aspect = OUT_ASPECT, bar: number = TITLE_BAR_FRAC): Treatment {
+  const key = `${checked ? 1 : 0}|${aspect.toFixed(3)}|${bar.toFixed(4)}|${boxes.map((b) => `${b.x.toFixed(3)},${b.y.toFixed(3)},${b.w.toFixed(3)},${b.h.toFixed(3)}`).join(";")}`;
   const hit = decided.get(key);
   if (hit) return hit;
-  const tr = decide(boxes, checked, aspect);
+  const tr = decide(boxes, checked, aspect, bar);
   if (decided.size > 5000) decided.clear();
   decided.set(key, tr);
   return tr;
 }
 
-function decide(boxes: Box[], checked: boolean, aspect: number): Treatment {
+function decide(boxes: Box[], checked: boolean, aspect: number, bar: number): Treatment {
   // 글자 검사를 못 했으면 아래 자막 띠(샤오홍슈 중국어 자막)를 확대로 잘라 내고, 안 되면 블러
   if (!checked) {
-    const crop = findCrop([SUBTITLE_BAND], aspect);
+    const crop = findCrop([SUBTITLE_BAND], aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar);
     return crop ? { kind: "unchecked", crop } : { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
   }
   if (!boxes.length) return { kind: "clean" };
   // 상단 제목 띠가 이미 덮는 글자(띠 안에 끝나는 것)는 여유를 넓히기 전에 뺀다
-  const bar = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
   const visible = boxes.filter((b) => b.y + b.h + 0.02 > bar);
   if (!visible.length) return { kind: "clean" };
   const padded = visible.map((b) => clampBox({ x: b.x - CROP_PAD, y: b.y - CROP_PAD, w: b.w + CROP_PAD * 2, h: b.h + CROP_PAD * 2 }));
-  const full = findCrop(padded, aspect, 1);
+  const full = findCrop(padded, aspect, 1, bar);
   if (full) return { kind: "clean" };
-  const crop = findCrop(padded, aspect);
-  if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect) };
+  const crop = findCrop(padded, aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar);
+  if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect, bar) };
   // v0.9.120: 확대로 다 못 가리면 — 글자가 가장 적게 보이는 확대 창 + 그래도 보이는 글자만 블러. 블러가 너무 크면 사용 안 함
-  const tr = coverAll(boxes, aspect);
+  const tr = coverAll(boxes, aspect, bar);
   return tr.kind === "blur" && blurShare(tr) <= MAX_BLUR_AREA ? tr : { kind: "rejected" };
 }
 
@@ -243,9 +244,9 @@ function blurShare(tr: Treatment): number {
  * 확대 비용을 조금 더해 같은 효과면 덜 확대한다. 블러 상자는 원본 좌표(0~1).
  * '가릴 수 없음'으로 끝나던 컷(검수 필요)에도 이걸 써서 자막·로고가 그대로 보이지 않게 한다.
  */
-export function coverAll(boxes: Box[], aspect = OUT_ASPECT): Treatment {
+export function coverAll(boxes: Box[], aspect = OUT_ASPECT, bar: number = TITLE_BAR_FRAC): Treatment {
   const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
-  const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+  const barFrac = bar;
   const marks = mergeNear(boxes.filter((b) => !(b.w >= 0.99 && b.h >= 0.99)))
     .map((b) => clampBox({ x: b.x - pad, y: b.y - pad * 0.6, w: b.w + pad * 2, h: b.h + pad * 1.2 }));
   if (!marks.length) return { kind: "clean" };
@@ -281,10 +282,10 @@ function intersect(a: Box, b: Box): Box | null {
 }
 
 /** 찾은 창을 조금 더 확대 (가운데 기준). 그래도 글자가 안 보이고 최대 배율 안이면 그 창, 아니면 원래 창 */
-function zoomMore(crop: Box, boxes: Box[], aspect: number): Box {
+function zoomMore(crop: Box, boxes: Box[], aspect: number, bar: number = TITLE_BAR_FRAC): Box {
   const s = crop.w / EXTRA_ZOOM;
   if (1 / s > VIDEO_RENDER_CONFIG.maxCropZoom + 1e-9) return crop;
-  const barFrac = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
+  const barFrac = bar;
   const cx = crop.x + crop.w / 2;
   const cy = crop.y + crop.h / 2;
   const win = { x: Math.min(1 - s, Math.max(0, cx - s / 2)), y: Math.min(1 - s, Math.max(0, cy - s / 2)), w: s, h: s };
@@ -360,7 +361,7 @@ const WANT_BONUS = 6;
 /** v0.9.157 영상별 구간 (초) */
 export type SourceRange = { from: number; to: number };
 
-export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]>; want?: { id: string; t: number } | null }): { id: string; start: number; tr: Treatment; value: number } | null {
+export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]>; want?: { id: string; t: number } | null; bar?: number }): { id: string; start: number; tr: Treatment; value: number } | null {
   const words = wordsOf(input.narration);
   let best: { id: string; start: number; tr: Treatment; value: number } | null = null;
   for (const src of input.sources) {
@@ -375,7 +376,7 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
     for (let n = 0; n <= steps; n++) {
       const start = lo + (span * n) / steps;
       if (anyFree && !free(start)) continue;
-      const tr = decideTreatment([...boxesIn(src.scan, start, input.dur), ...persistentBoxes(src.scan)], src.scan.checked, src.aspect);
+      const tr = decideTreatment([...boxesIn(src.scan, start, input.dur), ...persistentBoxes(src.scan)], src.scan.checked, src.aspect, input.bar ?? TITLE_BAR_FRAC);
       if (tr.kind === "rejected") continue;
       // 이 구간의 장면들 (없으면 가장 가까운 장면)
       let inRange = src.scan.samples.filter((x) => x.t >= start && x.t <= start + input.dur);

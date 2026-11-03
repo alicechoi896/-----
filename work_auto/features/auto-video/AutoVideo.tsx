@@ -5,7 +5,7 @@ import { CalendarClock, Film, CalendarPlus, Play, RefreshCw, Settings2, Trash2 }
 import { Badge, Button, CopyButton, EmptyState, ErrorState, Input, LoadingState, Modal, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
-import { DEFAULT_CAPTION_STYLE, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type TitleStyle } from "@/lib/video-production/config";
+import { DEFAULT_CAPTION_STYLE, DEFAULT_GROUP_STYLES, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type GroupVideoStyle, type TitleStyle } from "@/lib/video-production/config";
 import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
 import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
 import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker, VideoFontFaces } from "@/features/video-production/VideoProductionWorkspace";
@@ -30,6 +30,8 @@ interface Settings {
   count: number;
   length: "15s" | "30s";
   style?: AutoStyle | null;
+  groupStyles?: { living?: GroupVideoStyle } | null;
+  groupFormats?: { living?: string | null } | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -227,6 +229,7 @@ export function AutoVideo() {
       </SectionCard>
 
       <AutoStyleCard saved={s.style ?? null} busy={Boolean(busy)} onSave={(style) => save({ style })} />
+      <GroupStyleCard settings={s} busy={Boolean(busy)} onSave={(patch) => save(patch)} />
 
       <SectionCard
         title={`${data.date === data.today ? "오늘" : data.date} 결과 · ${items.filter((x) => x.status === "done").length}/${items.length}개 완성`}
@@ -378,6 +381,69 @@ function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, on
 }
 
 /** 영상 스타일 (v0.9.121): 영상 제작 화면과 같은 항목 — [저장]을 누르면 새벽 자동·시험 실행에 적용 */
+/**
+ * v0.9.162 분류별 영상 스타일 — 생활·잡화 제품만. 가전은 위 '영상 스타일' 그대로 (여기 설정은 가전에 쓰이지 않는다)
+ */
+function GroupStyleCard({ settings, busy, onSave }: { settings: Settings; busy: boolean; onSave: (patch: Partial<Settings>) => Promise<void> }) {
+  const base = { ...DEFAULT_GROUP_STYLES.living, ...(settings.groupStyles?.living ?? {}) };
+  const [st, setSt] = useState<GroupVideoStyle>(base);
+  const [formatId, setFormatId] = useState(settings.groupFormats?.living ?? "");
+  const [formats, setFormats] = useState<{ id: string; name: string }[]>([]);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    void fetch("/api/script-formats", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setFormats(((j?.data ?? []) as { id: string; name: string; contentType?: string }[]).filter((x) => x.contentType !== "info").map((x) => ({ id: x.id, name: x.name }))))
+      .catch(() => setFormats([]));
+  }, []);
+  const set = (p: Partial<GroupVideoStyle>) => (setSt((x) => ({ ...x, ...p })), setDirty(true));
+  const box = (label: string, on: boolean, f: (v: boolean) => void) => (
+    <label className="flex items-center gap-1.5">
+      <input type="checkbox" checked={on} onChange={(e) => f(e.target.checked)} className="accent-[var(--color-brand)]" />
+      {label}
+    </label>
+  );
+  return (
+    <SectionCard
+      title="생활·잡화 제품 영상 스타일"
+      icon={Settings2}
+      description="제품 분류가 '생활·잡화'인 제품(필름·파우치·지갑 등)만 이 스타일로 만듭니다. 가전 제품은 위 '영상 스타일' 그대로이고 여기 설정의 영향을 받지 않습니다."
+      actions={
+        <Button size="sm" variant="primary" disabled={busy || !dirty} onClick={() => void onSave({ groupStyles: { living: st }, groupFormats: { living: formatId || null } }).then(() => setDirty(false))} data-group-style-save>
+          저장
+        </Button>
+      }
+      data-group-style
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px]">
+        {box("상단 제목", st.title, (v) => set({ title: v }))}
+        {box("끝 화면 (최저가 구매링크)", st.ending, (v) => set({ ending: v }))}
+        {box("제품 버튼 화살표", st.arrows, (v) => set({ arrows: v }))}
+        <label className="flex items-center gap-1.5">
+          자막 위치
+          <select value={st.captionPosition} onChange={(e) => set({ captionPosition: e.target.value as GroupVideoStyle["captionPosition"] })} className="h-8 rounded border border-line bg-canvas px-1" aria-label="생활·잡화 자막 위치">
+            <option value="center">가운데</option>
+            <option value="lower">살짝 아래</option>
+            <option value="bottom">아래</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          대본 포맷
+          <select value={formatId} onChange={(e) => (setFormatId(e.target.value), setDirty(true))} className="h-8 max-w-[220px] rounded border border-line bg-canvas px-1" aria-label="생활·잡화 대본 포맷">
+            <option value="">기본 포맷 (가전과 같음)</option>
+            {formats.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="mt-2 text-[11.5px] text-fg-subtle">기본값은 레퍼런스(욕실 필름·파우치·지갑 영상)처럼 상단 제목·끝 화면·화살표 없이 가운데 자막입니다. 제품 분류는 제품 상세 위쪽에서 &lsquo;생활·잡화&rsquo;로 바꿉니다.</p>
+    </SectionCard>
+  );
+}
+
 function AutoStyleCard({ saved, busy, onSave }: { saved: AutoStyle | null; busy: boolean; onSave: (s: AutoStyle) => Promise<void> }) {
   const [opts, setOpts] = useState<VideoProductionOptions | null>(null);
   const [st, setSt] = useState<AutoStyle>(() => saved ?? {});

@@ -118,6 +118,8 @@ export interface VideoPlan {
   sourceRanges?: Record<string, { from: number; to: number }>;
   /** v0.9.156 AI 숙소 영상: 숙소 사진으로 만든 AI 컷만 쓰고(샤오홍슈 없음), 끝 화면 없음 */
   stay?: boolean;
+  /** v0.9.162 상단 제목 끄기 (분류별 스타일 — 생활·잡화 등). 없으면 넣는다 */
+  titleOff?: boolean;
   /** v0.9.156 상단 제목을 처음 몇 초만 (없으면 끝까지) */
   titleSec?: number | null;
 }

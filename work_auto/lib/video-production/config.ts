@@ -202,6 +202,41 @@ export const AI_CLIP_CONFIG = {
   imageHeight: 1280,
 } as const;
 
+/**
+ * v0.9.162 분류별 영상 스타일 — 가전(appliance)은 넣지 않는다 (가전은 지금 그대로, 절대 바뀌지 않게).
+ * 생활·잡화 기본값 = 레퍼런스(바우홈·홈잇·잼잼): 상단 제목 없음 · 끝 화면 없음 · 화살표 없음 · 자막 가운데
+ */
+export interface GroupVideoStyle {
+  /** 상단 제목 넣기 */
+  title: boolean;
+  /** 끝 화면 '최저가 구매링크' + 화살표 */
+  ending: boolean;
+  /** 컷마다 제품 버튼 화살표 */
+  arrows: boolean;
+  captionPosition: "center" | "lower" | "bottom";
+}
+export const DEFAULT_GROUP_STYLES: { living: GroupVideoStyle } = { living: { title: false, ending: false, arrows: false, captionPosition: "center" } };
+export function cleanGroupStyle(raw: unknown, base: GroupVideoStyle): GroupVideoStyle {
+  const r = (raw ?? {}) as Partial<GroupVideoStyle>;
+  return {
+    title: typeof r.title === "boolean" ? r.title : base.title,
+    ending: typeof r.ending === "boolean" ? r.ending : base.ending,
+    arrows: typeof r.arrows === "boolean" ? r.arrows : base.arrows,
+    captionPosition: r.captionPosition === "center" || r.captionPosition === "lower" || r.captionPosition === "bottom" ? r.captionPosition : base.captionPosition,
+  };
+}
+/** 계획에 분류 스타일을 얹는다. style 이 없으면(가전 등) 같은 계획을 그대로 돌려준다 */
+export function applyGroupStyle<P extends { titleOff?: boolean; ending: boolean; scenes: { arrow: boolean }[]; captionStyle?: CaptionStyle }>(plan: P, style: GroupVideoStyle | null | undefined): P {
+  if (!style) return plan;
+  return {
+    ...plan,
+    titleOff: !style.title,
+    ending: plan.ending && style.ending,
+    scenes: style.arrows ? plan.scenes : plan.scenes.map((x) => ({ ...x, arrow: false })),
+    captionStyle: { ...(plan.captionStyle ?? DEFAULT_CAPTION_STYLE), position: style.captionPosition },
+  };
+}
+
 /** v0.9.156 컷 화면 직접 조정: 배율·중심 → 원본에서 자를 창 (정사각 비율 창, 렌더가 9:16 으로 채운다) */
 export function frameCrop(frame: { zoom: number; x: number; y: number }): { x: number; y: number; w: number; h: number } {
   const z = Math.min(VIDEO_RENDER_CONFIG.maxCropZoom, Math.max(1, frame.zoom));

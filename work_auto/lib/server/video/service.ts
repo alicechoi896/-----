@@ -11,6 +11,7 @@ import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/t
 import { aiSourceId } from "@/lib/types/video-production";
 import { sanitizeClips } from "./ai-clips";
 import { readFrames } from "./frames";
+import { groupOf } from "@/lib/types/product";
 import { STAY_MAX_PHOTOS, cleanFrame, VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
@@ -141,6 +142,8 @@ export const videoJobService = {
     }
     const videos = await myVideos(userId, null);
     const frames = await readFrames(userId).catch(() => ({}) as Awaited<ReturnType<typeof readFrames>>);
+    const productIds = [...new Set(contents.map((c) => c.productId).filter(Boolean) as string[])];
+    const groups = new Map((productIds.length ? await repo.products.list((p) => productIds.includes(p.id), { id: productIds }).catch(() => []) : []).map((p) => [p.id, groupOf(p)]));
     const [ai, tts, typecast] = await Promise.all([getAIProvider(), getTTSProvider(), getTTSProvider("typecast").catch(() => null)]);
     return {
       contents: contents.map((c) => ({
@@ -158,6 +161,8 @@ export const videoJobService = {
         thumbPick: c.context.picks?.thumbnailTitles?.values?.[0] ?? null,
         // v0.9.156: 원고에서 고른 대본(체크한 것) — 영상 만들기가 늘 1번 대본으로 열리던 문제
         scriptPick: scriptPickIndex(c),
+        // v0.9.162 제품 분류 (생활·잡화면 화면에서 분류별 스타일 칸이 나온다)
+        productGroup: c.productId ? (groups.get(c.productId) ?? "appliance") : null,
         hook: c.context.workflow?.selected?.hook || null,
         cta: c.context.workflow?.selected?.cta || null,
       })),
@@ -312,6 +317,7 @@ export const videoJobService = {
       targetSec: cleanTarget(plan.targetSec),
       meme: false,
       sourceRanges: cleanRanges(plan.sourceRanges, new Set(sourceIds)),
+      ...(plan.titleOff === true ? { titleOff: true } : {}),
     };
   },
 

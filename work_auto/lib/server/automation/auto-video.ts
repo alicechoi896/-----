@@ -15,6 +15,8 @@ import { videoStorage } from "../video/storage";
 import { storedVideoIds, usableXhsVideo } from "../video/vault";
 import { loadScriptFormats } from "../services/script-formats";
 import { isRatingTalk } from "@/lib/script-format";
+import { DEFAULT_GROUP_STYLES, applyGroupStyle, cleanGroupStyle, type GroupVideoStyle } from "@/lib/video-production/config";
+import { groupOf } from "@/lib/types/product";
 
 /**
  * 제품 홍보 영상 자동 제작 (v0.9.107). docs/AUTO_VIDEO.md
@@ -34,6 +36,10 @@ export interface AutoVideoSettings {
   length: "15s" | "30s";
   /** v0.9.121: 자동 제작에 쓸 목소리·자막·제목 스타일 (없으면 가장 최근에 직접 만든 영상 설정) */
   style?: AutoVideoStyle | null;
+  /** v0.9.162 분류별 영상 스타일 (생활·잡화만 — 가전은 넣지 않는다, 가전은 위 style 그대로) */
+  groupStyles?: { living?: GroupVideoStyle } | null;
+  /** v0.9.162 분류별 대본 포맷 (없으면 기본 포맷) */
+  groupFormats?: { living?: string | null } | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -168,6 +174,8 @@ export async function saveSettings(v: Partial<AutoVideoSettings>, by: string): P
     count: Math.min(AUTO_LIMITS.maxCount, Math.max(1, Math.round(Number(v.count ?? cur.count) || 1))),
     length: v.length === "15s" ? "15s" : v.length === "30s" ? "30s" : cur.length,
     style: v.style === undefined ? (cur.style ?? null) : cleanStyle(v.style),
+    groupStyles: v.groupStyles === undefined ? (cur.groupStyles ?? null) : { living: cleanGroupStyle(v.groupStyles?.living, DEFAULT_GROUP_STYLES.living) },
+    groupFormats: v.groupFormats === undefined ? (cur.groupFormats ?? null) : { living: typeof v.groupFormats?.living === "string" && /^[\w-]{3,60}$/.test(v.groupFormats.living) ? v.groupFormats.living : null },
     updatedAt: now(),
     updatedBy: by,
   };
@@ -534,7 +542,11 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
   await step("원고 1단계 (키워드 분석·제목 후보)", { status: "running", startedAt: now(), error: null });
   const t0 = Date.now();
   try {
-    const s1 = (await contentGenerationService.stage1({ featureId: FEATURE, input: { productId: item.productId, keywords: item.keyword, length: settings.length } } as Parameters<typeof contentGenerationService.stage1>[0])) as GeneratedContent;
+    // v0.9.162 분류별: 생활·잡화면 그 분류의 대본 포맷·영상 스타일 (가전은 지금 그대로 — groupStyle 없음)
+    const group = groupOf((await getRepositories().products.get(item.productId).catch(() => null)) ?? {});
+    const groupStyle = group === "living" ? cleanGroupStyle(settings.groupStyles?.living, DEFAULT_GROUP_STYLES.living) : null;
+    const groupFormatId = group === "living" ? (settings.groupFormats?.living ?? null) : null;
+    const s1 = (await contentGenerationService.stage1({ featureId: FEATURE, input: { productId: item.productId, keywords: item.keyword, length: settings.length, ...(groupFormatId ? { scriptFormatId: groupFormatId } : {}) } } as Parameters<typeof contentGenerationService.stage1>[0])) as GeneratedContent;
     const out1 = s1.output as Record<string, unknown>;
     const titles = (Array.isArray(out1.titles) ? out1.titles : []).map(String);
     const top = (s1.context.quality?.titleTop ?? []).map((t) => t.title).filter(Boolean);
@@ -579,8 +591,9 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
     const thumbs = preferFormat(fitThumbs((Array.isArray(s2.output.thumbnailTitles) ? s2.output.thumbnailTitles : []).map(String).filter(Boolean)).slice(0, 10), fmt.thumbs);
     const pick3 = thumbs.length ? await pickBest("pick3", `제목 '${title}' 영상의 섬네일에 크게 넣을 문구로 클릭을 가장 부르는 것을 고른다.`, { thumb: thumbs }) : { thumb: 0 };
     const thumbnailTitle = thumbs[pick3.thumb] ?? thumbs[0] ?? null;
-    const { plan } = await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, scriptText, ...voice });
-    if (thumbnailTitle) plan.topLine2 = cutThumb(thumbnailTitle);
+    const planned = (await videoJobService.plan({ contentId: s2.id, scriptIndex: pick2.script, channelId: "youtube", sourceMode: "xhs", videoIds, scriptText, ...voice })).plan;
+    if (thumbnailTitle) planned.topLine2 = cutThumb(thumbnailTitle);
+    const plan = applyGroupStyle(planned, groupStyle);
     await addGifs(plan);
     (plan as VideoPlan & { auto?: boolean }).auto = true;
     await step("영상 만드는 중 (음성·자막·컷 편집)");

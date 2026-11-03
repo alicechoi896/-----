@@ -23,6 +23,9 @@ import {
   VOICE_SPEEDS,
   type CaptionStyle,
   type TitleStyle,
+  DEFAULT_GROUP_STYLES,
+  applyGroupStyle,
+  type GroupVideoStyle,
 } from "@/lib/video-production/config";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
@@ -75,6 +78,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
   const [previewing, setPreviewing] = useState(false);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [plan, setPlan] = useState<VideoPlan | null>(null);
+  // v0.9.162 분류별 영상 스타일 (생활·잡화 원고에서만 보이고 쓰인다)
+  const [groupStyle, setGroupStyle] = useState<GroupVideoStyle>(DEFAULT_GROUP_STYLES.living);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<(VideoJob & { fileUrl?: string | null }) | null>(null);
@@ -168,7 +173,8 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
     try {
       // v0.9.71: 고른 샤오홍슈 영상만으로 만든다 (AI 영상 생성 없음)
       const r = await api.videoProduction.plan({ contentId: content.id, scriptIndex, channelId, sourceMode: "xhs", videoIds, voice: ttsEngine === "typecast" ? tcVoice : voice, ttsEngine, ttsEmotion: tcEmotion, narrationOn, captions: captionsOn, voiceStyle, voiceSpeed, targetSec, maxPauseSec: maxPause, captionStyle, titleStyle, scriptText: scriptText ?? undefined, titleText: titleText.trim() || undefined, thumbText: thumbText.trim() || undefined });
-      setPlan(r.plan);
+      // v0.9.162 생활·잡화 원고만 분류별 스타일을 얹는다 (가전은 그대로)
+      setPlan(content.productGroup === "living" ? applyGroupStyle(r.plan, groupStyle) : r.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : "컷 계획을 만들지 못했습니다.");
     } finally {
@@ -346,6 +352,30 @@ export function VideoProductionWorkspace({ channelId, initialContentId, initialJ
                 )}
                 {content && (
                   <div className="space-y-2" data-script-picker>
+                    {content.productGroup === "living" && (
+                      <div className="rounded-control border border-brand-line bg-brand-soft/30 px-3 py-2 text-[12px]" data-group-style-vp>
+                        <p className="font-semibold">생활·잡화 제품 스타일 <span className="font-normal text-fg-subtle">(가전 원고에는 나오지 않음)</span></p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {(
+                            [
+                              ["title", "상단 제목"],
+                              ["ending", "끝 화면 (최저가 구매링크)"],
+                              ["arrows", "화살표"],
+                            ] as const
+                          ).map(([k, label]) => (
+                            <label key={k} className="flex items-center gap-1">
+                              <input type="checkbox" checked={groupStyle[k]} onChange={(e) => (setGroupStyle({ ...groupStyle, [k]: e.target.checked }), setPlan(null))} className="accent-[var(--color-brand)]" />
+                              {label}
+                            </label>
+                          ))}
+                          <select value={groupStyle.captionPosition} onChange={(e) => (setGroupStyle({ ...groupStyle, captionPosition: e.target.value as GroupVideoStyle["captionPosition"] }), setPlan(null))} className="h-6 rounded border border-line bg-canvas px-1" aria-label="자막 위치">
+                            <option value="center">자막 가운데</option>
+                            <option value="lower">자막 살짝 아래</option>
+                            <option value="bottom">자막 아래</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                     {(content.hook || content.cta) && (
                       <p className="rounded-control bg-subtle px-3 py-2 text-[12px] text-fg-muted" data-picked-hook>
                         원고에서 고른 것 · {content.hook ? <>Hook: <b className="text-fg">{content.hook}</b></> : null}

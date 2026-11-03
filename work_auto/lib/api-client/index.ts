@@ -538,7 +538,7 @@ export const api = {
 
 /** 영상 자동 제작 화면 준비 데이터 */
 export interface VideoProductionOptions {
-  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number; title?: string; thumbs?: string[]; thumbPick?: string | null; scriptPick?: number; hook?: string | null; cta?: string | null }[];
+  contents: { id: string; featureId: string; headline: string; productId: string | null; productName: string | null; scripts: string[]; createdAt: string; targetSec: number; title?: string; thumbs?: string[]; thumbPick?: string | null; scriptPick?: number; hook?: string | null; cta?: string | null; productGroup?: string | null }[];
   videos: { id: string; title: string; thumbnailUrl: string | null; durationSec: number; productId: string | null; /** v0.9.155 영상 가져올 때 남긴 메모 */ note?: string | null; /** v0.9.161 영상 URL 가져오기에서 정한 기본 화면 */ frame?: { zoom: number; x: number; y: number } | null }[];
   assets: { bgm: string[]; sfx: string[]; arrow: boolean; ending: boolean; meme: number; fonts: Record<string, boolean> };
   ready: { voice: boolean; vision: boolean; ai: string; typecast: boolean; giphy?: boolean };

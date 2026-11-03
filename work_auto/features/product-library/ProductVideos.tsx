@@ -2,15 +2,44 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Download, ExternalLink, Film, FolderDown, ListPlus, Unlink } from "lucide-react";
+import {
+  ArrowRight,
+  Download,
+  ExternalLink,
+  Film,
+  FolderDown,
+  ListPlus,
+  Unlink,
+} from "lucide-react";
 import type { ReferenceVideo } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { PLATFORM_LABEL, canDirectDownload, parseVideoLinks } from "@/lib/video-links";
-import { Badge, Button, EmptyState, ErrorState, IconButton, LoadingState, Notice, SectionCard, Textarea } from "@/components/ui";
+import {
+  PLATFORM_LABEL,
+  canDirectDownload,
+  parseVideoLinks,
+} from "@/lib/video-links";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  LoadingState,
+  Notice,
+  SectionCard,
+  Textarea,
+} from "@/components/ui";
 import { VideoThumb } from "@/components/shared/VideoThumb";
 import { formatRelative } from "@/lib/utils";
-import { XhsJobStatus, useXhsDownloads } from "@/features/video-import/useXhsDownloads";
+import {
+  XhsJobStatus,
+  useXhsDownloads,
+} from "@/features/video-import/useXhsDownloads";
+import {
+  FrameDialog,
+  type Frame,
+} from "@/features/video-production/FrameDialog";
 
 const MAX_BATCH = 20;
 
@@ -26,16 +55,32 @@ export function ProductVideos({ productId }: { productId: string }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const [importing, setImporting] = useState(false);
-  const [message, setMessage] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "info" | "warning";
+    text: string;
+  } | null>(null);
+  // v0.9.162 영상별 기본 화면 (영상 URL 가져오기와 같은 기능)
+  const [frames, setFrames] = useState<Record<string, Frame>>({});
+  const [frameFor, setFrameFor] = useState<ReferenceVideo | null>(null);
+  useEffect(() => {
+    void api.videoProduction
+      .frames()
+      .then(setFrames)
+      .catch(() => undefined);
+  }, []);
 
   const videos = (list.data ?? []).filter((v) => v.productId === productId);
   const xhsVideos = videos.filter((v) => canDirectDownload(v.platform));
   // v0.9.143: 원본 보관 현황 ([다운로드]로 받은 원본은 서버에도 보관 — 링크가 만료돼도 영상 제작에 씀)
   const vault = useAsync(() => api.videos.vaultStatus(), []);
   const stored = new Set(vault.data?.stored ?? []);
-  const notKept = videos.filter((v) => v.platform === "xiaohongshu" && vault.data && !stored.has(v.id));
+  const notKept = videos.filter(
+    (v) => v.platform === "xiaohongshu" && vault.data && !stored.has(v.id),
+  );
   // 다운로드가 끝나면 (받은 원본을 올린 뒤) 보관 현황을 다시 읽는다
-  const doneCount = Object.values(xhs.jobs).filter((j) => j.stage === "done").length;
+  const doneCount = Object.values(xhs.jobs).filter(
+    (j) => j.stage === "done",
+  ).length;
   useEffect(() => {
     if (!doneCount) return;
     const t = setTimeout(() => vault.reload(), 4000);
@@ -49,150 +94,264 @@ export function ProductVideos({ productId }: { productId: string }) {
     setImporting(true);
     setMessage(null);
     try {
-      const res = await api.videos.importMany(links.slice(0, MAX_BATCH), undefined, productId);
+      const res = await api.videos.importMany(
+        links.slice(0, MAX_BATCH),
+        undefined,
+        productId,
+      );
       const added = res.filter((r) => r.ok && r.video).map((r) => r.video!);
-      list.setData((prev) => [...added, ...(prev ?? []).filter((v) => !added.some((a) => a.id === v.id))]);
+      list.setData((prev) => [
+        ...added,
+        ...(prev ?? []).filter((v) => !added.some((a) => a.id === v.id)),
+      ]);
       const failed = res.filter((r) => !r.ok);
       setText(failed.map((r) => r.url).join("\n"));
       setMessage(
         failed.length
-          ? { tone: "warning", text: `${added.length}개 추가 · ${failed.length}개 실패: ${failed[0].error ?? "가져오지 못했습니다"}` }
-          : { tone: "info", text: `${added.length}개를 이 제품에 연결했습니다.` },
+          ? {
+              tone: "warning",
+              text: `${added.length}개 추가 · ${failed.length}개 실패: ${failed[0].error ?? "가져오지 못했습니다"}`,
+            }
+          : {
+              tone: "info",
+              text: `${added.length}개를 이 제품에 연결했습니다.`,
+            },
       );
       if (!failed.length) setAdding(false);
     } catch (e) {
-      setMessage({ tone: "warning", text: e instanceof Error ? e.message : "가져오지 못했습니다." });
+      setMessage({
+        tone: "warning",
+        text: e instanceof Error ? e.message : "가져오지 못했습니다.",
+      });
     } finally {
       setImporting(false);
     }
   }
 
   async function unlink(v: ReferenceVideo) {
-    if (!window.confirm(`'${v.title}' 영상을 이 제품에서 연결 해제할까요?\n(영상은 '영상 URL 가져오기' 목록에 그대로 남습니다)`)) return;
+    if (
+      !window.confirm(
+        `'${v.title}' 영상을 이 제품에서 연결 해제할까요?\n(영상은 '영상 URL 가져오기' 목록에 그대로 남습니다)`,
+      )
+    )
+      return;
     const updated = await api.videos.setProduct(v.id, null);
-    list.setData((prev) => prev?.map((x) => (x.id === v.id ? updated : x)) ?? null);
+    list.setData(
+      (prev) => prev?.map((x) => (x.id === v.id ? updated : x)) ?? null,
+    );
   }
 
+  const frameDialog = frameFor ? (
+    <FrameDialog
+      videoId={frameFor.id}
+      title={frameFor.title}
+      initial={frames[frameFor.id] ?? null}
+      onClose={() => setFrameFor(null)}
+      onSaved={(fr) => {
+        setFrames((m) => {
+          const n = { ...m };
+          if (fr) n[frameFor.id] = fr;
+          else delete n[frameFor.id];
+          return n;
+        });
+        setFrameFor(null);
+      }}
+    />
+  ) : null;
   return (
-    <SectionCard
-      title={`연결된 영상${videos.length ? ` · ${videos.length}개` : ""}`}
-      icon={Film}
-      description="이 제품에 연결한 참고 영상입니다. 샤오홍슈 영상은 워터마크 없는 원본을 소리 없이 바로 받을 수 있습니다."
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          {xhs.bulk && <span className="text-xs text-fg-subtle">{xhs.bulk}</span>}
-          {xhsVideos.length > 1 && (
-            <>
-              <Button size="sm" variant="primary" icon={FolderDown} loading={Boolean(xhs.bulk)} disabled={xhs.busy} onClick={() => void xhs.runAll(xhsVideos, "제품영상")}>
-                전체 다운로드 (ZIP)
-              </Button>
-            </>
-          )}
-          <Button size="sm" variant={adding ? "subtle" : "secondary"} icon={ListPlus} onClick={() => setAdding((v) => !v)}>
-            영상 추가
-          </Button>
-        </div>
-      }
-      flush
-    >
-      {adding && (
-        <div className="space-y-2 border-b border-line px-5 py-4">
-          <Textarea
-            rows={3}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={"샤오홍슈 공유 링크(또는 YouTube 주소)를 한 줄에 하나씩 붙여 넣으세요. 앱의 공유 문구를 통째로 붙여 넣어도 됩니다."}
-          />
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-fg-subtle">{links.length ? `링크 ${links.length}개${links.length > MAX_BATCH ? ` (한 번에 ${MAX_BATCH}개까지)` : ""}` : "링크를 찾지 못했습니다"}</span>
-            <Button size="sm" variant="primary" icon={ListPlus} loading={importing} disabled={!links.length} onClick={() => void handleImport()}>
-              이 제품에 연결해 가져오기
+    <>
+      {frameDialog}
+      <SectionCard
+        title={`연결된 영상${videos.length ? ` · ${videos.length}개` : ""}`}
+        icon={Film}
+        description="이 제품에 연결한 참고 영상입니다. 샤오홍슈 영상은 워터마크 없는 원본을 소리 없이 바로 받을 수 있습니다."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {xhs.bulk && (
+              <span className="text-xs text-fg-subtle">{xhs.bulk}</span>
+            )}
+            {xhsVideos.length > 1 && (
+              <>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={FolderDown}
+                  loading={Boolean(xhs.bulk)}
+                  disabled={xhs.busy}
+                  onClick={() => void xhs.runAll(xhsVideos, "제품영상")}
+                >
+                  전체 다운로드 (ZIP)
+                </Button>
+              </>
+            )}
+            <Button
+              size="sm"
+              variant={adding ? "subtle" : "secondary"}
+              icon={ListPlus}
+              onClick={() => setAdding((v) => !v)}
+            >
+              영상 추가
             </Button>
           </div>
-        </div>
-      )}
-      {message && (
-        <div className="px-5 pt-4">
-          <Notice tone={message.tone}>{message.text}</Notice>
-        </div>
-      )}
+        }
+        flush
+      >
+        {adding && (
+          <div className="space-y-2 border-b border-line px-5 py-4">
+            <Textarea
+              rows={3}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={
+                "샤오홍슈 공유 링크(또는 YouTube 주소)를 한 줄에 하나씩 붙여 넣으세요. 앱의 공유 문구를 통째로 붙여 넣어도 됩니다."
+              }
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-fg-subtle">
+                {links.length
+                  ? `링크 ${links.length}개${links.length > MAX_BATCH ? ` (한 번에 ${MAX_BATCH}개까지)` : ""}`
+                  : "링크를 찾지 못했습니다"}
+              </span>
+              <Button
+                size="sm"
+                variant="primary"
+                icon={ListPlus}
+                loading={importing}
+                disabled={!links.length}
+                onClick={() => void handleImport()}
+              >
+                이 제품에 연결해 가져오기
+              </Button>
+            </div>
+          </div>
+        )}
+        {message && (
+          <div className="px-5 pt-4">
+            <Notice tone={message.tone}>{message.text}</Notice>
+          </div>
+        )}
 
-      {list.loading ? (
-        <LoadingState variant="skeleton" rows={2} className="p-5" />
-      ) : list.error ? (
-        <ErrorState message={list.error} onRetry={list.reload} />
-      ) : !videos.length ? (
-        <EmptyState
-          compact
-          title="연결된 영상이 없습니다"
-          description="[영상 추가]로 링크를 넣거나, '영상 URL 가져오기'에서 영상마다 연관 제품을 고르면 여기에 모입니다."
-        />
-      ) : (
-        <ul className="divide-y divide-line">
-          {videos.map((v) => {
-            const running = xhs.isRunning(v.id);
-            return (
-              <li key={v.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                <VideoThumb className="h-11 w-20 shrink-0" thumbnailUrl={v.thumbnailUrl} color={v.thumbnailColor} durationSec={v.durationSec} />
-                <div className="min-w-0 flex-1">
-                  <a href={v.url} target="_blank" rel="noreferrer" className="line-clamp-1 text-sm font-medium text-fg hover:text-brand">
-                    {v.title}
-                  </a>
-                  <p className="text-xs text-fg-subtle">
-                    {PLATFORM_LABEL[v.platform] ?? "기타"} · {v.channelName} · {formatRelative(v.createdAt)}
-                    {v.note ? ` · ${v.note}` : ""}
-                  </p>
-                  <XhsJobStatus job={xhs.jobs[v.id]} />
-                  {v.platform === "xiaohongshu" && vault.data && (
-                    <div className="mt-1 text-[12px]" data-xhs-kept>
-                      {stored.has(v.id) ? <Badge tone="success">원본 보관 ✓</Badge> : <Badge tone="warning">원본 보관 안 됨 — [다운로드]를 누르면 보관</Badge>}
-                    </div>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {canDirectDownload(v.platform) ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        icon={Download}
-                        loading={running}
-                        disabled={Boolean(xhs.bulk)}
-                        onClick={() => xhs.runOne(v)}
-                        title="워터마크 없는 원본, 소리 없이 바로 저장합니다"
-                      >
-                        다운로드
-                      </Button>
-                    </>
-                  ) : (
+        {list.loading ? (
+          <LoadingState variant="skeleton" rows={2} className="p-5" />
+        ) : list.error ? (
+          <ErrorState message={list.error} onRetry={list.reload} />
+        ) : !videos.length ? (
+          <EmptyState
+            compact
+            title="연결된 영상이 없습니다"
+            description="[영상 추가]로 링크를 넣거나, '영상 URL 가져오기'에서 영상마다 연관 제품을 고르면 여기에 모입니다."
+          />
+        ) : (
+          <ul className="divide-y divide-line">
+            {videos.map((v) => {
+              const running = xhs.isRunning(v.id);
+              return (
+                <li
+                  key={v.id}
+                  className="flex flex-wrap items-center gap-3 px-5 py-3"
+                >
+                  <VideoThumb
+                    className="h-11 w-20 shrink-0"
+                    thumbnailUrl={v.thumbnailUrl}
+                    color={v.thumbnailColor}
+                    durationSec={v.durationSec}
+                  />
+                  <div className="min-w-0 flex-1">
                     <a
                       href={v.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] text-fg-muted hover:bg-subtle hover:text-fg"
+                      className="line-clamp-1 text-sm font-medium text-fg hover:text-brand"
                     >
-                      <ExternalLink className="size-3.5" />
-                      원본 보기
+                      {v.title}
                     </a>
-                  )}
-                  <IconButton icon={Unlink} label="이 제품에서 연결 해제" size="sm" disabled={running} onClick={() => void unlink(v)} />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {notKept.length > 0 && (
-        <p className="border-t border-line px-5 py-2 text-[12px] text-warning">
-          원본 보관 안 된 영상 {notKept.length}개 — [다운로드]를 누르면 받은 원본이 그대로 보관돼, 링크가 만료돼도 영상 제작·새벽 자동 제작에 씁니다 (추가 비용 없음).
-        </p>
-      )}
-      <div className="border-t border-line px-5 py-2.5 text-right">
-        <Link href="/tools/video-import" className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-brand">
-          영상 URL 가져오기에서 전체 보기
-          <ArrowRight className="size-3.5" />
-        </Link>
-      </div>
-    </SectionCard>
+                    <p className="text-xs text-fg-subtle">
+                      {PLATFORM_LABEL[v.platform] ?? "기타"} · {v.channelName} ·{" "}
+                      {formatRelative(v.createdAt)}
+                      {v.note ? ` · ${v.note}` : ""}
+                    </p>
+                    <XhsJobStatus job={xhs.jobs[v.id]} />
+                    {v.platform === "xiaohongshu" && vault.data && (
+                      <div className="mt-1 text-[12px]" data-xhs-kept>
+                        {stored.has(v.id) ? (
+                          <Badge tone="success">원본 보관 ✓</Badge>
+                        ) : (
+                          <Badge tone="warning">
+                            원본 보관 안 됨 — [다운로드]를 누르면 보관
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {canDirectDownload(v.platform) ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          icon={Download}
+                          loading={running}
+                          disabled={Boolean(xhs.bulk)}
+                          onClick={() => xhs.runOne(v)}
+                          title="워터마크 없는 원본, 소리 없이 바로 저장합니다"
+                        >
+                          다운로드
+                        </Button>
+                        {stored.has(v.id) && (
+                          <Button
+                            size="sm"
+                            variant={frames[v.id] ? "secondary" : "ghost"}
+                            onClick={() => setFrameFor(v)}
+                            title="로고·글자가 안 보이게 확대·위치를 정해 둡니다"
+                            data-frame-open
+                          >
+                            {frames[v.id]
+                              ? `화면 ${frames[v.id].zoom.toFixed(1)}배`
+                              : "화면 정하기"}
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <a
+                        href={v.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] text-fg-muted hover:bg-subtle hover:text-fg"
+                      >
+                        <ExternalLink className="size-3.5" />
+                        원본 보기
+                      </a>
+                    )}
+                    <IconButton
+                      icon={Unlink}
+                      label="이 제품에서 연결 해제"
+                      size="sm"
+                      disabled={running}
+                      onClick={() => void unlink(v)}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {notKept.length > 0 && (
+          <p className="border-t border-line px-5 py-2 text-[12px] text-warning">
+            원본 보관 안 된 영상 {notKept.length}개 — [다운로드]를 누르면 받은
+            원본이 그대로 보관돼, 링크가 만료돼도 영상 제작·새벽 자동 제작에
+            씁니다 (추가 비용 없음).
+          </p>
+        )}
+        <div className="border-t border-line px-5 py-2.5 text-right">
+          <Link
+            href="/tools/video-import"
+            className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-brand"
+          >
+            영상 URL 가져오기에서 전체 보기
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </div>
+      </SectionCard>
+    </>
   );
 }

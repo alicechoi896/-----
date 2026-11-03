@@ -36,7 +36,7 @@ import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
 import { readFrames } from "./frames";
 import { forgetStored } from "./vault";
-import { SCAN_VERSION, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { SCAN_VERSION, TITLE_BAR_FRAC, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
 import { isGiphyUrl } from "../providers/giphy";
 import { safeFetch } from "../security/safe-url";
@@ -288,6 +288,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     timing.match = Date.now() - t0;
     const usedRanges = new Map<string, [number, number][]>();
     let t = 0;
+    // v0.9.162: 상단 제목을 끈 계획(분류별 스타일)은 위쪽도 화면에 보이므로 위쪽 글자도 피한다. 기본(가전 등)은 그대로
+    const bar = job.plan.titleOff ? 0 : TITLE_BAR_FRAC;
     const defaultFrames = await readFrames(job.userId).catch(() => ({}) as Record<string, { zoom: number; x: number; y: number }>);
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number }[] = [];
     for (const [k, s] of scenes.entries()) {
@@ -306,9 +308,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const src = sources.get(s.sourceVideoId)!;
         const start = Math.max(0, Math.min(s.startAt, Math.max(0, src.duration - dur - 0.05)));
         const boxes = [...boxesIn(src.scan, start, dur), ...persistentBoxes(src.scan)];
-        let tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId));
+        let tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar);
         if (tr.kind === "rejected") {
-          const c = coverAll(boxes, aspects.get(s.sourceVideoId));
+          const c = coverAll(boxes, aspects.get(s.sourceVideoId), bar);
           tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
         }
         best = { id: s.sourceVideoId, start, tr };
@@ -321,6 +323,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         // v0.9.67: 대사와 맞는 장면·쓸모 점수 높은 장면 (앞에서부터 차례로가 아니라)
         const want = matched.wants.get(k);
         best = pickSegment({
+          bar,
           narration: s.narration,
           dur,
           used: usedRanges,
@@ -344,7 +347,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const id = candidates[0] ?? [...sources.keys()][0];
         // v0.9.120: 그래도 그대로 두지 않는다 — 글자가 가장 적게 보이게 확대하고 남은 글자는 블러
         const fb = sources.get(id);
-        const tr = fb?.scan.checked ? coverAll([...boxesIn(fb.scan, 0, dur), ...persistentBoxes(fb.scan)], aspects.get(id)) : null;
+        const tr = fb?.scan.checked ? coverAll([...boxesIn(fb.scan, 0, dur), ...persistentBoxes(fb.scan)], aspects.get(id), bar) : null;
         best = { id, start: 0, tr: tr && tr.kind !== "clean" ? { ...tr, kind: "rejected" } : { kind: "rejected" } };
         s.issue = "원본 글자가 많아 확대로 최대한 가렸습니다 (일부 보일 수 있음). 다른 클립이나 [영상 보며 고르기]의 화면 직접 정하기로 바꾸면 더 깔끔합니다.";
       }
@@ -529,7 +532,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       // 상단 제목
       {
         const from0 = startOf.get(k) ?? 0;
-        if (!titleSec) add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1[t${k}]`, `t${k}`);
+        if (job.plan.titleOff) {
+          // v0.9.162 분류별 스타일: 상단 제목 없음
+        } else if (!titleSec) add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1[t${k}]`, `t${k}`);
         else if (from0 < titleSec) add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1:enable='between(t,0,${(titleSec - from0).toFixed(3)})'[t${k}]`, `t${k}`);
       }
       // 자막 (엔딩 컷은 '최저가 구매링크'가 자리를 쓴다). 1줄 조각을 음성 길이에 맞춰 차례로 (컷 안 시간)
