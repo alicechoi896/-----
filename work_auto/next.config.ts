@@ -26,6 +26,8 @@ const nextConfig: NextConfig = {
     "/api/drama-studio/*/render": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/video/fonts/**/*", "./assets/video/sfx/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/@napi-rs/canvas*/**/*"],
     // AI 패션 (v0.9.103): 피드 카드·릴스·데모 결과
     "/api/fashion/*/render": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/fonts/LibreBaskerville-Regular.ttf", "./node_modules/pretendard/dist/public/static/Pretendard-SemiBold.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Bold.otf", "./node_modules/@napi-rs/canvas*/**/*"],
+    // 인스타그램 캐러셀 (v0.9.173): 장 그리기 글꼴 (Pretendard 굵기별 + 고를 수 있는 제목 글꼴)
+    "/api/carousel": ["./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Bold.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Medium.otf", "./assets/video/fonts/**/*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/fashion/*/sync": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/font/*": ["./assets/video/fonts/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],

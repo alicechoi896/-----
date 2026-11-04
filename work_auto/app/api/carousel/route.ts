@@ -5,7 +5,7 @@ import { carouselService } from "@/lib/server/carousel/service";
 
 export const maxDuration = 300;
 
-/** GET /api/carousel[?id=] — v0.9.163 제품 캐러셀 목록 / 하나 (사진·완성 이미지 주소 포함) */
+/** GET /api/carousel[?id=] — 캐러셀 목록 / 하나 (사진·완성 이미지 주소 포함) */
 export async function GET(request: Request) {
   return handle(async () => {
     await requireAccess("product-carousel");
@@ -15,13 +15,36 @@ export async function GET(request: Request) {
 }
 
 /**
- * POST /api/carousel { action, id, ... } — 누를 때만
- * create · update · upload · product(제품 사진, 무료) · videos(영상 장면 뽑기, 무료) · write(AI 1번) · render(PNG, 무료) · remove
+ * POST /api/carousel { action, id, ... } — 누를 때만 (자동 재시도 없음)
+ * create · update · upload · product(제품 사진, 무료) · videos(영상 장면, 무료) · style(참고 이미지 → 디자인, AI 1번)
+ * · write(AI 1번) · image(Kie 그림, 장 1개 = 1회 과금, confirmed 필수) · status(그림 확인, 무료) · render(PNG, 무료) · remove
  */
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("product-carousel");
-    const b = await readJson<{ action?: string; id?: unknown; productId?: unknown; contentId?: unknown; name?: unknown; slides?: unknown; caption?: unknown; hashtags?: unknown; font?: unknown; removePhoto?: unknown; dataUrl?: unknown; count?: unknown; request?: unknown }>(request);
+    const b = await readJson<{
+      action?: string;
+      id?: unknown;
+      productId?: unknown;
+      contentId?: unknown;
+      topic?: unknown;
+      title?: unknown;
+      notes?: unknown;
+      name?: unknown;
+      slides?: unknown;
+      design?: unknown;
+      caption?: unknown;
+      hashtags?: unknown;
+      removePhoto?: unknown;
+      dataUrl?: unknown;
+      slideId?: unknown;
+      slideIds?: unknown;
+      useCover?: unknown;
+      images?: unknown;
+      count?: unknown;
+      request?: unknown;
+      confirmed?: unknown;
+    }>(request);
     switch (b.action) {
       case "create":
         return carouselService.create(b);
@@ -33,9 +56,16 @@ export async function POST(request: Request) {
         return carouselService.fromProduct(b);
       case "videos":
         return carouselService.fromVideos(b);
+      case "style":
+        await rateLimit("ai-generate");
+        return carouselService.style(b);
       case "write":
         await rateLimit("ai-generate");
         return carouselService.write(b);
+      case "image":
+        return carouselService.image(b);
+      case "status":
+        return carouselService.status(b);
       case "render":
         return carouselService.render(b);
       case "remove":

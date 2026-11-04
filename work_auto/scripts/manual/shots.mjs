@@ -417,26 +417,15 @@ export const SHOTS = [
   {
     id: "04-carousel",
     url: "/instagram/carousel",
-    viewport: { width: 1280, height: 2500 },
+    viewport: { width: 1280, height: 3800 },
     prepare: async (p) => {
       const abs = (path) => new URL(path, p.url()).toString();
       const api = (body) => p.request.post(abs("/api/carousel"), { data: body }).then((r) => r.json());
       const list = (await (await p.request.get(abs("/api/carousel"))).json()).data ?? [];
-      if (!list.some((x) => x.rendered?.length)) {
-        const { createCanvas } = await import("@napi-rs/canvas");
-        const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
-        const proj = (await api({ action: "create", productId: pid })).data;
-        for (const c of ["#d9c7b8", "#b8c9d9", "#c9d9b8", "#e0d0e8"]) {
-          const cv = createCanvas(900, 1200);
-          const ctx = cv.getContext("2d");
-          const g = ctx.createLinearGradient(0, 0, 900, 1200);
-          g.addColorStop(0, c);
-          g.addColorStop(1, "#6b5d55");
-          ctx.fillStyle = g;
-          ctx.fillRect(0, 0, 900, 1200);
-          await api({ action: "upload", id: proj.id, dataUrl: "data:image/jpeg;base64," + cv.toBuffer("image/jpeg").toString("base64") });
-        }
-        await api({ action: "write", id: proj.id, count: 5 });
+      if (!list.some((x) => x.rendered?.length && x.design?.theme === "warning")) {
+        const proj = (await api({ action: "create", topic: "AI 한테 욕하던 사람들 비상" })).data;
+        await api({ action: "update", id: proj.id, notes: "욕하면 대화 종료, 반복하면 계정 정지 / 안 걸리는 문장 4개", design: { header: "비기의 Tip · CLAUDE POLICY", badge: "READ FIRST" } });
+        await api({ action: "write", id: proj.id, count: 6 });
         await api({ action: "render", id: proj.id });
       }
       await p.reload({ waitUntil: "networkidle" });
@@ -445,9 +434,10 @@ export const SHOTS = [
     },
     marks: {
       1: (p) => p.locator("[data-carousel-new]"),
-      2: (p) => p.locator("[data-carousel-frames]"),
-      3: (p) => p.locator("[data-carousel-write-go]"),
-      4: (p) => p.locator("[data-carousel-zip]"),
+      2: (p) => p.locator("[data-carousel-write]"),
+      3: (p) => p.locator("[data-carousel-style]"),
+      4: (p) => p.locator("[data-carousel-ai-image]"),
+      5: (p) => p.locator("[data-carousel-render-go]"),
     },
   },
   {

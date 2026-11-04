@@ -627,7 +627,7 @@ describe("트렌드·스타일·오류 기록", () => {
     await post("/api/detail-page", { action: "remove", id: p.id });
   });
 
-  it("제품 캐러셀(데모): 제품 → 사진 3장 → 글(AI) → 장 고치기 → 이미지 4:5 (v0.9.163)", async ({ skip }) => {
+  it("캐러셀(데모): 주제·제품 → 사진 3장 → 글(AI) → 참고 디자인 → 장 고치기 → AI 그림 확인 필수 → 이미지 4:5 (v0.9.173)", async ({ skip }) => {
     if (!reachable) skip();
     const { createCanvas } = await import("@napi-rs/canvas");
     const jpg = (color: string) => {
@@ -638,15 +638,22 @@ describe("트렌드·스타일·오류 기록", () => {
       return "data:image/jpeg;base64," + c.toBuffer("image/jpeg").toString("base64");
     };
     const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;
-    type P = { id: string; photos: string[]; slides: { photoKey: string; text: string; pos: string }[]; rendered: string[]; caption: string; urls: Record<string, string> };
-    let p = (await post("/api/carousel", { action: "create", productId: pid })).data as P;
+    type P = { id: string; photos: string[]; slides: { id: string; layout: string; title: string; imagePrompt: string }[]; design: { theme: string; badge: string }; rendered: string[]; caption: string; urls: Record<string, string> };
+    let p = (await post("/api/carousel", { action: "create", productId: pid, topic: "AI 한테 욕하면 계정 정지" })).data as P;
     for (const c of ["#a0b0c0", "#c0a0b0", "#b0c0a0"]) p = (await post("/api/carousel", { action: "upload", id: p.id, dataUrl: jpg(c) })).data as P;
     expect(p.photos).toHaveLength(3);
     p = (await post("/api/carousel", { action: "write", id: p.id, count: 5 })).data as P;
     expect(p.slides).toHaveLength(5);
+    expect(p.slides[0].layout).toBe("cover");
+    expect(p.slides[4].layout).toBe("cta");
     expect(p.caption).toBeTruthy();
-    p = (await post("/api/carousel", { action: "update", id: p.id, slides: p.slides.map((x, i) => (i === 1 ? { ...x, text: "직접 고친 글", pos: "top" } : x)) })).data as P;
-    expect(p.slides[1]).toMatchObject({ text: "직접 고친 글", pos: "top" });
+    p = (await post("/api/carousel", { action: "style", id: p.id, images: [jpg("#101010")] })).data as P;
+    expect(p.design.theme).toBe("warning");
+    p = (await post("/api/carousel", { action: "update", id: p.id, slides: p.slides.map((x, i) => (i === 1 ? { ...x, layout: "chat", title: "직접 고친 *제목*", lines: "막말하면:\n나: 야 또 틀렸네\n결과: 대화 종료" } : x)) })).data as P;
+    expect(p.slides[1]).toMatchObject({ layout: "chat", title: "직접 고친 *제목*" });
+    // AI 그림은 확인 없이 만들지 않는다 (유료)
+    const noConfirm = await fetch(BASE + "/api/carousel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "image", id: p.id, slideIds: [p.slides[0].id] }) });
+    expect(noConfirm.status).toBe(409);
     p = (await post("/api/carousel", { action: "render", id: p.id })).data as P;
     expect(p.rendered).toHaveLength(5);
     const u = p.urls[p.rendered[0]];
