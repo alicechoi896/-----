@@ -453,7 +453,7 @@ export const SHOTS = [
   {
     id: "04-ig-fashion",
     url: "/instagram/fashion",
-    viewport: { width: 1280, height: 1650 },
+    viewport: { width: 1280, height: 2700 },
     prepare: async (p) => {
       const abs = (path) => new URL(path, p.url()).toString();
       const r = await p.request.post(abs("/api/fashion"), { data: { title: "가을 출근룩 6가지", theme: "출근룩" } });

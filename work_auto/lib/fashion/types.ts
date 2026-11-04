@@ -96,6 +96,8 @@ export interface FashionSettings {
   clipConcept?: string;
   /** v0.9.124 AI 영상 추가 요청 (한국어 가능, 모든 룩 공통) */
   clipNote?: string;
+  /** v0.9.169 POV 문구 자리: 9:16 룩 사진 기준 가운데 x·y (0~1). 없으면 위쪽 가운데 */
+  povPos?: { x: number; y: number } | null;
 }
 
 export type FashionTaskStatus = "queued" | "requesting" | "generating" | "success" | "fail";

@@ -303,6 +303,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       let dur = audio[k].dur + C.minSpeechGapSec + (isLast ? C.tailSec : 0);
       // 엔딩(최저가 구매링크 + 화살표)은 2초 넘게 보이게 (v0.9.64)
       if (isLast && job.plan.ending) dur = Math.max(dur, C.endingMinSec);
+      // v0.9.169 AI 숙소: 사람이 정한 컷 시간 (대사보다 짧게는 안 줄인다)
+      if (job.plan.stay && s.holdSec) dur = Math.max(dur, s.holdSec);
       // 이 컷의 원본: 정한 것 → 안 되면 다른 원본 중 가장 깨끗한 것.
       // AI 컷은 AI 로 정한 컷에만 쓴다 (글자 없는 AI 컷이 샤오홍슈 컷을 모두 가져가지 않게, v0.9.64)
       const aiScene = isAiSource(s.sourceVideoId);
@@ -624,8 +626,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const amix: string[] = [`[1:a]loudnorm=I=-14:TP=-1.5:LRA=11,volume=${C.volumes.narration}[na]`];
     const mixIns = ["[na]"];
     const bgms = videoAssets.bgm();
-    const bgm = bgms.find((f) => path.basename(f).replace(/\.[^.]+$/, "") === job.plan.bgm) ?? bgms[0];
-    if (bgm) {
+    // v0.9.169 AI 숙소는 음악 없음 (bgm 이 비면 첫 음악을 넣던 기본값을 타지 않게)
+    const bgm = job.plan.stay ? null : (bgms.find((f) => path.basename(f).replace(/\.[^.]+$/, "") === job.plan.bgm) ?? bgms[0]);
+    if (job.plan.stay) {
+      // 음악 없음
+    } else if (bgm) {
       inputs.push("-stream_loop", "-1", "-i", bgm);
       amix.push(`[${idx}:a]atrim=0:${total.toFixed(3)},loudnorm=I=-14:TP=-1.5:LRA=11,volume=${C.volumes.bgm}[bg]`);
       mixIns.push("[bg]");

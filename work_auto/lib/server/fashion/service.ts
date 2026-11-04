@@ -85,6 +85,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
         bgmVolume: Math.min(1, Math.max(0, Number(v.bgmVolume ?? 0.5))),
         clipConcept: str(v.clipConcept, 20) || "pose",
         clipNote: str(v.clipNote, 300),
+        povPos: cleanPovPos(v.povPos),
       };
       return;
     case "items": {
@@ -191,6 +192,16 @@ type Json = Record<string, unknown>;
 const S = { type: "string" } as const;
 const obj = (props: Record<string, Json>) => ({ type: "object", additionalProperties: false, required: Object.keys(props), properties: props });
 const arr = (items: Json) => ({ type: "array", items });
+
+/** v0.9.169 POV 자리 (0.05~0.95, 없으면 기본 위쪽) */
+function cleanPovPos(v: unknown): { x: number; y: number } | null {
+  const o = v as { x?: unknown; y?: unknown } | null;
+  const x = Number(o?.x);
+  const y = Number(o?.y);
+  if (!o || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const c = (n: number) => Math.round(Math.min(0.95, Math.max(0.05, n)) * 1000) / 1000;
+  return { x: c(x), y: c(y) };
+}
 
 async function writeCopy(p: FashionProject, regroup: boolean): Promise<{ title: string; pov: string; cta: string; looks: { items: number[]; caption: string; pose: string }[]; aiCalls: number }> {
   const items = p.items.map((it, i) => `${i + 1}. [${categoryLabel(it.category)}] ${it.name}`).join("\n");

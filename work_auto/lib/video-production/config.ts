@@ -252,6 +252,8 @@ export function cleanFrame(raw: unknown): { zoom: number; x: number; y: number }
 }
 
 /** v0.9.156 AI 숙소 영상: 사진 최대 장수 (사진 1장 = AI 컷 1개 = Kie 1회 과금) */
+/** v0.9.169 AI 숙소 컷 하나 최대 시간(초) — AI 컷(Wan) 길이가 5초 */
+export const STAY_CUT_MAX_SEC = 5;
 export const STAY_MAX_PHOTOS = 12;
 
 /** 예상 비용 (모르는 모델은 null) */

@@ -203,6 +203,12 @@ export function DetailPageStudio({ initialProductId }: { initialProductId?: stri
           </SectionCard>
 
           <SectionCard title="③ 기획·글 (AI)" icon={Wand2} description="AI 가 사진과 제품 사실을 보고 섹션 구성(첫 화면 → 고민 → 핵심 특징 → 사용 장면 → 제품 정보 → 구매 유도)과 상품 등록명·검색 키워드·태그를 만듭니다 (AI 1번, 사실에 없는 수치·평점은 쓰지 않음)." data-detail-write>
+            {/* v0.9.169 사진 없는 섹션 안내 */}
+            {p.photos.length === 0 ? (
+              <Notice tone="warning" className="mb-3">사진이 아직 없습니다. ②에서 사진을 넣어 주세요. 비어 있으면 [기획·글 만들기]·[이미지 만들기] 때 제품 사진을 한 번 자동으로 가져옵니다.</Notice>
+            ) : p.sections.some((x) => !x.photoKey && x.kind !== "text" && x.kind !== "spec") ? (
+              <Notice tone="info" className="mb-3">사진 없는 섹션은 [이미지 만들기] 때 아직 안 쓴 사진으로 자동으로 채웁니다. 원하는 사진이 있으면 섹션의 사진 칸을 눌러 고르세요.</Notice>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <Input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="요청 (선택, 예: 30대 자취생 대상, 차분한 말투)" className="h-9 w-80" aria-label="요청" />
               <Button variant="primary" icon={Sparkles} loading={busy === "write"} onClick={() => void run("write", async () => setP(await call<Project>({ action: "write", id: p.id, request: ask || undefined })))} data-detail-write-go>

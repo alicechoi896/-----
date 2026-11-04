@@ -37,6 +37,64 @@ function ImageStrip({ list, urls, onChange, empty }: { list: FashionImage[]; url
   );
 }
 
+/**
+ * v0.9.169 POV 문구 자리 정하기: 룩 사진(9:16) 위에서 문구 상자를 끌어다 놓는다 (놓을 때 저장).
+ * 릴스와 피드 표지 모두 같은 자리 (피드 표지는 4:5 라 위아래가 잘린 만큼 맞춰 그린다)
+ */
+function PovPlacer({ text, photo, pos, onChange }: { text: string; photo: string | null; pos: { x: number; y: number } | null | undefined; onChange: (pos: { x: number; y: number } | null) => void }) {
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const cur = drag ?? pos ?? { x: 0.5, y: 0.13 };
+  const at = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const c = (n: number) => Math.min(0.95, Math.max(0.05, n));
+    return { x: c((e.clientX - r.left) / r.width), y: c((e.clientY - r.top) / r.height) };
+  };
+  return (
+    <div className="flex flex-wrap items-start gap-3" data-fashion-pov-pos>
+      <div
+        className="relative aspect-[9/16] w-[180px] shrink-0 cursor-crosshair touch-none select-none overflow-hidden rounded-control border border-line bg-subtle"
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setDrag(at(e));
+        }}
+        onPointerMove={(e) => drag && setDrag(at(e))}
+        onPointerUp={(e) => {
+          const next = at(e);
+          setDrag(null);
+          onChange(next);
+        }}
+        aria-label="POV 문구 자리 (눌러서 끌기)"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {photo ? <img src={photo} alt="" draggable={false} className="size-full object-cover" /> : <span className="absolute inset-0 flex items-center justify-center p-3 text-center text-[11px] text-fg-subtle">룩 이미지를 고르면 사진 위에서 볼 수 있어요</span>}
+        <span
+          className="pointer-events-none absolute max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded bg-white/95 px-1.5 py-0.5 text-center text-[8.5px] leading-tight font-semibold text-[#111] shadow"
+          style={{ left: `${cur.x * 100}%`, top: `${cur.y * 100}%` }}
+        >
+          {text || "POV 문구"}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1 space-y-1.5 text-[12px] text-fg-muted">
+        <p>사진 위를 누르거나 끌어서 문구 자리를 정하세요. 모델 얼굴을 피해 두면 됩니다. 놓으면 바로 저장되고, 릴스와 피드 표지에 같이 들어갑니다.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: "위", y: 0.08 },
+            { label: "가운데", y: 0.5 },
+            { label: "아래", y: 0.7 },
+          ].map((o) => (
+            <Button key={o.label} size="sm" variant="secondary" onClick={() => onChange({ x: 0.5, y: o.y })}>
+              {o.label}
+            </Button>
+          ))}
+          <Button size="sm" variant="ghost" disabled={!pos} onClick={() => onChange(null)}>
+            기본 자리로
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
   const p = ctl.project!;
   const s = p.settings;
@@ -46,6 +104,8 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
   const [uploading, setUploading] = useState(false);
   const [libOpen, setLibOpen] = useState(false);
   const setSettings = (patch: Partial<FashionSettings>) => ctl.edit("settings", { ...s, ...patch });
+  // POV 자리 미리보기: 첫 완성 룩 → 없으면 모델 사진
+  const povPhoto = p.looks.map((l) => approvedOf(l.images)?.key).find(Boolean) ?? approvedOf(p.model.images)?.key ?? null;
   const running = (pred: (t: (typeof p.tasks)[number]) => boolean) => p.tasks.filter((t) => pred(t) && (t.status === "generating" || t.status === "requesting"));
   const failed = (pred: (t: (typeof p.tasks)[number]) => boolean) => p.tasks.filter((t) => pred(t) && t.status === "fail").slice(-3);
   const modelReady = Boolean(approvedOf(p.model.images));
@@ -179,6 +239,10 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
             <span className="text-[12px] font-medium text-fg-muted">위쪽 고정 문구 (POV)</span>
             <Input value={s.pov} onChange={(e) => setSettings({ pov: e.target.value })} placeholder="POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나" data-fashion-pov />
           </label>
+          <div className="space-y-1 md:col-span-2">
+            <span className="text-[12px] font-medium text-fg-muted">POV 문구 자리</span>
+            <PovPlacer text={s.pov || p.title} photo={povPhoto ? (ctl.urls[povPhoto] ?? null) : null} pos={s.povPos} onChange={(povPos) => setSettings({ povPos })} />
+          </div>
           <label className="block space-y-1 md:col-span-2">
             <span className="text-[12px] font-medium text-fg-muted">마지막 안내 (댓글 링크)</span>
             <Input value={s.cta} onChange={(e) => setSettings({ cta: e.target.value })} />

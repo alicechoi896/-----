@@ -90,6 +90,27 @@ async function addPhoto(owner: string, p: DetailProject, buf: Buffer): Promise<b
 }
 
 const str = (v: unknown, n: number) => String(v ?? "").slice(0, n);
+
+/**
+ * v0.9.169 사진이 비어 있는 섹션(첫 화면·사진+설명·마무리)에 아직 안 쓴 사진을 차례로 채운다.
+ * 글(공감)·제품 정보 표는 원래 사진 없이 둔다. 사진이 모자라면 앞에서부터 다시 쓴다
+ */
+export function fillSectionPhotos(sections: DetailSection[], photos: string[]): DetailSection[] {
+  if (!photos.length) return sections;
+  const used = new Set(sections.map((x) => x.photoKey).filter(Boolean));
+  const fresh = photos.filter((k) => !used.has(k));
+  let i = 0;
+  const next = () => (fresh.length ? fresh.shift()! : photos[i++ % photos.length]);
+  return sections.map((x) => (x.photoKey || x.kind === "text" || x.kind === "spec" ? x : { ...x, photoKey: next() }));
+}
+
+/** 사진이 하나도 없으면 제품 라이브러리 사진을 가져온다 (무료). 가져온 장 수 */
+async function ensurePhotos(owner: string, p: DetailProject): Promise<number> {
+  if (p.photos.length || !p.productId) return 0;
+  let added = 0;
+  for (const buf of await productPhotoBuffers(p.productId, 16).catch(() => [] as Buffer[])) if (await addPhoto(owner, p, buf)) added++;
+  return added;
+}
 const KINDS: SectionKind[] = ["hero", "photo", "text", "spec", "cta"];
 const cleanSections = (raw: unknown, photos: Set<string>): DetailSection[] =>
   (Array.isArray(raw) ? raw : []).slice(0, MAX_SECTIONS).map((x: Partial<DetailSection>) => ({
@@ -328,6 +349,7 @@ export const detailPageService = {
     if (!product) throw new AppError("NOT_FOUND", "제품을 찾을 수 없습니다.", 404);
     const analysis = (await repo.productAnalyses.list((a) => a.productId === p.productId, { productId: p.productId! }).catch(() => [])).sort((a, b) => b.version - a.version)[0];
     const sm = analysis?.summary;
+    await ensurePhotos(owner, p);
     const clean = (xs?: string[]) => (xs ?? []).filter((x) => x && !isRatingTalk(x));
     const facts = [
       `제품명: ${product.name} / 브랜드: ${product.brand} / 카테고리: ${product.category}`,
@@ -417,6 +439,7 @@ export const detailPageService = {
       body: str(x.body, 1200).replace(/\\n/g, "\n").trim(),
       photoKey: Number(x.photo) > 0 ? (p.photos[Number(x.photo) - 1] ?? null) : null,
     }));
+    p.sections = fillSectionPhotos(p.sections, p.photos);
     return withUrls(await save(owner, list, p));
   },
 
@@ -425,13 +448,19 @@ export const detailPageService = {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     if (!p.sections.length) throw new AppError("VALIDATION", "섹션이 없습니다. [기획·글 만들기]를 먼저 눌러 주세요.");
+    // v0.9.169 사진 없는 섹션은 남은 사진으로 채워서 만든다 (사진이 아예 없으면 제품 사진을 한 번 가져온다)
+    await ensurePhotos(owner, p);
+    p.sections = fillSectionPhotos(p.sections, p.photos);
     for (const k of [...p.rendered, ...(p.full ? [p.full] : [])]) await videoStorage.remove(k).catch(() => undefined);
     const stamp = Date.now().toString(36);
     const pngs: Buffer[] = [];
     const keys: string[] = [];
     for (const [i, sec] of p.sections.entries()) {
       const photo = sec.photoKey ? await videoStorage.download(sec.photoKey).catch(() => null) : null;
-      const png = await drawSection(sec, photo, p.accent);
+      const png = await drawSection(sec, photo, p.accent).catch((e: unknown) => {
+        console.error("[DetailPage] section", JSON.stringify({ id: p.id, i, kind: sec.kind, error: e instanceof Error ? e.message.slice(0, 200) : String(e) }));
+        throw new AppError("RENDER", `${i + 1}번 섹션 이미지를 만들지 못했습니다. 그 섹션 글이나 사진을 바꿔서 다시 눌러 주세요.`, 500);
+      });
       const key = `${owner}/detail/${p.id}/s${String(i + 1).padStart(2, "0")}_${stamp}.png`;
       await videoStorage.put(key, png, "image/png", "0");
       pngs.push(png);

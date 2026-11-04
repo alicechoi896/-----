@@ -75,20 +75,36 @@ function roundRect(g: SKRSContext2D, x: number, y: number, w: number, h: number,
 }
 
 /** 위쪽 POV 문구: 흰 상자 + 검은 글자 (레퍼런스와 같은 모양) */
-function drawPov(g: SKRSContext2D, text: string, W: number, top: number) {
+/**
+ * POV 문구 상자. at 이 있으면 그 점(가운데)에, 없으면 위쪽 가운데(top).
+ * v0.9.169: 모델 얼굴을 가리지 않게 사람이 자리를 고른다 (화면 밖으로는 안 나가게)
+ */
+function drawPov(g: SKRSContext2D, text: string, W: number, top: number, at?: { cx: number; cy: number; H: number } | null) {
   if (!plainText(text)) return;
   const maxW = W * 0.8;
   const { lines, px } = fitLines(g, text, "fs_semi", Math.round(W * 0.042), maxW, 2);
   g.font = `${px}px fs_semi`;
   const w = Math.max(...lines.map((l) => g.measureText(l).width)) + px * 1.4;
   const h = lines.length * px * 1.35 + px * 0.8;
+  const m = W * 0.02;
+  const x = at ? Math.min(W - w - m, Math.max(m, at.cx - w / 2)) : (W - w) / 2;
+  const y = at ? Math.min(at.H - h - m, Math.max(m, at.cy - h / 2)) : top;
   g.fillStyle = "rgba(255,255,255,0.94)";
-  roundRect(g, (W - w) / 2, top, w, h, px * 0.35);
+  roundRect(g, x, y, w, h, px * 0.35);
   g.fill();
   g.fillStyle = "#111111";
   g.textAlign = "center";
   g.textBaseline = "top";
-  lines.forEach((l, k) => g.fillText(l, W / 2, top + px * 0.45 + k * px * 1.35));
+  lines.forEach((l, k) => g.fillText(l, x + w / 2, y + px * 0.45 + k * px * 1.35));
+}
+
+/** v0.9.169 9:16 사진 기준 자리(0~1) → cover 로 그린 화면의 점 (피드 표지 4:5 는 위아래가 잘려서 다시 맞춘다) */
+function povPoint(pos: { x: number; y: number } | null | undefined, W: number, H: number, imgW = 9, imgH = 16): { cx: number; cy: number; H: number } | null {
+  if (!pos) return null;
+  const sc = Math.max(W / imgW, H / imgH);
+  const dw = imgW * sc;
+  const dh = imgH * sc;
+  return { cx: (W - dw) / 2 + pos.x * dw, cy: (H - dh) / 2 + pos.y * dh, H };
 }
 
 /** 'LOOK 01' 타원 라벨 */
@@ -147,8 +163,9 @@ export async function renderFeed(owner: string, p: FashionProject, r: FashionRen
   {
     const c = createCanvas(W, H);
     const g = c.getContext("2d");
-    drawImage(g, await load(approvedOf(looks[0].images)!.key), 0, 0, W, H, "cover");
-    drawPov(g, p.settings.pov || p.title, W, 70);
+    const coverImg = await load(approvedOf(looks[0].images)!.key);
+    drawImage(g, coverImg, 0, 0, W, H, "cover");
+    drawPov(g, p.settings.pov || p.title, W, 70, povPoint(p.settings.povPos, W, H, coverImg.width, coverImg.height));
     await put("00_cover", c.toBuffer("image/png"));
   }
   for (const [i, look] of looks.entries()) {
@@ -187,7 +204,7 @@ export async function renderFeed(owner: string, p: FashionProject, r: FashionRen
 function reelOverlay(p: FashionProject, look: FashionLook | null, i: number, W: number, H: number): Buffer {
   const c = createCanvas(W, H);
   const g = c.getContext("2d");
-  drawPov(g, p.settings.pov || p.title, W, H * 0.085);
+  drawPov(g, p.settings.pov || p.title, W, H * 0.085, povPoint(p.settings.povPos, W, H));
   if (look) {
     g.save();
     g.shadowColor = "rgba(0,0,0,0.45)";

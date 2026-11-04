@@ -3,7 +3,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import type { SessionInfo } from "@/lib/types";
 import type { AiClip, VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { aiSourceId } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
+import { AI_CLIP_CONFIG, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { lastVoiceSettings } from "../automation/auto-video";
 import { AppError } from "../http";
@@ -35,6 +35,10 @@ export interface StayPhoto {
   line: string;
   /** AI 움직임 설명 (영어) */
   motion: string;
+  /** v0.9.169 움직임 설명 한글 번역 (보기용, 영어를 고치면 비운다) */
+  motionKo?: string;
+  /** v0.9.169 이 컷 보이는 시간(초). 없으면 대사 길이만큼 */
+  sec?: number | null;
 }
 export interface StayProject {
   id: string;
@@ -148,9 +152,13 @@ export const stayService = {
     if (Array.isArray(input.photos)) {
       const byKey = new Map(p.photos.map((x) => [x.key, x]));
       const next = (input.photos as Partial<StayPhoto>[])
-        .map((x) => {
+        .map((x): StayPhoto | null => {
           const old = byKey.get(String(x?.key ?? ""));
-          return old ? { key: old.key, line: str(x.line, 60), motion: String(x.motion ?? "").replace(/\s+/g, " ").trim().slice(0, 600) } : null;
+          if (!old) return null;
+          const motion = String(x.motion ?? "").replace(/\s+/g, " ").trim().slice(0, 600);
+          // 영어 명령어를 고치면 예전 번역은 맞지 않으니 비운다
+          const motionKo = motion === old.motion ? old.motionKo : x.motionKo !== undefined && x.motionKo !== old.motionKo ? str(x.motionKo, 400) : "";
+          return { key: old.key, line: str(x.line, 60), motion, motionKo, sec: cleanSec(x.sec) };
         })
         .filter((x): x is StayPhoto => Boolean(x));
       const keep = new Set(next.map((x) => x.key));
@@ -238,6 +246,35 @@ export const stayService = {
     return { project: await withUrls(p), added, found: urls.length };
   },
 
+  /** v0.9.169 [한글 번역] AI 1번 (글만): 움직임 명령어(영어)를 한글로 — 보기용, Kie 에는 영어 그대로 */
+  async translate(input: { id?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const todo = p.photos.filter((ph) => ph.motion.trim());
+    if (!todo.length) throw new AppError("VALIDATION", "번역할 움직임 명령어가 없습니다.");
+    const ai = await getAIProvider();
+    let ko: string[];
+    if (ai.id === "mock") ko = todo.map((ph) => `(번역) ${ph.motion}`);
+    else {
+      const r = await ai.generateStructured<{ items: string[] }>({
+        task: "stay-translate",
+        messages: [
+          { role: "system", content: "영상 AI 명령어(영어)를 자연스러운 한국어로 옮긴다. 뜻을 더하거나 빼지 않는다. 답은 JSON 하나." },
+          { role: "user", content: `아래 ${todo.length}개를 순서대로 한국어로 옮겨 items 배열로:\n${todo.map((ph, i) => `${i + 1}. ${ph.motion}`).join("\n")}` },
+        ],
+        outputKeys: ["items"],
+        jsonSchema: { type: "object", additionalProperties: false, required: ["items"], properties: { items: { type: "array", items: { type: "string" } } } },
+        variables: { stay: p.name, count: todo.length },
+        maxTokens: 1500,
+      });
+      ko = r.data.items ?? [];
+    }
+    todo.forEach((ph, i) => {
+      if (ko[i]) ph.motionKo = String(ko[i]).trim().slice(0, 400);
+    });
+    return withUrls(await save(owner, list, p));
+  },
+
   /** [대본 만들기] AI 1번: 사진을 보고 제목 2줄 + 컷마다 대사·움직임 */
   async script(input: { id?: unknown }) {
     const owner = await getCurrentUserId();
@@ -245,9 +282,9 @@ export const stayService = {
     if (p.photos.length < 3) throw new AppError("VALIDATION", "사진을 3장 이상 넣어 주세요.");
     const ai = await getAIProvider();
     const n = p.photos.length;
-    let data: { titleSmall: string; titleBig: string; cuts: { line: string; motion: string }[] };
+    let data: { titleSmall: string; titleBig: string; cuts: { line: string; motion: string; motionKo?: string }[] };
     if (ai.id === "mock") {
-      data = { titleSmall: "비 오는 날", titleBig: `${p.name.slice(0, 12)} 히노끼탕`, cuts: p.photos.map((_, i) => ({ line: ["여기 진짜 숙소인데", "통창 앞 노천탕이", "료칸 그대로예요", "밤엔 불멍까지", "지금 저장해두세요"][i % 5], motion: "gentle steam rising, light rain" })) };
+      data = { titleSmall: "비 오는 날", titleBig: `${p.name.slice(0, 12)} 히노끼탕`, cuts: p.photos.map((_, i) => ({ line: ["여기 진짜 숙소인데", "통창 앞 노천탕이", "료칸 그대로예요", "밤엔 불멍까지", "지금 저장해두세요"][i % 5], motion: "gentle steam rising, light rain", motionKo: "김이 은은하게 오르고 가랑비가 내림" })) };
     } else {
       const images = await Promise.all(p.photos.map(async (ph) => smallJpeg((await videoStorage.download(ph.key))!)));
       const parts = [
@@ -260,7 +297,8 @@ export const stayService = {
 - titleBig: 위쪽 큰 줄 (숙소의 가장 센 한 방, 12자 이내, 예: "액자창 앞 히노끼탕")
 - cuts: 사진 순서대로 ${n}개. line = 그 사진 위 가운데 자막이자 내레이션. 4~14자, 한 호흡, 존댓말 구어체("~예요/~고요/~거죠"). 컷을 이어 읽으면 한 문장 흐름이 되게 (예: "글램핑인데" → "돌 노천탕이" → "료칸 그대로예요" → … → "지금 저장해두세요"). 첫 컷은 궁금하게, 마지막 컷은 저장·예약 유도.
 - 사진에 실제로 보이는 것과 메모의 사실만 말한다. 가격·평점·리뷰 수·순위·할인은 쓰지 않는다.
-- motion: 그 사진에서 자연스럽게 움직일 것만 영어로 (예: "steam rising from the hot spring, light rain falling, water rippling"). 카메라는 움직이지 않는다. 사진에 없는 사람·물건을 더하지 않는다.`,
+- motion: 그 사진에서 자연스럽게 움직일 것만 영어로 (예: "steam rising from the hot spring, light rain falling, water rippling"). 카메라는 움직이지 않는다. 사진에 없는 사람·물건을 더하지 않는다.
+- motionKo: motion 을 그대로 한국어로 옮긴 것 (사람이 읽는 용도).`,
         },
       ];
       const r = await ai.generateStructured<typeof data>({
@@ -277,7 +315,7 @@ export const stayService = {
           properties: {
             titleSmall: { type: "string" },
             titleBig: { type: "string" },
-            cuts: { type: "array", items: { type: "object", additionalProperties: false, required: ["line", "motion"], properties: { line: { type: "string" }, motion: { type: "string" } } } },
+            cuts: { type: "array", items: { type: "object", additionalProperties: false, required: ["line", "motion", "motionKo"], properties: { line: { type: "string" }, motion: { type: "string" }, motionKo: { type: "string" } } } },
           },
         },
         variables: { stay: p.name, photos: n },
@@ -287,7 +325,7 @@ export const stayService = {
     }
     p.titleSmall = String(data.titleSmall ?? "").trim().slice(0, 20);
     p.titleBig = String(data.titleBig ?? "").trim().slice(0, 24);
-    p.photos = p.photos.map((ph, i) => ({ ...ph, line: String(data.cuts?.[i]?.line ?? ph.line).trim().slice(0, 60), motion: String(data.cuts?.[i]?.motion ?? ph.motion).trim().slice(0, 600) }));
+    p.photos = p.photos.map((ph, i) => ({ ...ph, line: String(data.cuts?.[i]?.line ?? ph.line).trim().slice(0, 60), motion: String(data.cuts?.[i]?.motion ?? ph.motion).trim().slice(0, 600), motionKo: String(data.cuts?.[i]?.motionKo ?? "").trim().slice(0, 400) }));
     return withUrls(await save(owner, list, p));
   },
 
@@ -354,7 +392,7 @@ export const stayService = {
     const scenes = p.photos
       .map((ph, i) => {
         const c = clipOf(p, ph.key);
-        return c && c.state === "success" && ph.line ? { index: i, narration: ph.line, sfx: null, arrow: false, attention: false, sourceVideoId: aiSourceId(c.id), pinned: true } : null;
+        return c && c.state === "success" && ph.line ? { index: i, narration: ph.line, sfx: null, arrow: false, attention: false, sourceVideoId: aiSourceId(c.id), pinned: true, holdSec: ph.sec ?? null } : null;
       })
       .filter((x): x is NonNullable<typeof x> => Boolean(x));
     if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷과 대사가 있는 사진이 없습니다.");
@@ -384,6 +422,13 @@ export const stayService = {
     return job;
   },
 };
+
+/** 컷 시간: 1~5초 (AI 컷이 5초라 그 안에서), 0.5초 단위. 없으면 대사 길이만큼 */
+function cleanSec(v: unknown): number | null {
+  const n = Number(v);
+  if (v == null || v === "" || !Number.isFinite(n) || n <= 0) return null;
+  return Math.min(STAY_CUT_MAX_SEC, Math.max(1, Math.round(n * 2) / 2));
+}
 
 // AI 컷 ↔ 사진 잇기 (clipKeys: 컷 id → 사진 key)
 function clipOf(p: StayProject, key: string): AiClip | undefined {

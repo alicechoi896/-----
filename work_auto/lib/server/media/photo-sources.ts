@@ -24,8 +24,13 @@ export async function productPhotoBuffers(productId: string, max = 12): Promise<
   const out: Buffer[] = [];
   for (const u of urls) {
     try {
-      const r = await safeFetch(u, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Accept: "image/*" } });
-      if (!r.ok) continue;
+      // v0.9.169 쿠팡 사진은 쿠팡에서 부른 것처럼 (Referer 없으면 막히는 경우)
+      const referer: Record<string, string> = /coupangcdn\.com/i.test(u) ? { Referer: "https://www.coupang.com/" } : {};
+      const r = await safeFetch(u, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Accept: "image/webp,image/jpeg,image/*", ...referer } });
+      if (!r.ok) {
+        console.info("[PhotoSources] skip", JSON.stringify({ host: new URL(u).hostname, status: r.status }));
+        continue;
+      }
       const buf = Buffer.from(await r.arrayBuffer());
       if (buf.length >= 12_000 && buf.length <= MAX_IMAGE_BYTES) out.push(buf);
     } catch {

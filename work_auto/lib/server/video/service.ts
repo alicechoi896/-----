@@ -13,7 +13,7 @@ import { sanitizeClips } from "./ai-clips";
 import { readEdits } from "./frames";
 import { cleanEdit, type SourceEdit } from "@/lib/video-production/source-edit";
 import { groupOf } from "@/lib/types/product";
-import { STAY_MAX_PHOTOS, cleanFrame, VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
+import { STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, cleanFrame, VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider, getTTSProvider, getTypecastProvider, getGiphyProvider } from "../providers/registry";
@@ -82,7 +82,7 @@ export function sanitizeStayPlan(plan: VideoPlan): VideoPlan {
   const ok = new Set(clips.map((c) => aiSourceId(c.id)));
   const scenes = (Array.isArray(plan.scenes) ? plan.scenes : [])
     .slice(0, STAY_MAX_PHOTOS)
-    .map((s, i) => ({ index: i, narration: String(s.narration ?? "").replace(/\s+/g, " ").trim().slice(0, 80), sfx: null, arrow: false, attention: false, gif: null, sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null, pinned: true }))
+    .map((s, i) => ({ index: i, narration: String(s.narration ?? "").replace(/\s+/g, " ").trim().slice(0, 80), sfx: null, arrow: false, attention: false, gif: null, sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null, pinned: true, holdSec: cleanHold(s.holdSec) }))
     .filter((s) => s.narration && s.sourceVideoId)
     .map((s, i) => ({ ...s, index: i }));
   if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷이 없습니다. 사진을 살아 움직이게 만든 뒤 눌러 주세요.");
@@ -113,6 +113,12 @@ export function sanitizeStayPlan(plan: VideoPlan): VideoPlan {
     stay: true,
     titleSec: plan.titleSec != null && Number.isFinite(Number(plan.titleSec)) ? Math.min(10, Math.max(1, Number(plan.titleSec))) : 2.5,
   };
+}
+
+/** v0.9.169 숙소 컷 보이는 시간 (1~5초) */
+function cleanHold(v: unknown): number | null {
+  const n = Number(v);
+  return v != null && Number.isFinite(n) && n > 0 ? Math.min(STAY_CUT_MAX_SEC, Math.max(1, n)) : null;
 }
 
 function cleanVoice(engine: unknown, voice: unknown): { ttsEngine: "openai" | "typecast"; voice: string } {
