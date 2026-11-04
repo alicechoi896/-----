@@ -28,7 +28,7 @@ import { VideoThumb } from "@/components/shared/VideoThumb";
 import { cn, formatRelative } from "@/lib/utils";
 import { XhsJobStatus, useXhsDownloads } from "./useXhsDownloads";
 import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
-import { FrameDialog, type Frame } from "@/features/video-production/FrameDialog";
+import { EditDialog, editSummary, type SourceEdit } from "@/features/video-production/FrameDialog";
 import { SocialSearchPanel } from "./SocialSearchPanel";
 
 const MAX_BATCH = 20;
@@ -165,7 +165,7 @@ export function VideoImport() {
   }
 
   // v0.9.161 영상별 기본 화면 (확대·위치)
-  const [frames, setFrames] = useState<Record<string, Frame>>({});
+  const [frames, setFrames] = useState<Record<string, SourceEdit>>({});
   const [frameFor, setFrameFor] = useState<ReferenceVideo | null>(null);
   useEffect(() => {
     void api.videoProduction
@@ -212,12 +212,12 @@ export function VideoImport() {
     { key: "note", header: "메모", render: (v) => <span className="text-fg-muted">{v.note ?? "-"}</span> },
     {
       key: "frame",
-      header: "화면",
+      header: "편집",
       width: "110px",
       render: (v) =>
         v.platform === "xiaohongshu" || v.platform === "douyin" ? (
-          <button type="button" onClick={() => setFrameFor(v)} className={cn("whitespace-nowrap rounded px-2 py-1 text-[12px] ring-1 ring-inset", frames[v.id] ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-muted ring-line hover:text-brand")} title="로고·글자가 안 보이게 확대·위치를 정해 둡니다" data-frame-open>
-            {frames[v.id] ? `화면 ${frames[v.id].zoom.toFixed(1)}배` : "화면 정하기"}
+          <button type="button" onClick={() => setFrameFor(v)} className={cn("whitespace-nowrap rounded px-2 py-1 text-[12px] ring-1 ring-inset", frames[v.id] ? "bg-brand-soft text-brand ring-brand/40" : "text-fg-muted ring-line hover:text-brand")} title="쓸 구간·확대(시간별 포함)·위치를 정해 두면 영상 제작에 그대로 들어갑니다" data-frame-open>
+            {editSummary(frames[v.id]) ?? "편집 설정"}
           </button>
         ) : (
           <span className="text-fg-subtle">-</span>
@@ -295,9 +295,10 @@ export function VideoImport() {
   return (
     <div className="space-y-5">
       {frameFor && (
-        <FrameDialog
+        <EditDialog
           videoId={frameFor.id}
           title={frameFor.title}
+          durationSec={frameFor.durationSec}
           initial={frames[frameFor.id] ?? null}
           onClose={() => setFrameFor(null)}
           onSaved={(fr) => {

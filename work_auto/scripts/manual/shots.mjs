@@ -640,6 +640,30 @@ export const SHOTS = [
     },
   },
   {
+    id: "03-edit-dialog",
+    url: "/tools/product-library",
+    viewport: { width: 1440, height: 1300 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (path, body) => p.request.post(abs(path), { data: body }).then((r) => r.json());
+      const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
+      const xhs = (await api("/api/videos/social-search", { keyword: "청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data;
+      await api("/api/videos/batch", { items: xhs.items.slice(0, 2).map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec } })), productId: pid });
+      await p.goto(abs(`/tools/product-library/${pid}`));
+      await p.locator("[data-frame-open]").first().waitFor({ timeout: 15_000 });
+      await p.locator("[data-frame-open]").first().click();
+      await p.locator("[data-source-editor]").waitFor({ timeout: 10_000 });
+      await p.locator("[data-edit-from]").click();
+      await p.locator("[data-edit-add-zoom]").click();
+      await p.waitForTimeout(1200);
+    },
+    marks: {
+      1: (p) => p.locator("[data-edit-from]").locator("xpath=ancestor::section[1]"),
+      2: (p) => p.locator("[data-edit-base-zoom]").locator("xpath=ancestor::section[1]"),
+      3: (p) => p.locator("[data-edit-add-zoom]").locator("xpath=ancestor::section[1]"),
+    },
+  },
+  {
     id: "05-clip-gallery",
     url: "/youtube/video-production",
     viewport: { width: 1440, height: 1100 },

@@ -33,7 +33,8 @@ import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { GiphyPicker } from "./GiphyPicker";
 import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
 import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
-import { frameStyle } from "./FrameDialog";
+import { SourceEditEditor, editSummary, frameStyle } from "./FrameDialog";
+import { cleanEdit, type SourceEdit } from "@/lib/video-production/source-edit";
 import { cn, formatRelative } from "@/lib/utils";
 
 const RUNNING: VideoJob["status"][] = ["queued", "analyzing", "editing", "rendering", "quality_check"];
@@ -664,7 +665,7 @@ function PlanEditor({
           }}
         />
       )}
-      <RangeBoard scenes={plan.scenes} videos={videos} ranges={plan.sourceRanges} onChange={(r) => onChange({ ...plan, sourceRanges: r })} />
+      <RangeBoard scenes={plan.scenes} videos={videos} edits={plan.sourceEdits} legacyRanges={plan.sourceRanges} onChange={(e) => onChange({ ...plan, sourceEdits: e, sourceRanges: undefined })} />
       <ol className="space-y-1.5">
         {plan.scenes.map((s, i) => (
           <li key={i} className="grid grid-cols-[28px_minmax(0,1fr)_200px] items-center gap-2 rounded-control border border-line px-2 py-1.5 text-[12.5px]" data-plan-scene>
@@ -791,7 +792,7 @@ function JobPanel({
   // v0.9.82: 제목·대본을 고쳤는지
   const textChanged = edited.topLine1 !== job.plan.topLine1 || edited.topLine2 !== job.plan.topLine2 || edited.scenes.some((s, i) => s.narration !== job.plan.scenes[i]?.narration);
   // v0.9.137: GIF·화살표 편집
-  const fxChanged = edited.scenes.length !== job.plan.scenes.length || edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m") || JSON.stringify(s.gifBox ?? null) !== JSON.stringify(o.gifBox ?? null) || (s.gif?.id ?? "") !== (o.gif?.id ?? "") || (s.startAt ?? null) !== (o.startAt ?? null) || (s.sfx ?? null) !== (o.sfx ?? null) || (s.gifSec ?? null) !== (o.gifSec ?? null) || JSON.stringify(s.frame ?? null) !== JSON.stringify(o.frame ?? null); }) || JSON.stringify(edited.sourceRanges ?? {}) !== JSON.stringify(job.plan.sourceRanges ?? {});
+  const fxChanged = edited.scenes.length !== job.plan.scenes.length || edited.scenes.some((s, i) => { const o = job.plan.scenes[i]; return !o || Boolean(s.attention) !== Boolean(o.attention) || s.arrow !== o.arrow || (s.gifPos ?? "top") !== (o.gifPos ?? "top") || (s.gifSize ?? "m") !== (o.gifSize ?? "m") || JSON.stringify(s.gifBox ?? null) !== JSON.stringify(o.gifBox ?? null) || (s.gif?.id ?? "") !== (o.gif?.id ?? "") || (s.startAt ?? null) !== (o.startAt ?? null) || (s.sfx ?? null) !== (o.sfx ?? null) || (s.gifSec ?? null) !== (o.gifSec ?? null) || JSON.stringify(s.frame ?? null) !== JSON.stringify(o.frame ?? null); }) || JSON.stringify(edited.sourceRanges ?? {}) !== JSON.stringify(job.plan.sourceRanges ?? {}) || JSON.stringify(edited.sourceEdits ?? {}) !== JSON.stringify(job.plan.sourceEdits ?? {});
   // v0.9.139 편집기: GIF 검색(GIPHY)·끌어다 놓기
   const [gifFor, setGifFor] = useState<number | null>(null);
   const [placeFor, setPlaceFor] = useState<number | null>(null);
@@ -921,7 +922,7 @@ function JobPanel({
                 <Input value={edited.topLine2} onChange={(e) => setEdited({ ...edited, topLine2: e.target.value })} className="h-8 text-[13px]" />
               </label>
             </div>
-            <RangeBoard scenes={edited.scenes} videos={poolVideos} ranges={edited.sourceRanges} onChange={(r) => setEdited({ ...edited, sourceRanges: r })} />
+            <RangeBoard scenes={edited.scenes} videos={poolVideos} edits={edited.sourceEdits} legacyRanges={edited.sourceRanges} onChange={(e) => setEdited({ ...edited, sourceEdits: e, sourceRanges: undefined })} />
             <ol className="space-y-1" data-job-scenes>
               {edited.scenes.map((s, i) => (
                 <li
@@ -1190,52 +1191,51 @@ function ClipChooser({ value, videos, narration, label, startAt, frame, onPick }
   );
 }
 
-type Range = { from: number; to: number };
 const cutsOf = (scenes: VideoPlan["scenes"], id: string) => scenes.map((x, i) => (x.sourceVideoId === id ? i + 1 : 0)).filter(Boolean);
 
 /**
- * v0.9.157 영상별 구간 고르기 (컷 계획 맨 위 한 곳): 영상마다 쓸 구간(시작~끝)을 정하면 그 영상을 쓰는 모든 컷이 그 구간 안에서 잘린다.
- * 영상마다 지금 몇 번 컷에 쓰이는지 보여 준다. 컷 하나만 다르게 하려면 '영상 보며 고르기'의 '지금 위치부터'
+ * v0.9.165 영상별 편집 (컷 계획 맨 위 한 곳): 구간(시작~끝) · 기본 화면 · 시간별 확대.
+ * 컷 계획을 만들 때 라이브러리(영상 URL 가져오기·연결된 영상) 설정을 복사해 오고, 여기서 고친 값이 그대로 렌더된다.
+ * 영상마다 지금 몇 번 컷에 쓰이는지 보여 준다. 컷 하나만 다르게 하려면 '영상 보며 고르기'
  */
-function RangeBoard({ scenes, videos, ranges, onChange }: { scenes: VideoPlan["scenes"]; videos: ClipVideo[]; ranges?: Record<string, Range>; onChange: (r: Record<string, Range> | undefined) => void }) {
+function RangeBoard({ scenes, videos, edits, legacyRanges, onChange }: { scenes: VideoPlan["scenes"]; videos: ClipVideo[]; edits?: Record<string, SourceEdit>; legacyRanges?: Record<string, { from: number; to: number }>; onChange: (e: Record<string, SourceEdit>) => void }) {
   const [open, setOpen] = useState(false);
   const used = videos.filter((v) => cutsOf(scenes, v.id).length);
   const list = used.length ? used : videos;
   if (!list.length) return null;
-  const set = Object.keys(ranges ?? {}).length;
+  // 예전 계획(구간만 있던 것)도 편집 설정으로 보여 준다
+  const cur: Record<string, SourceEdit> = { ...Object.fromEntries(Object.entries(legacyRanges ?? {}).map(([k, r]) => [k, { range: r }])), ...(edits ?? {}) };
+  const set = Object.keys(cur).filter((k) => editSummary(cur[k])).length;
   return (
     <div className="mb-3 rounded-control border border-line bg-subtle/50 px-3 py-2" data-range-board>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12.5px] font-semibold">
-          영상별 구간 <span className="font-normal text-fg-subtle">· 영상 {list.length}개{set ? ` · ${set}개 정함` : " · 모두 자동"}</span>
+          영상별 편집 (구간·확대) <span className="font-normal text-fg-subtle">· 영상 {list.length}개{set ? ` · ${set}개 정함` : " · 모두 자동"}</span>
         </p>
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)} data-range-open>
-          구간 한꺼번에 고르기
+          구간·확대 편집
         </Button>
       </div>
       <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-muted">
         {list.map((v) => {
-          const r = ranges?.[v.id];
           const cuts = cutsOf(scenes, v.id);
+          const sm = editSummary(cur[v.id]);
           return (
             <li key={v.id} title={clipTip(v)}>
-              <b className="text-fg">{v.title.slice(0, 14)}</b> {cuts.length ? `(${cuts.join("·")}번 컷)` : "(안 씀)"} · {r ? <span className="text-brand">{r.from}~{r.to}초</span> : "자동"}
+              <b className="text-fg">{v.title.slice(0, 14)}</b> {cuts.length ? `(${cuts.join("·")}번 컷)` : "(안 씀)"} · {sm ? <span className="text-brand">{sm}</span> : "자동"}
             </li>
           );
         })}
       </ul>
-      {open && <RangeDialog videos={list} scenes={scenes} ranges={ranges ?? {}} onClose={() => setOpen(false)} onSave={(r) => (onChange(Object.keys(r).length ? r : undefined), setOpen(false))} />}
+      {open && <EditBoardDialog videos={list} scenes={scenes} edits={cur} onClose={() => setOpen(false)} onSave={(e) => (onChange(e), setOpen(false))} />}
     </div>
   );
 }
 
-function RangeDialog({ videos, scenes, ranges, onClose, onSave }: { videos: ClipVideo[]; scenes: VideoPlan["scenes"]; ranges: Record<string, Range>; onClose: () => void; onSave: (r: Record<string, Range>) => void }) {
-  const [draft, setDraft] = useState<Record<string, Range>>(ranges);
+function EditBoardDialog({ videos, scenes, edits, onClose, onSave }: { videos: ClipVideo[]; scenes: VideoPlan["scenes"]; edits: Record<string, SourceEdit>; onClose: () => void; onSave: (e: Record<string, SourceEdit>) => void }) {
+  const [draft, setDraft] = useState<Record<string, SourceEdit>>(edits);
   const [sel, setSel] = useState(videos[0]?.id ?? "");
   const [urls, setUrls] = useState<Record<string, string | null>>({});
-  const [sec, setSec] = useState(0);
-  const [dur, setDur] = useState(0);
-  const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     let alive = true;
     void Promise.all(videos.slice(0, 30).map(async (v) => [v.id, await api.videoProduction.sourceUrl(v.id).then((r) => r.url).catch(() => null)] as const)).then((rows) => alive && setUrls(Object.fromEntries(rows)));
@@ -1244,98 +1244,65 @@ function RangeDialog({ videos, scenes, ranges, onClose, onSave }: { videos: Clip
     };
   }, [videos]);
   const v = videos.find((x) => x.id === sel);
-  const r = draft[sel];
-  const full = dur || v?.durationSec || 0;
-  const put = (next: Range | null) =>
-    setDraft((d) => {
-      const n = { ...d };
-      if (next && next.to - next.from >= 0.5) n[sel] = { from: Number(next.from.toFixed(1)), to: Number(next.to.toFixed(1)) };
-      else delete n[sel];
-      return n;
-    });
+  const save = () => {
+    const out: Record<string, SourceEdit> = {};
+    for (const [k, e] of Object.entries(draft)) {
+      const c = cleanEdit(e);
+      if (c) out[k] = c;
+    }
+    onSave(out);
+  };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4" role="dialog" aria-label="영상별 구간 고르기" data-range-dialog onClick={onClose}>
-      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col gap-3 overflow-hidden rounded-card bg-canvas p-4 shadow-card" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4" role="dialog" aria-label="영상별 구간·확대 편집" data-range-dialog onClick={onClose}>
+      <div className="flex max-h-[94vh] w-full max-w-6xl flex-col gap-3 overflow-hidden rounded-card bg-canvas p-4 shadow-card" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[14px] font-semibold">영상별 구간 고르기 · {videos.length}개</p>
-            <p className="text-[12px] text-fg-muted">영상마다 쓸 구간을 정하면, 그 영상을 쓰는 모든 컷이 그 구간 안에서만 잘립니다. 안 정한 영상은 자동입니다.</p>
+            <p className="text-[14px] font-semibold">영상별 구간·확대 편집 · {videos.length}개</p>
+            <p className="text-[12px] text-fg-muted">라이브러리에서 정한 설정이 들어와 있습니다. 여기서 고친 값이 이 영상에 그대로 반영됩니다 (미리보기 = 결과). 라이브러리 설정은 바뀌지 않습니다.</p>
           </div>
           <button type="button" onClick={onClose} className="text-[13px] text-fg-subtle hover:text-fg" aria-label="닫기">
             ✕
           </button>
         </div>
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto md:grid-cols-[220px_1fr]">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto md:grid-cols-[200px_1fr]">
           <ul className="space-y-1">
             {videos.map((x) => {
               const cuts = cutsOf(scenes, x.id);
+              const sm = editSummary(draft[x.id]);
               return (
                 <li key={x.id}>
-                  <button type="button" onClick={() => (setSel(x.id), setSec(draft[x.id]?.from ?? 0))} title={clipTip(x)} className={cn("w-full rounded-control px-2 py-1.5 text-left text-[12px] ring-1 ring-inset", x.id === sel ? "bg-brand-soft ring-brand" : "ring-line hover:bg-subtle")} data-range-item>
+                  <button type="button" onClick={() => setSel(x.id)} title={clipTip(x)} className={cn("w-full rounded-control px-2 py-1.5 text-left text-[12px] ring-1 ring-inset", x.id === sel ? "bg-brand-soft ring-brand" : "ring-line hover:bg-subtle")} data-range-item>
                     <span className="block truncate font-medium">{x.title}</span>
-                    <span className="block text-[11px] text-fg-subtle">{cuts.length ? `${cuts.join("·")}번 컷` : "안 쓰는 영상"} · {draft[x.id] ? <span className="text-brand">{draft[x.id].from}~{draft[x.id].to}초</span> : "자동"}</span>
+                    <span className="block text-[11px] text-fg-subtle">{cuts.length ? `${cuts.join("·")}번 컷` : "안 쓰는 영상"} · {sm ? <span className="text-brand">{sm}</span> : "자동"}</span>
                     {x.note && <span className="block truncate text-[10.5px] text-fg-subtle">✎ {x.note}</span>}
                   </button>
                 </li>
               );
             })}
           </ul>
-          <div className="space-y-2">
-            {v && urls[v.id] ? (
-              <video
-                key={v.id}
-                ref={ref}
-                src={urls[v.id]!}
-                controls
-                muted
-                playsInline
-                className="mx-auto max-h-[48vh] w-full rounded bg-black"
-                onLoadedMetadata={(e) => {
-                  setDur(e.currentTarget.duration || 0);
-                  e.currentTarget.currentTime = draft[v.id]?.from ?? 0;
-                }}
-                onTimeUpdate={(e) => setSec(Number(e.currentTarget.currentTime.toFixed(1)))}
-              />
-            ) : (
-              <div className="flex aspect-video w-full items-center justify-center rounded bg-muted text-[12px] text-fg-subtle">{v && v.id in urls ? "원본을 보관하지 않아 미리 볼 수 없습니다 (숫자로만 정할 수 있어요)" : "불러오는 중…"}</div>
-            )}
-            {/* 구간 막대: 회색 = 전체, 파랑 = 쓸 구간, 선 = 지금 위치 */}
-            <div className="relative h-3 rounded bg-muted" data-range-bar>
-              {r && full > 0 && <div className="absolute inset-y-0 rounded bg-brand/60" style={{ left: `${(r.from / full) * 100}%`, width: `${((r.to - r.from) / full) * 100}%` }} />}
-              {full > 0 && <div className="absolute inset-y-[-3px] w-0.5 bg-fg" style={{ left: `${(Math.min(sec, full) / full) * 100}%` }} />}
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-[12px]">
-              <span className="tabular text-fg-muted">지금 {sec.toFixed(1)}초 / {full.toFixed(0)}초</span>
-              <Button size="sm" variant="secondary" onClick={() => put({ from: sec, to: Math.max(sec + 0.5, r?.to ?? full) })} data-range-from>
-                여기서 시작
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => put({ from: Math.min(r?.from ?? 0, sec - 0.5), to: sec })} data-range-to>
-                여기서 끝
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => put(null)}>
-                자동으로
-              </Button>
-              {r && (
-                <button type="button" className="text-brand hover:underline" onClick={() => ref.current && ((ref.current.currentTime = r.from), void ref.current.play())}>
-                  구간 처음부터 보기
+          {v && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-[12px]">
+                <b className="truncate">{v.title}</b>
+                {v.edit && (
+                  <button type="button" className="text-brand hover:underline" onClick={() => setDraft((d) => ({ ...d, [v.id]: v.edit! }))} data-range-reset>
+                    라이브러리 설정으로 되돌리기 ({editSummary(v.edit)})
+                  </button>
+                )}
+                <button type="button" className="text-fg-subtle hover:text-fg" onClick={() => setDraft((d) => ({ ...d, [v.id]: {} }))}>
+                  이 영상 모두 자동으로
                 </button>
-              )}
+              </div>
+              <SourceEditEditor key={v.id} url={urls[v.id] ?? (v.id in urls ? null : undefined)} durationHint={v.durationSec} value={draft[v.id] ?? {}} onChange={(e) => setDraft((d) => ({ ...d, [v.id]: e }))} />
             </div>
-            <div className="flex items-center gap-2 text-[12px]">
-              숫자로
-              <Input type="number" step="0.1" min={0} value={r?.from ?? ""} onChange={(e) => put({ from: Number(e.target.value), to: r?.to ?? full })} className="h-8 w-20" aria-label="시작 초" />
-              ~
-              <Input type="number" step="0.1" min={0} value={r?.to ?? ""} onChange={(e) => put({ from: r?.from ?? 0, to: Number(e.target.value) })} className="h-8 w-20" aria-label="끝 초" />
-              초
-            </div>
-          </div>
+          )}
         </div>
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="ghost" onClick={onClose}>
             취소
           </Button>
-          <Button size="sm" variant="primary" onClick={() => onSave(draft)} data-range-save>
-            구간 저장 ({Object.keys(draft).length}개)
+          <Button size="sm" variant="primary" onClick={save} data-range-save>
+            저장
           </Button>
         </div>
       </div>

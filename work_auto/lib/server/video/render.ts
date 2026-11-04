@@ -21,7 +21,6 @@ import {
   cleanCaptionStyle,
   cleanTitleStyle,
   voiceInstructions,
-  frameCrop,
 } from "@/lib/video-production/config";
 import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
@@ -35,6 +34,8 @@ import { parseSilences } from "@/lib/silence-cut";
 import { aiClipService } from "./ai-clips";
 import { isAiSource } from "@/lib/types/video-production";
 import { readFrames } from "./frames";
+import { cutWindows, outputWindow, sequentialStart, type SourceEdit } from "@/lib/video-production/source-edit";
+import { manualFilter } from "./edit-filter";
 import { forgetStored } from "./vault";
 import { SCAN_VERSION, TITLE_BAR_FRAC, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
@@ -290,8 +291,13 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     let t = 0;
     // v0.9.162: 상단 제목을 끈 계획(분류별 스타일)은 위쪽도 화면에 보이므로 위쪽 글자도 피한다. 기본(가전 등)은 그대로
     const bar = job.plan.titleOff ? 0 : TITLE_BAR_FRAC;
-    const defaultFrames = await readFrames(job.userId).catch(() => ({}) as Record<string, { zoom: number; x: number; y: number }>);
-    const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number }[] = [];
+    // v0.9.165 영상별 편집 설정: 계획에 복사된 것(영상 제작에서 고친 값)이 기준. 예전 계획(복사 전)만 라이브러리 기본 화면을 읽는다
+    const planEdits = job.plan.sourceEdits ?? null;
+    const legacyFrames = planEdits ? {} : await readFrames(job.userId).catch(() => ({}) as Record<string, { zoom: number; x: number; y: number }>);
+    const editOf = (id: string): SourceEdit | undefined => (planEdits ? planEdits[id] : legacyFrames[id] ? { frame: legacyFrames[id] } : undefined);
+    const rangeOf = (id: string) => editOf(id)?.range ?? job.plan.sourceRanges?.[id] ?? null;
+    const usedSec = (id: string) => (usedRanges.get(id) ?? []).reduce((n, [a, b]) => n + (b - a), 0);
+    const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number; manual: ReturnType<typeof cutWindows> | null }[] = [];
     for (const [k, s] of scenes.entries()) {
       const isLast = k === scenes.length - 1;
       let dur = audio[k].dur + C.minSpeechGapSec + (isLast ? C.tailSec : 0);
@@ -312,6 +318,21 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         if (tr.kind === "rejected") {
           const c = coverAll(boxes, aspects.get(s.sourceVideoId), bar);
           tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
+        }
+        best = { id: s.sourceVideoId, start, tr };
+      } else if (!aiScene && s.sourceVideoId && sources.has(s.sourceVideoId) && rangeOf(s.sourceVideoId)) {
+        // v0.9.165: 구간을 정한 영상 — 장면을 고르지 않고 구간 시작부터 차례로 (5초로 정하면 첫 컷은 정확히 5초부터)
+        const src = sources.get(s.sourceVideoId)!;
+        const start = sequentialStart(rangeOf(s.sourceVideoId)!, usedSec(s.sourceVideoId), dur, src.duration);
+        const e = editOf(s.sourceVideoId);
+        let tr: Treatment = { kind: "clean" };
+        if (!(s.frame || e?.frame || e?.zooms?.length)) {
+          const boxes = [...boxesIn(src.scan, start, dur), ...persistentBoxes(src.scan)];
+          tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar);
+          if (tr.kind === "rejected") {
+            const c = coverAll(boxes, aspects.get(s.sourceVideoId), bar);
+            tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
+          }
         }
         best = { id: s.sourceVideoId, start, tr };
       } else if (aiScene && s.sourceVideoId && sources.has(s.sourceVideoId)) {
@@ -352,10 +373,17 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         s.issue = "원본 글자가 많아 확대로 최대한 가렸습니다 (일부 보일 수 있음). 다른 클립이나 [영상 보며 고르기]의 화면 직접 정하기로 바꾸면 더 깔끔합니다.";
       }
       // v0.9.156: 사람이 화면(확대·위치)을 정했으면 자동 확대 대신 그대로 (같은 원본일 때만)
-      // v0.9.161: 컷에서 안 정했으면 영상 URL 가져오기에서 정한 그 영상의 기본 화면
-      const manual = s.frame && best.id === s.sourceVideoId ? s.frame : defaultFrames[best.id];
-      if (manual && !isAiSource(best.id)) {
-        best = { ...best, tr: { kind: "crop", crop: frameCrop(manual) } };
+      // v0.9.165: 컷 화면 > 영상 편집 설정(기본 화면 + 시간별 확대). 모두 9:16 화면 기준 — 미리보기와 같은 계산(outputWindow)
+      let manual: ReturnType<typeof cutWindows> | null = null;
+      if (!isAiSource(best.id)) {
+        if (s.frame && best.id === s.sourceVideoId && s.frame.zoom > 1.001) manual = { base: outputWindow(s.frame), segs: [] };
+        else {
+          const w = cutWindows(editOf(best.id), best.start, dur);
+          if (w.base || w.segs.length) manual = w;
+        }
+      }
+      if (manual) {
+        best = { ...best, tr: { kind: "clean" } };
         s.issue = null;
       }
       const src = sources.get(best.id)!;
@@ -368,7 +396,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 확대로 잘랐습니다 (AI 이미지 읽기 연결 필요).";
       t += dur;
 
-      picks.push({ k, s, src, best, dur });
+      picks.push({ k, s, src, best, dur, manual });
     }
     const total = t;
 
@@ -442,7 +470,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     }
     const titleSec = job.plan.titleSec && job.plan.titleSec > 0 ? job.plan.titleSec : null;
     let done = 0;
-    const encode = async ({ k, s, src, best, dur }: (typeof picks)[number]) => {
+    const encode = async ({ k, s, src, best, dur, manual }: (typeof picks)[number]) => {
       const isLast = k === scenes.length - 1;
       const out = path.join(dir, `v${k}.mp4`);
       const size = await videoSize(src.file);
@@ -456,7 +484,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       const loop = src.duration < best.start + dur + 0.05 ? ["-stream_loop", "-1"] : [];
       const inputs: string[] = [...loop, "-ss", String(best.start), "-t", dur.toFixed(3), "-i", src.file];
       let idx = 1;
-      let filter = `[0:v]${vf.join(",")}[base]`;
+      let filter = manual ? manualFilter(manual) : `[0:v]${vf.join(",")}[base]`;
       let cur = "base";
       const blurBoxes = C.blurText ? (best.tr.blurs ?? (best.tr.blur ? [best.tr.blur] : [])) : [];
       if (blurBoxes.length && size.width) {

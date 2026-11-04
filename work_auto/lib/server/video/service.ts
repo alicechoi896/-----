@@ -10,7 +10,8 @@ import type { GeneratedContent, ReferenceVideo } from "@/lib/types";
 import type { VideoChannel, VideoJob, VideoPlan, VideoSourceMode } from "@/lib/types/video-production";
 import { aiSourceId } from "@/lib/types/video-production";
 import { sanitizeClips } from "./ai-clips";
-import { readFrames } from "./frames";
+import { readEdits } from "./frames";
+import { cleanEdit, type SourceEdit } from "@/lib/video-production/source-edit";
 import { groupOf } from "@/lib/types/product";
 import { STAY_MAX_PHOTOS, cleanFrame, VIDEO_RENDER_CONFIG, VIDEO_SCRIPT_FEATURES, VOICE_OPTIONS, VOICE_STYLES, atempoChain, cleanCaptionStyle, cleanPause, cleanTarget, cleanTitleStyle, cleanVoiceSpeed, targetFromLength, voiceInstructions } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
@@ -36,6 +37,17 @@ const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const fileKey = (j: Pick<VideoJob, "userId" | "id">) => `${j.userId}/${j.id}.mp4`;
 
 /** 음성 엔진·목소리 검사 (v0.9.73): 타입캐스트면 tc_…/uc_… id, 아니면 OpenAI 목소리 */
+/** v0.9.165 영상별 편집 설정: 고른 영상만 */
+export function cleanEdits(raw: unknown, ok: Set<string>): Record<string, SourceEdit> {
+  const out: Record<string, SourceEdit> = {};
+  for (const [id, v] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
+    if (!ok.has(id)) continue;
+    const e = cleanEdit(v);
+    if (e) out[id] = e;
+  }
+  return out;
+}
+
 /** v0.9.157 영상별 구간: 고른 영상만, 0~3600초, 최소 0.5초 */
 export function cleanRanges(raw: unknown, ok: Set<string>): Record<string, { from: number; to: number }> | undefined {
   if (!raw || typeof raw !== "object") return undefined;
@@ -141,7 +153,7 @@ export const videoJobService = {
       if (want && want.userId === userId && features.has(want.featureId) && Array.isArray(want.output.script)) contents.unshift(want);
     }
     const videos = await myVideos(userId, null);
-    const frames = await readFrames(userId).catch(() => ({}) as Awaited<ReturnType<typeof readFrames>>);
+    const edits = await readEdits(userId).catch(() => ({}) as Awaited<ReturnType<typeof readEdits>>);
     const productIds = [...new Set(contents.map((c) => c.productId).filter(Boolean) as string[])];
     const groups = new Map((productIds.length ? await repo.products.list((p) => productIds.includes(p.id), { id: productIds }).catch(() => []) : []).map((p) => [p.id, groupOf(p)]));
     const [ai, tts, typecast] = await Promise.all([getAIProvider(), getTTSProvider(), getTTSProvider("typecast").catch(() => null)]);
@@ -166,7 +178,7 @@ export const videoJobService = {
         hook: c.context.workflow?.selected?.hook || null,
         cta: c.context.workflow?.selected?.cta || null,
       })),
-      videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null, note: v.note ?? null, frame: frames[v.id] ?? null })),
+      videos: videos.slice(0, 200).map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec, productId: v.productId ?? null, note: v.note ?? null, frame: edits[v.id]?.frame ?? null, edit: edits[v.id] ?? null })),
       assets: videoAssets.summary(),
       ready: { voice: Boolean(tts), vision: ai.supportsVision, ai: ai.id, typecast: Boolean(typecast), giphy: Boolean(await getGiphyProvider().catch(() => null)) },
       typecastEmotions: TYPECAST_EMOTIONS,
@@ -201,6 +213,10 @@ export const videoJobService = {
     built.plan.ttsEngine = ttsEngine;
     built.plan.ttsEmotion = cleanEmotion(input.ttsEmotion);
     built.plan.targetSec = input.targetSec === undefined ? targetFromLength(content.input?.length) : cleanTarget(input.targetSec);
+    // v0.9.165: 라이브러리에서 정한 영상 편집 설정(구간·기본 화면·시간별 확대)을 계획에 복사 — 영상 제작 화면에서 고친 값이 그대로 렌더된다
+    const lib = await readEdits(userId).catch(() => ({}) as Record<string, SourceEdit>);
+    const copied = Object.fromEntries(built.plan.sourceVideoIds.filter((id) => lib[id]).map((id) => [id, lib[id]]));
+    built.plan.sourceEdits = copied;
     return built;
   },
 
@@ -317,6 +333,7 @@ export const videoJobService = {
       targetSec: cleanTarget(plan.targetSec),
       meme: false,
       sourceRanges: cleanRanges(plan.sourceRanges, new Set(sourceIds)),
+      ...(plan.sourceEdits && typeof plan.sourceEdits === "object" ? { sourceEdits: cleanEdits(plan.sourceEdits, new Set(sourceIds)) } : {}),
       ...(plan.titleOff === true ? { titleOff: true } : {}),
     };
   },

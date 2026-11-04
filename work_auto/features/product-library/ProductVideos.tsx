@@ -36,10 +36,7 @@ import {
   XhsJobStatus,
   useXhsDownloads,
 } from "@/features/video-import/useXhsDownloads";
-import {
-  FrameDialog,
-  type Frame,
-} from "@/features/video-production/FrameDialog";
+import { EditDialog, editSummary, type SourceEdit } from "@/features/video-production/FrameDialog";
 
 const MAX_BATCH = 20;
 
@@ -60,7 +57,7 @@ export function ProductVideos({ productId }: { productId: string }) {
     text: string;
   } | null>(null);
   // v0.9.162 영상별 기본 화면 (영상 URL 가져오기와 같은 기능)
-  const [frames, setFrames] = useState<Record<string, Frame>>({});
+  const [frames, setFrames] = useState<Record<string, SourceEdit>>({});
   const [frameFor, setFrameFor] = useState<ReferenceVideo | null>(null);
   useEffect(() => {
     void api.videoProduction
@@ -142,9 +139,10 @@ export function ProductVideos({ productId }: { productId: string }) {
   }
 
   const frameDialog = frameFor ? (
-    <FrameDialog
+    <EditDialog
       videoId={frameFor.id}
       title={frameFor.title}
+      durationSec={frameFor.durationSec}
       initial={frames[frameFor.id] ?? null}
       onClose={() => setFrameFor(null)}
       onSaved={(fr) => {
@@ -302,12 +300,10 @@ export function ProductVideos({ productId }: { productId: string }) {
                             size="sm"
                             variant={frames[v.id] ? "secondary" : "ghost"}
                             onClick={() => setFrameFor(v)}
-                            title="로고·글자가 안 보이게 확대·위치를 정해 둡니다"
+                            title="쓸 구간·확대(시간별 포함)·위치를 정해 두면 영상 제작에 그대로 들어갑니다"
                             data-frame-open
                           >
-                            {frames[v.id]
-                              ? `화면 ${frames[v.id].zoom.toFixed(1)}배`
-                              : "화면 정하기"}
+                            {editSummary(frames[v.id]) ?? "편집 설정"}
                           </Button>
                         )}
                       </>

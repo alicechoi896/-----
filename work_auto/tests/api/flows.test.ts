@@ -540,6 +540,40 @@ describe("트렌드·스타일·오류 기록", () => {
     expect((await post("/api/video-production/frames", { videoId: "nope", frame: null }, "PUT")).ok).toBe(false);
   });
 
+  it("영상 편집 설정: 라이브러리에서 구간·시간별 확대 저장 → 컷 계획에 그대로 복사 → 영상 제작에서 고친 값으로 렌더 (v0.9.165)", async ({ skip }) => {
+    if (!reachable) skip();
+    const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;
+    type X = { items: { originalUrl: string; title: string; authorName: string; durationSec: number }[] };
+    const xhs = (await post("/api/videos/social-search", { keyword: "청소기", platform: "xiaohongshu", sort: "general", period: "all" })).data as X;
+    await post("/api/videos/batch", { items: xhs.items.slice(0, 2).map((it) => ({ url: it.originalUrl, titleHint: it.title, meta: { channelName: it.authorName, durationSec: it.durationSec } })), productId: pid });
+    const vids = ((await j<{ id: string; platform: string; productId: string | null }[]>(`/api/videos?productId=${pid}`)).data ?? []).filter((v) => v.platform === "xiaohongshu" && v.productId === pid);
+    expect(vids.length).toBeGreaterThan(0);
+    const id = vids[0].id;
+    const edit = { range: { from: 1, to: 6 }, frame: { zoom: 1.3, x: 0.5, y: 0.4 }, zooms: [{ from: 2, to: 3.5, zoom: 1.5, x: 0.5, y: 0.5 }] };
+    const saved = (await post("/api/video-production/frames", { videoId: id, edit }, "PUT")).data as Record<string, typeof edit>;
+    expect(saved[id]).toEqual(edit);
+    type C = { id: string; output: Record<string, string[]> };
+    const s1 = (await post("/api/contents/stage1", { featureId: "yt-product-video", input: { productId: pid, length: "15s" }, clientRequestId: `edit-${Date.now()}` })).data as C;
+    const s2 = (await post("/api/contents/stage2", { stage1Id: s1.id, title: s1.output.titles[0], hook: s1.output.hooks[0], cta: s1.output.ctas[0] })).data as C;
+    type Plan = { sourceVideoIds: string[]; sourceEdits?: Record<string, typeof edit>; scenes: { sourceVideoId: string | null }[] };
+    const plan = (await post("/api/video-production/plan", { contentId: s2.id, channelId: "youtube", videoIds: [id] })).data as { plan: Plan };
+    expect(plan.plan.sourceEdits?.[id]).toEqual(edit);
+    // 영상 제작에서 시작을 1초 → 2초로 고쳐 렌더 → 결과 계획의 그 영상 첫 컷이 정확히 2초부터
+    const changed = { ...plan.plan, sourceEdits: { [id]: { ...edit, range: { from: 2, to: 6 } } } };
+    const job = (await post("/api/video-jobs", { plan: changed })).data as { id: string };
+    type Job = { status: string; plan: { scenes: { sourceVideoId: string | null; sourceStart?: number }[] } };
+    let done: Job | null = null;
+    for (let i = 0; i < 90; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      done = (await j<Job>(`/api/video-jobs/${job.id}`)).data;
+      if (done && ["completed", "needs_review", "failed"].includes(done.status)) break;
+    }
+    expect(["completed", "needs_review"]).toContain(done!.status);
+    const first = done!.plan.scenes.find((x) => x.sourceVideoId === id);
+    expect(first?.sourceStart).toBe(2);
+    await post("/api/video-production/frames", { videoId: id, edit: null }, "PUT");
+  }, 240_000);
+
   it("피드백 학습: 👎 고치고 배우기 → 규칙 배우기 → 다음 생성에 규칙이 들어감 → 끄기·지우기 (v0.9.164)", async ({ skip }) => {
     if (!reachable) skip();
     const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;

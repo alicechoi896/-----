@@ -10,10 +10,10 @@ export async function GET() {
   });
 }
 
-/** PUT /api/video-production/frames { videoId, frame | null } — 영상 URL 가져오기에서 기본 화면 정하기 (외부 호출 없음) */
+/** PUT /api/video-production/frames { videoId, edit | null } — v0.9.165 영상 편집 설정(구간·기본 화면·시간별 확대) 저장 (외부 호출 없음). 예전 { frame } 도 받음 */
 export async function PUT(request: Request) {
   return handle(async () => {
     await requireVideoAccess("youtube");
-    return videoFrameService.set(await readJson<{ videoId?: unknown; frame?: unknown }>(request));
+    return videoFrameService.set(await readJson<{ videoId?: unknown; edit?: unknown; frame?: unknown }>(request));
   });
 }

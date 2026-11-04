@@ -114,7 +114,9 @@ export interface VideoPlan {
   meme: boolean;
   /** AI 컷 (섞기·AI만, v0.9.60). 결과 영상은 Kie 에 14일 — 렌더할 때 taskId 로 받아 쓰고 남기지 않는다 */
   aiClips?: AiClip[];
-  /** v0.9.157 영상별 쓸 구간 (초, 그 영상을 쓰는 모든 컷 공통). 컷의 '지금 위치부터'(startAt)가 더 우선 */
+  /** v0.9.165 영상별 편집 설정 (구간·기본 화면·시간별 확대) — 컷 계획을 만들 때 라이브러리 설정을 복사, 여기서 고친 값이 그대로 렌더된다 */
+  sourceEdits?: Record<string, import("@/lib/video-production/source-edit").SourceEdit>;
+  /** v0.9.157 영상별 쓸 구간 (초, 그 영상을 쓰는 모든 컷 공통). 컷의 '지금 위치부터'(startAt)가 더 우선. v0.9.165 부터 sourceEdits.range 가 우선 */
   sourceRanges?: Record<string, { from: number; to: number }>;
   /** v0.9.156 AI 숙소 영상: 숙소 사진으로 만든 AI 컷만 쓰고(샤오홍슈 없음), 끝 화면 없음 */
   stay?: boolean;
