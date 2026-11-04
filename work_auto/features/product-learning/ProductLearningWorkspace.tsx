@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { ArrowRight, Check, FileText, ImageUp, Library, Link2, ScanSearch, Upload, X } from "lucide-react";
-import type { Product, ProductAnalysisDraft, ProductSourceInput, RawProductData } from "@/lib/types";
+import type { Product, ProductAnalysisDraft, ProductGroup, ProductSourceInput, RawProductData } from "@/lib/types";
+import { PRODUCT_GROUPS, guessGroup } from "@/lib/types/product";
 import { ApiError, api } from "@/lib/api-client";
 import { PLATFORM_LABEL_KO, PRODUCT_URL_ERROR, parseSupportedProductUrl } from "@/lib/product-url";
 import { CollectedError, analyzeRaw, learnProductUrl, type LearnStage } from "@/lib/product-learn-flow";
@@ -48,6 +49,7 @@ export function ProductLearningWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProductAnalysisDraft | null>(null);
   const [saved, setSaved] = useState<Product | null>(null);
+  const [group, setGroup] = useState<ProductGroup | null>(null);
   /** 진행 안내 (이미지 조각 읽기 단계별) */
   const [progress, setProgress] = useState<string | null>(null);
   /** 이미지에서 AI 가 읽은 원문 (확인용, 저장 시 원본 수집 데이터로 남는다) */
@@ -68,6 +70,7 @@ export function ProductLearningWorkspace() {
     setError(null);
     setDraft(null);
     setSaved(null);
+    setGroup(null);
     setExtracted(null);
     setShowExtracted(false);
     try {
@@ -114,6 +117,7 @@ export function ProductLearningWorkspace() {
     setErrorCode(null);
     setDraft(null);
     setSaved(null);
+    setGroup(null);
     setExisting(null);
     setCollected(null);
     try {
@@ -301,12 +305,29 @@ export function ProductLearningWorkspace() {
                   저장된 제품 보기
                 </LinkButton>
               )}
+              {/* v0.9.168 저장할 때 분류 고르기 (분석한 카테고리로 미리 골라 둠) */}
+              <label className="flex items-center gap-1.5 text-[13px]" data-save-group>
+                분류
+                <select
+                  value={group ?? guessGroup(draft.analysis.basicInfo.category)}
+                  disabled={Boolean(saved)}
+                  onChange={(e) => setGroup(e.target.value as ProductGroup)}
+                  className="h-9 rounded-control border border-line bg-canvas px-2"
+                  aria-label="제품 분류"
+                >
+                  {PRODUCT_GROUPS.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <SaveButton
                 icon={Library}
                 label="제품 라이브러리에 저장"
                 savedLabel="라이브러리에 저장됨"
                 saved={Boolean(saved)}
-                onSave={async () => setSaved(await api.products.save(draft))}
+                onSave={async () => setSaved(await api.products.save({ ...draft, productGroup: group ?? guessGroup(draft.analysis.basicInfo.category) }))}
               />
             </div>
           </div>

@@ -84,7 +84,8 @@ export function AiLearningCenter({
       </div>
 
       <div>
-        <Tabs items={items} value={tab} onChange={setTab} />
+        {/* v0.9.168 탭이 많아 잘리지 않게 두 줄로 */}
+        <Tabs items={items} value={tab} onChange={setTab} className="flex-wrap" />
         <div className="pt-5">
           {tab === "profiles" && <ContentProfileTab />}
           {tab === "products" && <ProductMemoryTab onChanged={overview.reload} />}

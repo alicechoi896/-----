@@ -40,7 +40,7 @@ export const productService = {
     return { raw, analysis, meta };
   },
 
-  async save(draft: { raw: RawProductData; analysis: ProductAnalysisContent; meta: AnalysisMeta }): Promise<Product> {
+  async save(draft: { raw: RawProductData; analysis: ProductAnalysisContent; meta: AnalysisMeta; productGroup?: unknown }): Promise<Product> {
     if (!draft?.raw || !draft?.analysis) throw new AppError("BAD_INPUT", "저장할 분석 결과가 없습니다.");
     const repo = getRepositories();
     const userId = await getCurrentUserId();
@@ -72,6 +72,8 @@ export const productService = {
       createdAt: now,
       updatedAt: now,
       lastUsedAt: null,
+      // v0.9.168 학습하고 저장할 때 고른 분류 (없으면 가전)
+      productGroup: cleanGroup(draft.productGroup),
     };
     await repo.products.insert(product);
     // v0.9.109: 분석·수집 원본도 제품과 같은 주인으로 (주인을 빼면 저장한 관리자 개인 것이 되어 다른 관리자에게 '제품 분석을 찾을 수 없습니다')

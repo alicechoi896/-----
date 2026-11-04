@@ -84,6 +84,8 @@ export interface ProductAnalysisDraft {
   raw: RawProductData;
   analysis: ProductAnalysisContent;
   meta: AnalysisMeta;
+  /** v0.9.168 저장할 때 고른 분류 (없으면 가전) */
+  productGroup?: ProductGroup;
 }
 
 export interface ProductAnalysis extends ProductAnalysisContent {
@@ -142,6 +144,15 @@ export const PRODUCT_GROUPS: { value: ProductGroup; label: string }[] = [
 ];
 /** 분류 값이 없으면 가전 */
 export const groupOf = (p: Pick<Product, "productGroup">): ProductGroup => (p.productGroup === "fashion" || p.productGroup === "stay" || p.productGroup === "living" ? p.productGroup : "appliance");
+/** v0.9.168 분석한 카테고리 글자로 분류 미리 고르기 (저장 전에 바꿀 수 있다) */
+export function guessGroup(category: string): ProductGroup {
+  const c = category.replace(/\s+/g, "");
+  if (/숙박|숙소|호텔|펜션|리조트|글램핑|캠핑장|여행|풀빌라|료칸/.test(c)) return "stay";
+  if (/패션|의류|옷|여성복|남성복|신발|가방|잡화류|액세서리|주얼리|속옷|언더웨어|모자|스카프|원피스|티셔츠|바지|아우터/.test(c)) return "fashion";
+  if (/가전|전자|디지털|컴퓨터|노트북|청소기|에어컨|냉장고|세탁기|드라이기|마사지기|건강가전|주방가전|생활가전|카메라|이어폰|헤드폰/.test(c)) return "appliance";
+  if (/생활|리빙|주방|욕실|수납|정리|문구|인테리어|뷰티|화장품|화장|스킨케어|반려|지갑|파우치|필름/.test(c)) return "living";
+  return "appliance";
+}
 export const cleanGroup = (v: unknown): ProductGroup => (v === "fashion" || v === "stay" || v === "living" ? v : "appliance");
 
 export interface ProductDetail {
