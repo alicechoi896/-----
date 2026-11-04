@@ -11,8 +11,8 @@ export const LEGAL_INFO = {
   contactEmail: "[문의 이메일]",
   privacyOfficer: "[개인정보 보호책임자 이름]",
   privacyOfficerEmail: "[개인정보 보호책임자 이메일]",
-  version: "1.0",
-  effectiveDate: "2026년 10월 2일",
+  version: "1.1",
+  effectiveDate: "2026년 11월 4일",
   /** 탈퇴 회원의 활동 기록 보관 기간 */
   auditLogRetention: "1년",
 };

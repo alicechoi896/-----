@@ -62,6 +62,17 @@ const sections: LegalSection[] = [
         <p>회원은 외부 API 를 본인 명의로 발급받아 연결합니다. 외부 API 이용에 따른 요금, 사용량 한도, 이용약관 준수는 해당 API 를 발급받은 회원의 책임입니다.</p>
         <p>회원이 외부 API 를 연결해 기능을 실행하면, 그 기능에 필요한 입력 내용이 회원의 요청에 따라 해당 외부 서비스로 전송됩니다.</p>
         <p>연결한 API 키는 서버에서 암호화하여 보관하며, 회원은 언제든 연결을 해제할 수 있습니다.</p>
+        <p>
+          YouTube 채널 연결(영상 올리기·통계 보기)은 YouTube API 서비스를 이용합니다. 이 기능을 쓰는 회원은{" "}
+          <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
+            YouTube 서비스 약관
+          </a>
+          과{" "}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+            Google 개인정보처리방침
+          </a>
+          을 함께 따릅니다.
+        </p>
       </>
     ),
   },

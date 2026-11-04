@@ -74,6 +74,38 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    title: "YouTube API 서비스 이용",
+    body: (
+      <>
+        <p>
+          서비스는 회원이 직접 연결한 경우에만 YouTube API 서비스(YouTube API Services)를 이용해 회원의 YouTube 채널에 영상을 올리고(제목·설명·태그·공개 범위·예약 시간 포함), 회원 채널의 이름과 영상 통계(조회수·좋아요·댓글 수 등)를 읽어 성과 분석에 보여 줍니다.
+        </p>
+        <ul>
+          <li>받는 정보: Google 계정 연결 토큰(갱신 토큰), 연결한 채널의 이름과 ID, 회원이 올린 영상의 공개 통계</li>
+          <li>보관: 연결 토큰은 서버의 비공개 저장소에 보관하며 회원 본인의 요청을 처리할 때만 씁니다. 다른 회원이나 제3자에게 제공하지 않고, 광고에 쓰지 않습니다.</li>
+          <li>
+            연결 해제: 서비스의 설정 › API 연결 센터에서 연결을 끊거나, Google 계정의{" "}
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">
+              보안 › 타사 앱 액세스 관리
+            </a>
+            에서 언제든 권한을 취소할 수 있습니다. 연결을 끊으면 보관한 토큰을 지웁니다.
+          </li>
+          <li>
+            YouTube API 서비스를 이용하므로 회원은{" "}
+            <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
+              YouTube 서비스 약관
+            </a>
+            에 동의하는 것으로 봅니다. Google 의 개인정보 처리는{" "}
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+              Google 개인정보처리방침
+            </a>
+            을 따릅니다.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     title: "개인정보 처리의 위탁 및 국외 이전",
     body: (
       <>
