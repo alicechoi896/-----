@@ -152,7 +152,6 @@ export function ProductVideos({ productId }: { productId: string }) {
           else delete n[frameFor.id];
           return n;
         });
-        setFrameFor(null);
       }}
     />
   ) : null;
@@ -295,17 +294,15 @@ export function ProductVideos({ productId }: { productId: string }) {
                         >
                           다운로드
                         </Button>
-                        {stored.has(v.id) && (
-                          <Button
-                            size="sm"
-                            variant={frames[v.id] ? "secondary" : "ghost"}
-                            onClick={() => setFrameFor(v)}
-                            title="쓸 구간·확대(시간별 포함)·위치를 정해 두면 영상 제작에 그대로 들어갑니다"
-                            data-frame-open
-                          >
-                            {editSummary(frames[v.id]) ?? "편집 설정"}
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant={frames[v.id] ? "secondary" : "ghost"}
+                          onClick={() => setFrameFor(v)}
+                          title="시작 초·확대(시간별 포함)·위치를 정해 두면 영상 제작에 그대로 들어갑니다 (미리보기는 원본을 보관한 영상만)"
+                          data-frame-open
+                        >
+                          {editSummary(frames[v.id]) ?? "편집 설정"}
+                        </Button>
                       </>
                     ) : (
                       <a

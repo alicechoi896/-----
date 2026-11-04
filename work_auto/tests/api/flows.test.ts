@@ -531,8 +531,8 @@ describe("트렌드·스타일·오류 기록", () => {
     const vids = ((await j<{ id: string; platform: string }[]>("/api/videos")).data ?? []).filter((v) => v.platform === "xiaohongshu");
     if (!vids.length) return;
     const id = vids[0].id;
-    const r = (await post("/api/video-production/frames", { videoId: id, frame: { zoom: 1.6, x: 0.4, y: 0.6 } }, "PUT")).data as Record<string, { zoom: number }>;
-    expect(r[id].zoom).toBe(1.6);
+    const r = (await post("/api/video-production/frames", { videoId: id, frame: { zoom: 1.6, x: 0.4, y: 0.6 } }, "PUT")).data as Record<string, { frame?: { zoom: number } }>;
+    expect(r[id].frame?.zoom).toBe(1.6);
     type O = { videos: { id: string; frame?: { zoom: number } | null }[] };
     expect((await j<O>("/api/video-production/options?channelId=youtube")).data.videos.find((v) => v.id === id)?.frame?.zoom).toBe(1.6);
     const cleared = (await post("/api/video-production/frames", { videoId: id, frame: { zoom: 1, x: 0.5, y: 0.5 } }, "PUT")).data as Record<string, unknown>;
@@ -549,7 +549,7 @@ describe("트렌드·스타일·오류 기록", () => {
     const vids = ((await j<{ id: string; platform: string; productId: string | null }[]>(`/api/videos?productId=${pid}`)).data ?? []).filter((v) => v.platform === "xiaohongshu" && v.productId === pid);
     expect(vids.length).toBeGreaterThan(0);
     const id = vids[0].id;
-    const edit = { range: { from: 1, to: 6 }, frame: { zoom: 1.3, x: 0.5, y: 0.4 }, zooms: [{ from: 2, to: 3.5, zoom: 1.5, x: 0.5, y: 0.5 }] };
+    const edit = { range: { from: 1 }, frame: { zoom: 1.3, x: 0.5, y: 0.4 }, zooms: [{ from: 2, to: 3.5, zoom: 1.5, x: 0.5, y: 0.5 }] };
     const saved = (await post("/api/video-production/frames", { videoId: id, edit }, "PUT")).data as Record<string, typeof edit>;
     expect(saved[id]).toEqual(edit);
     type C = { id: string; output: Record<string, string[]> };
@@ -559,7 +559,7 @@ describe("트렌드·스타일·오류 기록", () => {
     const plan = (await post("/api/video-production/plan", { contentId: s2.id, channelId: "youtube", videoIds: [id] })).data as { plan: Plan };
     expect(plan.plan.sourceEdits?.[id]).toEqual(edit);
     // 영상 제작에서 시작을 1초 → 2초로 고쳐 렌더 → 결과 계획의 그 영상 첫 컷이 정확히 2초부터
-    const changed = { ...plan.plan, sourceEdits: { [id]: { ...edit, range: { from: 2, to: 6 } } } };
+    const changed = { ...plan.plan, sourceEdits: { [id]: { ...edit, range: { from: 2 } } } };
     const job = (await post("/api/video-jobs", { plan: changed })).data as { id: string };
     type Job = { status: string; plan: { scenes: { sourceVideoId: string | null; sourceStart?: number }[] } };
     let done: Job | null = null;

@@ -1227,7 +1227,7 @@ function RangeBoard({ scenes, videos, edits, legacyRanges, onChange }: { scenes:
           );
         })}
       </ul>
-      {open && <EditBoardDialog videos={list} scenes={scenes} edits={cur} onClose={() => setOpen(false)} onSave={(e) => (onChange(e), setOpen(false))} />}
+      {open && <EditBoardDialog videos={list} scenes={scenes} edits={cur} onClose={() => setOpen(false)} onSave={onChange} />}
     </div>
   );
 }
@@ -1244,9 +1244,11 @@ function EditBoardDialog({ videos, scenes, edits, onClose, onSave }: { videos: C
     };
   }, [videos]);
   const v = videos.find((x) => x.id === sel);
-  const save = () => {
+  // v0.9.166 고치면 바로 계획에 반영 (저장 버튼 없이)
+  const apply = (next: Record<string, SourceEdit>) => {
+    setDraft(next);
     const out: Record<string, SourceEdit> = {};
-    for (const [k, e] of Object.entries(draft)) {
+    for (const [k, e] of Object.entries(next)) {
       const c = cleanEdit(e);
       if (c) out[k] = c;
     }
@@ -1258,7 +1260,7 @@ function EditBoardDialog({ videos, scenes, edits, onClose, onSave }: { videos: C
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[14px] font-semibold">영상별 구간·확대 편집 · {videos.length}개</p>
-            <p className="text-[12px] text-fg-muted">라이브러리에서 정한 설정이 들어와 있습니다. 여기서 고친 값이 이 영상에 그대로 반영됩니다 (미리보기 = 결과). 라이브러리 설정은 바뀌지 않습니다.</p>
+            <p className="text-[12px] text-fg-muted">라이브러리에서 정한 설정이 들어와 있습니다. 시작 초만 정하면 이 영상을 쓰는 컷이 그 초부터 각 컷 길이만큼 차례로 씁니다. 고친 값은 바로 반영되고 결과도 미리보기와 같습니다 (라이브러리 설정은 그대로).</p>
           </div>
           <button type="button" onClick={onClose} className="text-[13px] text-fg-subtle hover:text-fg" aria-label="닫기">
             ✕
@@ -1285,24 +1287,22 @@ function EditBoardDialog({ videos, scenes, edits, onClose, onSave }: { videos: C
               <div className="flex flex-wrap items-center gap-2 text-[12px]">
                 <b className="truncate">{v.title}</b>
                 {v.edit && (
-                  <button type="button" className="text-brand hover:underline" onClick={() => setDraft((d) => ({ ...d, [v.id]: v.edit! }))} data-range-reset>
+                  <button type="button" className="text-brand hover:underline" onClick={() => apply({ ...draft, [v.id]: v.edit! })} data-range-reset>
                     라이브러리 설정으로 되돌리기 ({editSummary(v.edit)})
                   </button>
                 )}
-                <button type="button" className="text-fg-subtle hover:text-fg" onClick={() => setDraft((d) => ({ ...d, [v.id]: {} }))}>
+                <button type="button" className="text-fg-subtle hover:text-fg" onClick={() => apply({ ...draft, [v.id]: {} })}>
                   이 영상 모두 자동으로
                 </button>
               </div>
-              <SourceEditEditor key={v.id} url={urls[v.id] ?? (v.id in urls ? null : undefined)} durationHint={v.durationSec} value={draft[v.id] ?? {}} onChange={(e) => setDraft((d) => ({ ...d, [v.id]: e }))} />
+              <SourceEditEditor key={v.id} url={urls[v.id] ?? (v.id in urls ? null : undefined)} durationHint={v.durationSec} value={draft[v.id] ?? {}} onChange={(e) => apply({ ...draft, [v.id]: e })} />
             </div>
           )}
         </div>
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            취소
-          </Button>
-          <Button size="sm" variant="primary" onClick={save} data-range-save>
-            저장
+        <div className="flex items-center justify-end gap-3">
+          <span className="text-[12px] text-fg-subtle">고치면 바로 이 컷 계획에 반영됩니다</span>
+          <Button size="sm" variant="primary" onClick={onClose} data-range-save>
+            닫기
           </Button>
         </div>
       </div>

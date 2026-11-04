@@ -74,8 +74,8 @@ export function SourceEditEditor({ url, durationHint, value, onChange }: { url: 
                 setDur(d);
                 e.currentTarget.currentTime = sec;
                 // 목록의 길이와 실제 길이가 다르면 구간·확대 끝을 실제 길이에 맞춘다
-                if (d && (value.range && value.range.to > d + 0.05 || zooms.some((z) => z.to > d + 0.05)))
-                  onChange({ ...value, range: value.range ? { from: Math.min(value.range.from, Math.max(0, d - 0.5)), to: Number(d.toFixed(2)) } : value.range, zooms: zooms.map((z) => ({ ...z, to: Math.min(z.to, Number(d.toFixed(2))) })) });
+                if (d && ((value.range && value.range.from > d - 0.5) || zooms.some((z) => z.to > d + 0.05)))
+                  onChange({ ...value, range: value.range ? { from: Number(Math.max(0, Math.min(value.range.from, d - 0.5)).toFixed(2)) } : value.range, zooms: zooms.map((z) => ({ ...z, to: Math.min(z.to, Number(d.toFixed(2))) })) });
               }}
               onTimeUpdate={(e) => setSec(Number(e.currentTarget.currentTime.toFixed(2)))}
               onPlay={() => setPlaying(true)}
@@ -108,7 +108,8 @@ export function SourceEditEditor({ url, durationHint, value, onChange }: { url: 
             }}
             data-edit-bar
           >
-            {value.range && full > 0 && <div className="absolute inset-y-0 rounded bg-brand/45" style={{ left: `${(Math.min(value.range.from, full) / full) * 100}%`, width: `${((Math.min(value.range.to, full) - Math.min(value.range.from, full)) / full) * 100}%` }} />}
+            {value.range && full > 0 && <div className="absolute inset-y-0 rounded-r bg-brand/30" style={{ left: `${(Math.min(value.range.from, full) / full) * 100}%`, right: 0 }} />}
+            {value.range && full > 0 && <div className="absolute inset-y-[-2px] w-1 rounded bg-brand" style={{ left: `${(Math.min(value.range.from, full) / full) * 100}%` }} title="시작" />}
             {full > 0 &&
               zooms.map((z, i) => <div key={i} className={cn("absolute inset-y-1 rounded bg-warning/80", sel === i && "ring-2 ring-warning")} style={{ left: `${(Math.min(z.from, full) / full) * 100}%`, width: `${Math.max(0.5, ((Math.min(z.to, full) - Math.min(z.from, full)) / full) * 100)}%` }} />)}
             {full > 0 && <div className="absolute inset-y-[-3px] w-0.5 bg-fg" style={{ left: `${(Math.min(sec, full) / full) * 100}%` }} />}
@@ -117,19 +118,14 @@ export function SourceEditEditor({ url, durationHint, value, onChange }: { url: 
         </div>
 
         <section className="space-y-1.5 rounded-control border border-line p-2">
-          <p className="font-semibold">① 쓸 구간 <span className="font-normal text-fg-subtle">— 이 영상을 쓰는 컷은 시작부터 차례로 잘립니다</span></p>
+          <p className="font-semibold">① 시작 <span className="font-normal text-fg-subtle">— 이 영상을 쓰는 컷은 여기부터 각 컷 길이만큼 차례로 씁니다 (끝은 컷 계획에 따라 정해짐)</span></p>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button size="sm" variant="secondary" onClick={() => onChange({ ...value, range: { from: Number(sec.toFixed(2)), to: Math.max(Number(sec.toFixed(2)) + 0.5, value.range?.to ?? full) } })} data-edit-from>
+            <Button size="sm" variant="secondary" onClick={() => onChange({ ...value, range: { from: Number(sec.toFixed(2)) } })} data-edit-from>
               여기서 시작
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => onChange({ ...value, range: { from: Math.min(value.range?.from ?? 0, Number(sec.toFixed(2)) - 0.5), to: Number(sec.toFixed(2)) } })} data-edit-to>
-              여기서 끝
-            </Button>
-            <Input type="number" step="0.1" min={0} value={value.range?.from ?? ""} onChange={(e) => onChange({ ...value, range: { from: Number(e.target.value), to: value.range?.to ?? full } })} className="h-8 w-20" aria-label="시작 초" />
-            ~
-            <Input type="number" step="0.1" min={0} value={value.range?.to ?? ""} onChange={(e) => onChange({ ...value, range: { from: value.range?.from ?? 0, to: Number(e.target.value) } })} className="h-8 w-20" aria-label="끝 초" />초
+            <Input type="number" step="0.1" min={0} value={value.range?.from ?? ""} onChange={(e) => onChange({ ...value, range: e.target.value === "" ? null : { from: Number(e.target.value) } })} className="h-8 w-20" aria-label="시작 초" placeholder="자동" />초부터
             <button type="button" className="text-fg-subtle hover:text-fg" onClick={() => onChange({ ...value, range: null })}>
-              구간 없음(자동)
+              자동(장면 골라 쓰기)
             </button>
           </div>
         </section>
@@ -200,6 +196,30 @@ export function EditDialog({ videoId, title, durationSec, initial, onClose, onSa
   const [edit, setEdit] = useState<SourceEdit>(initial ?? {});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // v0.9.166 고치면 바로 저장 (0.7초 동안 더 안 고치면). 마지막으로 저장한 값과 같으면 다시 보내지 않는다
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  const lastSaved = useRef(JSON.stringify(cleanEdit(initial ?? {}) ?? null));
+  useEffect(() => {
+    const clean = cleanEdit(edit);
+    const key = JSON.stringify(clean ?? null);
+    if (key === lastSaved.current) return;
+    const t = setTimeout(() => {
+      setState("saving");
+      api.videoProduction
+        .setEdit(videoId, clean)
+        .then(() => {
+          lastSaved.current = key;
+          setState("saved");
+          setErr(null);
+          onSaved(clean);
+        })
+        .catch((e) => {
+          setState("idle");
+          setErr(e instanceof Error ? e.message : "저장하지 못했습니다.");
+        });
+    }, 700);
+    return () => clearTimeout(t);
+  }, [edit, videoId, onSaved]);
   useEffect(() => {
     let alive = true;
     api.videoProduction
@@ -216,6 +236,8 @@ export function EditDialog({ videoId, title, durationSec, initial, onClose, onSa
     try {
       const clean = next ? cleanEdit(next) : null;
       await api.videoProduction.setEdit(videoId, clean);
+      lastSaved.current = JSON.stringify(clean ?? null);
+      setEdit(clean ?? {});
       onSaved(clean);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "저장하지 못했습니다.");
@@ -232,16 +254,16 @@ export function EditDialog({ videoId, title, durationSec, initial, onClose, onSa
         </div>
         <SourceEditEditor url={url} durationHint={durationSec} value={edit} onChange={setEdit} />
         {err && <p className="text-[12px] text-danger">{err}</p>}
-        <div className="flex justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => void save(null)}>
             모두 지우기 (자동으로)
           </Button>
-          <span className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={onClose}>
-              취소
-            </Button>
-            <Button size="sm" variant="primary" loading={busy} onClick={() => void save(edit)} data-frame-save>
-              저장
+          <span className="flex items-center gap-3">
+            <span className="text-[12px] text-fg-subtle" data-edit-state>
+              {state === "saving" ? "저장 중…" : state === "saved" ? "저장됨 ✓ (고치면 바로 저장)" : "고치면 바로 저장됩니다"}
+            </span>
+            <Button size="sm" variant="primary" onClick={onClose} data-frame-save>
+              닫기
             </Button>
           </span>
         </div>
@@ -253,6 +275,6 @@ export function EditDialog({ videoId, title, durationSec, initial, onClose, onSa
 /** 목록에 보일 짧은 요약 (예: '5~12초 · 130% · 확대 2') */
 export function editSummary(e: SourceEdit | null | undefined): string | null {
   if (!e) return null;
-  const parts = [e.range ? `${e.range.from}~${e.range.to}초` : "", e.frame ? `${Math.round(e.frame.zoom * 100)}%` : "", e.zooms?.length ? `확대 ${e.zooms.length}` : ""].filter(Boolean);
+  const parts = [e.range ? `${e.range.from}초부터` : "", e.frame ? `${Math.round(e.frame.zoom * 100)}%` : "", e.zooms?.length ? `확대 ${e.zooms.length}` : ""].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }

@@ -308,7 +308,6 @@ export function VideoImport() {
               else delete n[frameFor.id];
               return n;
             });
-            setFrameFor(null);
           }}
         />
       )}

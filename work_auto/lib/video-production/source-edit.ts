@@ -3,7 +3,7 @@
  * 미리보기(CSS)와 렌더(FFmpeg)는 이 파일의 같은 함수로 화면을 계산한다 → 미리보기와 결과가 같다.
  *
  * 좌표: 모두 '9:16 화면 기준'(원본을 1080×1920 에 꽉 채운 뒤의 화면, 0~1). 시간: 원본 영상의 초.
- * - range: 이 영상에서 쓸 구간. 이 영상을 쓰는 컷은 from 부터 차례로 이어서 잘린다
+ * - range: 이 영상의 시작 초(from). 이 영상을 쓰는 컷은 from 부터 각 컷 길이만큼 차례로 잘린다 — 끝은 컷 계획(컷 초)으로 정해지므로 받지 않는다 (v0.9.166)
  * - frame: 기본 화면 (확대 배율·화면 중심)
  * - zooms: 시간별 확대 — from~to 초 동안 그 배율·위치 (겹치면 나중 것이 우선)
  */
@@ -17,7 +17,8 @@ export interface ZoomSeg extends Frame {
   to: number;
 }
 export interface SourceEdit {
-  range?: { from: number; to: number } | null;
+  /** v0.9.166 시작 초만 (to 는 예전 데이터 호환용 — 쓰지 않는다) */
+  range?: { from: number; to?: number } | null;
   frame?: Frame | null;
   zooms?: ZoomSeg[];
 }
@@ -68,8 +69,9 @@ export function cleanEdit(raw: unknown): SourceEdit | null {
   }
   const sec = (v: unknown) => Math.min(3600, Math.max(0, Number(Number(v).toFixed(2))));
   let range: SourceEdit["range"] = null;
-  const rr = o.range as { from?: unknown; to?: unknown } | null | undefined;
-  if (rr && Number.isFinite(Number(rr.from)) && Number.isFinite(Number(rr.to)) && sec(rr.to) - sec(rr.from) >= 0.5) range = { from: sec(rr.from), to: sec(rr.to) };
+  const rr = o.range as { from?: unknown } | null | undefined;
+  // v0.9.166 시작만 — 끝(to)은 버린다 (컷 계획의 컷 길이로 정해짐). 0초 시작은 '처음부터(자동)'와 같아 저장하지 않는다
+  if (rr && Number.isFinite(Number(rr.from)) && sec(rr.from) > 0) range = { from: sec(rr.from) };
   const frame = cleanFrameValue(o.frame);
   const zooms = (Array.isArray(o.zooms) ? o.zooms : [])
     .map((z) => {
@@ -99,10 +101,9 @@ export function cutWindows(edit: SourceEdit | null | undefined, start: number, d
   return { base, segs };
 }
 
-/** 이 영상의 n 번째 사용(앞 컷들이 쓴 길이 used)의 시작 초: 구간 from 부터 이어서, 넘치면 처음으로 */
-export function sequentialStart(range: { from: number; to: number }, used: number, dur: number, srcDuration: number): number {
-  const end = Math.min(range.to, srcDuration);
-  const span = Math.max(0, end - range.from - dur);
+/** 이 영상의 n 번째 사용(앞 컷들이 쓴 길이 used)의 시작 초: 시작 초부터 이어서, 영상 끝을 넘으면 시작 초로 돌아간다 */
+export function sequentialStart(range: { from: number; to?: number }, used: number, dur: number, srcDuration: number): number {
+  const span = Math.max(0, srcDuration - range.from - dur);
   if (span <= 0.05) return Math.max(0, Math.min(range.from, srcDuration - dur - 0.05));
   return r3(range.from + (used % (span + 0.001)));
 }

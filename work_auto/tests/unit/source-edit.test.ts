@@ -40,16 +40,19 @@ describe("영상 편집 설정 (v0.9.165) — 계산", () => {
     expect(w.segs).toEqual([{ a: 1, b: 2.5, win: { x: 0, y: 0, w: 0.5, h: 0.5 } }]);
     expect(cutWindows({ zooms: [{ from: 10, to: 12, zoom: 2, x: 0.5, y: 0.5 }] }, 2, 3).segs).toEqual([]);
   });
-  it("구간 시작부터 차례로: 5초로 정하면 첫 컷 5초, 다음 컷은 이어서, 넘치면 처음으로", () => {
-    expect(sequentialStart({ from: 5, to: 12 }, 0, 1.5, 30)).toBe(5);
-    expect(sequentialStart({ from: 5, to: 12 }, 1.5, 1.5, 30)).toBe(6.5);
-    expect(sequentialStart({ from: 5, to: 8 }, 3, 1.5, 30)).toBeGreaterThanOrEqual(5);
-    expect(sequentialStart({ from: 5, to: 5.5 }, 0, 2, 30)).toBe(5);
+  it("시작 초부터 차례로 (끝 없음): 5초로 정하면 첫 컷 5초, 다음 컷은 이어서, 영상 끝을 넘으면 시작으로", () => {
+    expect(sequentialStart({ from: 5 }, 0, 1.5, 30)).toBe(5);
+    expect(sequentialStart({ from: 5 }, 1.5, 1.5, 30)).toBe(6.5);
+    expect(sequentialStart({ from: 5 }, 3.2, 2.1, 30)).toBe(8.2);
+    // 예전 데이터의 끝(to)은 쓰지 않는다
+    expect(sequentialStart({ from: 5, to: 6 }, 3, 1.5, 30)).toBe(8);
+    // 영상 10초, 시작 5초, 컷 2초 → 5, 7, (9는 넘침) → 다시 5 근처
+    expect(sequentialStart({ from: 5 }, 4, 2, 10)).toBeLessThan(8.01);
   });
   it("저장 정리: 예전 형식(화면만)도 받는다, 비면 null", () => {
     expect(cleanEdit({ zoom: 1.6, x: 0.4, y: 0.6 })).toEqual({ frame: { zoom: 1.6, x: 0.4, y: 0.6 } });
-    expect(cleanEdit({ range: { from: 5, to: 4 } })).toBeNull();
-    expect(cleanEdit({ range: { from: 5, to: 9 }, zooms: [{ from: 6, to: 7, zoom: 1.5, x: 0.5, y: 0.5 }] })).toEqual({ range: { from: 5, to: 9 }, zooms: [{ from: 6, to: 7, zoom: 1.5, x: 0.5, y: 0.5 }] });
+    expect(cleanEdit({ range: { from: 0 } })).toBeNull();
+    expect(cleanEdit({ range: { from: 5, to: 9 }, zooms: [{ from: 6, to: 7, zoom: 1.5, x: 0.5, y: 0.5 }] })).toEqual({ range: { from: 5 }, zooms: [{ from: 6, to: 7, zoom: 1.5, x: 0.5, y: 0.5 }] });
   });
 });
 

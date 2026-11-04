@@ -295,7 +295,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const planEdits = job.plan.sourceEdits ?? null;
     const legacyFrames = planEdits ? {} : await readFrames(job.userId).catch(() => ({}) as Record<string, { zoom: number; x: number; y: number }>);
     const editOf = (id: string): SourceEdit | undefined => (planEdits ? planEdits[id] : legacyFrames[id] ? { frame: legacyFrames[id] } : undefined);
-    const rangeOf = (id: string) => editOf(id)?.range ?? job.plan.sourceRanges?.[id] ?? null;
+    const rangeOf = (id: string): { from: number } | null => editOf(id)?.range ?? (job.plan.sourceRanges?.[id] ? { from: job.plan.sourceRanges[id].from } : null);
     const usedSec = (id: string) => (usedRanges.get(id) ?? []).reduce((n, [a, b]) => n + (b - a), 0);
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number; manual: ReturnType<typeof cutWindows> | null }[] = [];
     for (const [k, s] of scenes.entries()) {
