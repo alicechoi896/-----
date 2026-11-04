@@ -100,6 +100,9 @@ export interface FashionSettings {
   povPos?: { x: number; y: number } | null;
 }
 
+/** v0.9.170 '만드는 중'으로 이만큼 멈춰 있으면 끊긴 것으로 본다 (서버·화면 같은 기준, 렌더 함수 최대 800초보다 길게) */
+export const FASHION_STALE_RENDER_MS = 15 * 60_000;
+
 export type FashionTaskStatus = "queued" | "requesting" | "generating" | "success" | "fail";
 
 export interface FashionTask {

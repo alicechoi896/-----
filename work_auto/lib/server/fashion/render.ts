@@ -289,7 +289,8 @@ export async function renderReels(owner: string, p: FashionProject, r: FashionRe
     await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", joined], 120_000);
     const total = looks.length * sec + ctaSec;
     const final = path.join(dir, "final.mp4");
-    const bgm = p.bgmKey ? await videoStorage.download(p.bgmKey).catch(() => null) : null;
+    // v0.9.170 릴스에 음악은 넣지 않는다 (인스타·쇼츠 앱의 음악을 올릴 때 고른다). 무음 소리 트랙만
+    const bgm: Buffer | null = null;
     if (bgm) {
       const bf = path.join(dir, `bgm${path.extname(p.bgmKey!) || ".mp3"}`);
       await writeFile(bf, bgm);

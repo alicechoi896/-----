@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { mediaDuration } from "../video/ffmpeg";
 import { approvedOf, backgroundEn, categoryLabel, DEFAULT_SETTINGS, emptyFashionProject, newFashionId } from "@/lib/fashion/prompts";
-import { FASHION_CATEGORIES, type FashionCategory, type FashionImage, type FashionItem, type FashionLook, type FashionProject, type FashionRender, type FashionSection } from "@/lib/fashion/types";
+import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionItem, type FashionLook, type FashionProject, type FashionRender, type FashionSection } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
 import { getCurrentUserId } from "../repositories";
@@ -156,7 +156,7 @@ function newer(w: { status: string; updatedAt: string }, f: { status: string; up
 }
 
 /** 결과물이 이 시간 넘게 '만드는 중'이면 멈춘 것으로 본다 (실제로는 수십 초~몇 분) */
-const STALE_RENDER_MS = 15 * 60_000;
+const STALE_RENDER_MS = FASHION_STALE_RENDER_MS;
 
 async function saveMerged(owner: string, worked: FashionProject, fresh_ids: Set<string> = new Set()): Promise<FashionProject> {
   const fresh = await loadFashion(owner, worked.id);

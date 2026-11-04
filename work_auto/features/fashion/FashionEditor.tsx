@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Clapperboard, Download, ImageIcon, Library, Music, Palette, Plus, Shirt, Sparkles, Trash2, UserRound, Wand2 } from "lucide-react";
+import { Check, Clapperboard, Download, ImageIcon, Library, Palette, Plus, Shirt, Sparkles, Trash2, UserRound, Wand2 } from "lucide-react";
 import { Badge, Button, Input, Modal, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { api } from "@/lib/api-client";
 import { approvedOf, BACKGROUNDS, CLIP_CONCEPTS, categoryLabel, newFashionId } from "@/lib/fashion/prompts";
-import { FASHION_CATEGORIES, type FashionCategory, type FashionImage, type FashionLook, type FashionSettings } from "@/lib/fashion/types";
+import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionLook, type FashionSettings } from "@/lib/fashion/types";
 import type { Product } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { CostConfirm, TASK_LABEL, UploadButton, taskTone } from "@/features/drama-studio/ui";
@@ -99,8 +99,6 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
   const p = ctl.project!;
   const s = p.settings;
   const [ask, setAsk] = useState<{ jobs: ImageJob[]; title: string } | null>(null);
-  const [musicAsk, setMusicAsk] = useState(false);
-  const [musicNote, setMusicNote] = useState("");
   const [uploading, setUploading] = useState(false);
   const [libOpen, setLibOpen] = useState(false);
   const setSettings = (patch: Partial<FashionSettings>) => ctl.edit("settings", { ...s, ...patch });
@@ -326,7 +324,7 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
       </SectionCard>
 
       {/* ⑤ 결과물 */}
-      <Outputs ctl={ctl} uploading={uploading} upload={upload} onMusic={() => setMusicAsk(true)} musicNote={musicNote} setMusicNote={setMusicNote} />
+      <Outputs ctl={ctl} uploading={uploading} upload={upload} />
 
       <CostConfirm
         open={Boolean(ask)}
@@ -337,32 +335,26 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
         onConfirm={() => void makeImages()}
         busy={ctl.busy === "이미지 만들기"}
       />
-      <CostConfirm
-        open={musicAsk}
-        title="AI 음악 만들기"
-        items={[{ label: "Kie Suno V6 연주곡 (가사 없음, 보통 곡 2개)", count: 1, credits: null }]}
-        notes={["버튼 1번 = Kie 요청 1번 (자동으로 다시 보내지 않습니다).", "실제 쓴 크레딧은 끝난 뒤 Kie 가 알려 주는 대로 남깁니다."]}
-        onCancel={() => setMusicAsk(false)}
-        onConfirm={() => {
-          setMusicAsk(false);
-          void ctl.run("음악 만들기", () => fashionApi.music(p.id, { note: musicNote, clientRequestId: newRequestId() }));
-        }}
-        busy={ctl.busy === "음악 만들기"}
-      />
       <LibraryPicker open={libOpen} onClose={() => setLibOpen(false)} onPick={(productId, category) => void ctl.run("가져오기", () => fashionApi.action(p.id, "import-product", { productId, category }))} />
     </div>
   );
 }
 
-function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: { ctl: FashionCtl; uploading: boolean; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void>; onMusic: () => void; musicNote: string; setMusicNote: (v: string) => void }) {
+function Outputs({ ctl, uploading, upload }: { ctl: FashionCtl; uploading: boolean; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void> }) {
+  // 멈춤 판단용 지금 시각 (1분마다 새로)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const p = ctl.project!;
   const s = p.settings;
   const ready = p.looks.filter((l) => approvedOf(l.images));
   // v0.9.120: 피드·릴스는 서로 막지 않는다 (피드 없이 릴스만 만들어도 됨)
-  const renderingOf = (kind: "feed" | "reels") => p.renders.some((r) => r.kind === kind && r.status === "running");
+  // v0.9.170 끊겨서 '만드는 중'으로 멈춘 결과물은 막지 않는다 (서버와 같은 15분 기준)
+  const live = (r: (typeof p.renders)[number]) => r.status === "running" && now - Date.parse(r.updatedAt) < FASHION_STALE_RENDER_MS;
+  const renderingOf = (kind: "feed" | "reels") => p.renders.some((r) => r.kind === kind && live(r));
   const rendering = renderingOf("feed") && renderingOf("reels");
-  const musicBusy = p.tasks.some((t) => t.kind === "music" && (t.status === "generating" || t.status === "requesting"));
-  const musicFail = p.tasks.filter((t) => t.kind === "music" && t.status === "fail").slice(-1);
   return (
     <SectionCard title="⑤ 결과물 — 피드·릴스" icon={Clapperboard} description={`이미지를 고른 룩 ${ready.length}개로 만듭니다 (외부 유료 호출 없음). 피드 = 표지 + 룩마다 '착용 사진 + 제품 사진' 카드(4:5) · 릴스 = 룩마다 ${s.secPerLook}초, 위쪽 POV 고정, 마지막 댓글 안내.`} data-fashion-output>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -382,41 +374,7 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
               릴스 만들기 (약 {Math.round(ready.length * s.secPerLook + 2.5)}초)
             </Button>
           </div>
-          <div className="space-y-1.5 border-t border-line pt-2" data-fashion-music>
-            <p className="flex items-center gap-1 text-[12.5px] font-medium">
-              <Music className="size-3.5" /> 음악 (릴스는 말소리가 없어 음악이 분위기를 만듭니다)
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              <Input value={musicNote} onChange={(e) => setMusicNote(e.target.value.slice(0, 300))} placeholder="어떤 음악? (비우면 주제에 맞게)" className="h-8 min-w-[160px] flex-1 text-[12.5px]" />
-              <Button size="sm" variant="secondary" icon={Wand2} disabled={musicBusy || Boolean(ctl.busy)} loading={musicBusy} onClick={onMusic}>
-                {musicBusy ? "만드는 중…" : "AI 음악 만들기"}
-              </Button>
-              <UploadButton accept="audio/mpeg,audio/mp4,audio/wav,.mp3,.m4a,.wav" disabled={uploading} onFiles={(f) => void upload(f.slice(0, 1), "audio", { type: "bgm" })}>
-                음악 올리기
-              </UploadButton>
-            </div>
-            {musicFail.map((t) => (
-              <p key={t.id} className="text-[12px] text-danger">
-                음악 실패: {t.error}
-              </p>
-            ))}
-            {p.tracks.map((t) => (
-              <div key={t.id} className={cn("flex flex-wrap items-center gap-2 rounded border p-1.5", p.bgmKey === t.key ? "border-brand bg-brand-soft" : "border-line")}>
-                <span className="text-[12px] font-medium">{t.name}</span>
-                {ctl.urls[t.key] && <audio src={ctl.urls[t.key]} controls preload="none" className="h-7 max-w-[220px] flex-1" />}
-                {p.bgmKey === t.key ? <Badge tone="brand">사용 중</Badge> : <Button size="sm" variant="ghost" onClick={() => ctl.edit("bgmKey", t.key)}>쓰기</Button>}
-                <button type="button" aria-label="음악 지우기" className="p-1 text-fg-subtle hover:text-danger" onClick={() => window.confirm(`'${t.name}'을 지울까요?`) && void ctl.run("음악 지우기", () => fashionApi.action(p.id, "delete-track", { trackId: t.id }))}>
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-            ))}
-            {p.bgmKey && (
-              <label className="flex items-center gap-2 text-[12px] text-fg-muted">
-                음악 볼륨 {Math.round(s.bgmVolume * 100)}%
-                <input type="range" min={0} max={1} step={0.05} value={s.bgmVolume} onChange={(e) => ctl.edit("settings", { ...s, bgmVolume: Number(e.target.value) })} className="w-36 accent-[var(--color-brand)]" />
-              </label>
-            )}
-          </div>
+          <p className="text-[12px] text-fg-subtle" data-fashion-no-music>음악은 넣지 않습니다 (소리 없는 영상). 인스타·쇼츠에 올릴 때 앱의 음악을 고르세요.</p>
         </div>
       </div>
       {p.renders.length > 0 && (
@@ -430,10 +388,10 @@ function Outputs({ ctl, uploading, upload, onMusic, musicNote, setMusicNote }: {
             <div key={r.id} className="rounded-control border border-line p-3">
               <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
                 <span className="font-semibold">{r.kind === "feed" ? "피드 카드" : "릴스"}</span>
-                <Badge tone={r.status === "success" ? "success" : r.status === "fail" ? "danger" : "info"}>{r.status === "success" ? "완료" : r.status === "fail" ? "실패" : "만드는 중"}</Badge>
+                <Badge tone={r.status === "success" ? "success" : r.status === "fail" || !live(r) ? "danger" : "info"}>{r.status === "success" ? "완료" : r.status === "fail" ? "실패" : live(r) ? "만드는 중" : "멈춤 (다시 만들어 주세요)"}</Badge>
                 {r.totalSec != null && <span className="text-fg-muted">{r.totalSec}초</span>}
                 <span className="text-fg-subtle">{formatRelative(r.createdAt)}</span>
-                {r.status !== "running" && (
+                {!live(r) && (
                   <Button size="sm" variant="ghost" icon={Trash2} className="ml-auto" onClick={() => window.confirm("이 결과물을 지울까요?") && void ctl.run("지우기", () => fashionApi.action(p.id, "delete-render", { renderId: r.id }))}>
                     지우기
                   </Button>
