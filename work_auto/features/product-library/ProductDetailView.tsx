@@ -23,6 +23,7 @@ import {
 import { CreateContentMenu } from "@/components/shared/ProductCard";
 import { ProductAnalysisView } from "@/components/shared/ProductAnalysisView";
 import { formatDate, formatRelative } from "@/lib/utils";
+import { ProductPhotos } from "./ProductPhotos";
 import { ProductVideos } from "./ProductVideos";
 import { RelearnButton } from "./RelearnButton";
 
@@ -106,6 +107,9 @@ export function ProductDetailView({ productId, initialMode }: { productId: strin
           }}
         />
       )}
+
+      {/* v0.9.172 직접 올려 관리하는 사진 (숙소 사진 등) */}
+      <ProductPhotos productId={product.id} stay={groupOf(product) === "stay"} />
 
       <ProductVideos productId={product.id} />
 

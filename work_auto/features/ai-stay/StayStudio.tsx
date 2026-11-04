@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Film, ImagePlus, Link2, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Film, ImagePlus, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Badge, Button, EmptyState, ErrorState, Input, LoadingState, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import type { AiClip, VideoJob } from "@/lib/types/video-production";
@@ -34,6 +34,8 @@ interface Project {
   photos: Photo[];
   clips: AiClip[];
   clipKeys: Record<string, string>;
+  /** v0.9.159 가져온 제품 라이브러리 숙소 */
+  productId?: string | null;
   jobId: string | null;
   photoUrls: Record<string, string>;
   updatedAt: string;
@@ -144,6 +146,7 @@ export function StayStudio() {
     const id = Object.entries(p?.clipKeys ?? {}).find(([, k]) => k === key)?.[0];
     return id ? p?.clips.find((c) => c.id === id) : undefined;
   };
+  const linked = p?.productId ? (stays?.find((x) => x.id === p.productId) ?? { id: p.productId, name: p.name }) : null;
   const todo = p ? p.photos.filter((ph) => !clipOf(ph.key) || clipOf(ph.key)!.state === "fail").length : 0;
   const usd = (todo * (AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2);
   const ready = p ? p.photos.filter((ph) => clipOf(ph.key)?.state === "success" && ph.line).length : 0;
@@ -157,22 +160,35 @@ export function StayStudio() {
         {list.length > 0 && (
           <Select className="w-64" value={p?.id ?? ""} onChange={(e) => void run("open", () => open(e.target.value))} options={list.map((x) => ({ value: x.id, label: x.name }))} aria-label="숙소 영상 고르기" />
         )}
+        {/* v0.9.172 숙소도 제품: 제품 라이브러리의 숙소(분류 '숙소')를 골라 그 사진·정보로 새 영상 */}
+        {stays && stays.length > 0 && (
+          <Select className="w-64" value={stayPick} placeholder="숙소 고르기 (제품 라이브러리)" onChange={(e) => setStayPick(e.target.value)} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="제품 라이브러리 숙소" data-stay-pick />
+        )}
         <Button
           size="sm"
-          variant="secondary"
+          variant={stays?.length ? "primary" : "secondary"}
           icon={Plus}
           loading={busy === "create"}
+          disabled={Boolean(stays?.length) && !stayPick}
           onClick={() =>
             void run("create", async () => {
-              const np = await call<Project>({ action: "create", name: "새 숙소 영상" });
+              const pick = stays?.find((x) => x.id === stayPick);
+              let np = await call<Project>({ action: "create", name: pick?.name ?? "새 숙소 영상" });
+              let added = 0;
+              if (pick) {
+                const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: np.id, productId: pick.id });
+                np = r.project;
+                added = r.added;
+              }
               setList((l) => [{ id: np.id, name: np.name, updatedAt: np.updatedAt }, ...(l ?? [])]);
               setP(np);
               setJob(null);
+              if (pick) setMsg({ tone: added ? "info" : "warning", text: added ? `'${pick.name}' 사진 ${added}장과 숙소 정보로 새 영상을 만들었습니다.` : `'${pick.name}'에 사진이 없습니다. 제품 라이브러리 › ${pick.name} › 내 사진에 숙소 사진을 올린 뒤 [사진 다시 가져오기]를 눌러 주세요.` });
             })
           }
           data-stay-new
         >
-          새 숙소 영상
+          {stays?.length ? "이 숙소로 새 영상" : "새 숙소 영상"}
         </Button>
         {p && (
           <Button
@@ -197,58 +213,40 @@ export function StayStudio() {
         <EmptyState icon={ImagePlus} title="숙소 영상이 없습니다" description="[새 숙소 영상]을 누르고 숙소 사진을 넣어 주세요." />
       ) : (
         <>
-          <SectionCard title="① 숙소 사진" icon={ImagePlus} description={`사진 3~${STAY_MAX_PHOTOS}장 · 영상 컷 순서대로 (화살표로 순서 바꾸기). 사진은 9:16 으로 가운데를 꽉 채워 자릅니다. 쿠팡 주소는 한 번 시도하고, 막히면 사진을 저장해 올려 주세요.`} data-stay-photos>
+          <SectionCard title="① 숙소 사진" icon={ImagePlus} description={`사진 3~${STAY_MAX_PHOTOS}장 · 영상 컷 순서대로 (화살표로 순서 바꾸기). 사진은 9:16 으로 가운데를 꽉 채워 자릅니다. 숙소 사진은 제품 라이브러리 › 내 사진에서 관리하고, 이 영상에만 쓸 사진은 [사진 올리기]로 더 넣습니다.`} data-stay-photos>
             <div className="mb-3 rounded-control border border-brand-line bg-brand-soft/30 p-2.5" data-stay-product>
-              <p className="text-[12.5px] font-semibold">제품 라이브러리에서 가져오기 (추천)</p>
-              {stays && stays.length ? (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <Select className="w-64" value={stayPick} placeholder="숙소 고르기" onChange={(e) => setStayPick(e.target.value)} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="제품 라이브러리 숙소" />
+              {linked ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[12.5px]">
+                    숙소 <b>{linked.name}</b> <span className="text-fg-subtle">(제품 라이브러리)</span>
+                  </span>
                   <Button
                     size="sm"
-                    variant="primary"
+                    variant="secondary"
                     loading={busy === "product"}
-                    disabled={!stayPick || p.photos.length >= STAY_MAX_PHOTOS}
                     onClick={() =>
+                      window.confirm("제품 라이브러리의 사진으로 다시 가져올까요? 지금 사진·AI 움직임은 지우고 새로 넣습니다.") &&
                       void run("product", async () => {
-                        const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: p.id, productId: stayPick });
+                        const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: p.id, productId: linked.id, replace: true });
                         setP(r.project);
-                        setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장과 숙소 정보(이름·사실 메모)를 가져왔습니다. 더 필요한 사진은 [사진 올리기]로 넣어 주세요.` : `가져올 사진이 없습니다 (제품 사진 ${r.found}장). [사진 올리기]로 넣어 주세요.` });
+                        setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장을 다시 가져왔습니다.` : "가져올 사진이 없습니다. 제품 라이브러리 › 내 사진에 올려 주세요." });
                       })
                     }
                     data-stay-product-go
                   >
-                    사진·정보 가져오기
+                    사진 다시 가져오기
                   </Button>
+                  <a href={`/tools/product-library/${linked.id}`} className="text-[12px] text-brand hover:underline">
+                    제품 라이브러리에서 사진 관리 →
+                  </a>
                 </div>
               ) : (
-                <p className="mt-1 text-[12px] text-fg-muted">
-                  숙소를 <b>제품 상세페이지 학습</b>으로 저장한 뒤, 제품 상세 위쪽 <b>분류</b>를 <b>숙소</b>로 바꾸면 여기에서 고를 수 있습니다 (사진·이름·특징을 한 번에).
+                <p className="text-[12px] text-fg-muted">
+                  숙소도 제품처럼 관리합니다. <b>제품 상세페이지 학습</b>으로 저장하고 분류를 <b>숙소</b>로 고른 뒤, 제품 상세의 <b>내 사진</b>에 숙소 사진을 올리면 위쪽 <b>숙소 고르기</b>에서 골라 바로 영상을 만들 수 있습니다.
                 </p>
               )}
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input key={`n${p.updatedAt}`} defaultValue={p.name} onBlur={(e) => e.target.value !== p.name && void save({ name: e.target.value })} placeholder="숙소 이름 (예: 가평 ○○ 글램핑)" aria-label="숙소 이름" />
-              <div className="flex gap-1.5">
-                <Input id="stay-coupang" defaultValue={p.coupangUrl} placeholder="쿠팡 숙소 주소 (선택)" aria-label="쿠팡 주소" />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={Link2}
-                  loading={busy === "coupang"}
-                  onClick={() =>
-                    void run("coupang", async () => {
-                      const url = (document.getElementById("stay-coupang") as HTMLInputElement).value;
-                      const r = await call<{ project: Project; added: number; blocked: boolean; status: number }>({ action: "coupang", id: p.id, url });
-                      setP(r.project);
-                      setMsg(r.added ? { tone: "info", text: `쿠팡에서 사진 ${r.added}장을 가져왔습니다. 안 쓸 사진은 지워 주세요.` } : { tone: "warning", text: r.blocked ? `쿠팡이 자동으로 읽는 것을 막았습니다 (HTTP ${r.status}). 사진을 저장해 [사진 올리기]로 넣어 주세요.` : "주소에서 사진을 찾지 못했습니다. 사진을 저장해 올려 주세요." });
-                    })
-                  }
-                  data-stay-coupang
-                >
-                  사진 가져오기
-                </Button>
-              </div>
-            </div>
+            <Input key={`n${p.updatedAt}`} defaultValue={p.name} onBlur={(e) => e.target.value !== p.name && void save({ name: e.target.value })} placeholder="숙소 이름 (예: 가평 ○○ 글램핑)" aria-label="숙소 이름" />
             <Textarea key={`m${p.updatedAt}`} className="mt-2" rows={2} defaultValue={p.note} onBlur={(e) => e.target.value !== p.note && void save({ note: e.target.value })} placeholder="사실 메모 (선택, 대본에 그대로 근거로 씀) — 예: 해발 300m, 개별 노천탕, 서울에서 1시간 반" aria-label="숙소 메모" />
             <input
               ref={fileRef}

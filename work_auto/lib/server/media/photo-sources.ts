@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getRepositories } from "../repositories";
+import { ownProductPhotoBuffers } from "../services/product-photos";
 import { safeFetch } from "../security/safe-url";
 import { mediaDuration, runFfmpeg } from "../video/ffmpeg";
 import { srcKeyOf, storedVideoIds } from "../video/vault";
@@ -10,7 +11,7 @@ import { videoStorage } from "../video/storage";
 
 /**
  * 사진 재료 (v0.9.167, 캐러셀·상세페이지 공용) — 외부 유료 호출 없음
- * - 제품 라이브러리 사진: 대표 사진 + 상세페이지 수집 사진
+ * - 제품 라이브러리 사진: 내 사진(직접 올린 것, v0.9.172) + 대표 사진 + 상세페이지 수집 사진
  * - 연결된 샤오홍슈 영상 장면: 원본을 보관한 영상에서 FFmpeg 로 뽑기 (영상마다 25·50·75%)
  */
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
@@ -20,8 +21,10 @@ export async function productPhotoBuffers(productId: string, max = 12): Promise<
   const repo = getRepositories();
   const product = await repo.products.get(productId);
   const sources = await repo.productSources.list((x) => x.productId === productId, { productId }).catch(() => []);
-  const urls = [...new Set([product?.imageUrl, ...sources.flatMap((x) => x.raw?.imageUrls ?? [])].filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)))].slice(0, max);
-  const out: Buffer[] = [];
+  const urls = [...new Set([product?.imageUrl, ...sources.flatMap((x) => x.raw?.imageUrls ?? [])].filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)))];
+  // v0.9.172 제품 라이브러리에서 직접 올린 '내 사진'을 먼저 (숙소 사진 등), 남은 자리만 쇼핑몰 사진
+  const out: Buffer[] = product ? await ownProductPhotoBuffers(product.userId, productId, max).catch(() => []) : [];
+  urls.splice(Math.max(0, max - out.length));
   for (const u of urls) {
     try {
       // v0.9.169 쿠팡 사진은 쿠팡에서 부른 것처럼 (Referer 없으면 막히는 경우)

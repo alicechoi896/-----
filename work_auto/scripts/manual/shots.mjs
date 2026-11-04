@@ -758,7 +758,7 @@ export const SHOTS = [
       await p.locator("[data-stay-photo]").first().waitFor({ timeout: 15_000 });
     },
     marks: {
-      1: (p) => p.locator("[data-stay-upload]"),
+      1: (p) => p.locator("[data-stay-new]"),
       2: (p) => p.locator("[data-stay-script-go]"),
       3: (p) => p.locator("[data-stay-animate-go]"),
       4: (p) => p.locator("[data-stay-render-go]"),

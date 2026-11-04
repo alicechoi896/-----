@@ -11,6 +11,7 @@ import { getAIProvider, getVideoAIProvider } from "../providers/registry";
 import { VideoAIError } from "../providers/video-ai/kie";
 import { getCurrentUserId, getRepositories } from "../repositories";
 import { safeFetch } from "../security/safe-url";
+import { productPhotoBuffers } from "../media/photo-sources";
 import { aiClipService } from "../video/ai-clips";
 import { videoJobService } from "../video/service";
 import { videoStorage } from "../video/storage";
@@ -213,29 +214,33 @@ export const stayService = {
   },
 
   /** v0.9.159 제품 라이브러리의 숙소(분류 '숙소')에서 사진·이름·사실 메모 가져오기 (무료, 외부 AI 없음) */
-  async fromProduct(input: { id?: unknown; productId?: unknown }) {
+  async fromProduct(input: { id?: unknown; productId?: unknown; replace?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     const productId = String(input.productId ?? "");
     const repo = getRepositories();
     const product = await repo.products.get(productId);
     if (!product || product.userId !== owner) throw new AppError("NOT_FOUND", "제품을 찾을 수 없습니다.", 404);
-    const sources = await repo.productSources.list((x) => x.productId === productId, { productId }).catch(() => []);
     const analysis = (await repo.productAnalyses.list((a) => a.productId === productId, { productId }).catch(() => [])).sort((a, b) => b.version - a.version)[0];
-    const urls = [...new Set([product.imageUrl, ...sources.flatMap((x) => x.raw?.imageUrls ?? [])].filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)))].slice(0, STAY_MAX_PHOTOS - p.photos.length);
+    // v0.9.172 제품 라이브러리 '내 사진'(직접 올려 관리하는 숙소 사진) → 쇼핑몰 수집 사진 순
+    // 다른 숙소로 바꿔 가져오면 예전 숙소 사진은 뺀다 (같은 숙소면 이어 붙임)
+    if (input.replace === true || (p.productId && p.productId !== productId)) {
+      for (const ph of p.photos) await videoStorage.remove(ph.key).catch(() => undefined);
+      p.photos = [];
+      p.clips = [];
+      p.clipKeys = {};
+    }
+    const bufs = await productPhotoBuffers(productId, STAY_MAX_PHOTOS - p.photos.length);
     let added = 0;
-    for (const u of urls) {
+    for (const buf of bufs) {
       try {
-        const r = await safeFetch(u, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Accept: "image/*" } });
-        if (!r.ok) continue;
-        const buf = Buffer.from(await r.arrayBuffer());
-        if (buf.length < 15_000 || buf.length > MAX_IMAGE_BYTES) continue;
         await addPhoto(owner, p, buf);
         added++;
       } catch {
-        // 못 받은 사진은 건너뛴다
+        // 못 읽은 사진은 건너뛴다
       }
     }
+    const urls = bufs;
     p.productId = productId;
     if (!p.name || p.name === "새 숙소 영상") p.name = product.name.slice(0, 60);
     if (!p.note.trim() && analysis) {
