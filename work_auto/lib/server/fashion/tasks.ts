@@ -3,7 +3,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CLIP_CONCEPTS, approvedOf, fashionMusicPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
+import { CLIP_CONCEPTS, approvedOf, fashionMusicPrompt, feedLookPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
 import type { FashionImage, FashionLook, FashionProject, FashionTask } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getVideoAIProvider } from "../providers/registry";
@@ -55,7 +55,7 @@ async function submit(prov: VideoAIProvider, tasks: FashionTask[], model: (t: Fa
 }
 
 export interface FashionImageJob {
-  target: { type: "model" } | { type: "look"; lookId: string };
+  target: { type: "model" } | { type: "look"; lookId: string } | { type: "feedlook"; lookId: string };
 }
 
 /** 이미지 작업 계획 (Kie 호출 전 — 비용 확인 창의 장수와 같다) */
@@ -65,6 +65,12 @@ export function planFashionImages(p: FashionProject, jobs: FashionImageJob[], re
     if (j.target.type === "model") {
       if (p.model.mode === "photo" && !p.model.photoKey) throw new AppError("VALIDATION", "참고할 실제 사진을 먼저 올려 주세요 (또는 'AI 모델'로 바꾸기).");
       out.push(baseTask({ kind: "image", target: { type: "model" }, modelId: p.model.mode === "photo" ? "nano-banana-edit" : "nano-banana", prompt: modelPrompt(p.model), requestId }));
+    } else if (j.target.type === "feedlook") {
+      // v0.9.171 피드 카드용 (승인한 룩 이미지 → 배경만 밝은 무지)
+      const lookId = j.target.lookId;
+      const look = p.looks.find((l) => l.id === lookId);
+      if (!look || !approvedOf(look.images)) throw new AppError("VALIDATION", "④ 룩 이미지를 먼저 승인해 주세요 (피드용은 그 이미지로 만듭니다).");
+      out.push(baseTask({ kind: "image", target: { type: "feedlook", lookId }, modelId: "nano-banana-edit", prompt: feedLookPrompt(), requestId }));
     } else {
       const lookId = j.target.lookId;
       const look = p.looks.find((l) => l.id === lookId);
@@ -87,6 +93,10 @@ async function imageInput(p: FashionProject, t: FashionTask): Promise<Record<str
     const lookId = t.target.lookId;
     const look = p.looks.find((l) => l.id === lookId)!;
     refKeys = [approvedOf(p.model.images)!.key, ...lookRefItems(p, look).map((i) => i.imageKey!)];
+  } else if (t.target.type === "feedlook") {
+    const lookId = t.target.lookId;
+    const look = p.looks.find((l) => l.id === lookId)!;
+    refKeys = [approvedOf(look.images)!.key];
   }
   const urls = await videoStorage.urls(refKeys, 86_400);
   const refUrls = refKeys.map((k) => urls[k]).filter(Boolean);
@@ -273,7 +283,7 @@ export async function syncFashion(owner: string, p: FashionProject): Promise<boo
           t.storedKey ??= key;
         }
       } else {
-        const buf = demo ? demoImage(t.target.type === "look" ? "look" : "model") : await fetchFile(s.resultUrl, 15 * 1024 * 1024);
+        const buf = demo ? demoImage(t.target.type === "look" || t.target.type === "feedlook" ? "look" : "model") : await fetchFile(s.resultUrl, 15 * 1024 * 1024);
         const ext = buf.subarray(1, 4).toString() === "PNG" ? "png" : "jpg";
         const key = `${fashionDir(owner, p.id)}/img/${t.id}.${ext}`;
         await videoStorage.put(key, buf, ext === "png" ? "image/png" : "image/jpeg");
@@ -304,5 +314,12 @@ function attachImage(p: FashionProject, t: FashionTask, key: string): void {
     if (!look) return;
     img.approved = !approvedOf(look.images);
     look.images.push(img);
+  } else if (t.target.type === "feedlook") {
+    const lookId = t.target.lookId;
+    const look = p.looks.find((l) => l.id === lookId);
+    if (!look) return;
+    const list = (look.feedImages ??= []);
+    img.approved = !approvedOf(list);
+    list.push(img);
   }
 }

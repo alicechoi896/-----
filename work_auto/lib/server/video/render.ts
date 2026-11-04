@@ -21,6 +21,7 @@ import {
   cleanCaptionStyle,
   cleanTitleStyle,
   voiceInstructions,
+  STAY_CUT_MAX_SEC,
 } from "@/lib/video-production/config";
 import { getTTSProvider } from "../providers/registry";
 import { videoAssets } from "./assets";
@@ -36,6 +37,7 @@ import { isAiSource } from "@/lib/types/video-production";
 import { readFrames } from "./frames";
 import { cutWindows, outputWindow, sequentialStart, type SourceEdit } from "@/lib/video-production/source-edit";
 import { manualFilter } from "./edit-filter";
+import { stayCaptionsFor, stayTimeline } from "./stay-timeline";
 import { forgetStored } from "./vault";
 import { SCAN_VERSION, TITLE_BAR_FRAC, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
 import { videoStorage } from "./storage";
@@ -273,6 +275,23 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
 
     const audio = await audioPromise;
     timing.audio = Date.now() - t0;
+    // v0.9.171 AI 숙소: 영상과 대사를 따로 — 대사는 줄마다 이어 읽고, 컷은 정한 시간대로 끊김 없이.
+    // 이어 붙인 전체 음성을 컷 시간대로 잘라 컷마다 넣는다 (자막은 대사 시각을 따른다)
+    const stayTl = job.plan.stay ? stayTimeline(audio.map((a) => a?.dur ?? 0), scenes.map((s) => s.holdSec), STAY_CUT_MAX_SEC) : null;
+    if (stayTl) {
+      if (stayTl.overflow) issues.push(`대사가 영상(컷 ${scenes.length}개 × 최대 ${STAY_CUT_MAX_SEC}초)보다 길어 끝이 잘렸습니다. 대사를 줄이거나 사진을 더 넣어 주세요.`);
+      const whole = path.join(dir, "stay_narration.wav");
+      const ins = audio.flatMap((a) => ["-i", a.file]);
+      const delayed = audio.map((_, k) => `[${k}:a]aresample=44100,aformat=channel_layouts=mono,adelay=${Math.round(stayTl.lines[k].from * 1000)}[d${k}]`).join(";");
+      await runFfmpeg([...ins, "-filter_complex", `${delayed};${audio.map((_, k) => `[d${k}]`).join("")}amix=inputs=${audio.length}:normalize=0,apad,atrim=0:${stayTl.total.toFixed(3)}[o]`, "-map", "[o]", "-ar", "44100", "-ac", "1", "-y", whole]);
+      await Promise.all(
+        audio.map(async (_, k) => {
+          const out = path.join(dir, `stay_a${k}.wav`);
+          await runFfmpeg(["-ss", stayTl.cutStarts[k].toFixed(3), "-t", stayTl.cuts[k].toFixed(3), "-i", whole, "-ar", "44100", "-ac", "1", "-y", out]);
+          audio[k] = { file: out, dur: stayTl.cuts[k] };
+        }),
+      );
+    }
     await hooks.stage("editing", 30);
 
     // 3) 컷마다 원본 구간 고르기 (글자 없는 구간 우선, 같은 구간 반복 금지) → 컷 영상
@@ -300,11 +319,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const picks: { k: number; s: (typeof scenes)[number]; src: LocalSource & { scan: TextScan }; best: { id: string; start: number; tr: Treatment }; dur: number; manual: ReturnType<typeof cutWindows> | null }[] = [];
     for (const [k, s] of scenes.entries()) {
       const isLast = k === scenes.length - 1;
-      let dur = audio[k].dur + C.minSpeechGapSec + (isLast ? C.tailSec : 0);
+      let dur = stayTl ? stayTl.cuts[k] : audio[k].dur + C.minSpeechGapSec + (isLast ? C.tailSec : 0);
       // 엔딩(최저가 구매링크 + 화살표)은 2초 넘게 보이게 (v0.9.64)
       if (isLast && job.plan.ending) dur = Math.max(dur, C.endingMinSec);
-      // v0.9.169 AI 숙소: 사람이 정한 컷 시간 (대사보다 짧게는 안 줄인다)
-      if (job.plan.stay && s.holdSec) dur = Math.max(dur, s.holdSec);
       // 이 컷의 원본: 정한 것 → 안 되면 다른 원본 중 가장 깨끗한 것.
       // AI 컷은 AI 로 정한 컷에만 쓴다 (글자 없는 AI 컷이 샤오홍슈 컷을 모두 가져가지 않게, v0.9.64)
       const aiScene = isAiSource(s.sourceVideoId);
@@ -568,7 +585,29 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         else if (from0 < titleSec) add(["-loop", "1", "-i", titlePng], (i, from) => `[${from}][${i}:v]overlay=0:0:shortest=1:enable='between(t,0,${(titleSec - from0).toFixed(3)})'[t${k}]`, `t${k}`);
       }
       // 자막 (엔딩 컷은 '최저가 구매링크'가 자리를 쓴다). 1줄 조각을 음성 길이에 맞춰 차례로 (컷 안 시간)
-      if (job.plan.captions !== false && !(job.plan.ending && isLast)) {
+      if (stayTl && job.plan.captions !== false) {
+        // v0.9.171 AI 숙소: 그 컷 시간에 읽히는 대사 줄의 조각을 대사 시각대로 (컷을 넘어가면 다음 컷에서 이어서)
+        let n = 0;
+        for (const cap of stayCaptionsFor(stayTl, k)) {
+          const line = scenes[cap.line].narration;
+          const chunks = captionChunks(line, CAPTION_TEMPLATE.maxCharsPerLine);
+          const totalChars = chunks.reduce((m, c) => m + c.replace(/\s/g, "").length, 0) || 1;
+          const l = stayTl.lines[cap.line];
+          const span = Math.max(0.3, l.to - l.from);
+          let at = l.from - stayTl.cutStarts[k];
+          for (const [j, text] of chunks.entries()) {
+            const end = j === chunks.length - 1 ? cap.to : at + (span * text.replace(/\s/g, "").length) / totalChars;
+            const a0 = Math.max(cap.from, at);
+            const a1 = Math.min(cap.to, end);
+            at = end;
+            if (a1 - a0 < 0.05) continue;
+            const png = path.join(dir, `cap${k}_${n}.png`);
+            note(await renderCaption(png, text, cs), cs.font);
+            const id = `c${k}_${n++}`;
+            add(["-loop", "1", "-i", png], (i, from) => `[${from}][${i}:v]overlay=0:${captionY(cs)}:shortest=1:enable='between(t,${a0.toFixed(3)},${(a1 - 0.001).toFixed(3)})'[${id}]`, id);
+          }
+        }
+      } else if (job.plan.captions !== false && !(job.plan.ending && isLast)) {
         const chunks = captionChunks(s.narration, CAPTION_TEMPLATE.maxCharsPerLine);
         const speech = Math.min(dur, Math.max(0.3, audio[k]?.dur ?? dur));
         const totalChars = chunks.reduce((n, c) => n + c.replace(/\s/g, "").length, 0) || 1;

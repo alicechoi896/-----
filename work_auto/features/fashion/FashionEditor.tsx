@@ -324,7 +324,7 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
       </SectionCard>
 
       {/* ⑤ 결과물 */}
-      <Outputs ctl={ctl} uploading={uploading} upload={upload} />
+      <Outputs ctl={ctl} uploading={uploading} upload={upload} onAsk={setAsk} />
 
       <CostConfirm
         open={Boolean(ask)}
@@ -340,7 +340,7 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
   );
 }
 
-function Outputs({ ctl, uploading, upload }: { ctl: FashionCtl; uploading: boolean; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void> }) {
+function Outputs({ ctl, uploading, upload, onAsk }: { ctl: FashionCtl; uploading: boolean; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void>; onAsk: (a: { jobs: ImageJob[]; title: string }) => void }) {
   // 멈춤 판단용 지금 시각 (1분마다 새로)
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -350,6 +350,8 @@ function Outputs({ ctl, uploading, upload }: { ctl: FashionCtl; uploading: boole
   const p = ctl.project!;
   const s = p.settings;
   const ready = p.looks.filter((l) => approvedOf(l.images));
+  const feedBusy = p.tasks.some((t) => t.target.type === "feedlook" && (t.status === "generating" || t.status === "requesting"));
+  const feedTodo = ready.filter((l) => !approvedOf(l.feedImages ?? []));
   // v0.9.120: 피드·릴스는 서로 막지 않는다 (피드 없이 릴스만 만들어도 됨)
   // v0.9.170 끊겨서 '만드는 중'으로 멈춘 결과물은 막지 않는다 (서버와 같은 15분 기준)
   const live = (r: (typeof p.renders)[number]) => r.status === "running" && now - Date.parse(r.updatedAt) < FASHION_STALE_RENDER_MS;
@@ -360,6 +362,33 @@ function Outputs({ ctl, uploading, upload }: { ctl: FashionCtl; uploading: boole
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2 rounded-control border border-line p-3">
           <p className="text-[13px] font-semibold">피드 카드</p>
+          {/* v0.9.171 피드용 이미지: 같은 모델·같은 옷, 배경만 밝은 무지 → 카드에서 오려 붙인 것처럼 */}
+          <div className="space-y-1.5 rounded border border-line bg-subtle/40 p-2" data-fashion-feedlook>
+            <p className="text-[12px] text-fg-muted">
+              피드용 이미지 (배경 없는 모델) — 룩 이미지를 그대로 두고 배경만 밝은 무지로 바꾼 이미지를 만듭니다. 없으면 룩 이미지를 그대로 씁니다. 룩 1개 = 약 {IMAGE_CREDITS}크레딧(≈ $0.02).
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={Sparkles}
+              disabled={!feedTodo.length || Boolean(ctl.busy) || feedBusy}
+              onClick={() => onAsk({ jobs: feedTodo.map((l) => ({ target: { type: "feedlook", lookId: l.id } })), title: `피드용 이미지 ${feedTodo.length}개 만들기` })}
+              data-make-feedlooks
+            >
+              {feedBusy ? "만드는 중… (자동 확인)" : feedTodo.length ? `피드용 이미지 만들기 (${feedTodo.length}개)` : "모든 룩에 피드용 이미지 있음"}
+            </Button>
+            {ready.map((l) => (
+              <div key={l.id} className="flex items-start gap-2">
+                <span className="w-14 shrink-0 pt-1 text-[11.5px] font-medium text-fg-muted">{l.name}</span>
+                <div className="min-w-0 flex-1">
+                  <ImageStrip list={l.feedImages ?? []} urls={ctl.urls} empty="아직 없음 (룩 이미지로 들어감)" onChange={(next) => ctl.edit("looks", p.looks.map((x) => (x.id === l.id ? { ...x, feedImages: next } : x)))} />
+                </div>
+                <Button size="sm" variant="ghost" disabled={Boolean(ctl.busy) || feedBusy} onClick={() => onAsk({ jobs: [{ target: { type: "feedlook", lookId: l.id } }], title: `${l.name} 피드용 이미지 만들기` })}>
+                  {l.feedImages?.length ? "다시" : "만들기"}
+                </Button>
+              </div>
+            ))}
+          </div>
           <Button variant="primary" icon={ImageIcon} disabled={!ready.length || renderingOf("feed") || Boolean(ctl.busy)} onClick={() => void ctl.run("피드 만들기", () => fashionApi.render(p.id, "feed"))} data-render-feed>
             피드 카드 만들기 ({ready.length + (ready.length ? 1 : 0)}장)
           </Button>

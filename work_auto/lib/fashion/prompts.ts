@@ -120,6 +120,16 @@ export function fashionMusicPrompt(p: FashionProject, note: string): string {
 }
 
 /** 룩마다 쓰는 제품 사진 (사진 있는 것만, 최대 6장) */
+/** v0.9.171 피드 카드용 이미지: 승인한 룩 이미지 그대로, 배경만 무늬 없는 밝은 바탕 (오려 붙인 것처럼 보이게) */
+export function feedLookPrompt(): string {
+  return [
+    "Edit the provided photo. Keep EXACTLY the same woman (face, hair, body, skin), the same outfit (every item, color, fabric, length and detail) and the same pose.",
+    "Show her full body from head to toe, centered, with a little space above the head and below the feet.",
+    "[BACKGROUND] Replace the whole background with a plain seamless pure warm off-white studio backdrop (#F4F1EA), completely empty: no floor line, no walls, no props, no furniture, no pattern. Only a very soft faint shadow under the feet.",
+    "Soft even studio light. Photorealistic fashion catalog look. No text, no logo, no watermark, no frame.",
+  ].join("\n");
+}
+
 export const lookRefItems = (p: FashionProject, look: FashionLook) =>
   look.itemIds
     .map((id) => p.items.find((x) => x.id === id))

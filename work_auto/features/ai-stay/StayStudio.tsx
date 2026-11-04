@@ -7,8 +7,8 @@ import { Badge, Button, EmptyState, ErrorState, Input, LoadingState, Notice, Sec
 import type { AiClip, VideoJob } from "@/lib/types/video-production";
 import { AI_CLIP_CONFIG, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS } from "@/lib/video-production/config";
 
-/** v0.9.169 컷 시간 고르기: 자동(대사 길이) 또는 1~5초 */
-const SEC_OPTIONS = [{ value: "", label: "자동 (대사 길이)" }, ...[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].filter((v) => v <= STAY_CUT_MAX_SEC).map((v) => ({ value: String(v), label: `${v}초` }))];
+/** v0.9.169 컷 시간 고르기: 자동 또는 1~5초. v0.9.171 영상과 대사는 따로 흐른다 (대사가 길면 자동 컷부터 늘림) */
+const SEC_OPTIONS = [{ value: "", label: "자동 (2.5초~)" }, ...[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].filter((v) => v <= STAY_CUT_MAX_SEC).map((v) => ({ value: String(v), label: `${v}초` }))];
 
 /**
  * AI 숙소 영상 (v0.9.157) — 사진 → AI 대본·움직임 → Kie 로 살아 움직이게 → 9:16 영상 (처음 몇 초 위쪽 제목 + 가운데 자막 + AI 내레이션)
@@ -340,7 +340,7 @@ export function StayStudio() {
               <Button icon={Wand2} loading={busy === "translate"} disabled={!p.photos.some((x) => x.motion.trim())} onClick={() => void run("translate", async () => setP(await call<Project>({ action: "translate", id: p.id })))} data-stay-translate>
                 움직임 한글 번역
               </Button>
-              <span className="text-[12px] text-fg-subtle">사진 {p.photos.length}장 · 약 {Math.round(p.photos.reduce((n, x) => n + (x.sec ?? 1.5), 0))}초 영상</span>
+              <span className="text-[12px] text-fg-subtle">사진 {p.photos.length}장 · 약 {Math.round(p.photos.reduce((n, x) => n + (x.sec ?? 2.5), 0))}초 영상 · 대사는 컷과 따로 이어 읽음</span>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
               <Input key={`s${p.updatedAt}`} defaultValue={p.titleSmall} onBlur={(e) => e.target.value !== p.titleSmall && void save({ titleSmall: e.target.value })} placeholder="위쪽 작은 줄 (예: 비 오는 날)" aria-label="제목 작은 줄" />

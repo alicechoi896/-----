@@ -20,6 +20,8 @@ function fonts(): void {
   if (fontsReady) return;
   GlobalFonts.registerFromPath(path.join(FONT_DIR, "Pretendard-SemiBold.otf"), "fs_semi");
   GlobalFonts.registerFromPath(path.join(FONT_DIR, "Pretendard-Bold.otf"), "fs_bold");
+  // v0.9.171 피드 'LOOK 01' 세리프 (Libre Baskerville, SIL OFL — assets/fonts)
+  GlobalFonts.registerFromPath(path.join(process.cwd(), "assets", "fonts", "LibreBaskerville-Regular.ttf"), "fs_serif");
   fontsReady = true;
 }
 
@@ -147,6 +149,114 @@ async function load(key: string) {
 /** 쓸 룩: 승인한 이미지가 있는 룩만, 순서대로 */
 export const readyLooks = (p: FashionProject) => p.looks.filter((l) => approvedOf(l.images));
 
+/* ───── v0.9.171 피드 룩 카드 (레퍼런스: 점무늬 크림 바탕 · 세리프 LOOK 타원 · 왼쪽 모델 전신 · 오른쪽 제품을 크기 달리해 배치) ───── */
+const FEED_BG = "#F4F1EA";
+
+function dotPaper(g: SKRSContext2D, W: number, H: number) {
+  g.fillStyle = FEED_BG;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = "rgba(120,108,92,0.22)";
+  const step = 34;
+  for (let y = step / 2; y < H; y += step) for (let x = step / 2; x < W; x += step) g.fillRect(x - 1, y - 1, 2.2, 2.2);
+}
+
+/** 흰 여백을 잘라낸 사진 영역 (제품 사진이 칸 안에서 작아지지 않게) */
+function trimBox(img: Awaited<ReturnType<typeof loadImage>>): { x: number; y: number; w: number; h: number } {
+  const sw = Math.min(400, img.width);
+  const sh = Math.max(1, Math.round((img.height * sw) / img.width));
+  const c = createCanvas(sw, sh);
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, sw, sh);
+  g.drawImage(img, 0, 0, sw, sh);
+  const d = g.getImageData(0, 0, sw, sh).data;
+  let x0 = sw, y0 = sh, x1 = -1, y1 = -1;
+  for (let y = 0; y < sh; y++)
+    for (let x = 0; x < sw; x++) {
+      const k = (y * sw + x) * 4;
+      if (Math.min(d[k], d[k + 1], d[k + 2]) < 232) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  if (x1 < x0 || y1 < y0) return { x: 0, y: 0, w: img.width, h: img.height };
+  const s = img.width / sw;
+  const pad = 2;
+  const x = Math.max(0, (x0 - pad) * s);
+  const y = Math.max(0, (y0 - pad) * s);
+  return { x, y, w: Math.min(img.width - x, (x1 - x0 + 1 + pad * 2) * s), h: Math.min(img.height - y, (y1 - y0 + 1 + pad * 2) * s) };
+}
+
+/** 칸 안에 비율 그대로 (가로 가운데, align 위·가운데·아래). multiply 면 흰 배경이 바탕에 녹는다 */
+function placeImage(g: SKRSContext2D, img: Awaited<ReturnType<typeof loadImage>>, box: { x: number; y: number; w: number; h: number }, x: number, y: number, w: number, h: number, align: "top" | "middle" | "bottom", multiply: boolean) {
+  const sc = Math.min(w / box.w, h / box.h);
+  const dw = box.w * sc;
+  const dh = box.h * sc;
+  const dy = align === "top" ? y : align === "bottom" ? y + h - dh : y + (h - dh) / 2;
+  g.save();
+  if (multiply) g.globalCompositeOperation = "multiply";
+  g.drawImage(img, box.x, box.y, box.w, box.h, x + (w - dw) / 2, dy, dw, dh);
+  g.restore();
+}
+
+/** 'LOOK 01' 세리프 타원 (레퍼런스처럼 가는 선) */
+function drawSerifLabel(g: SKRSContext2D, label: string, x: number, y: number) {
+  const size = 32;
+  g.font = `${size}px fs_serif`;
+  const tw = g.measureText(label).width;
+  const w = tw + size * 1.9;
+  const h = size * 1.75;
+  g.strokeStyle = "#2b2b2b";
+  g.lineWidth = 1.8;
+  g.beginPath();
+  g.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.fillStyle = "#1f1f1f";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(label, x + w / 2, y + h / 2 + 2);
+}
+
+const ROW_OF: Record<FashionItem["category"], "top" | "dress" | "bottom" | "small"> = { outer: "top", top: "top", dress: "dress", bottom: "bottom", shoes: "small", bag: "small", acc: "small" };
+const ROW_WEIGHT = { top: 1, dress: 1.7, bottom: 0.95, small: 0.5 };
+
+async function drawLookCard(g: SKRSContext2D, p: FashionProject, look: FashionLook, i: number, W: number, H: number) {
+  dotPaper(g, W, H);
+  // 왼쪽: 모델 전신 — 피드용(밝은 무지 배경)이 있으면 그것을 바탕에 녹이고, 없으면 룩 이미지 그대로
+  const feed = approvedOf(look.feedImages ?? []);
+  const model = await load((feed ?? approvedOf(look.images)!).key);
+  const mBox = feed ? trimBox(model) : { x: 0, y: 0, w: model.width, h: model.height };
+  placeImage(g, model, mBox, 40, 150, 520, H - 190, "bottom", Boolean(feed));
+  drawSerifLabel(g, lookNo(i), 44, 44);
+  // 오른쪽: 제품 (상의·아우터 한 줄 → 원피스 → 하의 → 신발·가방·소품 한 줄)
+  const items = look.itemIds.map((id) => p.items.find((x) => x.id === id)).filter((x): x is FashionItem => Boolean(x?.imageKey)).slice(0, 6);
+  const order: ("top" | "dress" | "bottom" | "small")[] = ["top", "dress", "bottom", "small"];
+  const rows = order.map((k) => ({ k, list: items.filter((it) => ROW_OF[it.category] === k) })).filter((r) => r.list.length);
+  if (!rows.length) return;
+  const X = 590;
+  const RW = W - X - 40;
+  const top = 70;
+  const gap = 34;
+  const total = H - top - 50 - gap * (rows.length - 1);
+  const sum = rows.reduce((n, r) => n + ROW_WEIGHT[r.k], 0);
+  let y = top;
+  for (const r of rows) {
+    const rh = (total * ROW_WEIGHT[r.k]) / sum;
+    const cw = (RW - gap * (r.list.length - 1)) / r.list.length;
+    for (const [k, it] of r.list.entries()) {
+      try {
+        const img = await load(it.imageKey!);
+        placeImage(g, img, trimBox(img), X + k * (cw + gap), y, cw, rh, "middle", true);
+      } catch {
+        /* 제품 사진을 못 읽으면 빈 칸 */
+      }
+    }
+    y += rh + gap;
+  }
+}
+
 /** 피드 카드 PNG 들 (표지 + 룩마다) */
 export async function renderFeed(owner: string, p: FashionProject, r: FashionRender): Promise<string[]> {
   fonts();
@@ -171,30 +281,7 @@ export async function renderFeed(owner: string, p: FashionProject, r: FashionRen
   for (const [i, look] of looks.entries()) {
     const c = createCanvas(W, H);
     const g = c.getContext("2d");
-    g.fillStyle = "#f4f1ea";
-    g.fillRect(0, 0, W, H);
-    // 왼쪽: 착용 사진 (9:16 그대로 다 보이게)
-    drawImage(g, await load(approvedOf(look.images)!.key), 24, 110, 600, 1140, "contain");
-    // 오른쪽: 제품 사진 (위에서 아래로)
-    const items = look.itemIds.map((id) => p.items.find((x) => x.id === id)).filter((x): x is FashionItem => Boolean(x?.imageKey)).slice(0, 4);
-    const boxH = items.length ? Math.min(380, 1140 / items.length) : 0;
-    const top = 110 + (1140 - boxH * items.length) / 2;
-    for (const [k, it] of items.entries()) {
-      try {
-        drawImage(g, await load(it.imageKey!), 650, top + k * boxH + 8, 400, boxH - 16, "contain");
-      } catch {
-        /* 제품 사진을 못 읽으면 빈 칸 */
-      }
-    }
-    drawLookLabel(g, lookNo(i), 40, 36, 30);
-    if (look.caption.trim()) {
-      const { lines, px } = fitLines(g, look.caption, "fs_semi", 34, W - 120, 1);
-      g.font = `${px}px fs_semi`;
-      g.fillStyle = "#3f3a33";
-      g.textAlign = "right";
-      g.textBaseline = "middle";
-      g.fillText(lines[0], W - 44, 64);
-    }
+    await drawLookCard(g, p, look, i, W, H);
     await put(String(i + 1).padStart(2, "0"), c.toBuffer("image/png"));
   }
   return keys;

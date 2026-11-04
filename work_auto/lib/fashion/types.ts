@@ -65,6 +65,8 @@ export interface FashionLook {
   clips?: FashionClip[];
   /** v0.9.124 이 룩만의 영상 동작 (비우면 컨셉) */
   clipMotion?: string;
+  /** v0.9.171 피드 카드용: 같은 모델·같은 옷, 무늬 없는 밝은 배경 (승인 1장을 피드에 씀, 없으면 룩 이미지) */
+  feedImages?: FashionImage[];
 }
 
 export interface FashionClip {
@@ -108,7 +110,7 @@ export type FashionTaskStatus = "queued" | "requesting" | "generating" | "succes
 export interface FashionTask {
   id: string;
   kind: "image" | "music" | "video";
-  target: { type: "model" } | { type: "look"; lookId: string } | { type: "bgm" } | { type: "lookclip"; lookId: string };
+  target: { type: "model" } | { type: "look"; lookId: string } | { type: "bgm" } | { type: "lookclip"; lookId: string } | { type: "feedlook"; lookId: string };
   modelId: string;
   prompt: string;
   /** 실제로 보낸 input (참고 이미지는 Storage 키로) */

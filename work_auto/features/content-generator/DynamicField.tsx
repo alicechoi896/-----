@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { FieldDef } from "@/lib/generators/types";
 import { FormField } from "@/components/ui/FormField";
@@ -9,6 +9,7 @@ import { SegmentedControl } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/ui/Combobox";
 import { useRemoteOptions } from "./useRemoteOptions";
+import { PRODUCT_GROUPS } from "@/lib/types/product";
 
 export type FormValues = Record<string, string>;
 
@@ -137,6 +138,7 @@ function RemoteSelectInner({
 }) {
   const { data, loading, error } = useRemoteOptions(field.source!, field.sourceParam);
   const loaded = data ?? [];
+  const [pickedGroup, setPickedGroup] = useState<string | null>(null);
   // 스타일: 기본 스타일(★)을 처음에 골라 둔다 (무엇이 적용되는지 보이게, v0.9.41)
   const autoPicked = useRef(false);
   useEffect(() => {
@@ -152,8 +154,13 @@ function RemoteSelectInner({
     value && !loading && !loaded.some((o) => o.value === value)
       ? [{ value, label: field.source === "youtube-trends" ? "트렌드 화면에서 고른 영상" : "이전 화면에서 고른 항목", description: "생성할 때 이 항목 정보를 함께 사용합니다." }, ...loaded]
       : loaded;
-  const selected = options.find((o) => o.value === value);
   const isProduct = field.source === "products";
+  // v0.9.171 제품: 분류를 먼저 고르면 그 분류 제품만 (고른 제품이 있으면 그 분류로 시작)
+  const groups = isProduct ? PRODUCT_GROUPS.filter((g) => loaded.some((o) => o.group === g.value)) : [];
+  const valueGroup = options.find((o) => o.value === value)?.group;
+  const group = pickedGroup ?? valueGroup ?? groups[0]?.value ?? null;
+  const shown = isProduct && group && groups.length > 1 ? options.filter((o) => !o.group || o.group === group || o.value === value) : options;
+  const selected = options.find((o) => o.value === value);
 
   let hint: React.ReactNode = field.hint;
   if (error) hint = <span className="text-danger">목록을 불러오지 못했습니다: {error}</span>;
@@ -191,12 +198,24 @@ function RemoteSelectInner({
 
   return (
     <FormField label={field.label} htmlFor={`field-${field.name}`} required={field.required} optional={!field.required} hint={hint} className={className}>
+      {isProduct && groups.length > 1 && (
+        <SegmentedControl
+          className="mb-2 flex-wrap"
+          options={groups.map((g) => ({ value: g.value, label: `${g.label} ${loaded.filter((o) => o.group === g.value).length}` }))}
+          value={group ?? ""}
+          onChange={(g) => {
+            setPickedGroup(g);
+            // 다른 분류의 제품을 골라 둔 상태면 비운다 (그 분류 제품만 고르게)
+            if (value && valueGroup && valueGroup !== g) onChange("");
+          }}
+        />
+      )}
       {/* 검색할 수 있는 선택 상자: 제품·트렌드가 많아도 글자를 입력해 바로 찾는다 */}
       <Combobox
         id={`field-${field.name}`}
         value={value}
         disabled={loading}
-        options={options}
+        options={shown}
         placeholder={loading ? "불러오는 중…" : (field.placeholder ?? "선택")}
         searchPlaceholder={field.source === "products" ? "제품 이름·브랜드로 검색" : "검색"}
         clearable={!field.required}

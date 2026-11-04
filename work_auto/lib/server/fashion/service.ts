@@ -131,6 +131,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
           pose: str(x.pose, 200),
           clipMotion: str((x as { clipMotion?: unknown }).clipMotion, 300),
           images: old ? mergeImages(old.images, x.images) : [],
+          feedImages: old?.feedImages ? mergeImages(old.feedImages, (x as { feedImages?: unknown }).feedImages) : [],
           clips: old?.clips ? mergeClips(old.clips, (x as { clips?: unknown }).clips) : [],
         };
       });
@@ -144,7 +145,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
 
 /** 작업 결과를 최신 문서에 합쳐 저장 (그 사이 화면 저장을 덮어쓰지 않게) */
 /** 문서 안 이미지·음악 id (작업 전후를 비교해 새로 생긴 것만 합친다 — 그 사이 지운 것을 되살리지 않게) */
-const assetIds = (p: FashionProject) => new Set([...p.model.images.map((i) => i.id), ...p.looks.flatMap((l) => [...l.images.map((i) => i.id), ...(l.clips ?? []).map((c) => c.id)]), ...p.tracks.map((t) => t.id)]);
+const assetIds = (p: FashionProject) => new Set([...p.model.images.map((i) => i.id), ...p.looks.flatMap((l) => [...l.images.map((i) => i.id), ...(l.feedImages ?? []).map((i) => i.id), ...(l.clips ?? []).map((c) => c.id)]), ...p.tracks.map((t) => t.id)]);
 
 /** 같은 작업의 두 상태 중 worked 를 쓸지: 끝난 상태를 '진행 중'으로 되돌리지 않고, 같으면 더 늦게 바뀐 쪽 */
 const DONE = new Set(["success", "fail"]);
@@ -172,6 +173,7 @@ async function saveMerged(owner: string, worked: FashionProject, fresh_ids: Set<
   for (const l of fresh.looks) {
     const w = worked.looks.find((x) => x.id === l.id);
     if (w) addNew(l.images, w.images);
+    if (w?.feedImages?.length) addNew((l.feedImages ??= []), w.feedImages);
     if (w?.clips?.length) {
       const have = new Set((l.clips ?? []).map((c) => c.id));
       for (const c of w.clips) if (!have.has(c.id) && fresh_ids.has(c.id)) (l.clips ??= []).push({ ...c, approved: c.approved && !(l.clips ?? []).some((x) => x.approved) });
