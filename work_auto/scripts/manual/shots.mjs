@@ -640,6 +640,41 @@ export const SHOTS = [
     },
   },
   {
+    id: "03-detail-page",
+    url: "/tools/detail-page",
+    viewport: { width: 1280, height: 2400 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (body) => p.request.post(abs("/api/detail-page"), { data: body }).then((r) => r.json());
+      const list = (await (await p.request.get(abs("/api/detail-page"))).json()).data ?? [];
+      if (!list.some((x) => x.full)) {
+        const { createCanvas } = await import("@napi-rs/canvas");
+        const pid = (await (await p.request.get(abs("/api/products"))).json()).data[0].id;
+        const proj = (await api({ action: "create", productId: pid })).data;
+        for (const c of ["#9fb6cf", "#d8c3b0", "#b9d0b3"]) {
+          const cv = createCanvas(1000, 800);
+          const ctx = cv.getContext("2d");
+          const g = ctx.createLinearGradient(0, 0, 1000, 800);
+          g.addColorStop(0, c);
+          g.addColorStop(1, "#55606b");
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, 1000, 800);
+          await api({ action: "upload", id: proj.id, dataUrl: "data:image/jpeg;base64," + cv.toBuffer("image/jpeg").toString("base64") });
+        }
+        await api({ action: "write", id: proj.id });
+        await api({ action: "render", id: proj.id });
+      }
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-detail-out] img").first().waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(800);
+    },
+    marks: {
+      1: (p) => p.locator("[data-detail-new]"),
+      2: (p) => p.locator("[data-detail-write-go]"),
+      3: (p) => p.locator("[data-detail-render-go]"),
+    },
+  },
+  {
     id: "03-edit-dialog",
     url: "/tools/product-library",
     viewport: { width: 1440, height: 1300 },

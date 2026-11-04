@@ -83,7 +83,7 @@ export const savedTrendService = {
 
   async add(item: Partial<YouTubeTrendItem>): Promise<SavedTrend> {
     if (!item.videoId || !/^[\w-]{3,20}$/.test(item.videoId) || !item.title) {
-      throw new AppError("VALIDATION", "찜할 영상 정보가 올바르지 않습니다.");
+      throw new AppError("VALIDATION", "스크랩할 영상 정보가 올바르지 않습니다.");
     }
     const trendId = `yt_${item.videoId}`;
     const existing = await this.list();

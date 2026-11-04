@@ -260,7 +260,7 @@ export function YouTubeTrendExplorer() {
         setSaved((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
       }
     } catch (e) {
-      setNotice(errorText(e, "찜을 저장하지 못했습니다."));
+      setNotice(errorText(e, "스크랩하지 못했습니다."));
       setSaved(await api.trends.saved.list().catch(() => saved));
     }
   }
@@ -270,15 +270,15 @@ export function YouTubeTrendExplorer() {
   const columns: Column<YouTubeTrendItem>[] = [
     {
       key: "save",
-      header: <Star className="size-3.5" aria-label="찜" />,
+      header: <Star className="size-3.5" aria-label="스크랩" />,
       width: "44px",
       render: (r) => {
         const on = savedByVideo.has(r.videoId);
         return (
           <button
             type="button"
-            aria-label={on ? "찜 해제" : "찜하기"}
-            title={on ? "찜 해제" : "찜하기 (생성 화면 참고 트렌드에 먼저 나옵니다)"}
+            aria-label={on ? "스크랩 해제" : "스크랩"}
+            title={on ? "스크랩 해제" : "스크랩 (트렌드 스크랩에 담기고, 생성 화면 참고 트렌드에 먼저 나옵니다)"}
             onClick={(e) => {
               e.stopPropagation();
               void toggleSave(r);
@@ -445,7 +445,7 @@ export function YouTubeTrendExplorer() {
             {!loading && <Badge tone="brand">{items.length}개</Badge>}
             {saved.length > 0 && (
               <Badge tone="warning">
-                <Star className="size-3 fill-current" />찜 {saved.length}
+                <Star className="size-3 fill-current" />스크랩 {saved.length}
               </Badge>
             )}
           </span>

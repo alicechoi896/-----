@@ -595,6 +595,38 @@ describe("트렌드·스타일·오류 기록", () => {
     await post("/api/feedback-learning", { action: "removeItem", id: fb.id });
   });
 
+  it("상세페이지 만들기(데모): 제품 → 사진 → 기획·글(AI: 섹션·등록명·키워드·태그) → 섹션 고치기 → 이미지(섹션 PNG + 전체 JPG) (v0.9.167)", async ({ skip }) => {
+    if (!reachable) skip();
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const jpg = (color: string) => {
+      const c = createCanvas(1000, 800);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1000, 800);
+      return "data:image/jpeg;base64," + c.toBuffer("image/jpeg").toString("base64");
+    };
+    const pid = ((await j<{ id: string }[]>("/api/products")).data)[0].id;
+    type P = { id: string; photos: string[]; sections: { kind: string; title: string; body: string; photoKey: string | null }[]; names: string[]; keywords: string[]; tags: string[]; rendered: string[]; full: string | null; urls: Record<string, string> };
+    expect((await post("/api/detail-page", { action: "create", productId: "nope" })).ok).toBe(false);
+    let p = (await post("/api/detail-page", { action: "create", productId: pid })).data as P;
+    for (const c of ["#c8d4e0", "#e0c8d4"]) p = (await post("/api/detail-page", { action: "upload", id: p.id, dataUrl: jpg(c) })).data as P;
+    p = (await post("/api/detail-page", { action: "write", id: p.id })).data as P;
+    expect(p.names.length).toBe(5);
+    expect(p.keywords.length).toBeGreaterThan(0);
+    expect(p.sections.length).toBeGreaterThanOrEqual(4);
+    expect(p.sections[0].kind).toBe("hero");
+    p = (await post("/api/detail-page", { action: "update", id: p.id, sections: p.sections.map((x, i) => (i === 1 ? { ...x, title: "직접 고친 제목" } : x)) })).data as P;
+    expect(p.sections[1].title).toBe("직접 고친 제목");
+    p = (await post("/api/detail-page", { action: "render", id: p.id })).data as P;
+    expect(p.rendered.length).toBe(p.sections.length);
+    expect(p.full).toBeTruthy();
+    const u = p.urls[p.full!];
+    const ab = await fetch(u.startsWith("http") ? u : BASE + u).then((r) => r.arrayBuffer());
+    const buf = new Uint8Array(ab);
+    expect([buf[0], buf[1]]).toEqual([0xff, 0xd8]);
+    await post("/api/detail-page", { action: "remove", id: p.id });
+  });
+
   it("제품 캐러셀(데모): 제품 → 사진 3장 → 글(AI) → 장 고치기 → 이미지 4:5 (v0.9.163)", async ({ skip }) => {
     if (!reachable) skip();
     const { createCanvas } = await import("@napi-rs/canvas");

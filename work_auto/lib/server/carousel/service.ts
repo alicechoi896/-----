@@ -1,7 +1,4 @@
 import "server-only";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
 import { NO_RATING_RULE, isRatingTalk } from "@/lib/script-format";
 import { CAPTION_FONTS } from "@/lib/video-production/config";
@@ -9,10 +6,8 @@ import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
 import { getCurrentUserId, getRepositories } from "../repositories";
-import { safeFetch } from "../security/safe-url";
 import { loadScriptFormats } from "../services/script-formats";
-import { mediaDuration, runFfmpeg } from "../video/ffmpeg";
-import { srcKeyOf, storedVideoIds } from "../video/vault";
+import { productPhotoBuffers, videoFrameBuffers } from "../media/photo-sources";
 import { fontFamilyOf } from "../video/text-image";
 import { videoStorage } from "../video/storage";
 
@@ -27,7 +22,6 @@ const H = 1350;
 const MAX_PHOTOS = 20;
 const MAX_SLIDES = 8;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 export type SlidePos = "top" | "center" | "bottom";
 export interface Slide {
@@ -232,22 +226,8 @@ export const carouselService = {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     if (!p.productId) throw new AppError("VALIDATION", "제품을 고른 캐러셀만 제품 사진을 가져올 수 있습니다.");
-    const repo = getRepositories();
-    const product = await repo.products.get(p.productId);
-    const sources = await repo.productSources.list((x) => x.productId === p.productId, { productId: p.productId }).catch(() => []);
-    const urls = [...new Set([product?.imageUrl, ...sources.flatMap((x) => x.raw?.imageUrls ?? [])].filter((u): u is string => typeof u === "string" && /^https:\/\//.test(u)))].slice(0, 12);
     let added = 0;
-    for (const u of urls) {
-      try {
-        const r = await safeFetch(u, { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": UA, Accept: "image/*" } });
-        if (!r.ok) continue;
-        const buf = Buffer.from(await r.arrayBuffer());
-        if (buf.length < 12_000 || buf.length > MAX_IMAGE_BYTES) continue;
-        if (await addPhoto(owner, p, buf)) added++;
-      } catch {
-        // 못 받은 사진은 건너뛴다
-      }
-    }
+    for (const buf of await productPhotoBuffers(p.productId)) if (await addPhoto(owner, p, buf)) added++;
     await save(owner, list, p);
     return { project: await withUrls(p), added };
   },
@@ -256,29 +236,10 @@ export const carouselService = {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     if (!p.productId) throw new AppError("VALIDATION", "제품을 고른 캐러셀만 연결된 영상 장면을 뽑을 수 있습니다.");
-    const stored = await storedVideoIds(owner).catch(() => new Set<string>());
-    const vids = (await getRepositories().videos.list((v) => v.userId === owner && v.productId === p.productId, { userId: owner, productId: p.productId })).filter((v) => stored.has(v.id)).slice(0, 5);
-    if (!vids.length) throw new AppError("VALIDATION", "이 제품에 원본을 보관한 샤오홍슈 영상이 없습니다 (제품 상세 › 연결된 영상에서 [다운로드]).");
-    const dir = await mkdtemp(path.join(os.tmpdir(), "car-"));
+    const frames = await videoFrameBuffers(owner, p.productId);
+    if (!frames) throw new AppError("VALIDATION", "이 제품에 원본을 보관한 샤오홍슈 영상이 없습니다 (제품 상세 › 연결된 영상에서 [다운로드]).");
     let added = 0;
-    try {
-      for (const v of vids) {
-        const buf = await videoStorage.download(srcKeyOf(owner, v.id)).catch(() => null);
-        if (!buf) continue;
-        const file = path.join(dir, `${v.id}.mp4`);
-        await writeFile(file, buf);
-        const dur = await mediaDuration(file).catch(() => 0);
-        for (const f of [0.25, 0.5, 0.75]) {
-          const out = path.join(dir, `${v.id}_${f}.jpg`);
-          const r = await runFfmpeg(["-y", "-ss", String(Math.max(0, dur * f).toFixed(2)), "-i", file, "-frames:v", "1", "-q:v", "2", out]).catch(() => null);
-          if (!r) continue;
-          const img = await readFile(out).catch(() => null);
-          if (img && (await addPhoto(owner, p, img))) added++;
-        }
-      }
-    } finally {
-      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
-    }
+    for (const img of frames) if (await addPhoto(owner, p, img)) added++;
     await save(owner, list, p);
     return { project: await withUrls(p), added };
   },

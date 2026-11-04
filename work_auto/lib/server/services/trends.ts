@@ -115,7 +115,7 @@ export const trendService = {
         source: "youtube",
         title: t.title,
         keywords: t.keywords,
-        group: "찜한 영상",
+        group: "스크랩한 영상",
       }));
       const query = defaultFilter ? normalizeYouTubeQuery(defaultFilter.params as Record<string, unknown>) : defaultYouTubeQuery();
       query.scope = await contentProfileService.resolveScope();

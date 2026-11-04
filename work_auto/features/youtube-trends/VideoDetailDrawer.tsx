@@ -129,7 +129,7 @@ function DetailBody({
 
       <div className="flex flex-wrap gap-2">
         <Button variant={saved ? "subtle" : "secondary"} icon={Star} onClick={() => onToggleSave(item)} className={saved ? "text-warning" : undefined}>
-          {saved ? "찜 해제" : "찜하기"}
+          {saved ? "스크랩 해제" : "스크랩"}
         </Button>
         <LinkButton href={infoVideoHref(prefill)} icon={Video} variant="primary">
           이 트렌드로 영상 원고(정보성) 쓰기
