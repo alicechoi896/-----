@@ -2,7 +2,7 @@ import "server-only";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { MULTICAM_ANGLES, MULTICAM_MODELS, multicamCredits, type AngleId, type MulticamCut, type MulticamModel } from "@/lib/multicam/types";
+import { MULTICAM_ANGLES, MULTICAM_MODELS, multicamCredits, multicamGenCredits, type AngleId, type GenAspect, type MulticamCut, type MulticamModel } from "@/lib/multicam/types";
 import { AI_CLIP_CONFIG } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { AppError } from "../http";
@@ -45,6 +45,17 @@ export interface MulticamProject {
   /** 직접 고친 전체 프롬프트 (비우면 컷으로 자동) */
   promptOverride: string;
   task: { taskId: string | null; state: "waiting" | "success" | "fail"; error: string | null; credits: number | null; startedAt: string } | null;
+  /** v0.9.177 원본도 AI 로 만들기: 한국어 설명 → Seedance 프롬프트 (화면은 영어, 대사는 한국어 그대로) */
+  gen?: {
+    idea: string;
+    dialogue: string;
+    prompt: string;
+    model: MulticamModel;
+    resolution: "480p" | "720p";
+    seconds: number;
+    aspect: GenAspect;
+    task: { taskId: string | null; state: "waiting" | "success" | "fail"; error: string | null; startedAt: string } | null;
+  } | null;
   resultKey: string | null;
   createdAt: string;
   updatedAt: string;
@@ -76,7 +87,8 @@ async function save(owner: string, list: MulticamProject[], p: MulticamProject) 
 async function withUrls(p: MulticamProject) {
   const keys = [p.srcKey, p.inputKey, p.resultKey].filter((k): k is string => Boolean(k));
   const urls = keys.length ? await videoStorage.urls(keys, 3600).catch(() => ({}) as Record<string, string>) : {};
-  return { ...p, urls, prompt: buildPrompt(p), estimate: estimate(p) };
+  const genEstimate = p.gen ? (() => { const credits = multicamGenCredits(p.gen!.model, p.gen!.resolution, p.gen!.seconds); return { seconds: p.gen!.seconds, credits, usd: Math.round(credits * AI_CLIP_CONFIG.creditUsd * 100) / 100 }; })() : null;
+  return { ...p, urls, prompt: buildPrompt(p), estimate: estimate(p), genEstimate };
 }
 const len = (p: MulticamProject) => Math.max(0, Math.round((p.to - p.from) * 100) / 100);
 const modelOf = (m: MulticamModel) => MULTICAM_MODELS.find((x) => x.value === m) ?? MULTICAM_MODELS[0];
@@ -181,6 +193,84 @@ export const multicamService = {
   },
 
   /** 원본 올리기 1: 프로젝트 + 올릴 주소 */
+  /** v0.9.177 [AI 로 원본 만들기] 1: 프로젝트 만들기 (영상 없이) */
+  async createGen(input: { name?: unknown }) {
+    const owner = await getCurrentUserId();
+    const list = await readAll(owner);
+    const id = createId("mcam");
+    const p: MulticamProject = { id, name: String(input.name ?? "").trim().slice(0, 60) || "AI 원본 메이크업", srcKey: null, srcDuration: null, from: 0, to: 0, inputKey: null, inputSize: null, subject: "", cuts: [], model: "mini", resolution: "720p", keepAudio: true, promptOverride: "", task: null, resultKey: null, gen: { idea: "", dialogue: "", prompt: "", model: "mini", resolution: "720p", seconds: 10, aspect: "9:16", task: null }, createdAt: nowIso(), updatedAt: nowIso() };
+    return withUrls(await save(owner, list, p));
+  },
+
+  /** [프롬프트 만들기] AI 1번: 한국어 설명·대사 → Seedance 프롬프트. 화면·카메라는 영어, 말하는 대사는 한국어 그대로 따옴표 안에 */
+  async genPrompt(input: { id?: unknown; idea?: unknown; dialogue?: unknown; model?: unknown; resolution?: unknown; seconds?: unknown; aspect?: unknown }) {
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const g = (p.gen ??= { idea: "", dialogue: "", prompt: "", model: "mini", resolution: "720p", seconds: 10, aspect: "9:16", task: null });
+    g.idea = String(input.idea ?? g.idea).slice(0, 2000).trim();
+    g.dialogue = String(input.dialogue ?? g.dialogue).slice(0, 1000).trim();
+    if (input.model === "mini" || input.model === "s25") g.model = input.model;
+    if (input.resolution === "480p" || input.resolution === "720p") g.resolution = input.resolution;
+    const max = modelOf(g.model).maxOut;
+    if (input.seconds !== undefined) g.seconds = Math.max(4, Math.min(max, Math.round(Number(input.seconds) || 10)));
+    g.seconds = Math.min(max, g.seconds);
+    if (["9:16", "16:9", "3:4", "1:1"].includes(String(input.aspect))) g.aspect = input.aspect as GenAspect;
+    if (!g.idea) throw new AppError("VALIDATION", "어떤 영상인지 한국어로 적어 주세요 (예: 차 안에서 쿠션·아이섀도·립 순서로 화장하는 GRWM).");
+    const ai = await getAIProvider();
+    let prompt: string;
+    if (ai.id === "mock") {
+      prompt = `A realistic Korean beauty creator filming a GRWM. One fixed camera, natural daylight, identical character identity and outfit throughout. ${g.idea}. ${g.dialogue ? `She says in Korean: "${g.dialogue}".` : ""} Physically realistic hand-to-skin contact, realistic skin texture. No camera movement, no cuts, no music, no subtitles.`;
+    } else {
+      const r = await ai.generateStructured<{ prompt: string }>({
+        task: "multicam-gen-prompt",
+        messages: [
+          { role: "system", content: "당신은 ByteDance Seedance 영상 프롬프트 작가다. 한국어 설명을 자연스러운 영어 영상 프롬프트로 옮긴다. 답은 JSON 하나." },
+          {
+            role: "user",
+            content: `[만들 영상 — 한국어 설명]\n${g.idea}${g.dialogue ? `\n[말할 대사 — 한국어 그대로]\n${g.dialogue}` : ""}\n[길이] ${g.seconds}초, 화면 비율 ${g.aspect}
+
+규칙:
+- 화면·인물·장소·조명·동작·카메라 설명은 자연스러운 영어로 쓴다. 말하는 대사는 번역하지 말고 한국어 그대로 따옴표 안에 넣는다 (예: She says in Korean: "오늘은 차 안에서 5분 메이크업 해볼게요").
+- 나중에 같은 연기를 여러 카메라 구도로 다시 만들 원본이다: 카메라 1대 고정(no camera movement, no cuts), 인물 얼굴·머리·옷·장소가 처음부터 끝까지 같게(identical character identity and outfit throughout), 손이 피부·제품에 닿는 동작은 현실적으로, 표정·몸짓은 차분하게.
+- 화장 단계가 있으면 순서대로 시간에 맞게 (${g.seconds}초 안에 다 들어가게) 쓴다. 제품 이름·로고를 지어내지 않는다.
+- 소리: 대사가 있으면 그 목소리와 자연스러운 현장음만, 음악 없음. 자막·화면 글자·워터마크 없음.
+- 한 문단, 120~220단어.`,
+          },
+        ],
+        outputKeys: ["prompt"],
+        jsonSchema: { type: "object", additionalProperties: false, required: ["prompt"], properties: { prompt: { type: "string" } } },
+        variables: { multicam: p.id },
+        maxTokens: 900,
+      });
+      prompt = String(r.data.prompt ?? "");
+    }
+    g.prompt = prompt.trim().slice(0, 4000);
+    return withUrls(await save(owner, list, p));
+  },
+
+  /** [원본 만들기] Kie Seedance 글 → 영상 (확인 필수, 자동 재시도 없음). 끝나면 이 영상이 원본이 된다 (status) */
+  async genVideo(input: { id?: unknown; prompt?: unknown; confirmed?: unknown }) {
+    if (input.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "확인 창에서 [만들기]를 눌러 주세요.", 409);
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const g = p.gen;
+    if (!g) throw new AppError("VALIDATION", "[AI 로 원본 만들기]로 시작해 주세요.");
+    if (typeof input.prompt === "string" && input.prompt.trim()) g.prompt = input.prompt.trim().slice(0, 4000);
+    if (!g.prompt) throw new AppError("VALIDATION", "[프롬프트 만들기]를 먼저 눌러 주세요.");
+    if (g.task?.state === "waiting") throw new AppError("BUSY", "만드는 중입니다.", 409);
+    const provider = await getVideoAIProvider();
+    if (!provider) throw new AppError("KIE_NOT_CONNECTED", "Kie AI 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 Kie AI 키를 넣어 주세요.", 409);
+    try {
+      const r = await provider.createTask(modelOf(g.model).kie, { prompt: g.prompt, resolution: g.resolution, aspect_ratio: g.aspect, duration: g.seconds, generate_audio: true });
+      g.task = { taskId: r.taskId, state: "waiting", error: null, startedAt: nowIso() };
+      console.info("[Multicam] gen", JSON.stringify({ id: p.id, model: g.model, sec: g.seconds, taskId: r.taskId }));
+    } catch (e) {
+      g.task = { taskId: null, state: "fail", error: e instanceof Error ? e.message.slice(0, 200) : "만들지 못했습니다.", startedAt: nowIso() };
+      if (e instanceof VideoAIError && (e.code === "AUTH" || e.code === "PAYMENT")) throw e;
+    }
+    return withUrls(await save(owner, list, p));
+  },
+
   async uploadUrl(input: { name?: unknown; size?: unknown }) {
     if (Number(input.size) > MAX_BYTES) throw new AppError("VALIDATION", "영상이 너무 큽니다 (200MB 이하).");
     const owner = await getCurrentUserId();
@@ -348,7 +438,8 @@ export const multicamService = {
   async status(input: { id?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
-    if (p.task?.state !== "waiting" || !p.task.taskId) return withUrls(p);
+    if (p.gen?.task?.state === "waiting" && p.gen.task.taskId) await genStatus(owner, p).catch(() => undefined);
+    if (p.task?.state !== "waiting" || !p.task.taskId) return withUrls(await save(owner, list, p));
     const provider = await getVideoAIProvider();
     if (!provider) return withUrls(p);
     try {
@@ -382,6 +473,56 @@ export const multicamService = {
     }
   },
 };
+
+/** v0.9.177 AI 원본: 끝나면 받아서 원본(srcKey)으로 두고 길이·기본 구간·첫 컷을 정한다 */
+async function genStatus(owner: string, p: MulticamProject): Promise<void> {
+  const g = p.gen!;
+  const provider = await getVideoAIProvider();
+  if (!provider) return;
+  const s = await provider.status(g.task!.taskId!).catch((e: unknown) => {
+    if (e instanceof VideoAIError) return null;
+    throw e;
+  });
+  if (!s || s.state === "waiting" || s.state === "generating") return;
+  if (s.state === "fail" || !s.resultUrl) {
+    g.task = { ...g.task!, state: "fail", error: (s.error ?? "만들지 못했습니다.").slice(0, 200) };
+    return;
+  }
+  let video: Buffer;
+  if (s.resultUrl.startsWith("mock://")) {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mcam-g-"));
+    try {
+      const f = path.join(dir, "g.mp4");
+      await runFfmpeg(["-y", "-f", "lavfi", "-i", `testsrc2=size=720x1280:rate=24:duration=${g.seconds}`, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", String(g.seconds), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest", f], 60_000);
+      video = await readFile(f);
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  } else {
+    if (new URL(s.resultUrl).protocol !== "https:") throw new Error("결과 주소가 https 가 아닙니다.");
+    const res = await safeFetch(s.resultUrl, { signal: AbortSignal.timeout(120_000) });
+    if (!res.ok) throw new Error(`원본 영상을 받지 못했습니다 (HTTP ${res.status}).`);
+    video = Buffer.from(await res.arrayBuffer());
+  }
+  const key = `${owner}/multicam/${p.id}/src_${Date.now().toString(36)}.mp4`;
+  if (p.srcKey) await videoStorage.remove(p.srcKey).catch(() => undefined);
+  await videoStorage.put(key, video, "video/mp4");
+  p.srcKey = key;
+  p.inputKey = null;
+  p.srcDuration = g.seconds;
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mcam-g-"));
+  try {
+    const f = path.join(dir, "s.mp4");
+    await writeFile(f, video);
+    p.srcDuration = Math.round((await mediaDuration(f)) * 100) / 100 || g.seconds;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+  p.from = 0;
+  p.to = Math.min(p.srcDuration, modelOf(p.model).maxIn);
+  p.cuts = [{ start: 0, end: Math.max(0, p.to - p.from), angle: "front", note: "" }];
+  g.task = { ...g.task!, state: "success", error: null };
+}
 
 /** 결과 영상 + 입력 구간의 원본 소리 (영상 길이에 맞춰 자름) */
 async function withSourceAudio(video: Buffer, inputKey: string): Promise<Buffer> {

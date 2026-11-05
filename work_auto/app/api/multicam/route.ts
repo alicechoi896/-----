@@ -16,13 +16,20 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/multicam { action, id, ... } — 누를 때만 (자동 재시도 없음)
- * upload-url · probe · update · plan(AI 1번) · generate(Kie Seedance, confirmed 필수) · status(무료) · remove
+ * gen-create · gen-prompt(한국어 → Seedance 프롬프트, AI 1번) · gen-video(Kie 글 → 영상, confirmed 필수) · upload-url · probe · update · plan(AI 1번) · generate(Kie Seedance, confirmed 필수) · status(무료) · remove
  */
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("ai-makeup");
-    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; size?: unknown; from?: unknown; to?: unknown; subject?: unknown; cuts?: unknown; model?: unknown; resolution?: unknown; keepAudio?: unknown; promptOverride?: unknown; confirmed?: unknown }>(request);
+    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; size?: unknown; from?: unknown; to?: unknown; subject?: unknown; cuts?: unknown; model?: unknown; resolution?: unknown; keepAudio?: unknown; promptOverride?: unknown; confirmed?: unknown; idea?: unknown; dialogue?: unknown; seconds?: unknown; aspect?: unknown; prompt?: unknown }>(request);
     switch (b.action) {
+      case "gen-create":
+        return multicamService.createGen(b);
+      case "gen-prompt":
+        await rateLimit("ai-generate");
+        return multicamService.genPrompt(b);
+      case "gen-video":
+        return multicamService.genVideo(b);
       case "upload-url":
         return multicamService.uploadUrl(b);
       case "probe":

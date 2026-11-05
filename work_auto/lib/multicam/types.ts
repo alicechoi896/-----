@@ -35,3 +35,8 @@ export const multicamCredits = (model: MulticamModel, res: "480p" | "720p", seco
   // 입력 + 출력 (같은 길이)
   return Math.ceil(m.credits[res] * seconds * 2);
 };
+
+/** v0.9.177 원본도 AI 로: 글 → 영상 (영상 입력 없음) 크레딧/초. Kie 2026-11 */
+export const MULTICAM_GEN_CREDITS: Record<MulticamModel, Record<"480p" | "720p", number>> = { mini: { "480p": 3.8, "720p": 8.2 }, s25: { "480p": 28, "720p": 63 } };
+export const multicamGenCredits = (model: MulticamModel, res: "480p" | "720p", seconds: number) => Math.ceil(MULTICAM_GEN_CREDITS[model][res] * seconds);
+export type GenAspect = "9:16" | "16:9" | "3:4" | "1:1";
