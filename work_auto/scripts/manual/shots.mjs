@@ -488,7 +488,7 @@ export const SHOTS = [
     marks: {
       1: (p) => p.getByRole("heading", { name: /① 상품/ }).locator("xpath=ancestor::section[1]"),
       2: (p) => p.getByRole("heading", { name: /② 모델/ }).locator("xpath=ancestor::section[1]"),
-      3: (p) => p.getByRole("heading", { name: /③ 배경/ }).locator("xpath=ancestor::section[1]"),
+      3: (p) => p.getByRole("heading", { name: /③ 콘텐츠 유형/ }).locator("xpath=ancestor::section[1]"),
       4: (p) => p.getByRole("heading", { name: /④ 룩/ }).locator("xpath=ancestor::section[1]"),
       5: (p) => p.getByRole("heading", { name: /⑤ 결과물/ }).locator("xpath=ancestor::section[1]"),
     },

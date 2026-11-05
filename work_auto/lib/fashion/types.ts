@@ -67,6 +67,12 @@ export interface FashionLook {
   clipMotion?: string;
   /** v0.9.171 피드 카드용: 같은 모델·같은 옷, 무늬 없는 밝은 배경 (승인 1장을 피드에 씀, 없으면 룩 이미지) */
   feedImages?: FashionImage[];
+  /** v0.9.181 피드 플랫레이·벽에 건 코디 (모델 없이 제품만) */
+  flatImages?: FashionImage[];
+  /** v0.9.181 릴스 언박싱 컷 (손으로 꺼내 펼침) */
+  unboxImages?: FashionImage[];
+  /** v0.9.181 색 조합 추천: 이 룩의 색 2~3개 */
+  colors?: { name: string; hex: string }[];
 }
 
 export interface FashionClip {
@@ -100,6 +106,19 @@ export interface FashionSettings {
   clipNote?: string;
   /** v0.9.169 POV 문구 자리: 9:16 룩 사진 기준 가운데 x·y (0~1). 없으면 위쪽 가운데 */
   povPos?: { x: number; y: number } | null;
+  /** v0.9.181 콘텐츠 유형 (lib/fashion/formats.ts) — 없으면 룩북 · 모델+제품 카드 */
+  format?: string;
+  feedFormat?: string;
+  /** 얼굴 안 보이는 룩북: 위쪽 고정 체형 줄 (예: 171cm 81kg) */
+  bodyLine?: string;
+  /** 캐릭터 룩북: POV 아래 작은 안내 (예: 프로필링크에 5%할인쿠폰) */
+  noteLine?: string;
+  /** 문자 섬네일 플랫레이: 표지 가격대 태그 (예: 2~3만원대) · 표지 작은 줄 */
+  coverTag?: string;
+  coverSub?: string;
+  /** 라벨 카드: 아래 브랜드 이름 · 손글씨 한 줄 */
+  brand?: string;
+  script?: string;
 }
 
 /** v0.9.170 '만드는 중'으로 이만큼 멈춰 있으면 끊긴 것으로 본다 (서버·화면 같은 기준, 렌더 함수 최대 800초보다 길게) */
@@ -110,7 +129,7 @@ export type FashionTaskStatus = "queued" | "requesting" | "generating" | "succes
 export interface FashionTask {
   id: string;
   kind: "image" | "music" | "video";
-  target: { type: "model" } | { type: "look"; lookId: string } | { type: "bgm" } | { type: "lookclip"; lookId: string } | { type: "feedlook"; lookId: string };
+  target: { type: "model" } | { type: "look"; lookId: string } | { type: "bgm" } | { type: "lookclip"; lookId: string } | { type: "feedlook"; lookId: string } | { type: "flatlook"; lookId: string } | { type: "unboxlook"; lookId: string };
   modelId: string;
   prompt: string;
   /** 실제로 보낸 input (참고 이미지는 Storage 키로) */

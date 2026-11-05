@@ -1,4 +1,5 @@
 import { FASHION_CATEGORIES, type FashionImage, type FashionItem, type FashionLook, type FashionModel, type FashionProject, type FashionSettings } from "./types";
+import { reelFormatOf } from "./formats";
 
 /**
  * AI 패션 프롬프트 (v0.9.103). 레퍼런스 릴스 20개 분석: 같은 모델이 같은 배경·같은 자리에서 옷만 바뀌고(LOOK1~6, 룩마다 1.5~3초),
@@ -25,6 +26,9 @@ export const CLIP_CONCEPTS: { id: string; label: string; hint: string; en: strin
   { id: "breeze", label: "바람·자연스러움", hint: "바람에 머리·옷자락이 날리고 옷매무새 정리", en: "a light breeze moves her hair and the fabric; she smiles, adjusts her jacket or sleeve and looks at the camera" },
   { id: "daily", label: "일상 (출근·외출)", hint: "가방 들고 시계 보기 등 일상 동작", en: "a natural everyday moment matching the theme — she adjusts her bag strap, checks her watch or phone, then smiles at the camera as if heading out" },
   { id: "look", label: "룩 자세 그대로", hint: "④ 룩의 자세 문장을 그대로 움직임으로", en: "" },
+  // v0.9.181 콘텐츠 유형용
+  { id: "walkout", label: "문 열고 나와 걷기 (워킹)", hint: "카페·건물 문을 열고 나와 카메라 쪽으로", en: "she pushes the glass door open, steps out onto the sidewalk and walks toward the camera with a relaxed confident stride, the camera slowly tracking back" },
+  { id: "review", label: "말하듯 리뷰", hint: "카메라에 말하듯 옷을 만지며 보여 줌", en: "she talks to the camera like a casual review vlog, touching and showing the fabric and details of the outfit, turning slightly to show the side, natural expressive gestures" },
 ];
 
 export const DEFAULT_SETTINGS: FashionSettings = {
@@ -68,8 +72,18 @@ export const categoryLabel = (c: FashionItem["category"]) => FASHION_CATEGORIES.
 const CONSTRAINTS = "No text, no letters, no logo, no watermark, no frame or border. Photorealistic, natural skin texture, sharp focus on the clothes.";
 
 /** ② 모델 기준 이미지 (전신, 단순한 기본 옷, 회색 스튜디오). photo = 올린 사진을 참고하되 '다른 사람'으로 */
-export function modelPrompt(m: FashionModel): string {
+export function modelPrompt(m: FashionModel, opts: { character?: boolean } = {}): string {
   const who = m.description.trim() || "Korean female fashion model in her early 20s, slim, natural makeup, long dark wavy hair";
+  // v0.9.181 캐릭터 얼굴 룩북: 사람 대신 인형 같은 캐릭터
+  if (opts.character)
+    return [
+      "[FORMAT] Full-body character reference image, 9:16 vertical.",
+      `[CHARACTER] A cute stylized ball-jointed-doll-like girl character: porcelain smooth skin, large glossy eyes with long lashes, small nose and lips, soft blush, semi-realistic 3D doll rendering, consistent design. ${m.description.trim() ? `Look: ${m.description.trim()}.` : "Long wavy brown hair."}`,
+      "[POSE] Standing straight facing the camera, whole body visible from head to toe, arms relaxed, sweet expression.",
+      "[OUTFIT] Simple plain white t-shirt and light blue jeans, white sneakers.",
+      "[BACKGROUND] Plain light-grey studio background, soft even light.",
+      "[CONSTRAINTS] Single character only. No text, no letters, no logo, no watermark.",
+    ].join("\n");
   return [
     "[FORMAT] Full-body fashion model reference photo, 9:16 vertical, photorealistic lookbook style.",
     m.mode === "photo"
@@ -92,22 +106,29 @@ export function modelPrompt(m: FashionModel): string {
 export function lookPrompt(p: FashionProject, look: FashionLook, refItems: FashionItem[], hasModelRef: boolean): string {
   const items = look.itemIds.map((id) => p.items.find((x) => x.id === id)).filter((x): x is FashionItem => Boolean(x));
   const offset = hasModelRef ? 2 : 1;
+  // v0.9.181 콘텐츠 유형: 카메라·자세 (룩마다 돌아가며), 캐릭터
+  const fmt = reelFormatOf(p.settings.format);
+  const idx = Math.max(0, p.looks.findIndex((l) => l.id === look.id));
+  const pose = look.pose.trim() || fmt.poses?.[idx % fmt.poses.length] || "standing naturally facing the camera, one hand lightly holding the bag strap";
   const wear = items.map((it) => {
     const k = refItems.indexOf(it);
     return `${categoryEn(it.category)}: ${it.name}${k >= 0 ? ` (exactly the item in reference image ${k + offset})` : ""}`;
   });
   return [
-    "[FORMAT] Full-body fashion lookbook photo for an Instagram reel, 9:16 vertical, photorealistic.",
+    fmt.character ? "[FORMAT] Full-body character fashion lookbook image for an Instagram reel, 9:16 vertical, semi-realistic 3D doll style." : "[FORMAT] Full-body fashion lookbook photo for an Instagram reel, 9:16 vertical, photorealistic.",
     hasModelRef
-      ? "[MODEL] The woman in reference image 1. Keep EXACTLY the same face, hairstyle, hair color, skin tone, body shape and height — the same person in every look. Do not beautify or change the face."
+      ? fmt.character
+        ? "[MODEL] The doll-like character in reference image 1. Keep EXACTLY the same character design (face, eyes, hair, skin, proportions) in every look."
+        : "[MODEL] The woman in reference image 1. Keep EXACTLY the same face, hairstyle, hair color, skin tone, body shape and height — the same person in every look. Do not beautify or change the face."
       : `[MODEL] ${p.model.description.trim() || "Korean female fashion model in her early 20s, long dark wavy hair"}.`,
     wear.length
       ? `[OUTFIT] She wears ONLY these items, copied faithfully from the reference photos (same color, fabric, pattern, length, neckline, buttons and details): ${wear.join("; ")}. Fill anything missing with plain simple basics that match the style.`
       : "[OUTFIT] A stylish seasonal outfit.",
     `[BACKGROUND] ${backgroundEn(p.settings)}. Exactly the same background, camera position and framing as every other look in this series.`,
-    `[POSE] ${look.pose.trim() || "standing naturally facing the camera, one hand lightly holding the bag strap"}. Whole body visible from head to toe, centered, eye-level camera, 35mm lens look.`,
+    `[POSE] ${pose}.`,
+    `[CAMERA] ${fmt.camera}`,
     "[LIGHTING] Soft flattering light, natural colors, the clothes clearly visible.",
-    `[CONSTRAINTS] Single person only. ${CONSTRAINTS}`,
+    `[CONSTRAINTS] Single person only. ${fmt.character ? "No text, no letters, no logo, no watermark, no frame." : CONSTRAINTS}`,
   ]
     .filter(Boolean)
     .join("\n");

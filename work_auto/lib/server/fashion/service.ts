@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { mediaDuration } from "../video/ffmpeg";
 import { approvedOf, backgroundEn, categoryLabel, DEFAULT_SETTINGS, emptyFashionProject, newFashionId } from "@/lib/fashion/prompts";
+import { FEED_FORMATS, REEL_FORMATS, feedFormatOf, reelFormatOf } from "@/lib/fashion/formats";
 import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionItem, type FashionLook, type FashionProject, type FashionRender, type FashionSection } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
@@ -86,6 +87,15 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
         clipConcept: str(v.clipConcept, 20) || "pose",
         clipNote: str(v.clipNote, 300),
         povPos: cleanPovPos(v.povPos),
+        // v0.9.181 콘텐츠 유형
+        format: REEL_FORMATS.some((x) => x.value === v.format) ? String(v.format) : "lookbook",
+        feedFormat: FEED_FORMATS.some((x) => x.value === v.feedFormat) ? String(v.feedFormat) : "card",
+        bodyLine: str(v.bodyLine, 30),
+        noteLine: str(v.noteLine, 40),
+        coverTag: str(v.coverTag, 20),
+        coverSub: str(v.coverSub, 50),
+        brand: str(v.brand, 24),
+        script: str(v.script, 30),
       };
       return;
     case "items": {
@@ -132,6 +142,9 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
           clipMotion: str((x as { clipMotion?: unknown }).clipMotion, 300),
           images: old ? mergeImages(old.images, x.images) : [],
           feedImages: old?.feedImages ? mergeImages(old.feedImages, (x as { feedImages?: unknown }).feedImages) : [],
+          flatImages: old?.flatImages ? mergeImages(old.flatImages, (x as { flatImages?: unknown }).flatImages) : [],
+          unboxImages: old?.unboxImages ? mergeImages(old.unboxImages, (x as { unboxImages?: unknown }).unboxImages) : [],
+          colors: cleanColors((x as { colors?: unknown }).colors) ?? old?.colors,
           clips: old?.clips ? mergeClips(old.clips, (x as { clips?: unknown }).clips) : [],
         };
       });
@@ -145,7 +158,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
 
 /** 작업 결과를 최신 문서에 합쳐 저장 (그 사이 화면 저장을 덮어쓰지 않게) */
 /** 문서 안 이미지·음악 id (작업 전후를 비교해 새로 생긴 것만 합친다 — 그 사이 지운 것을 되살리지 않게) */
-const assetIds = (p: FashionProject) => new Set([...p.model.images.map((i) => i.id), ...p.looks.flatMap((l) => [...l.images.map((i) => i.id), ...(l.feedImages ?? []).map((i) => i.id), ...(l.clips ?? []).map((c) => c.id)]), ...p.tracks.map((t) => t.id)]);
+const assetIds = (p: FashionProject) => new Set([...p.model.images.map((i) => i.id), ...p.looks.flatMap((l) => [...l.images.map((i) => i.id), ...(l.feedImages ?? []).map((i) => i.id), ...(l.flatImages ?? []).map((i) => i.id), ...(l.unboxImages ?? []).map((i) => i.id), ...(l.clips ?? []).map((c) => c.id)]), ...p.tracks.map((t) => t.id)]);
 
 /** 같은 작업의 두 상태 중 worked 를 쓸지: 끝난 상태를 '진행 중'으로 되돌리지 않고, 같으면 더 늦게 바뀐 쪽 */
 const DONE = new Set(["success", "fail"]);
@@ -174,6 +187,8 @@ async function saveMerged(owner: string, worked: FashionProject, fresh_ids: Set<
     const w = worked.looks.find((x) => x.id === l.id);
     if (w) addNew(l.images, w.images);
     if (w?.feedImages?.length) addNew((l.feedImages ??= []), w.feedImages);
+    if (w?.flatImages?.length) addNew((l.flatImages ??= []), w.flatImages);
+    if (w?.unboxImages?.length) addNew((l.unboxImages ??= []), w.unboxImages);
     if (w?.clips?.length) {
       const have = new Set((l.clips ?? []).map((c) => c.id));
       for (const c of w.clips) if (!have.has(c.id) && fresh_ids.has(c.id)) (l.clips ??= []).push({ ...c, approved: c.approved && !(l.clips ?? []).some((x) => x.approved) });
@@ -195,6 +210,15 @@ const S = { type: "string" } as const;
 const obj = (props: Record<string, Json>) => ({ type: "object", additionalProperties: false, required: Object.keys(props), properties: props });
 const arr = (items: Json) => ({ type: "array", items });
 
+/** v0.9.181 색 조합: 이름 + #RRGGBB, 3개까지 */
+function cleanColors(v: unknown): { name: string; hex: string }[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v
+    .map((c: { name?: unknown; hex?: unknown }) => ({ name: str(c?.name, 20), hex: /^#[0-9a-f]{6}$/i.test(String(c?.hex ?? "")) ? String(c.hex) : "" }))
+    .filter((c) => c.name && c.hex)
+    .slice(0, 3);
+}
+
 /** v0.9.169 POV 자리 (0.05~0.95, 없으면 기본 위쪽) */
 function cleanPovPos(v: unknown): { x: number; y: number } | null {
   const o = v as { x?: unknown; y?: unknown } | null;
@@ -205,28 +229,54 @@ function cleanPovPos(v: unknown): { x: number; y: number } | null {
   return { x: c(x), y: c(y) };
 }
 
-async function writeCopy(p: FashionProject, regroup: boolean): Promise<{ title: string; pov: string; cta: string; looks: { items: number[]; caption: string; pose: string }[]; aiCalls: number }> {
+/** v0.9.181 유형마다 AI 글쓰기 지시 (레퍼런스 분석) */
+function formatGuide(p: FashionProject): string {
+  const r = reelFormatOf(p.settings.format);
+  const fd = feedFormatOf(p.settings.feedFormat);
+  const reel: Record<string, string> = {
+    lookbook: "릴스 유형: 룩북 — 같은 자리 전신, pov 는 위쪽에 끝까지 고정.",
+    daily: "릴스 유형: 일상 룩북 — 야외·일상 장소, pov 는 계절·날씨·상황 공감 ('POV : 드디어 날씨가 추워져서 야르한 가을 아우터를 입는 나'). pose 는 룩마다 앞모습·뒷모습·옆으로 걷기·한쪽 다리에 무게 등으로 다르게.",
+    weekday: "릴스 유형: 요일 룩 — 룩 수는 4~5개(월~금 출근), caption 은 쓰지 않아도 됨. pose 는 엘리베이터 안에서 문 쪽을 보고 서 있는 자세 (가방 들기·시계 보기·휴대폰 보기 등 조금씩 다르게).",
+    faceless: "릴스 유형: 얼굴 안 보이는 룩북 — pov 는 첫 화면 큰 제목 (예: '88사이즈 통통녀 직장인 출근룩', 'POV:' 없이 18자 안). pose 는 위에서 내려다본 셀카 각도로 손 동작만 다르게 (가방 잡기·재킷 여미기 등).",
+    character: "릴스 유형: 캐릭터 얼굴 룩북 — pov 는 2줄로 길게 공감 (예: 'POV : 만날때마다 추구미 바뀌어서 권태기 올 틈이 없는 내 남자친구'). pose 는 손 흔들기·볼 만지기 등 귀엽게.",
+    unboxing: "릴스 유형: 언박싱 — pov 는 표지 큰 제목 (예: '쇼핑몰 원피스 언박싱', 15자 안). pose 는 거울 앞에서 휴대폰으로 얼굴을 가린 셀카.",
+    walking: "릴스 유형: 워킹 — 글자 없이 걷는 영상. pose 는 문을 열고 나와 걸어오는 동작.",
+    review: "릴스 유형: 1인 리뷰형 — pov 는 첫 화면 제목 (예: '갓성비 5만원대..!! 가을 필수템 야상자켓'), caption 은 룩마다 말하듯 리뷰 한 줄 (예: '어디에 입어도 잘 어울리는', '10만원대 일부러 안 사도 돼요'), 15자 안.",
+  };
+  const feed: Record<string, string> = {
+    card: "",
+    cardLabel: "피드 유형: 라벨 카드 — caption 은 짧은 영어 무드 한 줄도 괜찮음.",
+    flatTitle: "피드 유형: 문자 섬네일 플랫레이 — coverTag = 표지 가격대·상황 태그 (예: '2~3만원대', 8자 안), title = 표지 큰 제목 3줄 느낌 (예: '출근길, 이렇게 입으면 센스있어 보인다!', 22자 안), coverSub = 표지 작은 줄 (예: '편안함과 멋, 둘 다 챙긴 데일리 출근룩!').",
+    flatlay: "피드 유형: 코디 플랫레이 — coverSub = 표지 작은 줄 (예: '각 종류별 최고의 아우터만 엄선'), title = 큰 2줄 (예: '매일 입어도 안 질려 겨울 아우터 모음').",
+    palette: "피드 유형: 색 조합 추천 — looks 마다 colors = 그 룩의 색 2~3개 [{name: 한국어 색 이름(예: '버건디','오프화이트','네이비'), hex: '#RRGGBB'}], 상품 색과 맞게.",
+  };
+  return [reel[r.value] ?? "", feed[fd.value] ?? ""].filter(Boolean).join("\n");
+}
+
+async function writeCopy(p: FashionProject, regroup: boolean): Promise<{ title: string; pov: string; cta: string; coverTag: string; coverSub: string; looks: { items: number[]; caption: string; pose: string; colors?: { name: string; hex: string }[] }[]; aiCalls: number }> {
   const items = p.items.map((it, i) => `${i + 1}. [${categoryLabel(it.category)}] ${it.name}`).join("\n");
   const current = p.looks.map((l) => `${l.name}: ${l.itemIds.map((id) => p.items.findIndex((x) => x.id === id) + 1).join(",")}`).join("\n");
-  const schema = obj({ title: S, pov: S, cta: S, looks: arr(obj({ items: arr({ type: "number" }), caption: S, pose: S })) });
+  const schema = obj({ title: S, pov: S, cta: S, coverTag: S, coverSub: S, looks: arr(obj({ items: arr({ type: "number" }), caption: S, pose: S, colors: arr(obj({ name: S, hex: S })) })) });
+  const guide = formatGuide(p);
   const ai = await getAIProvider();
   if (ai.id === "mock") {
     const groups = regroup || !p.looks.length ? chunk(p.items.map((_, i) => i + 1), 3) : p.looks.map((l) => l.itemIds.map((id) => p.items.findIndex((x) => x.id === id) + 1));
-    return { title: `${p.settings.theme} ${groups.length}가지`, pov: `POV: ${p.settings.theme} 고민 끝, 이렇게 입었더니 칭찬 3번 들음`, cta: DEFAULT_SETTINGS.cta, looks: groups.map((g, i) => ({ items: g, caption: `${i + 1}번 룩은 깔끔하게`, pose: "standing naturally, one hand on the bag strap" })), aiCalls: 0 };
+    const pal = [[{ name: "버건디", hex: "#7A1F2B" }, { name: "네이비", hex: "#1F2A44" }, { name: "오프화이트", hex: "#F3EFE6" }], [{ name: "브라운", hex: "#5A3A28" }, { name: "로즈", hex: "#D9A5A0" }], [{ name: "버터", hex: "#F2D98B" }, { name: "그레이", hex: "#8C8F94" }]];
+    return { title: `${p.settings.theme} ${groups.length}가지`, pov: `POV: ${p.settings.theme} 고민 끝, 이렇게 입었더니 칭찬 3번 들음`, cta: DEFAULT_SETTINGS.cta, coverTag: "2~3만원대", coverSub: "편안함과 멋, 둘 다 챙긴 데일리룩", looks: groups.map((g, i) => ({ items: g, caption: `${i + 1}번 룩은 깔끔하게`, pose: "standing naturally, one hand on the bag strap", colors: pal[i % pal.length] })), aiCalls: 0 };
   }
   const { data } = await ai.generateStructured<Json>({
     task: "fashion:copy",
     messages: [
       {
         role: "system",
-        content: `당신은 한국 인스타그램 패션 릴스·피드 기획자다. 레퍼런스 공식: 같은 모델·같은 배경에서 옷만 바뀌는 LOOK1~6, 위쪽에 끝까지 고정되는 공감 한 줄('POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나' 같은), 룩마다 짧은 한 줄. title·pov·cta·caption 은 반드시 한국어로만 쓴다 (영어 문장 금지, 상품명의 영문 브랜드만 그대로). pose 만 영어. 답은 JSON 객체 하나로만 (설명·마크다운 없이). 형식: {"title":"…","pov":"…","cta":"…","looks":[{"items":[1,2],"caption":"…","pose":"…"}]}`,
+        content: `당신은 한국 인스타그램 패션 릴스·피드 기획자다. 레퍼런스 공식: 같은 모델·같은 배경에서 옷만 바뀌는 LOOK1~6, 위쪽에 끝까지 고정되는 공감 한 줄('POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나' 같은), 룩마다 짧은 한 줄. title·pov·cta·caption 은 반드시 한국어로만 쓴다 (영어 문장 금지, 상품명의 영문 브랜드만 그대로). pose 만 영어. 답은 JSON 객체 하나로만 (설명·마크다운 없이). 형식: {"title":"…","pov":"…","cta":"…","coverTag":"…","coverSub":"…","looks":[{"items":[1,2],"caption":"…","pose":"…","colors":[{"name":"…","hex":"#RRGGBB"}]}]} (coverTag·coverSub·colors 는 해당 유형이 아니면 빈 값)`,
       },
       {
         role: "user",
-        content: `[주제] ${p.settings.theme}\n[배경] ${backgroundEn(p.settings)}\n[상품 목록]\n${items || "(없음)"}\n${!regroup && p.looks.length ? `[지금 룩 묶음 — 그대로 두고 문구만]\n${current}\n` : ""}\n만들 것:\n- title: 프로젝트 제목 (20자 안)\n- pov: 위쪽 고정 공감 문구, 'POV:' 로 시작, 35자 안, 상황·감정이 보이게\n- cta: 마지막 댓글 안내 (예: 댓글에 '링크' 남기면 DM 으로 보내드려요), 35자 안\n- looks: ${!regroup && p.looks.length ? `지금 룩 ${p.looks.length}개 순서 그대로 (items 는 지금 번호 그대로)` : "상품 번호로 룩 3~6개 묶기 (한 룩 = 상의/원피스 + 하의 + 신발·가방 등 함께 입을 것, 같은 상품을 여러 룩에 써도 됨)"}, caption = 룩 한 줄 (15자 안, 예: '하객룩은 차분하게'), pose = 영어 자세 한 문장 (룩마다 조금씩 다르게, 전신이 보이게)\n\n중요: title·pov·cta·caption 은 모두 한국어 (예: 'POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나', '하객룩은 차분하게').`,
+        content: `[주제] ${p.settings.theme}\n[배경] ${backgroundEn(p.settings)}\n[상품 목록]\n${items || "(없음)"}\n${!regroup && p.looks.length ? `[지금 룩 묶음 — 그대로 두고 문구만]\n${current}\n` : ""}\n만들 것:\n- title: 프로젝트 제목 (20자 안)\n- pov: 위쪽 고정 공감 문구, 'POV:' 로 시작, 35자 안, 상황·감정이 보이게\n- cta: 마지막 댓글 안내 (예: 댓글에 '링크' 남기면 DM 으로 보내드려요), 35자 안\n- looks: ${!regroup && p.looks.length ? `지금 룩 ${p.looks.length}개 순서 그대로 (items 는 지금 번호 그대로)` : "상품 번호로 룩 3~6개 묶기 (한 룩 = 상의/원피스 + 하의 + 신발·가방 등 함께 입을 것, 같은 상품을 여러 룩에 써도 됨)"}, caption = 룩 한 줄 (15자 안, 예: '하객룩은 차분하게'), pose = 영어 자세 한 문장 (룩마다 조금씩 다르게, 전신이 보이게)${guide ? `\n\n[콘텐츠 유형 — 꼭 따른다]\n${guide}` : ""}\n\n중요: title·pov·cta·caption 은 모두 한국어 (예: 'POV: 퇴근한 순간부터 연휴 즐기려고 꾸꾸꾸 상태로 출근한 나', '하객룩은 차분하게').`,
       },
     ],
-    outputKeys: ["title", "pov", "cta", "looks"],
+    outputKeys: ["title", "pov", "cta", "coverTag", "coverSub", "looks"],
     jsonSchema: schema,
     variables: {},
     maxTokens: 3000,
@@ -237,8 +287,9 @@ async function writeCopy(p: FashionProject, regroup: boolean): Promise<{ title: 
     items: (Array.isArray(l.items) ? l.items : []).map(Number).filter((n) => n >= 1 && n <= p.items.length),
     caption: str(l.caption, 40),
     pose: str(l.pose, 200),
+    colors: cleanColors(l.colors),
   }));
-  return { title: str(data.title, 40), pov: str(data.pov, 60), cta: str(data.cta, 60), looks, aiCalls: 1 };
+  return { title: str(data.title, 40), pov: str(data.pov, 60), cta: str(data.cta, 60), coverTag: str(data.coverTag, 20), coverSub: str(data.coverSub, 50), looks, aiCalls: 1 };
 }
 const chunk = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
@@ -286,7 +337,8 @@ export const fashionService = {
       fresh.looks = p.looks.map((l) => {
         const f = byId.get(l.id);
         const sent = ((body.value as Partial<FashionLook>[]) ?? []).find((x) => x.id === l.id);
-        return f ? { ...l, images: mergeImages(f.images, sent?.images), clips: f.clips ? mergeClips(f.clips, (sent as { clips?: unknown } | undefined)?.clips) : l.clips } : l;
+        const m = (k: "feedImages" | "flatImages" | "unboxImages") => (f?.[k] ? mergeImages(f[k]!, (sent as Record<string, unknown> | undefined)?.[k]) : l[k]);
+        return f ? { ...l, images: mergeImages(f.images, sent?.images), clips: f.clips ? mergeClips(f.clips, (sent as { clips?: unknown } | undefined)?.clips) : l.clips, feedImages: m("feedImages"), flatImages: m("flatImages"), unboxImages: m("unboxImages") } : l;
       });
     } else (fresh as unknown as Record<string, unknown>)[section] = (p as unknown as Record<string, unknown>)[section];
     if (section === "items") for (const l of fresh.looks) l.itemIds = l.itemIds.filter((x) => fresh.items.some((i) => i.id === x));
@@ -308,12 +360,14 @@ export const fashionService = {
         if (r.title && (p.title === "새 패션 콘텐츠" || !p.title)) p.title = r.title;
         if (r.pov) p.settings.pov = r.pov;
         if (r.cta) p.settings.cta = r.cta;
+        if (r.coverTag) p.settings.coverTag = r.coverTag;
+        if (r.coverSub) p.settings.coverSub = r.coverSub;
         if (regroup) {
           const old = p.looks;
           p.looks = r.looks
             .filter((l) => l.items.length)
-            .map((l, i) => ({ id: old[i]?.id ?? newFashionId("lk"), name: `LOOK ${i + 1}`, itemIds: [...new Set(l.items.map((n) => p.items[n - 1].id))], caption: l.caption, pose: l.pose, images: old[i]?.images ?? [] }));
-        } else p.looks = p.looks.map((l, i) => ({ ...l, caption: r.looks[i]?.caption || l.caption, pose: r.looks[i]?.pose || l.pose }));
+            .map((l, i) => ({ id: old[i]?.id ?? newFashionId("lk"), name: `LOOK ${i + 1}`, itemIds: [...new Set(l.items.map((n) => p.items[n - 1].id))], caption: l.caption, pose: l.pose, images: old[i]?.images ?? [], colors: l.colors?.length ? l.colors : undefined }));
+        } else p.looks = p.looks.map((l, i) => ({ ...l, caption: r.looks[i]?.caption || l.caption, pose: r.looks[i]?.pose || l.pose, colors: r.looks[i]?.colors?.length ? r.looks[i].colors : l.colors }));
         break;
       }
       // 제품 라이브러리(이미 학습한 쿠팡 상품) → 상품 (대표 이미지를 받아 둔다, 쿠팡 호출 없음)

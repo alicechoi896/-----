@@ -30,7 +30,7 @@ export interface FashionLoaded {
 }
 export const newRequestId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `rq-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-export type ImageJob = { target: { type: "model" } | { type: "look"; lookId: string } | { type: "feedlook"; lookId: string } };
+export type ImageJob = { target: { type: "model" } | { type: "look"; lookId: string } | { type: "feedlook"; lookId: string } | { type: "flatlook"; lookId: string } | { type: "unboxlook"; lookId: string } };
 
 export const fashionApi = {
   home: () => call<{ projects: FashionProjectSummary[]; imageCredits: number }>("/api/fashion"),

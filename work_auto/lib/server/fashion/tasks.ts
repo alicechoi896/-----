@@ -3,7 +3,8 @@ import { createCanvas } from "@napi-rs/canvas";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CLIP_CONCEPTS, approvedOf, fashionMusicPrompt, feedLookPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
+import { CLIP_CONCEPTS, approvedOf, categoryEn, fashionMusicPrompt, feedLookPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
+import { feedFormatOf, flatPrompt, reelFormatOf, unboxPrompt } from "@/lib/fashion/formats";
 import type { FashionImage, FashionLook, FashionProject, FashionTask } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getVideoAIProvider } from "../providers/registry";
@@ -55,8 +56,14 @@ async function submit(prov: VideoAIProvider, tasks: FashionTask[], model: (t: Fa
 }
 
 export interface FashionImageJob {
-  target: { type: "model" } | { type: "look"; lookId: string } | { type: "feedlook"; lookId: string };
+  target: { type: "model" } | { type: "look"; lookId: string } | { type: "feedlook"; lookId: string } | { type: "flatlook"; lookId: string } | { type: "unboxlook"; lookId: string };
 }
+
+/** v0.9.181 언박싱 컷에 쓸 대표 제품 (원피스·아우터·상의 순) */
+const unboxItem = (p: FashionProject, look: FashionLook) => {
+  const items = lookRefItems(p, look);
+  return items.find((i) => i.category === "dress") ?? items.find((i) => i.category === "outer") ?? items.find((i) => i.category === "top") ?? items[0];
+};
 
 /** 이미지 작업 계획 (Kie 호출 전 — 비용 확인 창의 장수와 같다) */
 export function planFashionImages(p: FashionProject, jobs: FashionImageJob[], requestId: string): FashionTask[] {
@@ -64,7 +71,19 @@ export function planFashionImages(p: FashionProject, jobs: FashionImageJob[], re
   for (const j of jobs.slice(0, MAX_TASKS)) {
     if (j.target.type === "model") {
       if (p.model.mode === "photo" && !p.model.photoKey) throw new AppError("VALIDATION", "참고할 실제 사진을 먼저 올려 주세요 (또는 'AI 모델'로 바꾸기).");
-      out.push(baseTask({ kind: "image", target: { type: "model" }, modelId: p.model.mode === "photo" ? "nano-banana-edit" : "nano-banana", prompt: modelPrompt(p.model), requestId }));
+      out.push(baseTask({ kind: "image", target: { type: "model" }, modelId: p.model.mode === "photo" ? "nano-banana-edit" : "nano-banana", prompt: modelPrompt(p.model, { character: reelFormatOf(p.settings.format).character }), requestId }));
+    } else if (j.target.type === "flatlook" || j.target.type === "unboxlook") {
+      // v0.9.181 플랫레이·벽에 건 코디 (제품 사진만) / 언박싱 컷 (대표 제품 1장)
+      const lookId = j.target.lookId;
+      const look = p.looks.find((l) => l.id === lookId);
+      if (!look) throw new AppError("VALIDATION", "룩을 찾지 못했습니다.");
+      const refs = lookRefItems(p, look);
+      if (!refs.length) throw new AppError("VALIDATION", `${look.name}에 사진이 있는 상품을 넣어 주세요 (제품 사진으로 만듭니다).`);
+      const prompt =
+        j.target.type === "flatlook"
+          ? flatPrompt(feedFormatOf(p.settings.feedFormat).image === "hanging" ? "hanging" : "flat", refs.map((it) => ({ category: categoryEn(it.category), name: it.name })), p.settings.theme)
+          : unboxPrompt({ category: categoryEn(unboxItem(p, look)!.category), name: unboxItem(p, look)!.name });
+      out.push(baseTask({ kind: "image", target: { type: j.target.type, lookId }, modelId: "nano-banana-edit", prompt, requestId }));
     } else if (j.target.type === "feedlook") {
       // v0.9.171 피드 카드용 (승인한 룩 이미지 → 배경만 밝은 무지)
       const lookId = j.target.lookId;
@@ -97,17 +116,24 @@ async function imageInput(p: FashionProject, t: FashionTask): Promise<Record<str
     const lookId = t.target.lookId;
     const look = p.looks.find((l) => l.id === lookId)!;
     refKeys = [approvedOf(look.images)!.key];
+  } else if (t.target.type === "flatlook") {
+    const lookId = t.target.lookId;
+    refKeys = lookRefItems(p, p.looks.find((l) => l.id === lookId)!).map((i) => i.imageKey!);
+  } else if (t.target.type === "unboxlook") {
+    const lookId = t.target.lookId;
+    refKeys = [unboxItem(p, p.looks.find((l) => l.id === lookId)!)!.imageKey!];
   }
   const urls = await videoStorage.urls(refKeys, 86_400);
   const refUrls = refKeys.map((k) => urls[k]).filter(Boolean);
   if (refKeys.length && refUrls.length !== refKeys.length) throw new AppError("VALIDATION", "참고 이미지 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  t.request = { aspect_ratio: "9:16", references: refKeys };
+  const aspect = t.target.type === "flatlook" ? "4:5" : "9:16";
+  t.request = { aspect_ratio: aspect, references: refKeys };
   if (!refUrls.length) {
     t.modelId = "nano-banana";
-    return { prompt: t.prompt, output_format: "png", aspect_ratio: "9:16" };
+    return { prompt: t.prompt, output_format: "png", aspect_ratio: aspect };
   }
   t.modelId = "nano-banana-edit";
-  return { prompt: t.prompt, image_urls: refUrls.slice(0, 10), output_format: "png", aspect_ratio: "9:16" };
+  return { prompt: t.prompt, image_urls: refUrls.slice(0, 10), output_format: "png", aspect_ratio: aspect };
 }
 
 const MODEL_NAME: Record<string, string> = { "nano-banana": "google/nano-banana", "nano-banana-edit": "google/nano-banana-edit" };
@@ -283,7 +309,7 @@ export async function syncFashion(owner: string, p: FashionProject): Promise<boo
           t.storedKey ??= key;
         }
       } else {
-        const buf = demo ? demoImage(t.target.type === "look" || t.target.type === "feedlook" ? "look" : "model") : await fetchFile(s.resultUrl, 15 * 1024 * 1024);
+        const buf = demo ? demoImage(t.target.type === "model" ? "model" : "look") : await fetchFile(s.resultUrl, 15 * 1024 * 1024);
         const ext = buf.subarray(1, 4).toString() === "PNG" ? "png" : "jpg";
         const key = `${fashionDir(owner, p.id)}/img/${t.id}.${ext}`;
         await videoStorage.put(key, buf, ext === "png" ? "image/png" : "image/jpeg");
@@ -314,11 +340,11 @@ function attachImage(p: FashionProject, t: FashionTask, key: string): void {
     if (!look) return;
     img.approved = !approvedOf(look.images);
     look.images.push(img);
-  } else if (t.target.type === "feedlook") {
+  } else if (t.target.type === "feedlook" || t.target.type === "flatlook" || t.target.type === "unboxlook") {
     const lookId = t.target.lookId;
     const look = p.looks.find((l) => l.id === lookId);
     if (!look) return;
-    const list = (look.feedImages ??= []);
+    const list = t.target.type === "feedlook" ? (look.feedImages ??= []) : t.target.type === "flatlook" ? (look.flatImages ??= []) : (look.unboxImages ??= []);
     img.approved = !approvedOf(list);
     list.push(img);
   }

@@ -5,6 +5,7 @@ import { Check, Clapperboard, Download, ImageIcon, Library, Palette, Plus, Shirt
 import { Badge, Button, Input, Modal, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
 import { api } from "@/lib/api-client";
 import { approvedOf, BACKGROUNDS, CLIP_CONCEPTS, categoryLabel, newFashionId } from "@/lib/fashion/prompts";
+import { FEED_FORMATS, REEL_FORMATS, feedFormatOf, reelFormatOf } from "@/lib/fashion/formats";
 import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionLook, type FashionSettings } from "@/lib/fashion/types";
 import type { Product } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
@@ -91,6 +92,44 @@ function PovPlacer({ text, photo, pos, onChange }: { text: string; photo: string
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** v0.9.181 룩마다 추가 이미지 (피드용·플랫레이·벽에 건 코디·언박싱 컷) — 같은 모양의 블록 */
+type ExtraKind = "feedlook" | "flatlook" | "unboxlook";
+const EXTRA_FIELD: Record<ExtraKind, "feedImages" | "flatImages" | "unboxImages"> = { feedlook: "feedImages", flatlook: "flatImages", unboxlook: "unboxImages" };
+function ExtraImages({ ctl, kind, title, hint, empty, onAsk }: { ctl: FashionCtl; kind: ExtraKind; title: string; hint: string; empty: string; onAsk: (a: { jobs: ImageJob[]; title: string }) => void }) {
+  const p = ctl.project!;
+  const field = EXTRA_FIELD[kind];
+  const ready = p.looks.filter((l) => approvedOf(l.images));
+  const busy = p.tasks.some((t) => t.target.type === kind && (t.status === "generating" || t.status === "requesting"));
+  const todo = ready.filter((l) => !approvedOf(l[field] ?? []));
+  const fails = p.tasks.filter((t) => t.target.type === kind && t.status === "fail").slice(-2);
+  return (
+    <div className="space-y-1.5 rounded border border-line bg-subtle/40 p-2" data-fashion-extra={kind}>
+      <p className="text-[12px] text-fg-muted">
+        <b className="text-fg">{title}</b> — {hint} 룩 1개 = 약 {IMAGE_CREDITS}크레딧(≈ $0.02).
+      </p>
+      <Button size="sm" variant="secondary" icon={Sparkles} disabled={!todo.length || Boolean(ctl.busy) || busy} onClick={() => onAsk({ jobs: todo.map((l) => ({ target: { type: kind, lookId: l.id } })), title: `${title} ${todo.length}개 만들기` })} data-make-extra={kind}>
+        {busy ? "만드는 중… (자동 확인)" : todo.length ? `${title} 만들기 (${todo.length}개)` : `모든 룩에 ${title} 있음`}
+      </Button>
+      {fails.map((t) => (
+        <p key={t.id} className="text-[11.5px] text-danger">
+          실패: {t.error}
+        </p>
+      ))}
+      {ready.map((l) => (
+        <div key={l.id} className="flex items-start gap-2">
+          <span className="w-14 shrink-0 pt-1 text-[11.5px] font-medium text-fg-muted">{l.name}</span>
+          <div className="min-w-0 flex-1">
+            <ImageStrip list={l[field] ?? []} urls={ctl.urls} empty={empty} onChange={(next) => ctl.edit("looks", p.looks.map((x) => (x.id === l.id ? { ...x, [field]: next } : x)))} />
+          </div>
+          <Button size="sm" variant="ghost" disabled={Boolean(ctl.busy) || busy} onClick={() => onAsk({ jobs: [{ target: { type: kind, lookId: l.id } }], title: `${l.name} ${title} 만들기` })}>
+            {l[field]?.length ? "다시" : "만들기"}
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -222,7 +261,46 @@ export function FashionEditor({ ctl }: { ctl: FashionCtl }) {
       </SectionCard>
 
       {/* ③ 배경·문구 */}
-      <SectionCard title="③ 배경·문구" icon={Palette} description="레퍼런스처럼 영상 하나에 배경 1개, 위쪽에 끝까지 고정되는 POV 공감 한 줄, 마지막에 댓글 링크 안내가 들어갑니다." data-fashion-copy>
+      <SectionCard title="③ 콘텐츠 유형 · 배경·문구" icon={Palette} description="먼저 릴스·피드 유형을 고르면 룩 이미지 구도·포즈·배경, 화면 글자 배치, 컷 전환, AI 영상 동작이 그 유형에 맞게 바뀝니다 (레퍼런스 12종 분석). 그다음 [AI 로 문구 쓰기]도 유형에 맞게 씁니다." data-fashion-copy>
+        <div className="mb-3 grid gap-3 md:grid-cols-2" data-fashion-format>
+          <label className="block space-y-1">
+            <span className="text-[12px] font-medium text-fg-muted">릴스 유형</span>
+            <Select
+              value={s.format ?? "lookbook"}
+              options={REEL_FORMATS.map((x) => ({ value: x.value, label: x.label }))}
+              onChange={(e) => {
+                const fmt = reelFormatOf(e.target.value);
+                setSettings({
+                  format: fmt.value,
+                  background: fmt.background ?? s.background,
+                  secPerLook: fmt.secPerLook ?? s.secPerLook,
+                  ...(fmt.clip ? { reelStyle: "b" as const, clipConcept: fmt.value === "walking" ? "walkout" : "review" } : {}),
+                });
+              }}
+              aria-label="릴스 유형"
+            />
+            <span className="block text-[11.5px] text-fg-subtle">{reelFormatOf(s.format).hint}{reelFormatOf(s.format).character ? " · ② 모델을 이 유형으로 다시 만들어 주세요 (캐릭터 얼굴)" : ""}</span>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[12px] font-medium text-fg-muted">피드 유형</span>
+            <Select value={s.feedFormat ?? "card"} options={FEED_FORMATS.map((x) => ({ value: x.value, label: x.label }))} onChange={(e) => setSettings({ feedFormat: e.target.value })} aria-label="피드 유형" />
+            <span className="block text-[11.5px] text-fg-subtle">{feedFormatOf(s.feedFormat).hint}</span>
+          </label>
+          {reelFormatOf(s.format).overlay.bodyLine && <Input value={s.bodyLine ?? ""} onChange={(e) => setSettings({ bodyLine: e.target.value })} placeholder="위쪽 고정 체형 줄 (예: 171cm 81kg)" aria-label="체형 줄" />}
+          {reelFormatOf(s.format).overlay.noteLine && <Input value={s.noteLine ?? ""} onChange={(e) => setSettings({ noteLine: e.target.value })} placeholder="POV 아래 작은 안내 (예: 프로필링크에 5%할인쿠폰)" aria-label="작은 안내" />}
+          {(s.feedFormat === "flatTitle" || s.feedFormat === "flatlay") && (
+            <>
+              {s.feedFormat === "flatTitle" && <Input value={s.coverTag ?? ""} onChange={(e) => setSettings({ coverTag: e.target.value })} placeholder="표지 태그 (예: 2~3만원대)" aria-label="표지 태그" />}
+              <Input value={s.coverSub ?? ""} onChange={(e) => setSettings({ coverSub: e.target.value })} placeholder="표지 작은 줄 (예: 편안함과 멋, 둘 다 챙긴 데일리 출근룩!)" aria-label="표지 작은 줄" />
+            </>
+          )}
+          {s.feedFormat === "cardLabel" && (
+            <>
+              <Input value={s.brand ?? ""} onChange={(e) => setSettings({ brand: e.target.value })} placeholder="아래 브랜드 이름 (선택, 영문)" aria-label="브랜드" />
+              <Input value={s.script ?? ""} onChange={(e) => setSettings({ script: e.target.value })} placeholder="손글씨 한 줄 (기본: for a better day)" aria-label="손글씨" />
+            </>
+          )}
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block space-y-1">
             <span className="text-[12px] font-medium text-fg-muted">주제</span>
@@ -350,8 +428,8 @@ function Outputs({ ctl, uploading, upload, onAsk }: { ctl: FashionCtl; uploading
   const p = ctl.project!;
   const s = p.settings;
   const ready = p.looks.filter((l) => approvedOf(l.images));
-  const feedBusy = p.tasks.some((t) => t.target.type === "feedlook" && (t.status === "generating" || t.status === "requesting"));
-  const feedTodo = ready.filter((l) => !approvedOf(l.feedImages ?? []));
+  const feedFmt = feedFormatOf(s.feedFormat);
+  const reelFmt = reelFormatOf(s.format);
   // v0.9.120: 피드·릴스는 서로 막지 않는다 (피드 없이 릴스만 만들어도 됨)
   // v0.9.170 끊겨서 '만드는 중'으로 멈춘 결과물은 막지 않는다 (서버와 같은 15분 기준)
   const live = (r: (typeof p.renders)[number]) => r.status === "running" && now - Date.parse(r.updatedAt) < FASHION_STALE_RENDER_MS;
@@ -362,39 +440,43 @@ function Outputs({ ctl, uploading, upload, onAsk }: { ctl: FashionCtl; uploading
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2 rounded-control border border-line p-3">
           <p className="text-[13px] font-semibold">피드 카드</p>
-          {/* v0.9.171 피드용 이미지: 같은 모델·같은 옷, 배경만 밝은 무지 → 카드에서 오려 붙인 것처럼 */}
-          <div className="space-y-1.5 rounded border border-line bg-subtle/40 p-2" data-fashion-feedlook>
-            <p className="text-[12px] text-fg-muted">
-              피드용 이미지 (배경 없는 모델) — 룩 이미지를 그대로 두고 배경만 밝은 무지로 바꾼 이미지를 만듭니다. 없으면 룩 이미지를 그대로 씁니다. 룩 1개 = 약 {IMAGE_CREDITS}크레딧(≈ $0.02).
-            </p>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={Sparkles}
-              disabled={!feedTodo.length || Boolean(ctl.busy) || feedBusy}
-              onClick={() => onAsk({ jobs: feedTodo.map((l) => ({ target: { type: "feedlook", lookId: l.id } })), title: `피드용 이미지 ${feedTodo.length}개 만들기` })}
-              data-make-feedlooks
-            >
-              {feedBusy ? "만드는 중… (자동 확인)" : feedTodo.length ? `피드용 이미지 만들기 (${feedTodo.length}개)` : "모든 룩에 피드용 이미지 있음"}
-            </Button>
-            {ready.map((l) => (
-              <div key={l.id} className="flex items-start gap-2">
-                <span className="w-14 shrink-0 pt-1 text-[11.5px] font-medium text-fg-muted">{l.name}</span>
-                <div className="min-w-0 flex-1">
-                  <ImageStrip list={l.feedImages ?? []} urls={ctl.urls} empty="아직 없음 (룩 이미지로 들어감)" onChange={(next) => ctl.edit("looks", p.looks.map((x) => (x.id === l.id ? { ...x, feedImages: next } : x)))} />
-                </div>
-                <Button size="sm" variant="ghost" disabled={Boolean(ctl.busy) || feedBusy} onClick={() => onAsk({ jobs: [{ target: { type: "feedlook", lookId: l.id } }], title: `${l.name} 피드용 이미지 만들기` })}>
-                  {l.feedImages?.length ? "다시" : "만들기"}
-                </Button>
-              </div>
-            ))}
-          </div>
+          <p className="text-[12px] text-fg-muted">유형: <b>{feedFmt.label}</b> — {feedFmt.hint} (③에서 바꿈)</p>
+          {feedFmt.image === "look" ? (
+            <ExtraImages ctl={ctl} kind="feedlook" title="피드용 이미지" hint="룩 이미지를 그대로 두고 배경만 밝은 무지로 바꿔, 카드에 오려 붙인 것처럼 들어갑니다. 없으면 룩 이미지를 그대로 씁니다." empty="아직 없음 (룩 이미지로 들어감)" onAsk={onAsk} />
+          ) : (
+            <ExtraImages
+              ctl={ctl}
+              kind="flatlook"
+              title={feedFmt.image === "hanging" ? "벽에 건 코디 이미지" : "플랫레이 이미지"}
+              hint={feedFmt.image === "hanging" ? "모델 없이 이 룩의 제품 사진으로 '벽에 건 코디'를 만듭니다 (위쪽에 색 칩이 들어감)." : "모델 없이 이 룩의 제품 사진을 바닥에 펼쳐 놓은 코디 사진을 만듭니다 (모든 장 같은 바닥·빛)."}
+              empty="아직 없음 (룩 이미지로 들어감)"
+              onAsk={onAsk}
+            />
+          )}
+          {feedFmt.value === "palette" && (
+            <div className="flex flex-wrap gap-2 text-[11.5px]" data-fashion-colors>
+              {ready.map((l) => (
+                <span key={l.id} className="flex items-center gap-1 rounded border border-line px-1.5 py-1">
+                  {l.name}
+                  {(l.colors ?? []).map((c) => (
+                    <span key={c.hex + c.name} className="flex items-center gap-0.5">
+                      <span className="size-3 rounded-sm ring-1 ring-line" style={{ background: c.hex }} />
+                      {c.name}
+                    </span>
+                  ))}
+                  {!l.colors?.length && <span className="text-fg-subtle">색 없음 — ③ AI 로 문구 쓰기</span>}
+                </span>
+              ))}
+            </div>
+          )}
           <Button variant="primary" icon={ImageIcon} disabled={!ready.length || renderingOf("feed") || Boolean(ctl.busy)} onClick={() => void ctl.run("피드 만들기", () => fashionApi.render(p.id, "feed"))} data-render-feed>
-            피드 카드 만들기 ({ready.length + (ready.length ? 1 : 0)}장)
+            피드 만들기 ({feedFmt.value === "card" ? ready.length + (ready.length ? 1 : 0) : ready.length}장)
           </Button>
         </div>
         <div className="space-y-2 rounded-control border border-line p-3">
           <p className="text-[13px] font-semibold">릴스</p>
+          <p className="text-[12px] text-fg-muted">유형: <b>{reelFmt.label}</b> — {reelFmt.hint} (③에서 바꿈)</p>
+          {reelFmt.unbox && <ExtraImages ctl={ctl} kind="unboxlook" title="언박싱 컷" hint="이 룩의 대표 제품을 손으로 꺼내 펼쳐 보여 주는 컷을 만들어, 룩 앞에 넣습니다." empty="아직 없음 (언박싱 컷 없이 룩만)" onAsk={onAsk} />}
           <SegmentedControl value={s.reelStyle} onChange={(v) => ctl.edit("settings", { ...s, reelStyle: v as "a" | "b" })} options={[{ value: "a", label: "(가) 사진 + 움직임 · 무료" }, { value: "b", label: "(나) AI 영상 · 룩마다 약 $0.16" }]} />
           {s.reelStyle === "b" && <LookClips ctl={ctl} upload={upload} uploading={uploading} />}
           <div className="flex flex-wrap items-center gap-2">

@@ -74,7 +74,8 @@ export function fashionKeys(p: FashionProject): string[] {
     ...p.items.map((i) => i.imageKey ?? ""),
     p.model.photoKey ?? "",
     ...p.model.images.map((i) => i.key),
-    ...p.looks.flatMap((l) => [...l.images.map((i) => i.key), ...(l.clips ?? []).map((c) => c.key)]),
+    // v0.9.181 피드용·플랫레이·언박싱 이미지도 (v0.9.171 피드용 이미지 미리보기가 빠져 있던 것)
+    ...p.looks.flatMap((l) => [...l.images, ...(l.feedImages ?? []), ...(l.flatImages ?? []), ...(l.unboxImages ?? [])].map((i) => i.key).concat((l.clips ?? []).map((c) => c.key))),
     ...p.renders.flatMap((r) => r.keys),
     ...p.tracks.map((t) => t.key),
   ].filter(Boolean);
