@@ -6,7 +6,7 @@ describe("stayTimeline (v0.9.171 AI 숙소: 영상과 대사 따로)", () => {
     const tl = stayTimeline([0.8, 0.9, 1.0], [null, null, null], 5);
     expect(tl.cuts).toEqual([STAY_AUTO_CUT_SEC, STAY_AUTO_CUT_SEC, STAY_AUTO_CUT_SEC]);
     expect(tl.lines[1].from).toBeCloseTo(0.2 + 0.8 + 0.25, 3);
-    expect(tl.total).toBeCloseTo(7.5, 3);
+    expect(tl.total).toBeCloseTo(3 * STAY_AUTO_CUT_SEC, 3);
     expect(tl.overflow).toBe(false);
   });
   it("정한 컷 시간은 그대로, 대사가 길면 자동 컷부터 늘린다 (최대 5초)", () => {

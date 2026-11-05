@@ -326,3 +326,44 @@ export function endingTarget(f: { examples?: { text: string }[]; guideline?: str
   const noBanmal = maxBanmal !== null && total < 10 ? "말끝 규칙: 반말로 줄을 끝내지 않는다 ('~해·~야·~지·~어·~거든·~잖아·~네', '~다', '~고·~인데·~거나·~해서' 같은 이어지는 말 포함). 줄마다 '~요' 존댓말로 끝낸다 — 이어서 말할 때도 '~는데요·~고요·~거든요' ('~니다' 금지)." : null;
   return { maxYo: null, maxBanmal, rule: fromExamples ?? noBanmal };
 }
+
+/**
+ * v0.9.174 대본 한 줄 길이 (공백 포함). YouTube 제품 홍보 영상·영상 자동 제작은 8~10자.
+ * 긴 줄은 띄어쓰기 자리에서만 나눈다 — 낱말 중간('지/금')에서는 절대 끊지 않는다.
+ * 줄 수가 가장 적게, 그 안에서 줄 길이가 고르게 (마지막에 '요.' 처럼 짧은 조각이 남지 않게).
+ * 한 낱말이 max 보다 길면 그 낱말은 한 줄로 둔다.
+ */
+export const SCRIPT_LINE = { min: 8, max: 10 } as const;
+
+export function wrapLine(line: string, max: number = SCRIPT_LINE.max): string[] {
+  const t = line.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return [t];
+  const words = t.split(" ");
+  const n = words.length;
+  const len = (i: number, j: number) => words.slice(i, j).join(" ").length;
+  // best[i] = words[i..] 를 나누는 가장 좋은 방법: [줄 수, 가장 긴 넘침, 길이 차 제곱 합]
+  const best: { lines: number; over: number; cost: number; next: number }[] = new Array(n + 1);
+  best[n] = { lines: 0, over: 0, cost: 0, next: n };
+  for (let i = n - 1; i >= 0; i--) {
+    let pick: (typeof best)[number] | null = null;
+    for (let j = i + 1; j <= n; j++) {
+      const l = len(i, j);
+      if (l > max && j > i + 1) break;
+      const rest = best[j];
+      const cand = { lines: rest.lines + 1, over: Math.max(rest.over, Math.max(0, l - max)), cost: rest.cost + (max - Math.min(l, max)) ** 2, next: j };
+      if (!pick || cand.over < pick.over || (cand.over === pick.over && (cand.lines < pick.lines || (cand.lines === pick.lines && cand.cost < pick.cost)))) pick = cand;
+    }
+    best[i] = pick!;
+  }
+  const out: string[] = [];
+  for (let i = 0; i < n; i = best[i].next) out.push(words.slice(i, best[i].next).join(" "));
+  return out;
+}
+
+/** 대본 전체: 줄마다 wrapLine (빈 줄·문단은 그대로) */
+export function wrapScript(script: string, max: number = SCRIPT_LINE.max): string {
+  return script
+    .split("\n")
+    .flatMap((l) => (l.trim() ? wrapLine(l, max) : [l]))
+    .join("\n");
+}

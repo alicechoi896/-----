@@ -1,6 +1,6 @@
 import "server-only";
 import { CLAUDE_ONLY_FEATURES, forcedAi, withClaude } from "../providers/ai-force";
-import { NO_RATING_RULE, banmalRatio, endingTarget, followShare, yoRatio } from "@/lib/script-format";
+import { NO_RATING_RULE, banmalRatio, endingTarget, followShare, wrapScript, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
@@ -200,6 +200,13 @@ async function enforceEndings(p: Prepared, output: Record<string, GeneratedValue
   }
 }
 
+/** v0.9.174 YouTube 제품 홍보 영상(·자동 제작) 대본: 10자 넘는 줄은 띄어쓰기에서 나눈다 (낱말 중간은 안 끊음) */
+const WRAP_FEATURES = new Set(["yt-product-video"]);
+function wrapScriptLines(featureId: string, output: Record<string, GeneratedValue>): void {
+  if (!WRAP_FEATURES.has(featureId) || !Array.isArray(output.script)) return;
+  output.script = (output.script as string[]).map((t) => wrapScript(String(t)));
+}
+
 async function finish(
   p: Prepared,
   output: Record<string, GeneratedValue>,
@@ -209,6 +216,7 @@ async function finish(
   const { feature, config, featureId, channelId, userId, input, context, template } = p;
   mergeUserKeywords(config, input, output);
   await enforceEndings(p, output);
+  wrapScriptLines(featureId, output);
   if (typeof output.description === "string") output.description = cleanDescription(output.description);
   if (context.honestyGuard) {
     const violations = findHonestyViolations(JSON.stringify(output));
@@ -616,6 +624,7 @@ export const contentGenerationService = {
       variables: { featureId: content.featureId, outputs: sections, input, context, previous: content.output, append },
     });
     const fresh = normalizeOutput(sections, result.data);
+    wrapScriptLines(content.featureId, fresh);
     const userEdits = { ...(content.context.userEdits ?? {}) };
     const picks = { ...(content.context.picks ?? {}) };
     let output: Record<string, GeneratedValue>;

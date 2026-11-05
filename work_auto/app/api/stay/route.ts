@@ -18,12 +18,12 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/stay { action, id, ... } — 누를 때만 (자동 재시도 없음)
- * create · update · upload(사진 1장) · product(제품 라이브러리 숙소에서 사진·메모, 무료) · coupang(주소 1번 시도, 무료) · script(AI 1번) · translate(움직임 한글 번역, AI 1번) · animate(Kie, 사진 1장 = 1회 과금, confirmed 필수) · status(무료) · render · remove
+ * create · update · upload(사진 1장) · product(제품 라이브러리 숙소에서 사진·메모, 무료) · coupang(주소 1번 시도, 무료) · script(AI 1번) · translate(움직임 한글 번역, AI 1번) · animate(Kie, 사진 1장 = 1회 과금, confirmed 필수) · angles(다른 각도 사진, Kie 1장 = 4크레딧, confirmed 필수) · status(무료) · render · remove
  */
 export async function POST(request: Request) {
   return handle(async () => {
     const session = await requireAccess("ai-stay");
-    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; dataUrl?: unknown; url?: unknown; confirmed?: unknown; productId?: unknown; replace?: unknown }>(request);
+    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; dataUrl?: unknown; url?: unknown; confirmed?: unknown; productId?: unknown; replace?: unknown; keys?: unknown; angles?: unknown }>(request);
     switch (b.action) {
       case "create":
         return stayService.create(b);
@@ -43,6 +43,8 @@ export async function POST(request: Request) {
         return stayService.script(b);
       case "animate":
         return stayService.animate(b);
+      case "angles":
+        return stayService.angles(b);
       case "status":
         return stayService.status(b);
       case "render": {

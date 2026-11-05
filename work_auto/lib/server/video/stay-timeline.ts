@@ -7,7 +7,8 @@
 export const STAY_LEAD_SEC = 0.2;
 export const STAY_LINE_GAP_SEC = 0.25;
 export const STAY_TAIL_SEC = 0.8;
-export const STAY_AUTO_CUT_SEC = 2.5;
+/** v0.9.174 레퍼런스처럼 짧게 (16초 12컷 ≈ 1.4초). 대사가 길면 자동 컷부터 늘어난다 */
+export const STAY_AUTO_CUT_SEC = 1.6;
 
 export interface StayTimeline {
   /** 컷 길이 */

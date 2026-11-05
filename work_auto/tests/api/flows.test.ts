@@ -312,8 +312,11 @@ describe("트렌드·스타일·오류 기록", () => {
       expect(g.output.titles).toBeUndefined();
       expect(g.output.script).toHaveLength(3);
       for (const sc of g.output.script as string[]) {
-        expect(sc.split("\n")[0]).toBe(hook);
-        expect(sc.split("\n").at(-1)).toBe(cta);
+        // v0.9.174 대본 한 줄 8~10자: Hook·CTA 가 길면 띄어쓰기에서 나뉘므로 줄을 이어서 본다
+        const flat = sc.replace(/\n+/g, " ");
+        expect(flat.startsWith(hook)).toBe(true);
+        expect(flat.endsWith(cta)).toBe(true);
+        for (const line of sc.split("\n")) if (line.includes(" ")) expect(line.length).toBeLessThanOrEqual(10);
       }
       expect(g.output.description).toBeTruthy();
       expect((g.output.tags as string[]).length).toBeGreaterThan(0);

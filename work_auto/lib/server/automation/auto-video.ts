@@ -1,7 +1,6 @@
 import "server-only";
 import { withClaude } from "../providers/ai-force";
 import { cutThumb, fitThumbs } from "@/lib/video-production/thumb";
-import { makeThumbnail } from "../video/thumbnail";
 import type { GeneratedContent } from "@/lib/types";
 import type { VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { AppError } from "../http";
@@ -623,10 +622,8 @@ async function produceItemLocked(owner: string, settings: AutoVideoSettings, dat
       keywords: list(out2.keywords).slice(0, 30),
       tags: list(out2.tags).slice(0, 30),
     });
-    // v0.9.147: 섬네일 이미지도 자동으로 (실패해도 영상은 그대로)
-    const thumb = await makeThumbnail(done.id).catch(() => null);
-    if (thumb) await patchItem(date, itemId, { thumbKeys: thumb.keys });
-    console.info("[AutoVideo] done", JSON.stringify({ date, item: itemId, product: item.productId, ms: Date.now() - t0, thumb: Boolean(thumb) }));
+    // v0.9.174: 섬네일 이미지는 만들지 않는다 (사용자 요청). 섬네일 제목은 영상 상단 제목 2번째 줄로만
+    console.info("[AutoVideo] done", JSON.stringify({ date, item: itemId, product: item.productId, ms: Date.now() - t0 }));
     return finished!.items.find((x) => x.id === itemId)!;
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);
@@ -645,8 +642,7 @@ export async function relinkItemJob(date: string, itemId: string, jobId: string)
   const job = (await getRepositories().videoJobs.get(jobId)) as VideoJob | null;
   if (!job || !job.outputPath || job.status === "failed") throw new AppError("VALIDATION", "다시 만든 영상이 아직 없습니다.");
   if (job.plan.contentId !== (await getRepositories().videoJobs.get(it.jobId ?? ""))?.plan.contentId) throw new AppError("VALIDATION", "다른 원고의 영상입니다.");
-  const thumb = await makeThumbnail(job.id).catch(() => null);
-  await patchItem(date, itemId, { thumbKeys: thumb?.keys ?? it.thumbKeys ?? null, jobId: job.id, videoKey: job.outputPath, jobStatus: job.status, issues: job.qa?.issues ?? [], thumbnailTitle: job.plan.topLine2 || it.thumbnailTitle, title: job.plan.selectedTitle || it.title });
+  await patchItem(date, itemId, { jobId: job.id, videoKey: job.outputPath, jobStatus: job.status, issues: job.qa?.issues ?? [], thumbnailTitle: job.plan.topLine2 || it.thumbnailTitle, title: job.plan.selectedTitle || it.title });
   return { ok: true };
 }
 

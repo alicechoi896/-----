@@ -254,7 +254,20 @@ export function cleanFrame(raw: unknown): { zoom: number; x: number; y: number }
 /** v0.9.156 AI 숙소 영상: 사진 최대 장수 (사진 1장 = AI 컷 1개 = Kie 1회 과금) */
 /** v0.9.169 AI 숙소 컷 하나 최대 시간(초) — AI 컷(Wan) 길이가 5초 */
 export const STAY_CUT_MAX_SEC = 5;
-export const STAY_MAX_PHOTOS = 12;
+/** v0.9.174 다른 각도 컷이 더해지니 넉넉히 (레퍼런스 16초 12컷) */
+export const STAY_MAX_PHOTOS = 20;
+/**
+ * v0.9.174 AI 숙소: 사진 1장 → 같은 장소를 다른 자리에서 찍은 것처럼 (레퍼런스: 노천탕 하나를 넓게·처마 밑·물 가까이·낮게 5컷)
+ * Nano Banana Edit 1장 = 4크레딧 (≈ $0.02). 만든 각도 사진도 [살아 움직이게]는 따로 (1장 약 $0.10)
+ */
+export const STAY_ANGLE_CREDITS = 4;
+export const STAY_ANGLES: { value: string; label: string; en: string }[] = [
+  { value: "wide", label: "넓게", en: "a wide establishing shot from a far corner, showing the whole space and the view beyond it" },
+  { value: "low", label: "낮게 (물·바닥 가까이)", en: "a low angle just above the water or floor surface, with the surface and rising steam in the foreground" },
+  { value: "side", label: "옆에서", en: "a three-quarter view from the side, looking along the length of the space toward the scenery" },
+  { value: "close", label: "가까이 (디테일)", en: "a close-up detail shot of the most beautiful element (water ripples, wood grain, stone, textiles), background softly out of focus" },
+  { value: "out", label: "밖을 바라보며", en: "a view from inside looking out through the opening, window or eaves toward the outside scenery, framed by the architecture" },
+];
 
 /** 예상 비용 (모르는 모델은 null) */
 export function estimateAiClipUsd(modes: ("product" | "text")[]): { usd: number; unknown: number } {

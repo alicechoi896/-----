@@ -3,7 +3,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import type { SessionInfo } from "@/lib/types";
 import type { AiClip, VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { aiSourceId } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
+import { AI_CLIP_CONFIG, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { lastVoiceSettings } from "../automation/auto-video";
 import { AppError } from "../http";
@@ -40,6 +40,19 @@ export interface StayPhoto {
   motionKo?: string;
   /** v0.9.169 이 컷 보이는 시간(초). 없으면 대사 길이만큼 */
   sec?: number | null;
+  /** v0.9.174 이 사진이 다른 사진에서 만든 각도면: 원래 사진 key · 각도 */
+  fromKey?: string | null;
+  angle?: string | null;
+}
+/** v0.9.174 각도 사진 작업 (Kie Nano Banana Edit) */
+export interface StayAngleTask {
+  id: string;
+  sourceKey: string;
+  angle: string;
+  taskId: string | null;
+  state: "waiting" | "success" | "fail";
+  error: string | null;
+  createdAt: string;
 }
 export interface StayProject {
   id: string;
@@ -55,6 +68,8 @@ export interface StayProject {
   clipKeys: Record<string, string>;
   /** v0.9.159 가져온 제품 라이브러리 숙소 */
   productId?: string | null;
+  /** v0.9.174 다른 각도 만들기 작업 */
+  angleTasks?: StayAngleTask[];
   jobId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -159,7 +174,7 @@ export const stayService = {
           const motion = String(x.motion ?? "").replace(/\s+/g, " ").trim().slice(0, 600);
           // 영어 명령어를 고치면 예전 번역은 맞지 않으니 비운다
           const motionKo = motion === old.motion ? old.motionKo : x.motionKo !== undefined && x.motionKo !== old.motionKo ? str(x.motionKo, 400) : "";
-          return { key: old.key, line: str(x.line, 60), motion, motionKo, sec: cleanSec(x.sec) };
+          return { key: old.key, line: str(x.line, 60), motion, motionKo, sec: cleanSec(x.sec), fromKey: old.fromKey ?? null, angle: old.angle ?? null };
         })
         .filter((x): x is StayPhoto => Boolean(x));
       const keep = new Set(next.map((x) => x.key));
@@ -293,11 +308,11 @@ export const stayService = {
     } else {
       const images = await Promise.all(p.photos.map(async (ph) => smallJpeg((await videoStorage.download(ph.key))!)));
       const parts = [
-        { type: "text" as const, text: `숙소: ${p.name}${p.note ? `\n메모(사실 정보): ${p.note}` : ""}\n아래 사진 ${n}장이 영상 컷 순서다. 사진마다 번호를 붙여 보낸다.` },
+        { type: "text" as const, text: `숙소: ${p.name}${p.note ? `\n메모(사실 정보): ${p.note}` : ""}\n아래 사진 ${n}장이 영상 컷 순서다. 사진마다 번호를 붙여 보낸다.${sameGroups(p)}` },
         ...images.flatMap((data, i) => [{ type: "text" as const, text: `[사진 ${i + 1}]` }, { type: "image" as const, mediaType: "image/jpeg" as const, data }]),
         {
           type: "text" as const,
-          text: `세로 숏폼 숙소 소개 영상(약 ${Math.round(n * 1.5)}초)을 만든다. 컷 하나 = 사진 하나 = 1~2초.
+          text: `세로 숏폼 숙소 소개 영상(약 ${Math.round(n * 1.5)}초)을 만든다. 컷 하나 = 사진 하나 = 약 1.5초. 영상은 계속 흐르고 대사는 컷과 따로 이어 읽는다.
 - titleSmall: 영상 처음 2~3초 위쪽 작은 줄 (상황·날씨·계절, 8자 이내, 예: "비 오는 날")
 - titleBig: 위쪽 큰 줄 (숙소의 가장 센 한 방, 12자 이내, 예: "액자창 앞 히노끼탕")
 - cuts: 사진 순서대로 ${n}개. line = 그 사진 위 가운데 자막이자 내레이션. 4~14자, 한 호흡, 존댓말 구어체("~예요/~고요/~거죠"). 컷을 이어 읽으면 한 문장 흐름이 되게 (예: "글램핑인데" → "돌 노천탕이" → "료칸 그대로예요" → … → "지금 저장해두세요"). 첫 컷은 궁금하게, 마지막 컷은 저장·예약 유도.
@@ -374,17 +389,97 @@ export const stayService = {
     return { project: await withUrls(await save(owner, list, p)), created };
   },
 
-  /** 상태 확인 (무료) */
+  /**
+   * v0.9.174 [다른 각도 만들기] 사진마다 고른 각도로 같은 장소를 다른 자리에서 찍은 사진 (Kie Nano Banana Edit, 1장 = 4크레딧).
+   * 확인(confirmed) 필수, 자동 재시도 없음. 끝나면 원래 사진 바로 뒤에 들어간다 (status)
+   */
+  async angles(input: { id?: unknown; keys?: unknown; angles?: unknown; confirmed?: unknown }) {
+    if (input.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "확인 창에서 [만들기]를 눌러 주세요.", 409);
+    const owner = await getCurrentUserId();
+    const { list, p } = await own(owner, input.id);
+    const provider = await getVideoAIProvider();
+    if (!provider) throw new AppError("KIE_NOT_CONNECTED", "Kie AI 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 Kie AI 키를 넣어 주세요.", 409);
+    const keys = (Array.isArray(input.keys) ? input.keys.map(String) : []).filter((k) => p.photos.some((ph) => ph.key === k));
+    const angles = (Array.isArray(input.angles) ? input.angles.map(String) : []).filter((a) => STAY_ANGLES.some((x) => x.value === a));
+    if (!keys.length || !angles.length) throw new AppError("VALIDATION", "사진과 각도를 골라 주세요.");
+    const waiting = (p.angleTasks ?? []).filter((t) => t.state === "waiting").length;
+    const room = STAY_MAX_PHOTOS - p.photos.length - waiting;
+    const jobs = keys.flatMap((k) => angles.map((a) => ({ k, a }))).slice(0, Math.max(0, Math.min(12, room)));
+    if (!jobs.length) throw new AppError("VALIDATION", `사진은 ${STAY_MAX_PHOTOS}장까지입니다. 안 쓰는 사진을 빼 주세요.`);
+    const tasks = (p.angleTasks ??= []);
+    const uploaded = new Map<string, string>();
+    let created = 0;
+    for (const { k, a } of jobs) {
+      const t: StayAngleTask = { id: createId("sa"), sourceKey: k, angle: a, taskId: null, state: "waiting", error: null, createdAt: nowIso() };
+      try {
+        if (!uploaded.has(k)) {
+          const buf = await videoStorage.download(k);
+          if (!buf) throw new AppError("NOT_FOUND", "사진 파일이 없습니다.", 404);
+          uploaded.set(k, await provider.uploadImage(buf));
+        }
+        const ang = STAY_ANGLES.find((x) => x.value === a)!;
+        const prompt = `Re-photograph EXACTLY the same place shown in the reference photo of a Korean accommodation, from a different camera position: ${ang.en}. Keep the same architecture, materials, colors, furniture, season, weather and lighting; do not add or remove objects, and do not change the place. Photorealistic travel photography, natural light, vertical 9:16 composition. No people, no text, no logo, no watermark.`;
+        const r = await provider.createTask("google/nano-banana-edit", { prompt, image_urls: [uploaded.get(k)!], output_format: "jpeg", aspect_ratio: "9:16" });
+        t.taskId = r.taskId;
+        created++;
+        console.info("[Stay] angle", JSON.stringify({ project: p.id, angle: a, taskId: r.taskId }));
+      } catch (e) {
+        Object.assign(t, { state: "fail", error: e instanceof Error ? e.message.slice(0, 200) : "만들지 못했습니다." });
+        tasks.push(t);
+        if (e instanceof VideoAIError && (e.code === "AUTH" || e.code === "PAYMENT")) break;
+        continue;
+      }
+      tasks.push(t);
+    }
+    p.angleTasks = tasks.slice(-60);
+    return { project: await withUrls(await save(owner, list, p)), created };
+  },
+
+  /** 상태 확인 (무료): AI 컷 + 각도 사진 */
   async status(input: { id?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
+    let changed = false;
     const busy = p.clips.filter((c) => c.state === "waiting" || c.state === "generating");
     if (busy.length) {
       const r = await aiClipService.status({ clips: p.clips });
       const byId = new Map(r.clips.map((c) => [c.id, c]));
       p.clips = p.clips.map((c) => ({ ...c, ...(byId.get(c.id) ?? {}), imageUrl: c.imageUrl }));
-      await save(owner, list, p);
+      changed = true;
     }
+    const angleBusy = (p.angleTasks ?? []).filter((t) => t.state === "waiting" && t.taskId);
+    if (angleBusy.length) {
+      const provider = await getVideoAIProvider();
+      for (const t of provider ? angleBusy : []) {
+        try {
+          const st = await provider!.status(t.taskId!);
+          if (st.state === "waiting" || st.state === "generating") continue;
+          changed = true;
+          if (st.state === "fail" || !st.resultUrl) {
+            Object.assign(t, { state: "fail", error: (st.error ?? "만들지 못했습니다.").slice(0, 200) });
+            continue;
+          }
+          if (new URL(st.resultUrl).protocol !== "https:") throw new Error("결과 주소가 https 가 아닙니다.");
+          const res = await safeFetch(st.resultUrl, { signal: AbortSignal.timeout(60_000) });
+          if (!res.ok) throw new Error(`사진을 받지 못했습니다 (HTTP ${res.status}).`);
+          const src = p.photos.find((x) => x.key === t.sourceKey);
+          if (!src || p.photos.length >= STAY_MAX_PHOTOS) throw new Error(src ? `사진은 ${STAY_MAX_PHOTOS}장까지입니다.` : "원래 사진을 뺐습니다.");
+          const key = `${owner}/stay/${p.id}/p${createId("ph").slice(-8)}.jpg`;
+          await videoStorage.put(key, await coverJpeg(Buffer.from(await res.arrayBuffer())), "image/jpeg");
+          // 원래 사진(과 이미 들어간 같은 사진의 각도들) 바로 뒤에, 움직임은 원래 사진 것을 이어받는다
+          let at = p.photos.findIndex((x) => x.key === src.key);
+          while (at + 1 < p.photos.length && p.photos[at + 1].fromKey === src.key) at++;
+          p.photos.splice(at + 1, 0, { key, line: "", motion: src.motion, motionKo: src.motionKo, sec: null, fromKey: src.key, angle: t.angle });
+          t.state = "success";
+        } catch (e) {
+          if (!(e instanceof VideoAIError)) {
+            Object.assign(t, { state: "fail", error: (e instanceof Error ? e.message : "받지 못했습니다.").slice(0, 200) });
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) await save(owner, list, p);
     return withUrls(p);
   },
 
@@ -433,6 +528,15 @@ function cleanSec(v: unknown): number | null {
   const n = Number(v);
   if (v == null || v === "" || !Number.isFinite(n) || n <= 0) return null;
   return Math.min(STAY_CUT_MAX_SEC, Math.max(1, Math.round(n * 2) / 2));
+}
+
+/** v0.9.174 같은 장소를 다른 각도로 만든 컷 묶음 → 대본 AI 에 알림 (대사는 컷마다 끊지 않고 이어서) */
+function sameGroups(p: StayProject): string {
+  const idx = new Map(p.photos.map((ph, i) => [ph.key, i + 1]));
+  const groups = new Map<string, number[]>();
+  for (const [i, ph] of p.photos.entries()) if (ph.fromKey && idx.has(ph.fromKey)) groups.set(ph.fromKey, [...(groups.get(ph.fromKey) ?? [idx.get(ph.fromKey)!]), i + 1]);
+  if (!groups.size) return "";
+  return `\n같은 장소를 여러 각도로 보여 주는 컷 묶음: ${[...groups.values()].map((g) => `[${g.join("·")}]`).join(" ")} — 묶음 안에서는 한 문장을 이어서 나눠 말한다 (예: "보는 사람마다 다" → "노천탕이에요" → "처마 밑 탕에").`;
 }
 
 // AI 컷 ↔ 사진 잇기 (clipKeys: 컷 id → 사진 key)

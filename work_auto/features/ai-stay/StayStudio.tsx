@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Film, ImagePlus, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowUp, BedDouble, Film, ImagePlus, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Badge, Button, EmptyState, ErrorState, Input, LoadingState, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import type { AiClip, VideoJob } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS } from "@/lib/video-production/config";
+import { AI_CLIP_CONFIG, STAY_ANGLE_CREDITS, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS } from "@/lib/video-production/config";
+import { LinkButton } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 
 /** v0.9.169 컷 시간 고르기: 자동 또는 1~5초. v0.9.171 영상과 대사는 따로 흐른다 (대사가 길면 자동 컷부터 늘림) */
-const SEC_OPTIONS = [{ value: "", label: "자동 (2.5초~)" }, ...[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].filter((v) => v <= STAY_CUT_MAX_SEC).map((v) => ({ value: String(v), label: `${v}초` }))];
+const SEC_OPTIONS = [{ value: "", label: "자동 (1.6초~)" }, ...[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].filter((v) => v <= STAY_CUT_MAX_SEC).map((v) => ({ value: String(v), label: `${v}초` }))];
 
 /**
  * AI 숙소 영상 (v0.9.157) — 사진 → AI 대본·움직임 → Kie 로 살아 움직이게 → 9:16 영상 (처음 몇 초 위쪽 제목 + 가운데 자막 + AI 내레이션)
@@ -22,6 +24,16 @@ interface Photo {
   motionKo?: string;
   /** v0.9.169 컷 보이는 시간(초), 없으면 대사 길이만큼 */
   sec?: number | null;
+  /** v0.9.174 다른 사진에서 만든 각도 */
+  fromKey?: string | null;
+  angle?: string | null;
+}
+interface AngleTask {
+  id: string;
+  sourceKey: string;
+  angle: string;
+  state: "waiting" | "success" | "fail";
+  error: string | null;
 }
 interface Project {
   id: string;
@@ -36,6 +48,7 @@ interface Project {
   clipKeys: Record<string, string>;
   /** v0.9.159 가져온 제품 라이브러리 숙소 */
   productId?: string | null;
+  angleTasks?: AngleTask[];
   jobId: string | null;
   photoUrls: Record<string, string>;
   updatedAt: string;
@@ -89,6 +102,9 @@ export function StayStudio() {
   // v0.9.159 제품 라이브러리의 숙소 (분류 '숙소')
   const [stays, setStays] = useState<{ id: string; name: string }[] | null>(null);
   const [stayPick, setStayPick] = useState("");
+  // v0.9.174 다른 각도 만들기: 고른 사진·각도
+  const [anglePick, setAnglePick] = useState<Set<string>>(new Set());
+  const [angleKinds, setAngleKinds] = useState<Set<string>>(new Set(["wide", "low", "close"]));
   useEffect(() => {
     void api.products
       .list()
@@ -116,7 +132,7 @@ export function StayStudio() {
   }, [loadList]);
 
   // Kie 상태 확인 (무료): 만드는 중인 컷이 있을 때만 8초마다
-  const making = Boolean(p?.clips.some((c) => c.state === "waiting" || c.state === "generating"));
+  const making = Boolean(p?.clips.some((c) => c.state === "waiting" || c.state === "generating") || p?.angleTasks?.some((t) => t.state === "waiting"));
   useEffect(() => {
     if (!p || !making) return;
     const t = setInterval(() => void call<Project>({ action: "status", id: p.id }).then(setP).catch(() => undefined), 8000);
@@ -141,11 +157,28 @@ export function StayStudio() {
       setBusy(null);
     }
   }
+  const create = (productId: string) =>
+    run("create", async () => {
+      const pick = stays?.find((x) => x.id === productId);
+      let np = await call<Project>({ action: "create", name: pick?.name ?? "새 숙소 영상" });
+      let added = 0;
+      if (pick) {
+        const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: np.id, productId: pick.id });
+        np = r.project;
+        added = r.added;
+      }
+      setList((l) => [{ id: np.id, name: np.name, updatedAt: np.updatedAt }, ...(l ?? [])]);
+      setP(np);
+      setJob(null);
+      if (pick) setMsg({ tone: added ? "info" : "warning", text: added ? `'${pick.name}' 사진 ${added}장과 숙소 정보로 새 영상을 만들었습니다. 사진마다 [다른 각도 만들기]로 컷을 늘려 보세요.` : `'${pick.name}'에 사진이 없습니다. 제품 라이브러리 › ${pick.name} › 내 사진에 숙소 사진을 올린 뒤 [사진 다시 가져오기]를 눌러 주세요.` });
+    });
   const save = (patch: Partial<Project>) => p && run("save", async () => setP(await call<Project>({ action: "update", id: p.id, ...patch })));
   const clipOf = (key: string) => {
     const id = Object.entries(p?.clipKeys ?? {}).find(([, k]) => k === key)?.[0];
     return id ? p?.clips.find((c) => c.id === id) : undefined;
   };
+  const angleCount = Math.min(12, anglePick.size * angleKinds.size);
+  const angleFails = (p?.angleTasks ?? []).filter((t) => t.state === "fail").slice(-3).map((t) => t.error ?? "실패");
   const linked = p?.productId ? (stays?.find((x) => x.id === p.productId) ?? { id: p.productId, name: p.name }) : null;
   const todo = p ? p.photos.filter((ph) => !clipOf(ph.key) || clipOf(ph.key)!.state === "fail").length : 0;
   const usd = (todo * (AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2);
@@ -156,58 +189,67 @@ export function StayStudio() {
 
   return (
     <div className="space-y-5" data-stay>
-      <div className="flex flex-wrap items-center gap-2">
+      {/* v0.9.174 숙소도 제품: 제품 라이브러리 숙소를 골라 시작 (항상 보이게) */}
+      <SectionCard title="숙소 고르기" icon={BedDouble} description="제품 라이브러리에서 분류가 '숙소'인 제품을 고르면 그 숙소의 내 사진·이름·특징으로 새 영상을 만듭니다." data-stay-start>
+        {stays && stays.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Select className="w-72" value={stayPick} placeholder="숙소 고르기" onChange={(e) => setStayPick(e.target.value)} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="제품 라이브러리 숙소" data-stay-pick />
+            <Button variant="primary" icon={Plus} loading={busy === "create"} disabled={!stayPick} onClick={() => void create(stayPick)} data-stay-new>
+              이 숙소로 새 영상
+            </Button>
+            <LinkButton href="/tools/product-library" variant="ghost" size="sm">
+              제품 라이브러리
+            </LinkButton>
+          </div>
+        ) : (
+          <div className="rounded-control border border-dashed border-line p-3 text-[12.5px]" data-stay-empty>
+            <p className="font-semibold">제품 라이브러리에 숙소가 아직 없습니다.</p>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-fg-muted">
+              <li>
+                <b>제품 상세페이지 학습</b>에서 숙소 상품 주소로 학습하고, 저장할 때 <b>분류 = 숙소</b>를 고릅니다 (이미 저장했으면 제품 상세 위쪽 분류를 숙소로).
+              </li>
+              <li>
+                제품 상세의 <b>내 사진</b>에 숙소 사진을 올립니다 (순서대로 컷이 됩니다).
+              </li>
+              <li>여기로 돌아오면 숙소를 골라 바로 영상을 만들 수 있습니다.</li>
+            </ol>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <LinkButton href="/tools/product-learning" size="sm" variant="secondary">
+                제품 상세페이지 학습
+              </LinkButton>
+              <LinkButton href="/tools/product-library" size="sm" variant="secondary">
+                제품 라이브러리
+              </LinkButton>
+              <Button size="sm" variant="ghost" icon={Plus} loading={busy === "create"} onClick={() => void create("")} data-stay-new>
+                사진만으로 새 영상
+              </Button>
+            </div>
+          </div>
+        )}
         {list.length > 0 && (
-          <Select className="w-64" value={p?.id ?? ""} onChange={(e) => void run("open", () => open(e.target.value))} options={list.map((x) => ({ value: x.id, label: x.name }))} aria-label="숙소 영상 고르기" />
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+            <span className="text-[12.5px] text-fg-muted">만든 영상</span>
+            <Select className="w-64" value={p?.id ?? ""} onChange={(e) => void run("open", () => open(e.target.value))} options={list.map((x) => ({ value: x.id, label: x.name }))} aria-label="숙소 영상 고르기" />
+            {p && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={Trash2}
+                onClick={() =>
+                  window.confirm(`'${p.name}'을(를) 지울까요? 올린 사진도 지워집니다.`) &&
+                  void run("remove", async () => {
+                    await call({ action: "remove", id: p.id });
+                    setP(null);
+                    await loadList();
+                  })
+                }
+              >
+                지우기
+              </Button>
+            )}
+          </div>
         )}
-        {/* v0.9.172 숙소도 제품: 제품 라이브러리의 숙소(분류 '숙소')를 골라 그 사진·정보로 새 영상 */}
-        {stays && stays.length > 0 && (
-          <Select className="w-64" value={stayPick} placeholder="숙소 고르기 (제품 라이브러리)" onChange={(e) => setStayPick(e.target.value)} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="제품 라이브러리 숙소" data-stay-pick />
-        )}
-        <Button
-          size="sm"
-          variant={stays?.length ? "primary" : "secondary"}
-          icon={Plus}
-          loading={busy === "create"}
-          disabled={Boolean(stays?.length) && !stayPick}
-          onClick={() =>
-            void run("create", async () => {
-              const pick = stays?.find((x) => x.id === stayPick);
-              let np = await call<Project>({ action: "create", name: pick?.name ?? "새 숙소 영상" });
-              let added = 0;
-              if (pick) {
-                const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: np.id, productId: pick.id });
-                np = r.project;
-                added = r.added;
-              }
-              setList((l) => [{ id: np.id, name: np.name, updatedAt: np.updatedAt }, ...(l ?? [])]);
-              setP(np);
-              setJob(null);
-              if (pick) setMsg({ tone: added ? "info" : "warning", text: added ? `'${pick.name}' 사진 ${added}장과 숙소 정보로 새 영상을 만들었습니다.` : `'${pick.name}'에 사진이 없습니다. 제품 라이브러리 › ${pick.name} › 내 사진에 숙소 사진을 올린 뒤 [사진 다시 가져오기]를 눌러 주세요.` });
-            })
-          }
-          data-stay-new
-        >
-          {stays?.length ? "이 숙소로 새 영상" : "새 숙소 영상"}
-        </Button>
-        {p && (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Trash2}
-            onClick={() =>
-              window.confirm(`'${p.name}'을(를) 지울까요? 올린 사진도 지워집니다.`) &&
-              void run("remove", async () => {
-                await call({ action: "remove", id: p.id });
-                setP(null);
-                await loadList();
-              })
-            }
-          >
-            지우기
-          </Button>
-        )}
-      </div>
+      </SectionCard>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {!p ? (
         <EmptyState icon={ImagePlus} title="숙소 영상이 없습니다" description="[새 숙소 영상]을 누르고 숙소 사진을 넣어 주세요." />
@@ -239,6 +281,11 @@ export function StayStudio() {
                   <a href={`/tools/product-library/${linked.id}`} className="text-[12px] text-brand hover:underline">
                     제품 라이브러리에서 사진 관리 →
                   </a>
+                </div>
+              ) : stays && stays.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                  이 영상에 숙소 연결
+                  <Select className="w-64" value="" placeholder="숙소 고르기" onChange={(e) => e.target.value && void run("product", async () => { const r = await call<{ project: Project; added: number }>({ action: "product", id: p.id, productId: e.target.value }); setP(r.project); setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장을 가져왔습니다.` : "가져올 사진이 없습니다." }); })} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="숙소 연결" />
                 </div>
               ) : (
                 <p className="text-[12px] text-fg-muted">
@@ -307,7 +354,15 @@ export function StayStudio() {
                             ))}
                           </select>
                         </label>
-                        <span className="flex items-center gap-1.5 text-[11.5px]">
+                        <span className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
+                          {ph.fromKey ? (
+                            <Badge tone="info">각도 · {STAY_ANGLES.find((x) => x.value === ph.angle)?.label ?? ph.angle} ({(p.photos.findIndex((x) => x.key === ph.fromKey) + 1) || "?"}번에서)</Badge>
+                          ) : (
+                            <label className="flex items-center gap-1" data-stay-angle-pick>
+                              <input type="checkbox" checked={anglePick.has(ph.key)} onChange={(e) => setAnglePick((o) => { const n = new Set(o); if (e.target.checked) n.add(ph.key); else n.delete(ph.key); return n; })} />
+                              다른 각도 만들기
+                            </label>
+                          )}
                           AI 움직임 <Badge tone={st.tone}>{st.label}</Badge>
                           {c?.error && <span className="truncate text-danger">{c.error}</span>}
                         </span>
@@ -328,6 +383,50 @@ export function StayStudio() {
                 })}
               </ol>
             )}
+          </SectionCard>
+
+          <SectionCard
+            title="①-2 다른 각도 만들기 (AI 사진)"
+            icon={Sparkles}
+            description={`사진 한 장으로 같은 장소를 다른 자리에서 찍은 사진을 만듭니다 (레퍼런스처럼 노천탕 하나를 넓게·낮게·옆에서·가까이). 만든 사진은 원래 사진 바로 뒤에 컷으로 들어갑니다. 1장 약 ${(STAY_ANGLE_CREDITS * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie), 확인 후에만.`}
+            data-stay-angles
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              {STAY_ANGLES.map((a) => (
+                <button
+                  key={a.value}
+                  type="button"
+                  aria-pressed={angleKinds.has(a.value)}
+                  onClick={() => setAngleKinds((o) => { const n = new Set(o); if (n.has(a.value)) n.delete(a.value); else n.add(a.value); return n; })}
+                  className={cn("h-8 rounded-full px-3 text-[12.5px] font-medium ring-1 ring-inset", angleKinds.has(a.value) ? "bg-brand-soft text-brand ring-brand-line" : "text-fg-muted ring-line hover:bg-subtle")}
+                >
+                  {angleKinds.has(a.value) && "✓ "}
+                  {a.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                icon={Sparkles}
+                loading={busy === "angles"}
+                disabled={!angleCount || making}
+                onClick={() =>
+                  window.confirm(`다른 각도 사진 ${angleCount}장을 만들까요?\n예상 비용 약 ${(angleCount * STAY_ANGLE_CREDITS * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie 크레딧 ${angleCount * STAY_ANGLE_CREDITS}). 한 번 누르면 바로 과금됩니다.\n만든 사진을 움직이게 하는 것(③)은 따로 1장 약 ${((AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)}입니다.`) &&
+                  void run("angles", async () => {
+                    const r = await call<{ project: Project; created: number }>({ action: "angles", id: p.id, keys: [...anglePick], angles: [...angleKinds], confirmed: true });
+                    setP(r.project);
+                    setAnglePick(new Set());
+                    setMsg({ tone: "info", text: `각도 사진 ${r.created}장 만들기를 시작했습니다. 30초~1분 뒤 원래 사진 뒤에 들어갑니다 (자동 확인, 무료).` });
+                  })
+                }
+                data-stay-angles-go
+              >
+                {making && p.angleTasks?.some((t) => t.state === "waiting") ? "각도 사진 만드는 중… (자동 확인)" : `다른 각도 ${angleCount}장 만들기 · 약 ${(angleCount * STAY_ANGLE_CREDITS * AI_CLIP_CONFIG.creditUsd).toFixed(2)}`}
+              </Button>
+              <span className="text-[12px] text-fg-subtle">① 사진에서 “다른 각도 만들기”를 체크한 사진 {anglePick.size}장 × 각도 {angleKinds.size}개</span>
+            </div>
+            {angleFails.length > 0 && <p className="mt-2 text-[12px] text-danger">실패: {angleFails.join(" · ")}</p>}
           </SectionCard>
 
           <SectionCard title="② 제목·대사 (AI)" icon={Wand2} description="AI 가 사진을 보고 위쪽 제목 2줄과 컷마다 짧은 대사·움직임을 씁니다 (누를 때 AI 1번). 위 칸에서 바로 고칠 수 있습니다." data-stay-script>

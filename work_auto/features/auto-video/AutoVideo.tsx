@@ -259,7 +259,7 @@ export function AutoVideo() {
         ) : (
           <ol className="space-y-4">
             {items.map((it, k) => (
-              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} thumbUrls={data.urls} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} onMakeNow={() => void makeNow(it.id)} makeBusy={Boolean(busy) || items.some((x) => x.status === "running")} />
+              <ReportItem key={it.id} it={it} k={k} url={it.videoKey ? data.urls[it.videoKey] : undefined} date={data.date} onDone={() => void load(date)} onError={setError} onRemove={() => void remove(it.id)} onMakeNow={() => void makeNow(it.id)} makeBusy={Boolean(busy) || items.some((x) => x.status === "running")} />
             ))}
           </ol>
         )}
@@ -291,7 +291,7 @@ export function AutoVideo() {
   );
 }
 
-function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, onMakeNow, makeBusy }: { it: Item; k: number; url?: string; thumbUrls: Record<string, string>; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void; onMakeNow: () => void; makeBusy: boolean }) {
+function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, makeBusy }: { it: Item; k: number; url?: string; date: string; onDone: () => void; onError: (m: string) => void; onRemove: () => void; onMakeNow: () => void; makeBusy: boolean }) {
   const [at, setAt] = useState(() => defaultSlot(k));
   const [busy, setBusy] = useState(false);
   const st = STATUS[it.status];
@@ -339,19 +339,7 @@ function ReportItem({ it, k, url, thumbUrls, date, onDone, onError, onRemove, on
             {it.titleRef && <p className="-mt-1 text-[11.5px] text-brand" data-format-ref>포맷 따라 씀: {it.titleRef}</p>}
             {it.contentId && it.title && <ItemFeedback contentId={it.contentId} itemKey="titles" item={it.title} formatRef={it.titleRef ?? null} className="-mt-1" />}
             {it.thumbnailTitle && <Field label="섬네일 제목 (대본 포맷 참고 · 영상 상단 제목 2번째 줄)" value={it.thumbnailTitle} />}
-            {it.thumbKeys && (thumbUrls[it.thumbKeys.vertical] || thumbUrls[it.thumbKeys.horizontal]) && (
-              <div className="flex items-start gap-2" data-auto-thumb>
-                {[it.thumbKeys.vertical, it.thumbKeys.horizontal].map((k, j) =>
-                  thumbUrls[k] ? (
-                    <a key={k} href={thumbUrls[k]} download target="_blank" rel="noreferrer" className={j ? "flex-1" : "w-[28%] shrink-0"}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={thumbUrls[k]} alt="섬네일" className="w-full rounded ring-1 ring-line" />
-                      <span className="text-[11px] text-brand">{j ? "가로 섬네일 받기" : "세로 섬네일 받기"}</span>
-                    </a>
-                  ) : null,
-                )}
-              </div>
-            )}
+{/* v0.9.174 섬네일 이미지 만들기는 뺐다 (사용자 요청) */}
             {it.jobId && it.status === "done" && <YouTubeUploadButton jobId={it.jobId} title={it.title ?? it.productName} description={it.description ?? ""} tags={it.tags ?? []} productId={it.productId} />}
             {it.jobId && (
               <a href={`/youtube/video-production?jobId=${it.jobId}&autoDate=${date}&autoItem=${it.id}`} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-control bg-brand px-4 text-[14px] font-semibold text-white shadow-card hover:bg-brand-hover" data-auto-edit>
