@@ -1,4 +1,5 @@
 import "server-only";
+import { PSYCHOLOGY_DETAIL_GUIDE, readAiOptions } from "../settings/ai-options";
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
 import { NO_RATING_RULE, isRatingTalk } from "@/lib/script-format";
 import { createId, nowIso } from "@/lib/utils";
@@ -341,7 +342,7 @@ export const detailPageService = {
   },
 
   /** [기획·글 만들기] AI 1번: 섹션 구성 + 등록명 5 + 키워드 20 + 태그 10 */
-  async write(input: { id?: unknown; request?: unknown }) {
+  async write(input: { id?: unknown; request?: unknown; psychology?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     const repo = getRepositories();
@@ -350,6 +351,8 @@ export const detailPageService = {
     const analysis = (await repo.productAnalyses.list((a) => a.productId === p.productId, { productId: p.productId! }).catch(() => [])).sort((a, b) => b.version - a.version)[0];
     const sm = analysis?.summary;
     await ensurePhotos(owner, p);
+    // v0.9.175 마케팅 심리 원칙: 화면에서 고른 값, 없으면 AI 학습 관리의 공통 설정
+    const psychology = typeof input.psychology === "boolean" ? input.psychology : ((await readAiOptions(owner).catch(() => null))?.psychology ?? false);
     const clean = (xs?: string[]) => (xs ?? []).filter((x) => x && !isRatingTalk(x));
     const facts = [
       `제품명: ${product.name} / 브랜드: ${product.brand} / 카테고리: ${product.category}`,
@@ -408,7 +411,7 @@ export const detailPageService = {
    kind: hero(첫 화면 — 큰 Hook 1~2줄 + 짧은 부제) / text(공감·고민, 사진 없이) / photo(특징 하나씩: 제목 + 설명 2~3줄 + 사진) / spec(제품 정보 표: body 에 '항목: 값' 한 줄에 하나, 스펙 사실만) / cta(마무리 구매 유도).
    권장 흐름: hero → text(이런 고민) → photo(핵심 특징 3~4개, 섹션마다 하나) → photo(사용 장면) → spec → cta.
    photo = 그 섹션에 쓸 사진 번호(1부터, 없으면 0). 사진에 보이는 것과 글이 맞게.
-   한 줄 22자 안쪽, 줄바꿈은 \\n. ${NO_RATING_RULE} 사실에 없는 수치·인증·효능은 쓰지 않는다.${input.request ? `\n[사용자 요청 — 가장 먼저 지킨다] ${str(input.request, 300)}` : ""}`,
+   한 줄 22자 안쪽, 줄바꿈은 \\n. ${NO_RATING_RULE} 사실에 없는 수치·인증·효능은 쓰지 않는다.${psychology ? `\n[마케팅 심리 원칙 — 켜져 있음, 사실·정직성 규칙이 우선]\n${PSYCHOLOGY_DETAIL_GUIDE.join("\n")}` : ""}${input.request ? `\n[사용자 요청 — 가장 먼저 지킨다] ${str(input.request, 300)}` : ""}`,
               },
             ],
           },

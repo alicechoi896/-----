@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("detail-page");
-    const b = await readJson<{ action?: string; id?: unknown; productId?: unknown; sections?: unknown; names?: unknown; keywords?: unknown; tags?: unknown; accent?: unknown; removePhoto?: unknown; dataUrl?: unknown; request?: unknown }>(request);
+    const b = await readJson<{ action?: string; id?: unknown; productId?: unknown; sections?: unknown; names?: unknown; keywords?: unknown; tags?: unknown; accent?: unknown; removePhoto?: unknown; dataUrl?: unknown; request?: unknown; psychology?: unknown }>(request);
     switch (b.action) {
       case "create":
         return detailPageService.create(b);

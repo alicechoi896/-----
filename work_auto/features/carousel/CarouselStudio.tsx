@@ -60,6 +60,18 @@ export function CarouselStudio() {
   const [newTopic, setNewTopic] = useState("");
   const [count, setCount] = useState("8");
   const [ask, setAsk] = useState("");
+  // v0.9.175 마케팅 심리 원칙: 처음엔 AI 학습 관리의 공통 설정, 여기서 바꿀 수 있다
+  const [psy, setPsy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void fetch("/api/ai-options", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { ok?: boolean; data?: { psychology?: boolean } }) => live && j?.ok && setPsy(Boolean(j.data?.psychology)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
   const [pickFor, setPickFor] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [sameChar, setSameChar] = useState(true);
@@ -185,11 +197,15 @@ export function CarouselStudio() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Select className="w-28" value={count} onChange={(e) => setCount(e.target.value)} options={[5, 6, 7, 8, 9, 10, 12, 13, 15].map((v) => ({ value: String(v), label: `${v}장` }))} aria-label="장 수" />
               <Input className="h-9 w-80" value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="요청 (선택, 예: 20대 직장인 말투, 숫자 강조)" aria-label="요청" />
+              <label className="flex items-center gap-1.5 text-[12.5px]" title="행동경제학·설득 원칙(손실 회피·대비·구체적 숫자·실수 효과·피크엔드 등)을 사실 범위 안에서 씁니다" data-carousel-psy>
+                <input type="checkbox" checked={psy} onChange={(e) => setPsy(e.target.checked)} />
+                마케팅 심리 원칙 적용
+              </label>
               <Button
                 variant="primary"
                 icon={Sparkles}
                 loading={busy === "write"}
-                onClick={() => (!p.slides.length || window.confirm("지금 장들을 새로 쓴 글로 바꿉니다. 계속할까요?")) && void run("write", async () => setP(await call<Project>({ action: "write", id: p.id, count: Number(count), request: ask || undefined })))}
+                onClick={() => (!p.slides.length || window.confirm("지금 장들을 새로 쓴 글로 바꿉니다. 계속할까요?")) && void run("write", async () => setP(await call<Project>({ action: "write", id: p.id, count: Number(count), request: ask || undefined, psychology: psy })))}
                 data-carousel-write
               >
                 글 만들기 (AI 1번)

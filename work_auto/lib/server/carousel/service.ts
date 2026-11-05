@@ -26,6 +26,7 @@ import { loadScriptFormats } from "../services/script-formats";
 import { productPhotoBuffers, videoFrameBuffers } from "../media/photo-sources";
 import { videoStorage } from "../video/storage";
 import { drawCarouselSlide } from "./draw";
+import { PSYCHOLOGY_CAROUSEL_GUIDE, readAiOptions } from "../settings/ai-options";
 
 /**
  * 인스타그램 캐러셀 (v0.9.173, 예전 '제품 캐러셀' v0.9.163 을 넓힘)
@@ -332,7 +333,7 @@ export const carouselService = {
   },
 
   /** [글 만들기] AI 1번: 제목 + 장마다 종류·글·그림 설명 + 캡션·해시태그 */
-  async write(input: { id?: unknown; count?: unknown; request?: unknown }) {
+  async write(input: { id?: unknown; count?: unknown; request?: unknown; psychology?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     if (!p.topic.trim() && !p.notes.trim() && !p.productId) throw new AppError("VALIDATION", "주제나 넣을 내용을 먼저 써 주세요.");
@@ -346,6 +347,8 @@ export const carouselService = {
     const facts = sm ? [sm.oneLiner, ...(sm.keyBenefits ?? []), ...(sm.buyingPoints ?? []), ...(sm.differentiators ?? [])].filter((x) => x && !isRatingTalk(x)) : [];
     const formats = product ? await loadScriptFormats(owner, "product", "").catch(() => []) : [];
     const hooks = formats.flatMap((f) => f.hooks ?? []).slice(0, 10);
+    // v0.9.175 마케팅 심리 원칙: 화면에서 고른 값, 없으면 AI 학습 관리의 공통 설정
+    const psychology = typeof input.psychology === "boolean" ? input.psychology : ((await readAiOptions(owner).catch(() => null))?.psychology ?? false);
     const ai = await getAIProvider();
     type Out = { title: string; slides: { layout: SlideLayout; tag: string; title: string; body: string; lines: string; photo: number; imagePrompt: string }[]; caption: string; hashtags: string[] };
     let data: Out;
@@ -399,7 +402,7 @@ export const carouselService = {
   · imagePrompt: 그림이 필요한 장(표지는 꼭)만, 영어로 장면 설명 (글자·로고 없이, 예: "a cute fluffy red monster character pressing a glowing red button in a dark room, dramatic red rim light, 3d render, no text"). 필요 없으면 빈 문자열
 - 흐름: 1장 = 스크롤을 멈추게 하는 Hook → 중간 = 하나씩 쉽게 → 마지막 = 저장·팔로우·댓글 유도
 - 한국어, 짧고 센 문장. 사실이 아닌 수치·날짜·회사 발표를 지어내지 않는다 (내용에 있는 것만). ${NO_RATING_RULE}
-- caption: 피드 설명글 4~8줄 (첫 줄은 Hook, 마지막 줄은 행동 유도), hashtags: 8~15개${input.request ? `\n[사용자 요청 — 가장 먼저 지킨다] ${str(input.request, 300)}` : ""}`,
+- caption: 피드 설명글 4~8줄 (첫 줄은 Hook, 마지막 줄은 행동 유도), hashtags: 8~15개${psychology ? `\n[마케팅 심리 원칙 — 켜져 있음, 사실·정직성 규칙이 우선]\n${PSYCHOLOGY_CAROUSEL_GUIDE.join("\n")}` : ""}${input.request ? `\n[사용자 요청 — 가장 먼저 지킨다] ${str(input.request, 300)}` : ""}`,
         },
       ];
       const r = await ai.generateStructured<Out>({

@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       count?: unknown;
       request?: unknown;
       confirmed?: unknown;
+      psychology?: unknown;
     }>(request);
     switch (b.action) {
       case "create":

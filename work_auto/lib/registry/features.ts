@@ -387,6 +387,21 @@ export const FEATURES: FeatureDef[] = [
   },
 
   {
+    id: "reel-read",
+    channelId: "tools",
+    order: 4,
+    title: "릴스 읽기",
+    description: "릴스 영상을 올리거나 인스타그램 주소를 넣으면(TikHub 1회) 말소리를 받아쓰고, 장면이 바뀔 때마다 화면을 보고 장면별(시간·화면·말)로 정리합니다. 첫 3초·전개·CTA 구조와 내 분야에 바꿔 쓸 아이디어 3개, 대본 포맷에 담기까지.",
+    href: "/tools/reel-read",
+    icon: ScanSearch,
+    kind: "tool",
+    status: "live",
+    defaultTiers: GOLD_UP,
+    requiredProviders: ["openai"],
+    inputs: ["릴스 영상 파일 (무료) 또는 인스타그램 릴스 주소 (TikHub 1회)", "내 분야 (아이디어용, 선택)"],
+    outputs: ["원본 요약 3줄", "장면별 (시간 / 화면 / 말)", "첫 3초 · 구조 (Hook·전개·CTA)", "바꿔 쓸 아이디어 3개", "대본 포맷에 담기"],
+  },
+  {
     id: "silence-cut",
     channelId: "video",
     order: 3,

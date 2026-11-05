@@ -70,6 +70,18 @@ export function DetailPageStudio({ initialProductId }: { initialProductId?: stri
   const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
   const [newProduct, setNewProduct] = useState(initialProductId ?? "");
   const [ask, setAsk] = useState("");
+  // v0.9.175 마케팅 심리 원칙: 처음엔 AI 학습 관리의 공통 설정, 여기서 바꿀 수 있다
+  const [psy, setPsy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void fetch("/api/ai-options", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { ok?: boolean; data?: { psychology?: boolean } }) => live && j?.ok && setPsy(Boolean(j.data?.psychology)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
   const [pickFor, setPickFor] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -211,7 +223,11 @@ export function DetailPageStudio({ initialProductId }: { initialProductId?: stri
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <Input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="요청 (선택, 예: 30대 자취생 대상, 차분한 말투)" className="h-9 w-80" aria-label="요청" />
-              <Button variant="primary" icon={Sparkles} loading={busy === "write"} onClick={() => void run("write", async () => setP(await call<Project>({ action: "write", id: p.id, request: ask || undefined })))} data-detail-write-go>
+<label className="flex items-center gap-1.5 text-[12.5px]" title="행동경제학·설득 원칙(손실 회피·대비·구체적 숫자·실수 효과·피크엔드 등)을 사실 범위 안에서 씁니다" data-detail-psy>
+                <input type="checkbox" checked={psy} onChange={(e) => setPsy(e.target.checked)} />
+                마케팅 심리 원칙 적용
+              </label>
+              <Button variant="primary" icon={Sparkles} loading={busy === "write"} onClick={() => void run("write", async () => setP(await call<Project>({ action: "write", id: p.id, request: ask || undefined, psychology: psy })))} data-detail-write-go>
                 기획·글 만들기
               </Button>
               <span className="flex items-center gap-1 text-[12px] text-fg-muted">

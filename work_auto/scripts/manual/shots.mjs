@@ -200,6 +200,38 @@ export const SHOTS = [
     },
   },
   {
+    id: "03-reel-read",
+    url: "/tools/reel-read",
+    viewport: { width: 1280, height: 2400 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (body) => p.request.post(abs("/api/reel-read"), { data: body }).then((r) => r.json());
+      const list = (await (await p.request.get(abs("/api/reel-read"))).json()).data ?? [];
+      if (!list.some((x) => x.state === "read")) {
+        // 장면이 바뀌는 12초 시험 영상 (색 4번 바뀜)
+        const { execFileSync } = await import("node:child_process");
+        const { readFileSync, mkdtempSync } = await import("node:fs");
+        const os = await import("node:os");
+        const path = await import("node:path");
+        const ffmpeg = (await import("ffmpeg-static")).default;
+        const out = path.join(mkdtempSync(path.join(os.tmpdir(), "reelshot-")), "r.mp4");
+        execFileSync(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=0x2b4a6b:s=540x960:d=3", "-f", "lavfi", "-i", "color=c=0x6b3d2b:s=540x960:d=3", "-f", "lavfi", "-i", "color=c=0x2b6b47:s=540x960:d=3", "-f", "lavfi", "-i", "color=c=0x5a2b6b:s=540x960:d=3", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-filter_complex", "[0:v][1:v][2:v][3:v]concat=n=4:v=1[v]", "-map", "[v]", "-map", "4:a", "-t", "12", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest", out]);
+        const buf = readFileSync(out);
+        const up = (await api({ action: "upload-url", name: "잘된 숙소 릴스.mp4", size: buf.length })).data;
+        await p.request.fetch(up.url.startsWith("http") ? up.url : abs(up.url), { method: up.method, data: buf, headers: { "Content-Type": "video/mp4" } });
+        await api({ action: "read", id: up.id, field: "숙소 소개 릴스" });
+      }
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-reel-scenes]").first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: (p) => p.locator("[data-reel-upload]"),
+      2: (p) => p.getByText("원본 요약").first(),
+      3: (p) => p.locator("[data-reel-format]"),
+    },
+  },
+  {
     id: "03-video-import",
     url: "/tools/video-import",
     viewport: { width: 1280, height: 1150 },

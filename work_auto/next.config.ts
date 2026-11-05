@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
     "/api/fashion/*/render": ["./node_modules/ffmpeg-static/ffmpeg*", "./assets/fonts/LibreBaskerville-Regular.ttf", "./node_modules/pretendard/dist/public/static/Pretendard-SemiBold.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Bold.otf", "./node_modules/@napi-rs/canvas*/**/*"],
     // 인스타그램 캐러셀 (v0.9.173): 장 그리기 글꼴 (Pretendard 굵기별 + 고를 수 있는 제목 글꼴)
     "/api/carousel": ["./node_modules/pretendard/dist/public/static/Pretendard-Black.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Bold.otf", "./node_modules/pretendard/dist/public/static/Pretendard-Medium.otf", "./assets/video/fonts/**/*", "./node_modules/@napi-rs/canvas*/**/*"],
+    // 릴스 읽기 (v0.9.175): 장면 사진·소리 뽑기
+    "/api/reel-read": ["./node_modules/ffmpeg-static/ffmpeg*"],
     "/api/fashion/*/sync": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/engine": ["./node_modules/ffmpeg-static/ffmpeg*", "./node_modules/@napi-rs/canvas*/**/*"],
     "/api/video-production/font/*": ["./assets/video/fonts/**/*", "./node_modules/pretendard/dist/public/static/Pretendard-Black.otf"],
