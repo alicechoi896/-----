@@ -3,7 +3,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import type { SessionInfo } from "@/lib/types";
 import type { AiClip, VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { aiSourceId } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
+import { AI_CLIP_CONFIG, cleanVoiceSpeed, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { lastVoiceSettings } from "../automation/auto-video";
 import { AppError } from "../http";
@@ -70,9 +70,35 @@ export interface StayProject {
   productId?: string | null;
   /** v0.9.174 다른 각도 만들기 작업 */
   angleTasks?: StayAngleTask[];
+  /** v0.9.182 완성된 AI 컷 영상 (컷 id → 우리 저장소 key, 미리보기용) */
+  clipFiles?: Record<string, string>;
+  /** v0.9.182 이 영상 AI 내레이션 목소리 (없으면 원고로 영상 만들기 마지막 설정) */
+  voice?: StayVoice | null;
   jobId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StayVoice {
+  ttsEngine: "openai" | "typecast";
+  voice: string;
+  ttsEmotion?: string;
+  voiceStyle?: string;
+  voiceSpeed?: number;
+}
+function cleanVoice(v: unknown): StayVoice | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const s = (x: unknown, n: number) => String(x ?? "").trim().slice(0, n);
+  const voice = s(o.voice, 120);
+  const speed = Number(o.voiceSpeed);
+  return {
+    ttsEngine: o.ttsEngine === "openai" ? "openai" : "typecast",
+    voice,
+    ttsEmotion: s(o.ttsEmotion, 40) || undefined,
+    voiceStyle: s(o.voiceStyle, 40) || undefined,
+    voiceSpeed: o.voiceSpeed == null || o.voiceSpeed === "" ? undefined : cleanVoiceSpeed(speed),
+  };
 }
 
 const listKey = (owner: string) => `${owner}/stay/projects.json`;
@@ -125,9 +151,47 @@ async function addPhoto(owner: string, p: StayProject, buf: Buffer) {
 }
 
 /** 화면용: 사진 미리보기 주소 (1시간) */
-async function withUrls(p: StayProject): Promise<StayProject & { photoUrls: Record<string, string> }> {
+async function withUrls(p: StayProject): Promise<StayProject & { photoUrls: Record<string, string>; clipUrls: Record<string, string> }> {
   const photoUrls = p.photos.length ? await videoStorage.urls(p.photos.map((x) => x.key), 3600).catch(() => ({})) : {};
-  return { ...p, photoUrls };
+  // v0.9.182 완성된 AI 컷 미리보기 (컷 id → 주소)
+  const files = Object.entries(p.clipFiles ?? {});
+  const byKey: Record<string, string> = files.length ? await videoStorage.urls(files.map(([, k]) => k), 3600).catch(() => ({})) : {};
+  const clipUrls = Object.fromEntries(files.filter(([, k]) => byKey[k]).map(([id, k]) => [id, byKey[k]]));
+  return { ...p, photoUrls, clipUrls };
+}
+
+/** v0.9.182 완성된 AI 컷 영상을 우리 저장소에 받아 둔다 (상태 확인 때, 무료 — Kie 결과 주소는 오래 안 가서). 데모(mock://)는 건너뜀 */
+async function keepClipFiles(owner: string, p: StayProject): Promise<boolean> {
+  const todo = p.clips.filter((c) => c.state === "success" && c.taskId && !p.clipFiles?.[c.id]).slice(0, 6);
+  if (!todo.length) return false;
+  const provider = await getVideoAIProvider();
+  if (!provider) return false;
+  let changed = false;
+  for (const c of todo) {
+    try {
+      const st = await provider.status(c.taskId!);
+      if (st.state !== "success" || !st.resultUrl || new URL(st.resultUrl).protocol !== "https:") continue;
+      const res = await safeFetch(st.resultUrl, { signal: AbortSignal.timeout(60_000), headers: { "User-Agent": UA } });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 1000 || buf.length > 60 * 1024 * 1024) continue;
+      const key = `${owner}/stay/${p.id}/clip_${c.id}_${createId("v").slice(-6)}.mp4`;
+      await videoStorage.put(key, buf, "video/mp4");
+      p.clipFiles = { ...(p.clipFiles ?? {}), [c.id]: key };
+      changed = true;
+    } catch {
+      // 못 받으면 다음 확인 때 다시 (렌더는 taskId 로 따로 받음)
+    }
+  }
+  return changed;
+}
+async function dropClipFile(p: StayProject, clipId: string) {
+  const k = p.clipFiles?.[clipId];
+  if (!k) return;
+  await videoStorage.remove(k).catch(() => undefined);
+  const { [clipId]: _gone, ...rest } = p.clipFiles!;
+  void _gone;
+  p.clipFiles = rest;
 }
 
 export const stayService = {
@@ -152,11 +216,12 @@ export const stayService = {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, id);
     for (const ph of p.photos) await videoStorage.remove(ph.key).catch(() => undefined);
+    for (const k of Object.values(p.clipFiles ?? {})) await videoStorage.remove(k).catch(() => undefined);
     await writeAll(owner, list.filter((x) => x.id !== p.id));
   },
 
   /** 이름·메모·제목·대사·움직임·사진 순서 고치기 (사진 지우기 포함) */
-  async update(input: { id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown }) {
+  async update(input: { id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; voice?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     const str = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -164,6 +229,7 @@ export const stayService = {
     if (input.note !== undefined) p.note = String(input.note ?? "").slice(0, 1000);
     if (input.titleSmall !== undefined) p.titleSmall = str(input.titleSmall, 20);
     if (input.titleBig !== undefined) p.titleBig = str(input.titleBig, 24);
+    if (input.voice !== undefined) p.voice = cleanVoice(input.voice);
     if (input.titleSec !== undefined && Number.isFinite(Number(input.titleSec))) p.titleSec = Math.min(10, Math.max(1, Number(input.titleSec)));
     if (Array.isArray(input.photos)) {
       const byKey = new Map(p.photos.map((x) => [x.key, x]));
@@ -180,6 +246,7 @@ export const stayService = {
       const keep = new Set(next.map((x) => x.key));
       for (const old of p.photos) if (!keep.has(old.key)) await videoStorage.remove(old.key).catch(() => undefined);
       // 지운 사진의 AI 컷도 뺀다 (컷 id 는 사진 key 로 잇는다)
+      for (const c of p.clips) if (!keep.has(p.clipKeys?.[c.id] ?? "")) await dropClipFile(p, c.id);
       p.clips = p.clips.filter((c) => keep.has(p.clipKeys?.[c.id] ?? ""));
       p.photos = next;
     }
@@ -242,8 +309,10 @@ export const stayService = {
     if (input.replace === true || (p.productId && p.productId !== productId)) {
       for (const ph of p.photos) await videoStorage.remove(ph.key).catch(() => undefined);
       p.photos = [];
+      for (const k of Object.values(p.clipFiles ?? {})) await videoStorage.remove(k).catch(() => undefined);
       p.clips = [];
       p.clipKeys = {};
+      p.clipFiles = {};
     }
     const bufs = await productPhotoBuffers(productId, STAY_MAX_PHOTOS - p.photos.length);
     let added = 0;
@@ -367,6 +436,7 @@ export const stayService = {
       const old = clipOf(p, ph.key);
       if (old && old.state !== "fail") continue;
       const id = old?.id ?? nextClipId(p);
+      if (old) await dropClipFile(p, old.id);
       const clip: AiClip = old ?? { id, mode: "product", prompt: "", imageUrl: null, taskId: null, state: "draft", model: null, credits: null, error: null };
       try {
         const buf = await videoStorage.download(ph.key);
@@ -479,6 +549,7 @@ export const stayService = {
         }
       }
     }
+    if (await keepClipFiles(owner, p)) changed = true;
     if (changed) await save(owner, list, p);
     return withUrls(p);
   },
@@ -509,6 +580,7 @@ export const stayService = {
       ending: false,
       bgm: null,
       ...voice,
+      ...(p.voice?.voice ? { ttsEngine: p.voice.ttsEngine, voice: p.voice.voice, ttsEmotion: p.voice.ttsEmotion, voiceStyle: p.voice.voiceStyle, voiceSpeed: p.voice.voiceSpeed ?? (voice as Partial<VideoPlan>).voiceSpeed } : {}),
       narrationOn: true,
       captions: true,
       meme: false,

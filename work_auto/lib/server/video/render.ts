@@ -308,6 +308,8 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     timing.match = Date.now() - t0;
     const usedRanges = new Map<string, [number, number][]>();
     let t = 0;
+    // v0.9.182 바로 앞 컷 (같은 영상이 이어지면 그 끝에서부터)
+    let prevPick = null as { id: string; end: number; tr: Treatment } | null;
     // v0.9.162: 상단 제목을 끈 계획(분류별 스타일)은 위쪽도 화면에 보이므로 위쪽 글자도 피한다. 기본(가전 등)은 그대로
     const bar = job.plan.titleOff ? 0 : TITLE_BAR_FRAC;
     // v0.9.165 영상별 편집 설정: 계획에 복사된 것(영상 제작에서 고친 값)이 기준. 예전 계획(복사 전)만 라이브러리 기본 화면을 읽는다
@@ -359,6 +361,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const src = sources.get(s.sourceVideoId)!;
         const maxStart = Math.max(0, src.duration - dur - 0.1);
         best = { id: s.sourceVideoId, start: maxStart > 0 ? ((usedRanges.get(s.sourceVideoId) ?? []).length * 1.7) % maxStart : 0, tr: { kind: "clean" } };
+      } else if (!aiScene && s.sourceVideoId && prevPick?.id === s.sourceVideoId && sources.has(s.sourceVideoId) && prevPick.end + dur <= sources.get(s.sourceVideoId)!.duration - 0.05) {
+        // v0.9.182: 바로 앞 컷과 같은 영상이면 끊기지 않게 앞 컷이 끝난 곳부터 이어서 (화면 처리도 앞 컷 그대로 — 확대가 튀지 않게)
+        best = { id: s.sourceVideoId, start: prevPick.end, tr: prevPick.tr };
       } else {
         // v0.9.67: 대사와 맞는 장면·쓸모 점수 높은 장면 (앞에서부터 차례로가 아니라)
         const want = matched.wants.get(k);
@@ -407,6 +412,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       }
       const src = sources.get(best.id)!;
       usedRanges.set(best.id, [...(usedRanges.get(best.id) ?? []), [best.start, best.start + dur]]);
+      prevPick = isAiSource(best.id) ? null : { id: best.id, end: best.start + dur, tr: best.tr };
       s.sourceVideoId = best.id;
       s.sourceStart = Number(best.start.toFixed(2));
       s.start = Number(t.toFixed(2));

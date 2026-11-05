@@ -788,7 +788,7 @@ export const SHOTS = [
   {
     id: "05-stay",
     url: "/video/stay",
-    viewport: { width: 1280, height: 2600 },
+    viewport: { width: 1280, height: 3100 },
     prepare: async (p) => {
       const abs = (path) => new URL(path, p.url()).toString();
       const api = (body) => p.request.post(abs("/api/stay"), { data: body }).then((r) => r.json());
@@ -813,10 +813,10 @@ export const SHOTS = [
     },
     marks: {
       1: (p) => p.locator("[data-stay-new]"),
-      2: (p) => p.locator("[data-stay-angles-go]"),
+      2: (p) => p.locator("[data-stay-angle-open]").first(),
       3: (p) => p.locator("[data-stay-script-go]"),
       4: (p) => p.locator("[data-stay-animate-go]"),
-      5: (p) => p.locator("[data-stay-render-go]"),
+      5: (p) => p.locator("[data-stay-voice]"),
     },
   },
   {
