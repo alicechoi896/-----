@@ -149,17 +149,29 @@ export function StayStudio() {
 
   // Kie 상태 확인 (무료): 만드는 중인 컷이 있을 때만 8초마다
   const making = Boolean(p?.clips.some((c) => c.state === "waiting" || c.state === "generating") || p?.angleTasks?.some((t) => t.state === "waiting"));
-  useEffect(() => {
-    if (!p || !making) return;
-    const t = setInterval(() => void call<Project>({ action: "status", id: p.id }).then(setP).catch(() => undefined), 8000);
-    return () => clearInterval(t);
-  }, [p, making]);
-  // v0.9.182 예전에 완성된 AI 컷은 미리보기 파일이 없으니, 열 때 한 번만 받아 둔다 (무료 상태 확인)
+  // v0.9.184 상태 확인은 한 번에 하나만, 응답이 늦게 와도 지금 보고 있는 영상일 때만 화면에 (다른 영상으로 바꾼 뒤 예전 영상이 다시 뜨지 않게)
   const pid = p?.id;
+  const statusBusy = useRef(false);
+  const checkStatus = useCallback((id: string) => {
+    if (statusBusy.current) return;
+    statusBusy.current = true;
+    void call<Project>({ action: "status", id })
+      .then((np) => setP((cur) => (cur && cur.id === np.id ? np : cur)))
+      .catch(() => undefined)
+      .finally(() => {
+        statusBusy.current = false;
+      });
+  }, []);
+  useEffect(() => {
+    if (!pid || !making) return;
+    const t = setInterval(() => checkStatus(pid), 8000);
+    return () => clearInterval(t);
+  }, [pid, making, checkStatus]);
+  // v0.9.182 예전에 완성된 AI 컷은 미리보기 파일이 없으니, 열 때 한 번만 받아 둔다 (무료 상태 확인)
   const needPreview = Boolean(p?.clips.some((c) => c.state === "success" && !p.clipUrls?.[c.id]));
   useEffect(() => {
     if (!pid || !needPreview) return;
-    void call<Project>({ action: "status", id: pid }).then(setP).catch(() => undefined);
+    checkStatus(pid);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 프로젝트를 열 때 한 번만
   }, [pid]);
   // 렌더 진행

@@ -128,10 +128,53 @@ async function own(owner: string, id: unknown): Promise<{ list: StayProject[]; p
   if (!p) throw new AppError("NOT_FOUND", "숙소 영상 프로젝트를 찾을 수 없습니다.", 404);
   return { list, p };
 }
+/**
+ * 저장: 쓰기 직전에 목록을 다시 읽어 이 프로젝트만 바꾼다 (v0.9.184).
+ * 예전엔 요청 처음에 읽은 목록을 통째로 다시 써서, 오래 걸리는 상태 확인이 끝날 때 그사이 만든 새 영상·지운 영상이 되돌아갔다.
+ * 그사이 지워진 프로젝트는 다시 살리지 않는다.
+ */
 async function save(owner: string, list: StayProject[], p: StayProject): Promise<StayProject> {
   p.updatedAt = nowIso();
-  await writeAll(owner, [p, ...list.filter((x) => x.id !== p.id)]);
+  const isNew = !list.some((x) => x.id === p.id);
+  const latest = await readAll(owner);
+  if (!isNew && !latest.some((x) => x.id === p.id)) return p;
+  await writeAll(owner, [p, ...latest.filter((x) => x.id !== p.id)]);
   return p;
+}
+/**
+ * v0.9.184 상태 확인 저장: 그사이 화면에서 고친 내용(대사·순서·이름 등)은 지키고, 상태 확인이 바꾼 것만 얹는다
+ * (AI 컷 상태 · 각도 작업 · 새로 받은 각도 사진 · 미리보기 파일)
+ */
+async function saveStatus(owner: string, p: StayProject): Promise<StayProject> {
+  const latest = await readAll(owner);
+  const cur = latest.find((x) => x.id === p.id);
+  if (!cur) return p; // 그사이 지움
+  const clipById = new Map(p.clips.map((c) => [c.id, c]));
+  cur.clips = cur.clips.map((c) => {
+    const m = clipById.get(c.id);
+    return m && m.taskId === c.taskId ? { ...c, state: m.state, credits: m.credits, error: m.error } : c;
+  });
+  const taskById = new Map((p.angleTasks ?? []).map((t) => [t.id, t]));
+  cur.angleTasks = (cur.angleTasks ?? []).map((t) => taskById.get(t.id) ?? t);
+  // 새로 받은 각도 사진: 원래 사진(과 그 각도들) 바로 뒤에
+  const have = new Set(cur.photos.map((x) => x.key));
+  for (const ph of p.photos) {
+    if (have.has(ph.key) || !ph.fromKey) continue;
+    let at = cur.photos.findIndex((x) => x.key === ph.fromKey);
+    if (at < 0) {
+      await videoStorage.remove(ph.key).catch(() => undefined); // 원래 사진을 그사이 뺐음
+      continue;
+    }
+    while (at + 1 < cur.photos.length && cur.photos[at + 1].fromKey === ph.fromKey) at++;
+    cur.photos.splice(at + 1, 0, ph);
+    have.add(ph.key);
+  }
+  const ids = new Set(cur.clips.map((c) => c.id));
+  cur.clipFiles = Object.fromEntries(Object.entries(p.clipFiles ?? {}).filter(([id]) => ids.has(id)));
+  cur.clipFileAt = Object.fromEntries(Object.entries(p.clipFileAt ?? {}).filter(([id]) => ids.has(id)));
+  cur.updatedAt = nowIso();
+  await writeAll(owner, [cur, ...latest.filter((x) => x.id !== cur.id)]);
+  return cur;
 }
 
 /** 사진 → 9:16 꽉 채우기 (가운데 기준으로 자름) */
@@ -243,7 +286,9 @@ export const stayService = {
     const { list, p } = await own(owner, id);
     for (const ph of p.photos) await videoStorage.remove(ph.key).catch(() => undefined);
     for (const k of Object.values(p.clipFiles ?? {})) await videoStorage.remove(k).catch(() => undefined);
-    await writeAll(owner, list.filter((x) => x.id !== p.id));
+    void list;
+    // v0.9.184 지우기 직전에 다시 읽어서 (그사이 만든 다른 영상을 지우지 않게)
+    await writeAll(owner, (await readAll(owner)).filter((x) => x.id !== p.id));
   },
 
   /** 이름·메모·제목·대사·움직임·사진 순서 고치기 (사진 지우기 포함) */
@@ -535,7 +580,7 @@ export const stayService = {
   /** 상태 확인 (무료): AI 컷 + 각도 사진 */
   async status(input: { id?: unknown; refetch?: unknown }) {
     const owner = await getCurrentUserId();
-    const { list, p } = await own(owner, input.id);
+    const { p } = await own(owner, input.id);
     let changed = false;
     // v0.9.183 [다시 받기] (무료): Kie 에서는 만들어졌는데 우리 쪽에서 못 받은 각도 사진을 다시 받는다 (다시 만들지 않음)
     if (input.refetch === true) {
@@ -590,7 +635,7 @@ export const stayService = {
           p.photos.splice(at + 1, 0, { key, line: "", motion: src.motion, motionKo: src.motionKo, sec: null, fromKey: src.key, angle: t.angle });
           t.state = "success";
           // 하나 받을 때마다 저장 (상태 확인이 중간에 끊겨도 받은 사진은 남게)
-          await save(owner, list, p);
+          await saveStatus(owner, p);
         } catch (e) {
           const msg = (e instanceof Error ? e.message : "받지 못했습니다.").slice(0, 200);
           console.warn("[Stay] angle fetch", JSON.stringify({ project: p.id, taskId: t.taskId, kie: e instanceof VideoAIError, error: msg }));
@@ -604,8 +649,8 @@ export const stayService = {
     }
     if (await pruneClipFiles(p)) changed = true;
     if (await keepClipFiles(owner, p)) changed = true;
-    if (changed) await save(owner, list, p);
-    return withUrls(p);
+    if (!changed) return withUrls(p);
+    return withUrls(await saveStatus(owner, p));
   },
 
   /** [영상 만들기]: 완성된 AI 컷으로 계획을 만들어 렌더 작업을 만든다 (렌더는 응답 뒤) */
