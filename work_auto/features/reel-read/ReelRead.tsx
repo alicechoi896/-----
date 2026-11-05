@@ -69,7 +69,6 @@ export function ReelRead() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
-  const [url, setUrl] = useState("");
   const [field, setField] = useState("");
   const [formats, setFormats] = useState<ScriptFormat[]>([]);
   const [fmt, setFmt] = useState("");
@@ -159,7 +158,7 @@ export function ReelRead() {
 
   return (
     <div className="space-y-5" data-reel>
-      <SectionCard title="① 릴스 넣기" icon={ScanSearch} description="영상 파일을 올리면 무료입니다. 인스타그램 주소를 넣으면 TikHub 로 1번 받습니다 (유료, 누를 때만). 남의 릴스는 공부용으로만 — 영상·대본을 그대로 다시 올리지 마세요.">
+      <SectionCard title="① 영상 파일 올리기 · 읽은 릴스" icon={ScanSearch} description="저장한 릴스 영상 파일을 올리면 무료입니다. 인스타그램 주소는 아래 ②에 여러 개를 한 번에 넣으세요. 남의 릴스는 공부용으로만 — 영상·대본을 그대로 다시 올리지 마세요.">
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="primary" icon={Upload} loading={busy === "upload"} onClick={() => fileRef.current?.click()} data-reel-upload>
             영상 올리기 (무료)
@@ -182,26 +181,6 @@ export function ReelRead() {
               });
             }}
           />
-          <span className="text-[12px] text-fg-subtle">또는</span>
-          <Input className="h-9 w-80" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.instagram.com/reel/…" aria-label="릴스 주소" />
-          <Button
-            variant="secondary"
-            icon={Link2}
-            loading={busy === "url"}
-            disabled={!url.trim()}
-            onClick={() =>
-              window.confirm("TikHub 로 이 릴스를 받을까요? (TikHub 1회 호출, 유료)\n받은 뒤 바로 읽습니다 (받아쓰기 OpenAI 1분 약 $0.006 + AI 1번).") &&
-              void run("url", async () => {
-                const x = await call<Reel>({ action: "url", url: url.trim(), confirmed: true });
-                added(x);
-                setUrl("");
-                added(await call<Reel>({ action: "read", id: x.id, field }));
-              })
-            }
-            data-reel-url
-          >
-            주소로 받기 (TikHub 1회)
-          </Button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Input className="h-9 w-80" value={field} onChange={(e) => setField(e.target.value)} placeholder="내 분야 (선택, 예: 가전 제품 홍보 쇼츠, 숙소 소개 릴스)" aria-label="내 분야" />
@@ -213,8 +192,8 @@ export function ReelRead() {
           )}
         </div>
       </SectionCard>
-      <SectionCard title="여러 링크 한 번에 (TikHub)" icon={ListPlus} description="'- 언박싱 유형'처럼 유형 이름 줄 아래에 주소를 붙여 넣으면 유형별로 묶습니다. 링크 1개 = TikHub 1회 (릴스 영상·캐러셀 사진 모두). 받은 원본은 유형 폴더별 ZIP 으로 내려받을 수 있습니다." data-reel-batch>
-        <Textarea rows={6} value={batch} onChange={(e) => setBatch(e.target.value)} placeholder={"- 언박싱 유형\nhttps://www.instagram.com/reels/…\n- 코디 캐러셀형\nhttps://www.instagram.com/p/…"} aria-label="여러 링크" />
+      <SectionCard title="② 인스타그램 주소로 받기 (여러 개 한 번에)" icon={ListPlus} description="주소를 줄마다 하나씩 붙여 넣으면 전부 차례로 받습니다 (엔터로 구분, 릴스·캐러셀 모두). '- 언박싱 유형'처럼 주소가 아닌 줄을 넣으면 그 아래 주소들을 그 유형으로 묶어 ZIP 폴더가 나뉩니다. 링크 1개 = TikHub 1회." data-reel-batch>
+        <Textarea rows={8} value={batch} onChange={(e) => setBatch(e.target.value)} placeholder={"주소를 줄마다 하나씩 (엔터로 구분)\nhttps://www.instagram.com/reels/…\nhttps://www.instagram.com/reels/…\nhttps://www.instagram.com/p/…\n\n(선택) 유형 이름 줄을 넣으면 폴더가 나뉩니다\n- 언박싱 유형\nhttps://www.instagram.com/reels/…"} aria-label="여러 링크" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-[12.5px]">
             <input type="checkbox" checked={batchRead} onChange={(e) => setBatchRead(e.target.checked)} />
@@ -230,7 +209,7 @@ export function ReelRead() {
             }
             data-reel-batch-go
           >
-            {items.length ? `${items.length}개 받기 (TikHub ${items.length}회)` : "링크를 붙여 넣어 주세요"}
+            {items.length ? `${items.length}개 전부 받기 (TikHub ${items.length}회)` : "주소를 붙여 넣어 주세요"}
           </Button>
           <Button variant="secondary" icon={Download} loading={busy === "zip"} disabled={!list.length} onClick={() => void run("zip", zipAll)} data-reel-zip>
             원본 모두 받기 (ZIP)

@@ -2,6 +2,12 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.179] - 2026-11-05: 쿠팡 모바일 주소 · 릴스 주소 여러 개 한 칸에
+
+### 고침
+- 제품 상세페이지 학습: 쿠팡 모바일 주소 지원 — m.coupang.com/nm/products/{id} = 쿠팡 트래블(같은 번호의 trip.coupang.com/tp/products/{id}), m.coupang.com/vm/products/{id} = 일반 상품(www.coupang.com/vp/products/{id})
+- 릴스 읽기: 한 줄 주소 칸을 없애고 **② 인스타그램 주소로 받기**에 줄마다 여러 주소 (엔터로 구분, 유형 이름 줄은 선택)
+
 ## [0.9.178] - 2026-11-05: 쿠팡 트래블 저장 페이지 올리기 · 릴스 읽기 여러 링크·캐러셀·ZIP
 
 ### 고침

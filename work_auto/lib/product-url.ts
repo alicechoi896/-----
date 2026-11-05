@@ -24,6 +24,8 @@ export const PLATFORM_LABEL_KO: Record<ProductUrlPlatform, string> = { coupang: 
 
 const COUPANG_HOSTS = new Set(["coupang.com", "www.coupang.com"]);
 const COUPANG_TRIP_HOST = "trip.coupang.com";
+/** v0.9.179 쿠팡 모바일: /vm/products/{id} = 일반 상품, /nm/products/{id} = 쿠팡 트래블 (같은 번호의 trip 페이지) */
+const COUPANG_MOBILE_HOST = "m.coupang.com";
 const SMARTSTORE_HOST = "smartstore.naver.com";
 /** 네이버 브랜드스토어 (v0.9.41): 주소 구조·상품 ID 가 스마트스토어와 같아 같은 수집기로 처리한다 */
 const BRANDSTORE_HOST = "brand.naver.com";
@@ -58,6 +60,14 @@ export function parseSupportedProductUrl(input: string): ParsedProductUrl {
       originalUrl: u.toString(),
       collectionUrl: `https://www.coupang.com/vp/products/${productId}${q ? `?${q}` : ""}`,
     };
+  }
+
+  if (host === COUPANG_MOBILE_HOST) {
+    const m = u.pathname.match(/^\/(vm|nm)\/products\/(\d{4,20})\/?$/);
+    if (!m) return { supported: false, reason: "NOT_PRODUCT_PAGE" };
+    const [, kind, productId] = m;
+    if (kind === "nm") return { supported: true, platform: "coupang_trip", productId, storeName: null, canonicalKey: `coupang-trip:${productId}`, originalUrl: u.toString(), collectionUrl: `https://${COUPANG_TRIP_HOST}/tp/products/${productId}` };
+    return { supported: true, platform: "coupang", productId, storeName: null, canonicalKey: `coupang:${productId}`, originalUrl: u.toString(), collectionUrl: `https://www.coupang.com/vp/products/${productId}` };
   }
 
   if (host === COUPANG_TRIP_HOST) {

@@ -9,6 +9,9 @@ describe("쿠팡 트래블 (v0.9.176)", () => {
     const p = parseSupportedProductUrl("https://trip.coupang.com/tp/products/30000011285411?abc=1");
     expect(p).toMatchObject({ supported: true, platform: "coupang_trip", productId: "30000011285411", canonicalKey: "coupang-trip:30000011285411", collectionUrl: "https://trip.coupang.com/tp/products/30000011285411" });
     expect(parseSupportedProductUrl("https://trip.coupang.com/tp/search").supported).toBe(false);
+    // v0.9.179 모바일: nm = 트래블, vm = 일반 상품
+    expect(parseSupportedProductUrl("https://m.coupang.com/nm/products/10000011285873")).toMatchObject({ supported: true, platform: "coupang_trip", collectionUrl: "https://trip.coupang.com/tp/products/10000011285873" });
+    expect(parseSupportedProductUrl("https://m.coupang.com/vm/products/123456?itemId=1")).toMatchObject({ supported: true, platform: "coupang", collectionUrl: "https://www.coupang.com/vp/products/123456" });
     // 일반 쿠팡은 그대로
     expect(parseSupportedProductUrl("https://www.coupang.com/vp/products/12345")).toMatchObject({ supported: true, platform: "coupang" });
   });

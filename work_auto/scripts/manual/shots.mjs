@@ -227,7 +227,7 @@ export const SHOTS = [
     },
     marks: {
       1: (p) => p.locator("[data-reel-upload]"),
-      2: (p) => p.getByText("원본 요약").first(),
+      2: (p) => p.locator("[data-reel-batch-go]"),
       3: (p) => p.locator("[data-reel-format]"),
     },
   },
