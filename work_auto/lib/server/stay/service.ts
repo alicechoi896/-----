@@ -6,6 +6,7 @@ import { aiSourceId } from "@/lib/types/video-production";
 import { AI_CLIP_CONFIG, cleanVoiceSpeed, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { lastVoiceSettings } from "../automation/auto-video";
+import { serverConfig } from "../config";
 import { AppError } from "../http";
 import { getAIProvider, getVideoAIProvider } from "../providers/registry";
 import { VideoAIError } from "../providers/video-ai/kie";
@@ -44,6 +45,10 @@ export interface StayPhoto {
   fromKey?: string | null;
   angle?: string | null;
 }
+/** v0.9.183 미리보기 AI 컷 영상 보관 시간 */
+const CLIP_PREVIEW_MS = 60 * 60 * 1000;
+/** v0.9.183 각도 사진이 이만큼 지나도 '만드는 중'이면 실패로 (Kie 는 보통 1분 안) */
+const ANGLE_TIMEOUT_MS = 15 * 60 * 1000;
 /** v0.9.174 각도 사진 작업 (Kie Nano Banana Edit) */
 export interface StayAngleTask {
   id: string;
@@ -52,6 +57,8 @@ export interface StayAngleTask {
   taskId: string | null;
   state: "waiting" | "success" | "fail";
   error: string | null;
+  /** v0.9.183 Kie 에서는 만들어졌는데 우리 쪽에서 받지 못한 것 → [다시 받기](무료)로 다시 받을 수 있음 */
+  refetch?: boolean;
   createdAt: string;
 }
 export interface StayProject {
@@ -72,6 +79,8 @@ export interface StayProject {
   angleTasks?: StayAngleTask[];
   /** v0.9.182 완성된 AI 컷 영상 (컷 id → 우리 저장소 key, 미리보기용) */
   clipFiles?: Record<string, string>;
+  /** v0.9.183 미리보기 파일 받은 시각 (1시간 뒤 지움 — 렌더는 Kie 에서 따로 받음) */
+  clipFileAt?: Record<string, string>;
   /** v0.9.182 이 영상 AI 내레이션 목소리 (없으면 원고로 영상 만들기 마지막 설정) */
   voice?: StayVoice | null;
   jobId: string | null;
@@ -162,12 +171,14 @@ async function withUrls(p: StayProject): Promise<StayProject & { photoUrls: Reco
 
 /** v0.9.182 완성된 AI 컷 영상을 우리 저장소에 받아 둔다 (상태 확인 때, 무료 — Kie 결과 주소는 오래 안 가서). 데모(mock://)는 건너뜀 */
 async function keepClipFiles(owner: string, p: StayProject): Promise<boolean> {
-  const todo = p.clips.filter((c) => c.state === "success" && c.taskId && !p.clipFiles?.[c.id]).slice(0, 6);
+  const todo = p.clips.filter((c) => c.state === "success" && c.taskId && !p.clipFiles?.[c.id]).slice(0, 3);
+  const until = Date.now() + 40_000;
   if (!todo.length) return false;
   const provider = await getVideoAIProvider();
   if (!provider) return false;
   let changed = false;
   for (const c of todo) {
+    if (Date.now() > until) break;
     try {
       const st = await provider.status(c.taskId!);
       if (st.state !== "success" || !st.resultUrl || new URL(st.resultUrl).protocol !== "https:") continue;
@@ -178,9 +189,11 @@ async function keepClipFiles(owner: string, p: StayProject): Promise<boolean> {
       const key = `${owner}/stay/${p.id}/clip_${c.id}_${createId("v").slice(-6)}.mp4`;
       await videoStorage.put(key, buf, "video/mp4");
       p.clipFiles = { ...(p.clipFiles ?? {}), [c.id]: key };
+      p.clipFileAt = { ...(p.clipFileAt ?? {}), [c.id]: nowIso() };
       changed = true;
-    } catch {
+    } catch (e) {
       // 못 받으면 다음 확인 때 다시 (렌더는 taskId 로 따로 받음)
+      console.warn("[Stay] clip preview", JSON.stringify({ project: p.id, clip: c.id, error: e instanceof Error ? e.message.slice(0, 160) : "?" }));
     }
   }
   return changed;
@@ -192,6 +205,18 @@ async function dropClipFile(p: StayProject, clipId: string) {
   const { [clipId]: _gone, ...rest } = p.clipFiles!;
   void _gone;
   p.clipFiles = rest;
+  if (p.clipFileAt) delete p.clipFileAt[clipId];
+}
+/** v0.9.183 받은 지 1시간 지난 미리보기 영상은 지운다 (저장 공간 절약, 다시 열면 다시 받음) */
+async function pruneClipFiles(p: StayProject): Promise<boolean> {
+  let changed = false;
+  for (const id of Object.keys(p.clipFiles ?? {})) {
+    const at = Date.parse(p.clipFileAt?.[id] ?? "");
+    if (Number.isFinite(at) && Date.now() - at < CLIP_PREVIEW_MS) continue;
+    await dropClipFile(p, id);
+    changed = true;
+  }
+  return changed;
 }
 
 export const stayService = {
@@ -201,7 +226,8 @@ export const stayService = {
 
   async get(id: unknown) {
     const owner = await getCurrentUserId();
-    const { p } = await own(owner, id);
+    const { list, p } = await own(owner, id);
+    if (await pruneClipFiles(p)) await save(owner, list, p);
     return withUrls(p);
   },
 
@@ -313,6 +339,7 @@ export const stayService = {
       p.clips = [];
       p.clipKeys = {};
       p.clipFiles = {};
+      p.clipFileAt = {};
     }
     const bufs = await productPhotoBuffers(productId, STAY_MAX_PHOTOS - p.photos.length);
     let added = 0;
@@ -506,10 +533,15 @@ export const stayService = {
   },
 
   /** 상태 확인 (무료): AI 컷 + 각도 사진 */
-  async status(input: { id?: unknown }) {
+  async status(input: { id?: unknown; refetch?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     let changed = false;
+    // v0.9.183 [다시 받기] (무료): Kie 에서는 만들어졌는데 우리 쪽에서 못 받은 각도 사진을 다시 받는다 (다시 만들지 않음)
+    if (input.refetch === true) {
+      for (const t of p.angleTasks ?? []) if (canRefetch(t)) Object.assign(t, { state: "waiting", error: null, refetch: false, createdAt: nowIso() });
+      changed = true;
+    }
     const busy = p.clips.filter((c) => c.state === "waiting" || c.state === "generating");
     if (busy.length) {
       const r = await aiClipService.status({ clips: p.clips });
@@ -523,32 +555,54 @@ export const stayService = {
       for (const t of provider ? angleBusy : []) {
         try {
           const st = await provider!.status(t.taskId!);
-          if (st.state === "waiting" || st.state === "generating") continue;
+          console.info("[Stay] angle status", JSON.stringify({ project: p.id, taskId: t.taskId, state: st.state, hasUrl: Boolean(st.resultUrl), error: st.error ? st.error.slice(0, 120) : null }));
+          if (st.state === "waiting" || st.state === "generating") {
+            if (Date.now() - Date.parse(t.createdAt) > ANGLE_TIMEOUT_MS) {
+              Object.assign(t, { state: "fail", error: "15분이 지나도 끝나지 않았습니다. Kie 로그를 확인해 주세요." });
+              changed = true;
+            }
+            continue;
+          }
           changed = true;
           if (st.state === "fail" || !st.resultUrl) {
             Object.assign(t, { state: "fail", error: (st.error ?? "만들지 못했습니다.").slice(0, 200) });
             continue;
           }
-          if (new URL(st.resultUrl).protocol !== "https:") throw new Error("결과 주소가 https 가 아닙니다.");
-          const res = await safeFetch(st.resultUrl, { signal: AbortSignal.timeout(60_000) });
-          if (!res.ok) throw new Error(`사진을 받지 못했습니다 (HTTP ${res.status}).`);
           const src = p.photos.find((x) => x.key === t.sourceKey);
           if (!src || p.photos.length >= STAY_MAX_PHOTOS) throw new Error(src ? `사진은 ${STAY_MAX_PHOTOS}장까지입니다.` : "원래 사진을 뺐습니다.");
+          let img: Buffer;
+          if (serverConfig.providerMode !== "live" && st.resultUrl.startsWith("mock://")) {
+            // 데모: 원래 사진을 그대로 (흐름 시험용)
+            const b = await videoStorage.download(src.key);
+            if (!b) throw new Error("원래 사진 파일이 없습니다.");
+            img = b;
+          } else {
+            if (new URL(st.resultUrl).protocol !== "https:") throw new Error("결과 주소가 https 가 아닙니다.");
+            const res = await safeFetch(st.resultUrl, { signal: AbortSignal.timeout(60_000), headers: { "User-Agent": UA, Accept: "image/*" } });
+            if (!res.ok) throw new Error(`사진을 받지 못했습니다 (HTTP ${res.status}).`);
+            img = Buffer.from(await res.arrayBuffer());
+          }
           const key = `${owner}/stay/${p.id}/p${createId("ph").slice(-8)}.jpg`;
-          await videoStorage.put(key, await coverJpeg(Buffer.from(await res.arrayBuffer())), "image/jpeg");
+          await videoStorage.put(key, await coverJpeg(img), "image/jpeg");
           // 원래 사진(과 이미 들어간 같은 사진의 각도들) 바로 뒤에, 움직임은 원래 사진 것을 이어받는다
           let at = p.photos.findIndex((x) => x.key === src.key);
           while (at + 1 < p.photos.length && p.photos[at + 1].fromKey === src.key) at++;
           p.photos.splice(at + 1, 0, { key, line: "", motion: src.motion, motionKo: src.motionKo, sec: null, fromKey: src.key, angle: t.angle });
           t.state = "success";
+          // 하나 받을 때마다 저장 (상태 확인이 중간에 끊겨도 받은 사진은 남게)
+          await save(owner, list, p);
         } catch (e) {
-          if (!(e instanceof VideoAIError)) {
-            Object.assign(t, { state: "fail", error: (e instanceof Error ? e.message : "받지 못했습니다.").slice(0, 200) });
-            changed = true;
-          }
+          const msg = (e instanceof Error ? e.message : "받지 못했습니다.").slice(0, 200);
+          console.warn("[Stay] angle fetch", JSON.stringify({ project: p.id, taskId: t.taskId, kie: e instanceof VideoAIError, error: msg }));
+          if (e instanceof VideoAIError) {
+            // Kie 확인이 잠깐 안 되는 것 → 다음 확인 때 다시 (오래 걸리면 위에서 실패로)
+            t.error = `확인 중 오류 — 다시 확인합니다 (${msg})`;
+          } else Object.assign(t, { state: "fail", error: msg, refetch: true });
+          changed = true;
         }
       }
     }
+    if (await pruneClipFiles(p)) changed = true;
     if (await keepClipFiles(owner, p)) changed = true;
     if (changed) await save(owner, list, p);
     return withUrls(p);
@@ -563,10 +617,11 @@ export const stayService = {
     const scenes = p.photos
       .map((ph, i) => {
         const c = clipOf(p, ph.key);
-        return c && c.state === "success" && ph.line ? { index: i, narration: ph.line, sfx: null, arrow: false, attention: false, sourceVideoId: aiSourceId(c.id), pinned: true, holdSec: ph.sec ?? null } : null;
+        return c && c.state === "success" ? { index: i, narration: ph.line, sfx: null, arrow: false, attention: false, sourceVideoId: aiSourceId(c.id), pinned: true, holdSec: ph.sec ?? null } : null;
       })
       .filter((x): x is NonNullable<typeof x> => Boolean(x));
-    if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷과 대사가 있는 사진이 없습니다.");
+    if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷이 없습니다. ③ 살아 움직이게를 먼저 해 주세요.");
+    if (!scenes.some((x) => x.narration.trim())) throw new AppError("VALIDATION", "대사가 하나도 없습니다. ② 제목·대사를 만들어 주세요.");
     const plan = {
       contentId: null,
       channelId: "youtube",
@@ -624,4 +679,11 @@ function nextClipId(p: StayProject): string {
   const used = new Set(p.clips.map((c) => c.id));
   for (let i = 1; i <= 99; i++) if (!used.has(`ai${i}`)) return `ai${i}`;
   throw new AppError("VALIDATION", "AI 컷이 너무 많습니다.");
+}
+
+/** v0.9.183 다시 받을 수 있는 각도 사진: Kie 가 실패라고 한 것이 아니고 작업 번호가 있는 것 (예전 기록은 오류 문구로 판단) */
+export function canRefetch(t: StayAngleTask): boolean {
+  if (t.state !== "fail" || !t.taskId) return false;
+  if (t.refetch !== undefined) return t.refetch;
+  return !/^AI 컷을 만들지 못했습니다|^15분이 지나도/.test(t.error ?? "");
 }

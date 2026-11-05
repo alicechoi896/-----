@@ -30,7 +30,8 @@ export function stayTimeline(lineSec: number[], holdSec: (number | null | undefi
     t += Math.max(0, d) + STAY_LINE_GAP_SEC;
   }
   const need = (lines.length ? lines[lines.length - 1].to : 0) + STAY_TAIL_SEC;
-  const n = lineSec.length;
+  // v0.9.183 컷 수는 대사 줄 수와 다를 수 있다 (대사 없는 컷)
+  const n = holdSec.length;
   const fixed = holdSec.map((h) => (h && h > 0 ? Math.min(maxCut, h) : null));
   const cuts = fixed.map((h) => h ?? STAY_AUTO_CUT_SEC);
   // 모자라면 자동 컷부터 고르게 늘리고, 그래도 모자라면 정한 컷도 (최대 maxCut)

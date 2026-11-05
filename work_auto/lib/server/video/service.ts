@@ -83,9 +83,10 @@ export function sanitizeStayPlan(plan: VideoPlan): VideoPlan {
   const scenes = (Array.isArray(plan.scenes) ? plan.scenes : [])
     .slice(0, STAY_MAX_PHOTOS)
     .map((s, i) => ({ index: i, narration: String(s.narration ?? "").replace(/\s+/g, " ").trim().slice(0, 80), sfx: null, arrow: false, attention: false, gif: null, sourceVideoId: s.sourceVideoId && ok.has(String(s.sourceVideoId)) ? String(s.sourceVideoId) : null, pinned: true, holdSec: cleanHold(s.holdSec) }))
-    .filter((s) => s.narration && s.sourceVideoId)
+    .filter((s) => s.sourceVideoId)
     .map((s, i) => ({ ...s, index: i }));
   if (!scenes.length) throw new AppError("VALIDATION", "완성된 AI 컷이 없습니다. 사진을 살아 움직이게 만든 뒤 눌러 주세요.");
+  if (!scenes.some((s) => s.narration)) throw new AppError("VALIDATION", "대사가 하나도 없습니다. ② 제목·대사를 만들어 주세요.");
   return {
     contentId: null,
     channelId: "youtube",

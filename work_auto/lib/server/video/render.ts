@@ -86,7 +86,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     const tts = wantVoice ? await getTTSProvider(engine) : null;
     if (wantVoice && !tts) issues.push(`AI 음성이 연결되지 않아(${engine === "typecast" ? "타입캐스트" : "OpenAI"}) 음성 없이 자막 시간으로 만들었습니다.`);
     let voiceTempo = 1;
-    const audioPromise = (async () => {
+    // v0.9.183 AI 숙소: 대사 없는 컷(각도 컷 등)도 영상에 넣는다 — 음성은 대사 있는 줄만 만들고, 컷과 따로 흐른다
+    const speechScenes = plan.stay ? scenes.filter((s) => s.narration.trim()) : scenes;
+    const audioPromise = (async (scenes: typeof speechScenes) => {
     const audio: { file: string; dur: number }[] = new Array(scenes.length);
     // v0.9.77: 타입캐스트는 대본 전체를 한 번에 만들고(시간표 있는 음성) 글자 시각으로 줄마다 자른다
     // — 줄마다 동시에 부르면 '동시 요청이 너무 많음'(429). 톤도 컷마다 달라지지 않는다
@@ -178,7 +180,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     }
     voiceTempo = tempo;
     return audio;
-    })();
+    })(speechScenes);
 
     // 1) 원본 받기 + 글자 검사 (쓰는 원본만, 동시에 3개씩)
     await hooks.stage("analyzing", 5);
@@ -273,24 +275,31 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       throw new Error(`쓸 수 있는 원본 영상이 없습니다. ${why}`);
     }
 
-    const audio = await audioPromise;
+    let audio = await audioPromise;
     timing.audio = Date.now() - t0;
     // v0.9.171 AI 숙소: 영상과 대사를 따로 — 대사는 줄마다 이어 읽고, 컷은 정한 시간대로 끊김 없이.
     // 이어 붙인 전체 음성을 컷 시간대로 잘라 컷마다 넣는다 (자막은 대사 시각을 따른다)
     const stayTl = job.plan.stay ? stayTimeline(audio.map((a) => a?.dur ?? 0), scenes.map((s) => s.holdSec), STAY_CUT_MAX_SEC) : null;
+    // 대사 줄(음성) — 컷 수와 다를 수 있다
+    const speech = audio;
     if (stayTl) {
       if (stayTl.overflow) issues.push(`대사가 영상(컷 ${scenes.length}개 × 최대 ${STAY_CUT_MAX_SEC}초)보다 길어 끝이 잘렸습니다. 대사를 줄이거나 사진을 더 넣어 주세요.`);
       const whole = path.join(dir, "stay_narration.wav");
-      const ins = audio.flatMap((a) => ["-i", a.file]);
-      const delayed = audio.map((_, k) => `[${k}:a]aresample=44100,aformat=channel_layouts=mono,adelay=${Math.round(stayTl.lines[k].from * 1000)}[d${k}]`).join(";");
-      await runFfmpeg([...ins, "-filter_complex", `${delayed};${audio.map((_, k) => `[d${k}]`).join("")}amix=inputs=${audio.length}:normalize=0,apad,atrim=0:${stayTl.total.toFixed(3)}[o]`, "-map", "[o]", "-ar", "44100", "-ac", "1", "-y", whole]);
+      if (speech.length) {
+        const ins = speech.flatMap((a) => ["-i", a.file]);
+        const delayed = speech.map((_, k) => `[${k}:a]aresample=44100,aformat=channel_layouts=mono,adelay=${Math.round(stayTl.lines[k].from * 1000)}[d${k}]`).join(";");
+        await runFfmpeg([...ins, "-filter_complex", `${delayed};${speech.map((_, k) => `[d${k}]`).join("")}amix=inputs=${speech.length}:normalize=0,apad,atrim=0:${stayTl.total.toFixed(3)}[o]`, "-map", "[o]", "-ar", "44100", "-ac", "1", "-y", whole]);
+      } else await runFfmpeg(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", stayTl.total.toFixed(3), "-y", whole]);
+      // 컷마다 그 시간의 음성 조각 (컷 수만큼)
+      const cutAudio: { file: string; dur: number }[] = new Array(scenes.length);
       await Promise.all(
-        audio.map(async (_, k) => {
+        scenes.map(async (_, k) => {
           const out = path.join(dir, `stay_a${k}.wav`);
           await runFfmpeg(["-ss", stayTl.cutStarts[k].toFixed(3), "-t", stayTl.cuts[k].toFixed(3), "-i", whole, "-ar", "44100", "-ac", "1", "-y", out]);
-          audio[k] = { file: out, dur: stayTl.cuts[k] };
+          cutAudio[k] = { file: out, dur: stayTl.cuts[k] };
         }),
       );
+      audio = cutAudio;
     }
     await hooks.stage("editing", 30);
 
@@ -595,7 +604,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         // v0.9.171 AI 숙소: 그 컷 시간에 읽히는 대사 줄의 조각을 대사 시각대로 (컷을 넘어가면 다음 컷에서 이어서)
         let n = 0;
         for (const cap of stayCaptionsFor(stayTl, k)) {
-          const line = scenes[cap.line].narration;
+          const line = speechScenes[cap.line].narration;
           const chunks = captionChunks(line, CAPTION_TEMPLATE.maxCharsPerLine);
           const totalChars = chunks.reduce((m, c) => m + c.replace(/\s/g, "").length, 0) || 1;
           const l = stayTl.lines[cap.line];

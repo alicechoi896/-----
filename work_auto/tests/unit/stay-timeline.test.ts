@@ -23,4 +23,14 @@ describe("stayTimeline (v0.9.171 AI 숙소: 영상과 대사 따로)", () => {
     expect(c1[0].line).toBe(0);
     expect(c1.some((x) => x.line === 1)).toBe(true);
   });
+
+  it("v0.9.183 대사 없는 컷(각도 컷)이 있어 컷이 대사보다 많아도 컷 수만큼 이어진다", () => {
+    const tl = stayTimeline([0.8, 0.9], [null, null, 2, null, null], 5);
+    expect(tl.cuts).toHaveLength(5);
+    expect(tl.cutStarts).toHaveLength(5);
+    expect(tl.lines).toHaveLength(2);
+    expect(tl.cuts[2]).toBe(2);
+    expect(tl.total).toBeGreaterThanOrEqual(STAY_AUTO_CUT_SEC * 4 + 2 - 0.01);
+    expect(tl.overflow).toBe(false);
+  });
 });

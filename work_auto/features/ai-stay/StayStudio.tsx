@@ -36,6 +36,8 @@ interface AngleTask {
   angle: string;
   state: "waiting" | "success" | "fail";
   error: string | null;
+  taskId?: string | null;
+  refetch?: boolean;
   createdAt?: string;
 }
 interface StayVoice {
@@ -237,8 +239,8 @@ export function StayStudio() {
             <Badge tone={st.tone}>{vid ? "완성 · 재생 중" : st.label}</Badge>
             {c?.error && <span className="truncate text-danger">{c.error}</span>}
           </div>
-          <Input defaultValue={ph.line} onBlur={(e) => e.target.value !== ph.line && set({ line: e.target.value })} placeholder="이 컷 자막·내레이션 (예: 돌 노천탕이)" className="h-8 text-[13px]" aria-label={`${n}번 대사`} />
-          <Input defaultValue={ph.motion} onBlur={(e) => e.target.value !== ph.motion && set({ motion: e.target.value })} placeholder="움직임 (영어, 예: steam rising, light rain)" className="h-7 text-[12px]" aria-label={`${n}번 움직임`} />
+          <Input key={`l${ph.line}`} defaultValue={ph.line} onBlur={(e) => e.target.value !== ph.line && set({ line: e.target.value })} placeholder="이 컷 자막·내레이션 (예: 돌 노천탕이)" className="h-8 text-[13px]" aria-label={`${n}번 대사`} />
+          <Input key={`m${ph.motion}`} defaultValue={ph.motion} onBlur={(e) => e.target.value !== ph.motion && set({ motion: e.target.value })} placeholder="움직임 (영어, 예: steam rising, light rain)" className="h-7 text-[12px]" aria-label={`${n}번 움직임`} />
           <p className="text-[11.5px] leading-snug text-fg-muted" data-stay-motion-ko>
             <span className="mr-1 font-medium text-fg-subtle">한글</span>
             {ph.motionKo || (ph.motion ? "아직 번역 없음 — ②의 [움직임 한글 번역]을 눌러 주세요" : "—")}
@@ -272,7 +274,7 @@ export function StayStudio() {
   const linked = p?.productId ? (stays?.find((x) => x.id === p.productId) ?? { id: p.productId, name: p.name }) : null;
   const todo = p ? p.photos.filter((ph) => !clipOf(ph.key) || clipOf(ph.key)!.state === "fail").length : 0;
   const usd = (todo * (AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2);
-  const ready = p ? p.photos.filter((ph) => clipOf(ph.key)?.state === "success" && ph.line).length : 0;
+  const ready = p ? p.photos.filter((ph) => clipOf(ph.key)?.state === "success").length : 0;
 
   if (error) return <ErrorState message={error} onRetry={() => void loadList()} />;
   if (!list) return <LoadingState label="숙소 영상을 불러오는 중…" />;
@@ -423,7 +425,7 @@ export function StayStudio() {
                 {groups.map((g, gi) => {
                   const root = g.root;
                   const pending = (p.angleTasks ?? []).filter((t) => t.sourceKey === root.key && t.state === "waiting");
-                  const fails = (p.angleTasks ?? []).filter((t) => t.sourceKey === root.key && t.state === "fail" && Date.now() - Date.parse(t.createdAt ?? "") < 30 * 60_000).slice(-2);
+                  const fails = (p.angleTasks ?? []).filter((t) => t.sourceKey === root.key && t.state === "fail").slice(-2);
                   const isOpen = angleOpen === root.key;
                   const moveGroup = (d: number) => {
                     const arr = [...groups];
@@ -455,13 +457,20 @@ export function StayStudio() {
                             <span className="flex aspect-[9/16] w-12 items-center justify-center rounded bg-subtle">
                               <Sparkles className="size-4 animate-pulse" />
                             </span>
-                            {STAY_ANGLES.find((x) => x.value === t.angle)?.label ?? t.angle} 각도 만드는 중… (30초~1분, 자동 확인)
+                            {STAY_ANGLES.find((x) => x.value === t.angle)?.label ?? t.angle} 각도 만드는 중… (30초~1분, 자동 확인){t.error ? ` · ${t.error}` : ""}
                           </div>
                         ))}
                         {fails.map((t) => (
-                          <p key={t.id} className="ml-6 text-[12px] text-danger">
-                            {STAY_ANGLES.find((x) => x.value === t.angle)?.label ?? t.angle} 각도 실패: {t.error ?? "만들지 못했습니다."}
-                          </p>
+                          <div key={t.id} className="ml-6 flex flex-wrap items-center gap-2 text-[12px] text-danger" data-stay-angle-fail>
+                            <span>
+                              {STAY_ANGLES.find((x) => x.value === t.angle)?.label ?? t.angle} 각도 실패: {t.error ?? "만들지 못했습니다."}
+                            </span>
+                            {canRefetch(t) && (
+                              <Button size="sm" variant="secondary" loading={busy === "refetch"} onClick={() => void run("refetch", async () => setP(await call<Project>({ action: "status", id: p.id, refetch: true })))} data-stay-angle-refetch>
+                                Kie 에서 다시 받기 (무료)
+                              </Button>
+                            )}
+                          </div>
                         ))}
                       </div>
                       <div className="mt-2 border-t border-line pt-2">
@@ -567,7 +576,7 @@ export function StayStudio() {
               {making ? "만드는 중… (자동 확인)" : todo ? `${todo}장 살아 움직이게 · 약 ${usd}` : "모두 만들었습니다"}
             </Button>
             <p className="mt-2 text-[12px] text-fg-subtle" data-stay-animate-progress>
-              완성 {done}/{p.photos.length}컷 — 완성된 AI 영상은 ① 각 컷의 사진 자리에서 바로 재생됩니다.
+              완성 {done}/{p.photos.length}컷 — 각도 컷도 같이 만들어 영상에 넣습니다 (대사가 없는 컷도 들어감). 완성된 AI 영상은 ① 각 컷의 사진 자리에서 1시간 동안 바로 재생됩니다.
             </p>
           </SectionCard>
 
@@ -648,4 +657,11 @@ function StayVoicePanel({ value, onSave }: { value: StayVoice | null; onSave: (v
       )}
     </div>
   );
+}
+
+/** 서버와 같은 기준: Kie 가 실패라고 한 것이 아니고 작업 번호가 있는 것 */
+function canRefetch(t: AngleTask): boolean {
+  if (t.state !== "fail" || !t.taskId) return false;
+  if (t.refetch !== undefined) return t.refetch;
+  return !/^AI 컷을 만들지 못했습니다|^15분이 지나도/.test(t.error ?? "");
 }

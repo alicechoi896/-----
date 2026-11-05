@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return handle(async () => {
     const session = await requireAccess("ai-stay");
-    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; dataUrl?: unknown; url?: unknown; confirmed?: unknown; productId?: unknown; replace?: unknown; keys?: unknown; angles?: unknown; voice?: unknown }>(request);
+    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; dataUrl?: unknown; url?: unknown; confirmed?: unknown; productId?: unknown; replace?: unknown; keys?: unknown; angles?: unknown; voice?: unknown; refetch?: unknown }>(request);
     switch (b.action) {
       case "create":
         return stayService.create(b);
