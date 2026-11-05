@@ -29,7 +29,7 @@ export interface RawProductData {
   collectedAt: ISODate;
   /** 상품 URL 수집 (v0.9.36, Bright Data): 같은 상품 판별 키 · 쇼핑몰 · 쇼핑몰 상품 id */
   canonicalKey?: string;
-  platform?: "coupang" | "naver_smartstore";
+  platform?: "coupang" | "naver_smartstore" | "coupang_trip";
   externalProductId?: string;
   /** 정가·할인율·옵션 (v0.9.38, 수집한 그대로) */
   originalPrice?: number;

@@ -1035,6 +1035,34 @@
       }
     ]
   },
+  "05-makeup": {
+    "file": "/manual/shots/05-makeup.png",
+    "w": 1280,
+    "h": 2300,
+    "boxes": [
+      {
+        "n": 1,
+        "x": 303,
+        "y": 276,
+        "w": 125,
+        "h": 48
+      },
+      {
+        "n": 2,
+        "x": 303,
+        "y": 987,
+        "w": 132,
+        "h": 48
+      },
+      {
+        "n": 3,
+        "x": 541,
+        "y": 1575,
+        "w": 151,
+        "h": 48
+      }
+    ]
+  },
   "05-precise-result": {
     "file": "/manual/shots/05-precise-result.png",
     "w": 528,

@@ -3,11 +3,13 @@
  * 자동 학습 지원: 쿠팡 · 네이버 스마트스토어 · 네이버 브랜드스토어(v0.9.41). 판별은 URL 파서로만 한다 (외부 호출 0회, 문자열 includes 금지).
  */
 export type CommercePlatform = "coupang" | "naver_smartstore";
+/** v0.9.176 쿠팡 트래블(숙소): Bright Data 쿠팡 수집기가 읽지 못하는 주소라 서버가 페이지를 직접 1번 읽는다 (무료) */
+export type ProductUrlPlatform = CommercePlatform | "coupang_trip";
 
 export type ParsedProductUrl =
   | {
       supported: true;
-      platform: CommercePlatform;
+      platform: ProductUrlPlatform;
       productId: string;
       storeName: string | null;
       /** 같은 상품 판별용 (추적 파라미터와 무관) */
@@ -18,9 +20,10 @@ export type ParsedProductUrl =
     }
   | { supported: false; reason: "INVALID_URL" | "NOT_HTTPS" | "UNSUPPORTED_DOMAIN" | "NOT_PRODUCT_PAGE" };
 
-export const PLATFORM_LABEL_KO: Record<CommercePlatform, string> = { coupang: "쿠팡", naver_smartstore: "네이버 스마트스토어" };
+export const PLATFORM_LABEL_KO: Record<ProductUrlPlatform, string> = { coupang: "쿠팡", naver_smartstore: "네이버 스마트스토어", coupang_trip: "쿠팡 트래블" };
 
 const COUPANG_HOSTS = new Set(["coupang.com", "www.coupang.com"]);
+const COUPANG_TRIP_HOST = "trip.coupang.com";
 const SMARTSTORE_HOST = "smartstore.naver.com";
 /** 네이버 브랜드스토어 (v0.9.41): 주소 구조·상품 ID 가 스마트스토어와 같아 같은 수집기로 처리한다 */
 const BRANDSTORE_HOST = "brand.naver.com";
@@ -57,6 +60,13 @@ export function parseSupportedProductUrl(input: string): ParsedProductUrl {
     };
   }
 
+  if (host === COUPANG_TRIP_HOST) {
+    const m = u.pathname.match(/^\/tp\/products\/(\d{4,20})\/?$/);
+    if (!m) return { supported: false, reason: "NOT_PRODUCT_PAGE" };
+    const productId = m[1];
+    return { supported: true, platform: "coupang_trip", productId, storeName: null, canonicalKey: `coupang-trip:${productId}`, originalUrl: u.toString(), collectionUrl: `https://${COUPANG_TRIP_HOST}/tp/products/${productId}` };
+  }
+
   if (host === SMARTSTORE_HOST || host === BRANDSTORE_HOST) {
     const m = u.pathname.match(/^\/([A-Za-z0-9_.-]{1,60})\/products\/(\d{4,20})\/?$/);
     if (!m) return { supported: false, reason: "NOT_PRODUCT_PAGE" };
@@ -77,7 +87,7 @@ export function parseSupportedProductUrl(input: string): ParsedProductUrl {
 export const PRODUCT_URL_ERROR: Record<Exclude<ParsedProductUrl, { supported: true }>["reason"], string> = {
   INVALID_URL: "올바른 상품 주소가 아닙니다.",
   NOT_HTTPS: "https:// 로 시작하는 주소만 지원합니다.",
-  UNSUPPORTED_DOMAIN: "현재 지원하지 않는 상세페이지입니다. 자동 학습은 쿠팡과 네이버 스마트스토어·브랜드스토어 상품 상세페이지만 지원합니다.",
+  UNSUPPORTED_DOMAIN: "현재 지원하지 않는 상세페이지입니다. 자동 학습은 쿠팡(쿠팡 트래블 숙소 포함)과 네이버 스마트스토어·브랜드스토어 상품 상세페이지만 지원합니다.",
   NOT_PRODUCT_PAGE: "상품 상세페이지 주소가 아닙니다. 쿠팡은 coupang.com/vp/products/…, 스마트스토어는 smartstore.naver.com/스토어/products/…, 브랜드스토어는 brand.naver.com/스토어/products/… 형식이어야 합니다.",
 };
 

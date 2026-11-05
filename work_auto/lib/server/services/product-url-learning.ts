@@ -1,5 +1,6 @@
 import "server-only";
-import { PRODUCT_URL_ERROR, parseSupportedProductUrl, type CommercePlatform } from "@/lib/product-url";
+import { PRODUCT_URL_ERROR, parseSupportedProductUrl, type ProductUrlPlatform } from "@/lib/product-url";
+import { readCoupangTrip } from "./coupang-trip";
 import type { ProductAnalysisDraft, RawProductData } from "@/lib/types";
 import { AppError } from "../http";
 import { brightDataConfig, logBrightData, normalizeBrightDataRecord } from "../providers/product/brightdata";
@@ -30,7 +31,7 @@ export const productLearnConfig = {
 
 type StartResult =
   | { status: "existing"; productId: string; name: string }
-  | { status: "collecting"; jobId: string; platform: CommercePlatform; canonicalKey: string; reused: boolean }
+  | { status: "collecting"; jobId: string; platform: ProductUrlPlatform; canonicalKey: string; reused: boolean }
   | { status: "collected"; raw: RawProductData };
 
 /** 진행 중 작업: 사용자 + 상품 키 → 작업 id (Trigger 중인 Promise 포함). DB 없음 */
@@ -66,23 +67,26 @@ export const productUrlLearning = {
       if (!existing || existing.id !== input.productId) throw new AppError("VALIDATION", "다시 학습할 제품을 찾을 수 없습니다.");
     }
 
+    // v0.9.176 쿠팡 트래블(숙소): 서버가 페이지를 직접 1번 읽는다 (Bright Data 0회, 무료)
+    if (parsed.platform === "coupang_trip") return { status: "collected", raw: await readCoupangTrip(parsed.collectionUrl, parsed.canonicalKey, parsed.productId) };
+    const platform = parsed.platform;
     const key = `${userId}:${parsed.canonicalKey}`;
     const job = jobs.get(key);
     if (job && Date.now() - job.at < productLearnConfig.jobMemoryMs) {
-      if (job.jobId) return { status: "collecting", jobId: job.jobId, platform: parsed.platform, canonicalKey: parsed.canonicalKey, reused: true };
+      if (job.jobId) return { status: "collecting", jobId: job.jobId, platform, canonicalKey: parsed.canonicalKey, reused: true };
       if (job.pending) return job.pending; // 동시에 두 번 눌러도 Trigger 1회
     }
     const pending = (async (): Promise<StartResult> => {
       const collector = await getProductPageCollector();
-      logBrightData({ requestId: reqId(input.clientRequestId), operation: "trigger", platform: parsed.platform, canonicalKey: parsed.canonicalKey, user: userId.slice(0, 8) });
-      const r = await collector.trigger(parsed.platform, parsed.collectionUrl); // 자동 재시도 없음
+      logBrightData({ requestId: reqId(input.clientRequestId), operation: "trigger", platform, canonicalKey: parsed.canonicalKey, user: userId.slice(0, 8) });
+      const r = await collector.trigger(platform, parsed.collectionUrl); // 자동 재시도 없음
       if (r.status === "ready") {
         jobs.delete(key);
-        return { status: "collected", raw: normalizeBrightDataRecord(r.record, { platform: parsed.platform, url: parsed.collectionUrl, canonicalKey: parsed.canonicalKey, productId: parsed.productId }) };
+        return { status: "collected", raw: normalizeBrightDataRecord(r.record, { platform, url: parsed.collectionUrl, canonicalKey: parsed.canonicalKey, productId: parsed.productId }) };
       }
       jobs.set(key, { at: Date.now(), jobId: r.snapshotId });
       if (jobs.size > 500) jobs.delete(jobs.keys().next().value!);
-      return { status: "collecting", jobId: r.snapshotId, platform: parsed.platform, canonicalKey: parsed.canonicalKey, reused: false };
+      return { status: "collecting", jobId: r.snapshotId, platform, canonicalKey: parsed.canonicalKey, reused: false };
     })();
     jobs.set(key, { at: Date.now(), pending });
     try {
@@ -96,22 +100,24 @@ export const productUrlLearning = {
   /** 같은 작업의 상태만 확인 (Trigger 아님). 토큰이 사용자 것이라 작업도 그 계정 것만 보인다 */
   async status(input: { jobId?: unknown; url?: unknown; clientRequestId?: unknown }): Promise<{ status: "collecting"; progress: string } | { status: "collected"; raw: RawProductData }> {
     const parsed = parseOrThrow(input.url);
+    if (parsed.platform === "coupang_trip") throw new AppError("VALIDATION", "쿠팡 트래블은 바로 읽으므로 수집 작업이 없습니다. 다시 눌러 주세요.");
+    const platform = parsed.platform;
     const jobId = String(input.jobId ?? "");
     if (!/^[\w-]{4,80}$/.test(jobId)) throw new AppError("VALIDATION", "수집 작업을 찾을 수 없습니다.");
     const userId = await getCurrentUserId();
     const collector = await getProductPageCollector();
-    logBrightData({ requestId: reqId(input.clientRequestId), operation: "status", platform: parsed.platform, canonicalKey: parsed.canonicalKey, user: userId.slice(0, 8) });
+    logBrightData({ requestId: reqId(input.clientRequestId), operation: "status", platform, canonicalKey: parsed.canonicalKey, user: userId.slice(0, 8) });
     const progress = await collector.progress(jobId);
     if (progress === "failed") {
       jobs.delete(`${userId}:${parsed.canonicalKey}`);
       throw new AppError("BRIGHTDATA_FAILED", "상세페이지를 자동으로 읽지 못했습니다. 상세페이지를 캡처해 '이미지 업로드'로 올리거나 '텍스트 직접 입력'을 이용해 주세요.", 502);
     }
     if (progress !== "ready") return { status: "collecting", progress };
-    logBrightData({ requestId: reqId(input.clientRequestId), operation: "result", platform: parsed.platform, canonicalKey: parsed.canonicalKey, user: userId.slice(0, 8) });
+    logBrightData({ requestId: reqId(input.clientRequestId), operation: "result", platform, canonicalKey: parsed.canonicalKey, user: userId.slice(0, 8) });
     const record = await collector.result(jobId);
     if (record == null) return { status: "collecting", progress: "running" };
     jobs.delete(`${userId}:${parsed.canonicalKey}`);
-    return { status: "collected", raw: normalizeBrightDataRecord(record, { platform: parsed.platform, url: parsed.collectionUrl, canonicalKey: parsed.canonicalKey, productId: parsed.productId }) };
+    return { status: "collected", raw: normalizeBrightDataRecord(record, { platform, url: parsed.collectionUrl, canonicalKey: parsed.canonicalKey, productId: parsed.productId }) };
   },
 
   /** 수집한 데이터 → AI 분석 (Bright Data 0회). 화면이 받은 정리 데이터를 그대로 다시 보낸다 */

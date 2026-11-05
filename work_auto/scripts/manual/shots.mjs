@@ -754,6 +754,38 @@ export const SHOTS = [
     },
   },
   {
+    id: "05-makeup",
+    url: "/video/makeup",
+    viewport: { width: 1280, height: 2300 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const api = (body) => p.request.post(abs("/api/multicam"), { data: body }).then((r) => r.json());
+      const list = (await (await p.request.get(abs("/api/multicam"))).json()).data ?? [];
+      if (!list.length) {
+        const { execFileSync } = await import("node:child_process");
+        const { readFileSync, mkdtempSync } = await import("node:fs");
+        const os = await import("node:os");
+        const path = await import("node:path");
+        const ffmpeg = (await import("ffmpeg-static")).default;
+        const out = path.join(mkdtempSync(path.join(os.tmpdir(), "mcshot-")), "m.mp4");
+        execFileSync(ffmpeg, ["-y", "-f", "lavfi", "-i", "testsrc2=size=960x540:rate=24:duration=12", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "12", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest", out]);
+        const buf = readFileSync(out);
+        const up = (await api({ action: "upload-url", name: "차 안 GRWM 원본.mp4", size: buf.length })).data;
+        await p.request.fetch(up.url.startsWith("http") ? up.url : abs(up.url), { method: up.method, data: buf, headers: { "Content-Type": "video/mp4" } });
+        await api({ action: "probe", id: up.id });
+        await api({ action: "plan", id: up.id });
+      }
+      await p.reload({ waitUntil: "networkidle" });
+      await p.locator("[data-mc-cut]").first().waitFor({ timeout: 15_000 });
+      await p.waitForTimeout(500);
+    },
+    marks: {
+      1: (p) => p.locator("[data-mc-upload]"),
+      2: (p) => p.locator("[data-mc-plan]"),
+      3: (p) => p.locator("[data-mc-go]"),
+    },
+  },
+  {
     id: "05-stay",
     url: "/video/stay",
     viewport: { width: 1280, height: 2600 },
