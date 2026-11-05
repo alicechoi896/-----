@@ -42,6 +42,11 @@ export interface ReelRead {
   ideas: string[];
   /** 내 분야 (아이디어용) */
   field: string;
+  /** v0.9.178 유형 이름 (여러 링크 한 번에 넣을 때 '- 언박싱 유형' 줄) — ZIP 폴더 이름 */
+  label?: string;
+  /** v0.9.178 영상 / 캐러셀 사진 */
+  kind?: "video" | "photos";
+  photoKeys?: string[];
   state: "new" | "ready" | "read" | "fail";
   error: string | null;
   createdAt: string;
@@ -72,7 +77,7 @@ async function save(owner: string, list: ReelRead[], r: ReelRead) {
   return r;
 }
 async function withUrls(r: ReelRead) {
-  const keys = [...(r.videoKey ? [r.videoKey] : []), ...r.scenes.map((s) => s.frameKey)];
+  const keys = [...(r.videoKey ? [r.videoKey] : []), ...(r.photoKeys ?? []), ...r.scenes.map((s) => s.frameKey)];
   const urls = keys.length ? await videoStorage.urls(keys, 3600).catch(() => ({}) as Record<string, string>) : {};
   return { ...r, urls };
 }
@@ -122,11 +127,79 @@ async function transcribe(audio: Buffer): Promise<{ t: number; end: number; text
   return segs.length ? segs : j.text ? [{ t: 0, end: 0, text: j.text.trim() }] : [];
 }
 
+/** v0.9.178 캐러셀 읽기: 장마다 사진을 보고 화면·글자 + 구조 (AI 1번, 받아쓰기 없음) */
+async function readPhotos(r: ReelRead): Promise<ReelRead> {
+  const keys = (r.photoKeys ?? []).slice(0, 15);
+  const imgs: { key: string; b64: string }[] = [];
+  for (const k of keys) {
+    const b = await videoStorage.download(k).catch(() => null);
+    if (!b) continue;
+    const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+    const im = await loadImage(b).catch(() => null);
+    if (!im) continue;
+    const w = 480;
+    const c = createCanvas(w, Math.round((w * im.height) / im.width));
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+    imgs.push({ key: k, b64: c.toBuffer("image/jpeg", 80).toString("base64") });
+  }
+  const ai = await getAIProvider();
+  type Out = { summary: string[]; slides: { screen: string; text: string }[]; first3s: string; hook: string; body: string; cta: string; ideas: string[] };
+  let out: Out;
+  if (ai.id === "mock") out = { summary: ["표지에 큰 글자", "장마다 코디 하나", "마지막 저장 유도"], slides: imgs.map((_, i) => ({ screen: `${i + 1}장 화면`, text: "" })), first3s: "표지 큰 글자", hook: "표지 문구", body: "장마다 하나", cta: "저장", ideas: ["", "", ""] };
+  else {
+    const r2 = await ai.generateStructured<Out>({
+      task: "reel-read-carousel",
+      messages: [
+        { role: "system", content: "당신은 한국 인스타그램 캐러셀 분석가다. 장마다 사진을 보고 디자인·구도·글자를 사실대로 정리한다. 답은 JSON 하나." },
+        {
+          role: "user",
+          content: [
+            { type: "text" as const, text: `캐러셀 ${imgs.length}장 (순서대로).` },
+            ...imgs.flatMap((im, i) => [{ type: "text" as const, text: `[${i + 1}장]` }, { type: "image" as const, mediaType: "image/jpeg" as const, data: im.b64 }]),
+            { type: "text" as const, text: `정리:
+- summary: 요약 3줄
+- slides: 장마다 screen = 무엇이 보이는지(구도·인물·옷·배경·레이아웃·색), text = 장 위의 글자 그대로 (없으면 빈 문자열)
+- first3s: 표지(1장)가 어떻게 넘기게 만드는지
+- hook·body·cta: 표지 / 중간 / 마지막 장 구조를 한 줄씩
+- ideas: 내 분야에 바꿔 쓸 아이디어 3개 (내 분야: ${r.field || "AI 패션 룩북·코디 콘텐츠"}). 구조만 빌리고 그대로 베끼지 않는다.` },
+          ],
+        },
+      ],
+      outputKeys: ["summary", "slides", "first3s", "hook", "body", "cta", "ideas"],
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["summary", "slides", "first3s", "hook", "body", "cta", "ideas"],
+        properties: {
+          summary: { type: "array", items: { type: "string" } },
+          slides: { type: "array", items: { type: "object", additionalProperties: false, required: ["screen", "text"], properties: { screen: { type: "string" }, text: { type: "string" } } } },
+          first3s: { type: "string" },
+          hook: { type: "string" },
+          body: { type: "string" },
+          cta: { type: "string" },
+          ideas: { type: "array", items: { type: "string" } },
+        },
+      },
+      variables: { reel: r.id, slides: imgs.length },
+      maxTokens: 3500,
+    });
+    out = r2.data;
+  }
+  r.summary = (out.summary ?? []).map((x) => str(x, 200)).slice(0, 3);
+  r.scenes = imgs.map((im, i) => ({ t: i + 1, frameKey: im.key, screen: str(out.slides?.[i]?.screen, 300), speech: str(out.slides?.[i]?.text, 300) }));
+  r.first3s = str(out.first3s, 300);
+  r.structure = { hook: str(out.hook, 200), body: str(out.body, 200), cta: str(out.cta, 200) };
+  r.ideas = (out.ideas ?? []).map((x) => str(x, 300)).slice(0, 3);
+  r.state = "read";
+  r.error = null;
+  return r;
+}
+
 const str = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
 export const reelReadService = {
   async list() {
-    return (await readAll(await getCurrentUserId())).map((r) => ({ id: r.id, name: r.name, state: r.state, updatedAt: r.updatedAt }));
+    return (await readAll(await getCurrentUserId())).map((r) => ({ id: r.id, name: r.name, state: r.state, label: r.label ?? "", kind: r.kind ?? "video", updatedAt: r.updatedAt }));
   },
   async get(id: unknown) {
     const { r } = await own(await getCurrentUserId(), id);
@@ -135,7 +208,7 @@ export const reelReadService = {
   async remove(id: unknown) {
     const owner = await getCurrentUserId();
     const { list, r } = await own(owner, id);
-    for (const k of [r.videoKey, ...r.scenes.map((s) => s.frameKey)]) if (k) await videoStorage.remove(k).catch(() => undefined);
+    for (const k of [r.videoKey, ...(r.photoKeys ?? []), ...r.scenes.map((s) => s.frameKey)]) if (k) await videoStorage.remove(k).catch(() => undefined);
     await writeAll(owner, list.filter((x) => x.id !== r.id));
     return { ok: true };
   },
@@ -158,26 +231,48 @@ export const reelReadService = {
     await videoStorage.put(r.videoKey ?? vkey(owner, r.id), Buffer.from(body), "video/mp4");
   },
 
-  /** 인스타그램 주소 → TikHub 1회로 영상 받기 (확인 필수, 자동 재시도 없음) */
-  async fromUrl(input: { url?: unknown; confirmed?: unknown }) {
+  /** 인스타그램 주소 → TikHub 1회 (fetch_post_info) — 릴스 영상 또는 캐러셀 사진 (확인 필수, 자동 재시도 없음) */
+  async fromUrl(input: { url?: unknown; confirmed?: unknown; label?: unknown }) {
     if (input.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "확인 창에서 [받기]를 눌러 주세요.", 409);
     const url = String(input.url ?? "").trim();
     const code = reelCode(url);
-    if (!code) throw new AppError("VALIDATION", "인스타그램 릴스 주소(https://www.instagram.com/reel/…)를 넣어 주세요.");
+    if (!code) throw new AppError("VALIDATION", "인스타그램 릴스·게시물 주소(https://www.instagram.com/reel/… 또는 /p/…)를 넣어 주세요.");
     const owner = await getCurrentUserId();
     const list = await readAll(owner);
-    const r = blank(owner, `릴스 ${code}`, url.slice(0, 300));
+    const r = blank(owner, `인스타 ${code}`, url.slice(0, 300));
+    r.label = str(input.label, 40);
     const provider = await getInstagramProvider();
-    const reel = await provider.fetchReel(code);
-    console.info("[ReelRead] tikhub", JSON.stringify({ code, found: Boolean(reel?.videoUrl) }));
-    if (!reel?.videoUrl) throw new AppError("NO_VIDEO", "이 릴스의 영상 주소를 받지 못했습니다 (비공개·삭제·막힘). 영상을 저장해 [영상 올리기]로 넣어 주세요.", 422);
-    if (reel.caption) r.name = str(reel.caption, 40) || r.name;
-    const res = await safeFetch(reel.videoUrl, { signal: AbortSignal.timeout(90_000) });
-    if (!res.ok) throw new AppError("UPSTREAM", `영상을 받지 못했습니다 (HTTP ${res.status}). [영상 올리기]로 넣어 주세요.`, 502);
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > MAX_BYTES) throw new AppError("VALIDATION", "영상이 너무 큽니다 (80MB 이하).");
-    r.videoKey = vkey(owner, r.id);
-    await videoStorage.put(r.videoKey, buf, "video/mp4");
+    const media = await provider.fetchPostMedia(code);
+    console.info("[ReelRead] tikhub", JSON.stringify({ code, items: media?.items.length ?? 0, videos: media?.items.filter((x) => x.type === "video").length ?? 0 }));
+    if (!media?.items.length) throw new AppError("NO_VIDEO", "이 게시물의 영상·사진을 받지 못했습니다 (비공개·삭제·막힘). 저장해서 [영상 올리기]로 넣어 주세요.", 422);
+    r.name = [r.label, str(media.caption, 40) || (media.author ? `@${media.author}` : "") || code].filter(Boolean).join(" · ").slice(0, 60);
+    const get = async (u: string, max: number) => {
+      const res = await safeFetch(u, { signal: AbortSignal.timeout(90_000) });
+      if (!res.ok) throw new AppError("UPSTREAM", `받지 못했습니다 (HTTP ${res.status}).`, 502);
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > max) throw new AppError("VALIDATION", "파일이 너무 큽니다.");
+      return buf;
+    };
+    const video = media.items.find((x) => x.type === "video");
+    if (media.items.length === 1 && video) {
+      r.kind = "video";
+      r.videoKey = vkey(owner, r.id);
+      await videoStorage.put(r.videoKey, await get(video.url, MAX_BYTES), "video/mp4");
+    } else {
+      // 캐러셀: 사진만 차례로 (영상 장은 첫 장면 사진이 없으면 건너뜀)
+      r.kind = "photos";
+      r.photoKeys = [];
+      for (const [i, it] of media.items.entries()) {
+        if (it.type !== "image") continue;
+        const buf = await get(it.url, 15 * 1024 * 1024).catch(() => null);
+        if (!buf) continue;
+        const key = `${owner}/reels/${r.id}/p${String(i + 1).padStart(2, "0")}.jpg`;
+        await videoStorage.put(key, buf, "image/jpeg");
+        r.photoKeys.push(key);
+      }
+      if (!r.photoKeys.length) throw new AppError("NO_VIDEO", "캐러셀 사진을 받지 못했습니다. 저장해서 넣어 주세요.", 422);
+      r.state = "ready";
+    }
     return withUrls(await save(owner, list, r));
   },
 
@@ -186,6 +281,7 @@ export const reelReadService = {
     const owner = await getCurrentUserId();
     const { list, r } = await own(owner, input.id);
     r.field = str(input.field, 80);
+    if (r.kind === "photos") return withUrls(await save(owner, list, await readPhotos(r)));
     const buf = r.videoKey ? await videoStorage.download(r.videoKey) : null;
     if (!buf) throw new AppError("VALIDATION", "영상이 아직 없습니다. 다시 올려 주세요.");
     const dir = await mkdtemp(path.join(os.tmpdir(), "reel-"));

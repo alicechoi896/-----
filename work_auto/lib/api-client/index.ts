@@ -205,6 +205,9 @@ export const api = {
         | { status: "collected"; raw: RawProductData }
       >("/api/products/learn-url", { method: "POST", body: json(body) }),
     /** 같은 수집 작업의 상태만 (새 Trigger 아님) */
+    /** v0.9.178 쿠팡 트래블: 저장한 페이지(HTML) 올리기 */
+    learnHtml: (body: { url: string; html: string }) =>
+      request<{ status: "existing"; productId: string; name: string } | { status: "collected"; raw: RawProductData }>("/api/products/learn-html", { method: "POST", body: json(body) }),
     learnStatus: (body: { jobId: string; url: string; clientRequestId: string }) =>
       request<{ status: "collecting"; progress: string } | { status: "collected"; raw: RawProductData }>("/api/products/learn-url/status", { method: "POST", body: json(body) }),
     /** 수집한 데이터 → AI 분석 (Bright Data 0회) */

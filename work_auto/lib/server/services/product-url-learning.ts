@@ -1,6 +1,6 @@
 import "server-only";
 import { PRODUCT_URL_ERROR, parseSupportedProductUrl, type ProductUrlPlatform } from "@/lib/product-url";
-import { readCoupangTrip } from "./coupang-trip";
+import { parseCoupangTrip, readCoupangTrip } from "./coupang-trip";
 import type { ProductAnalysisDraft, RawProductData } from "@/lib/types";
 import { AppError } from "../http";
 import { brightDataConfig, logBrightData, normalizeBrightDataRecord } from "../providers/product/brightdata";
@@ -95,6 +95,24 @@ export const productUrlLearning = {
       jobs.delete(key); // 실패하면 사용자가 다시 누를 때만 새로
       throw e;
     }
+  },
+
+  /**
+   * v0.9.178 쿠팡 트래블: 브라우저에서 저장한 페이지(HTML) 올리기 — 쿠팡이 서버 접속을 막을 때 (외부 호출 0회, 무료)
+   * 같은 숙소를 이미 학습했으면 existing
+   */
+  async fromHtml(input: { url?: unknown; html?: unknown }): Promise<StartResult> {
+    const parsed = parseOrThrow(input.url);
+    if (parsed.platform !== "coupang_trip") throw new AppError("VALIDATION", "저장한 페이지 올리기는 쿠팡 트래블 숙소 주소에서만 씁니다.");
+    const html = String(input.html ?? "");
+    if (html.length < 2000) throw new AppError("VALIDATION", "저장한 페이지가 비어 있습니다. 숙소 페이지에서 Ctrl+S → '웹페이지, HTML만'으로 저장한 파일을 올려 주세요.");
+    if (html.length > 6_000_000) throw new AppError("VALIDATION", "파일이 너무 큽니다. '웹페이지, HTML만'으로 저장해 주세요.");
+    if (!html.includes(parsed.productId)) throw new AppError("VALIDATION", "올린 페이지가 이 주소의 숙소가 아닙니다. 주소와 같은 숙소 페이지를 저장해 올려 주세요.");
+    const userId = await getCurrentUserId();
+    const existing = await findLearnedProduct(userId, parsed.canonicalKey);
+    if (existing) return { status: "existing", productId: existing.id, name: existing.name };
+    console.info("[CoupangTrip] html", JSON.stringify({ productId: parsed.productId, size: html.length }));
+    return { status: "collected", raw: parseCoupangTrip(html, parsed.collectionUrl, parsed.canonicalKey, parsed.productId) };
   },
 
   /** 같은 작업의 상태만 확인 (Trigger 아님). 토큰이 사용자 것이라 작업도 그 계정 것만 보인다 */

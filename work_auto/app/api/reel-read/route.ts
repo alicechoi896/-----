@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("reel-read");
-    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; size?: unknown; url?: unknown; confirmed?: unknown; field?: unknown; formatId?: unknown; newFormat?: { name?: unknown; contentType?: unknown } | null }>(request);
+    const b = await readJson<{ action?: string; id?: unknown; name?: unknown; size?: unknown; url?: unknown; confirmed?: unknown; field?: unknown; formatId?: unknown; newFormat?: { name?: unknown; contentType?: unknown } | null; label?: unknown }>(request);
     switch (b.action) {
       case "upload-url":
         return reelReadService.uploadUrl(b);

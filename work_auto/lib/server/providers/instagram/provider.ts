@@ -1,7 +1,7 @@
 import "server-only";
 import type { IgReel } from "@/lib/types/instagram";
 import { tikhubRequest } from "../tikhub/client";
-import { parseReelSearch, shapeOf } from "./parse";
+import { parsePostMedia, parseReelSearch, shapeOf, type IgPostMedia } from "./parse";
 
 /**
  * 인스타그램 릴스 검색 Provider (v0.9.53). 화면·서비스는 이 interface 만 쓴다.
@@ -13,6 +13,8 @@ export interface InstagramProvider {
   searchReels(keyword: string, next?: string | null): Promise<{ items: IgReel[]; next: string | null; shape?: string }>;
   /** 릴스 1개 (재생 주소가 검색 결과에 없을 때만) — GET /api/v1/instagram/v2/fetch_post_info?code_or_url= */
   fetchReel(code: string): Promise<IgReel | null>;
+  /** v0.9.178 게시물 1개의 영상·캐러셀 사진 (같은 fetch_post_info 1회) */
+  fetchPostMedia(code: string): Promise<IgPostMedia | null>;
 }
 
 export class TikHubInstagramProvider implements InstagramProvider {
@@ -25,6 +27,10 @@ export class TikHubInstagramProvider implements InstagramProvider {
   async fetchReel(code: string) {
     const body = await tikhubRequest(this.apiKey, "GET", "/api/v1/instagram/v2/fetch_post_info", { code_or_url: code });
     return parseReelSearch(body).items.find((r) => r.code === code) ?? parseReelSearch({ data: { items: [body.data] } }).items[0] ?? null;
+  }
+  async fetchPostMedia(code: string) {
+    const body = await tikhubRequest(this.apiKey, "GET", "/api/v1/instagram/v2/fetch_post_info", { code_or_url: code });
+    return parsePostMedia(body, code);
   }
 }
 
@@ -56,5 +62,8 @@ export class MockInstagramProvider implements InstagramProvider {
   }
   async fetchReel() {
     return null; // 데모: 재생 주소 없음
+  }
+  async fetchPostMedia() {
+    return null; // 데모
   }
 }

@@ -121,3 +121,38 @@ export function shapeOf(body: unknown): string {
     .map(([k, v]) => `${k}:${Array.isArray(v) ? `[${v.length}]` : isObj(v) ? `{${Object.keys(v).slice(0, 8).join(",")}}` : typeof v}`)
     .join(" ");
 }
+
+/**
+ * v0.9.178 게시물 1개의 미디어 (릴스 영상 · 캐러셀 사진/영상) — TikHub fetch_post_info 응답을 너그럽게 읽는다.
+ * 캐러셀: carousel_media[] 순서대로, 각 항목은 영상(video_versions[0]) 또는 사진(image_versions2.candidates[0], 가장 큰 것)
+ */
+export interface IgPostMedia {
+  caption: string;
+  author: string | null;
+  items: { type: "video" | "image"; url: string }[];
+}
+export function parsePostMedia(body: unknown, code: string): IgPostMedia | null {
+  const all: Obj[] = [];
+  const walk = (v: unknown, depth = 0) => {
+    if (depth > 8 || !v || typeof v !== "object") return;
+    if (Array.isArray(v)) return v.forEach((x) => walk(x, depth + 1));
+    const o = v as Obj;
+    if (typeof (o.code ?? o.shortcode) === "string" || Array.isArray(o.carousel_media) || "image_versions2" in o || "video_versions" in o) all.push(o);
+    for (const x of Object.values(o)) if (x && typeof x === "object") walk(x, depth + 1);
+  };
+  walk(isObj(body) ? (body.data ?? body) : body);
+  const root = all.find((o) => (o.code ?? o.shortcode) === code) ?? all.find((o) => Array.isArray(o.carousel_media)) ?? all[0];
+  if (!root) return null;
+  const one = (m: Obj): { type: "video" | "image"; url: string } | null => {
+    const v = pick(m, "video_versions.0.url", "video_url");
+    if (typeof v === "string" && /^https:\/\//.test(v)) return { type: "video", url: v };
+    const cands = (pick(m, "image_versions2.candidates") as Obj[] | undefined) ?? [];
+    const best = [...cands].filter(isObj).sort((a, b) => (num(b.width) ?? 0) - (num(a.width) ?? 0))[0];
+    const i = (best?.url as string | undefined) ?? (pick(m, "display_url", "thumbnail_src", "image_versions.items.0.url") as string | undefined);
+    return typeof i === "string" && /^https:\/\//.test(i) ? { type: "image", url: i } : null;
+  };
+  const list = Array.isArray(root.carousel_media) ? (root.carousel_media as unknown[]).filter(isObj).map(one) : [one(root)];
+  const items = list.filter((x): x is { type: "video" | "image"; url: string } => Boolean(x)).slice(0, 20);
+  const cap = pick(root, "caption.text", "caption", "edge_media_to_caption.edges.0.node.text");
+  return { caption: typeof cap === "string" ? cap.slice(0, 1000) : "", author: (pick(root, "user.username", "owner.username") as string | undefined) ?? null, items };
+}

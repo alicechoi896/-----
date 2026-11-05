@@ -74,6 +74,6 @@ export async function readCoupangTrip(url: string, canonicalKey: string, product
   }
   const res = await safeFetch(url, { signal: AbortSignal.timeout(20_000), headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "ko-KR,ko;q=0.9" } }).catch(() => null);
   console.info("[CoupangTrip] fetch", JSON.stringify({ productId, status: res?.status ?? 0 }));
-  if (!res || !res.ok) throw new AppError("COUPANG_TRIP_BLOCKED", `쿠팡 트래블 페이지를 읽지 못했습니다 (HTTP ${res?.status ?? "연결 실패"}). 상세페이지를 캡처해 '이미지 업로드'로 올리거나 '텍스트 직접 입력'을 이용해 주세요.`, 502);
+  if (!res || !res.ok) throw new AppError("COUPANG_TRIP_BLOCKED", `쿠팡이 서버 접속을 막았습니다 (HTTP ${res?.status ?? "연결 실패"}). 아래 [저장한 페이지(.html) 올리기]로 해 주세요 — 숙소 페이지에서 Ctrl+S → '웹페이지, HTML만' 저장 → 올리기 (무료).`, 502);
   return parseCoupangTrip(await res.text(), url, canonicalKey, productId);
 }

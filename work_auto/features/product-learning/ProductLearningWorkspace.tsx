@@ -135,6 +135,34 @@ export function ProductLearningWorkspace() {
     }
   }
 
+  /** v0.9.178 쿠팡 트래블: 브라우저에서 저장한 숙소 페이지(HTML) 올려 학습 (외부 호출 0회) */
+  async function learnHtml(file: File) {
+    if (learnBusy.current || !parsedUrl?.supported) return;
+    learnBusy.current = true;
+    setAnalyzing(true);
+    setError(null);
+    setErrorCode(null);
+    setDraft(null);
+    setSaved(null);
+    setGroup(null);
+    setExisting(null);
+    setCollected(null);
+    try {
+      setLearnStage("checking");
+      const r = await api.products.learnHtml({ url: url.trim(), html: await file.text() });
+      if (r.status === "existing") setExisting({ productId: r.productId, name: r.name });
+      else setDraft(await analyzeRaw(r.raw, setLearnStage));
+    } catch (e) {
+      if (e instanceof CollectedError) setCollected(e.raw);
+      setErrorCode(e instanceof ApiError ? e.code : null);
+      setError(e instanceof Error ? e.message : "페이지를 읽지 못했습니다.");
+    } finally {
+      learnBusy.current = false;
+      setAnalyzing(false);
+      setLearnStage(null);
+    }
+  }
+
   /** 수집은 끝나고 AI 분석만 실패했을 때: AI 만 다시 (Bright Data 0회) */
   async function retryAnalyze() {
     if (!collected || learnBusy.current) return;
@@ -190,6 +218,40 @@ export function ProductLearningWorkspace() {
                 {analyzing ? "학습 중…" : "상세페이지 학습"}
               </Button>
             </div>
+            {/* v0.9.178 쿠팡 트래블: 쿠팡이 서버 접속을 막으면 브라우저에서 저장한 페이지로 */}
+            {parsedUrl?.supported && parsedUrl.platform === "coupang_trip" && (
+              <div className="rounded-control border border-brand-line bg-brand-soft/30 p-3 text-[12.5px]" data-trip-html>
+                <p className="font-semibold">쿠팡 트래블이 막히면 (HTTP 403) — 저장한 페이지 올리기 (무료)</p>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-fg-muted">
+                  <li>
+                    숙소 페이지를 브라우저에서 엽니다 (
+                    <a href={parsedUrl.collectionUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
+                      새 창으로 열기
+                    </a>
+                    ).
+                  </li>
+                  <li>
+                    <b>Ctrl+S</b> (맥은 ⌘+S) → 형식 <b>웹페이지, HTML만</b> → 저장.
+                  </li>
+                  <li>저장한 .html 파일을 아래 버튼으로 올립니다. 숙소 이름·주소·체크인·안내·사진을 읽고 바로 AI 분석합니다.</li>
+                </ol>
+                <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-line bg-canvas px-3 py-1.5 font-medium hover:bg-subtle">
+                  <Upload className="size-4" />
+                  저장한 페이지(.html) 올리기
+                  <input
+                    type="file"
+                    accept=".html,.htm,text/html"
+                    hidden
+                    disabled={analyzing}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) void learnHtml(file);
+                    }}
+                  />
+                </label>
+              </div>
+            )}
           </div>
         )}
 

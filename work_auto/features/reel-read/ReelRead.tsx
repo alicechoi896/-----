@@ -1,10 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookmarkPlus, Link2, ScanSearch, Trash2, Upload } from "lucide-react";
+import { BookmarkPlus, Download, Link2, ListPlus, ScanSearch, Trash2, Upload } from "lucide-react";
 import { api } from "@/lib/api-client";
-import { Button, CopyButton, EmptyState, ErrorState, Input, LoadingState, Notice, SectionCard, Select } from "@/components/ui";
+import { Button, CopyButton, EmptyState, ErrorState, Input, LoadingState, Notice, SectionCard, Select, Textarea } from "@/components/ui";
 import type { ScriptFormat } from "@/lib/types/script-format";
+import { createZip } from "@/lib/zip";
+
+/** v0.9.178 여러 링크 한 번에: '- 언박싱 유형' 같은 줄은 유형 이름, 그 아래 주소들은 그 유형 */
+function parseBatch(text: string): { label: string; url: string }[] {
+  const out: { label: string; url: string }[] = [];
+  let label = "";
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const urls = line.match(/https:\/\/(?:www\.)?instagram\.com\/[^\s]+/g);
+    if (urls) for (const u of urls) out.push({ label, url: u });
+    else label = line.replace(/^[-*•\s]+/, "").slice(0, 40);
+  }
+  const seen = new Set<string>();
+  return out.filter((x) => !seen.has(x.url) && seen.add(x.url));
+}
 
 /**
  * 릴스 읽기 (v0.9.175) — ① 영상 올리기(무료) / 인스타 주소(TikHub 1회, 확인 후) → ② [읽기] 받아쓰기 + 장면 사진 + AI 1번
@@ -21,6 +37,9 @@ interface Reel {
   name: string;
   url: string | null;
   videoKey: string | null;
+  photoKeys?: string[];
+  kind?: "video" | "photos";
+  label?: string;
   duration: number | null;
   transcript: { t: number; end: number; text: string }[];
   summary: string[];
@@ -42,7 +61,10 @@ async function call<T>(body?: Record<string, unknown>, id?: string): Promise<T> 
 }
 
 export function ReelRead() {
-  const [list, setList] = useState<{ id: string; name: string; state: string }[] | null>(null);
+  const [list, setList] = useState<{ id: string; name: string; state: string; label?: string }[] | null>(null);
+  const [batch, setBatch] = useState("");
+  const [batchRead, setBatchRead] = useState(true);
+  const [progress, setProgress] = useState<string | null>(null);
   const [r, setR] = useState<Reel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -56,7 +78,7 @@ export function ReelRead() {
   const open = useCallback(async (id: string) => setR(await call<Reel>(undefined, id)), []);
   const loadList = useCallback(async () => {
     try {
-      const l = await call<{ id: string; name: string; state: string }[]>();
+      const l = await call<{ id: string; name: string; state: string; label?: string }[]>();
       setList(l);
       if (l[0]) await open(l[0].id);
     } catch (e) {
@@ -86,6 +108,50 @@ export function ReelRead() {
     setList((l) => [{ id: x.id, name: x.name, state: x.state }, ...(l ?? []).filter((y) => y.id !== x.id)]);
     setR(x);
   };
+  const items = parseBatch(batch);
+  async function runBatch() {
+    const fails: string[] = [];
+    for (const [i, it] of items.entries()) {
+      setProgress(`${i + 1}/${items.length} 받는 중 — ${it.label || "유형 없음"}`);
+      try {
+        const x = await call<Reel>({ action: "url", url: it.url, label: it.label, confirmed: true });
+        added(x);
+        if (batchRead) {
+          setProgress(`${i + 1}/${items.length} 읽는 중 — ${it.label || "유형 없음"}`);
+          added(await call<Reel>({ action: "read", id: x.id, field }));
+        }
+      } catch (e) {
+        fails.push(`${it.url} (${e instanceof Error ? e.message : "실패"})`);
+      }
+    }
+    setProgress(null);
+    setMsg({ tone: fails.length ? "warning" : "info", text: `${items.length - fails.length}/${items.length}개를 받았습니다.${fails.length ? ` 못 받은 것: ${fails.join(" · ")}` : " [원본 모두 받기 (ZIP)]로 내려받을 수 있습니다."}` });
+  }
+  /** 받은 원본(영상·캐러셀 사진)을 유형 폴더별 ZIP 으로 */
+  async function zipAll() {
+    const files: { name: string; blob: Blob }[] = [];
+    for (const [i, x] of (list ?? []).entries()) {
+      setProgress(`ZIP 만드는 중 ${i + 1}/${list!.length}`);
+      const r2 = await call<Reel>(undefined, x.id);
+      const dir = (r2.label || "기타").replace(/[\\/:*?"<>|]/g, "_");
+      const base = r2.name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 40);
+      const keys = r2.videoKey ? [r2.videoKey] : (r2.photoKeys ?? []);
+      for (const [j, k] of keys.entries()) {
+        const u = r2.urls[k];
+        if (!u) continue;
+        const blob = await (await fetch(u)).blob();
+        files.push({ name: `${dir}/${base}${keys.length > 1 ? `_${String(j + 1).padStart(2, "0")}` : ""}.${r2.videoKey ? "mp4" : "jpg"}`, blob });
+      }
+    }
+    setProgress(null);
+    if (!files.length) throw new Error("받은 원본이 없습니다.");
+    const blob = await createZip(files);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "릴스_원본.zip";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
   const read = (id: string) => run("read", async () => added(await call<Reel>({ action: "read", id, field })));
 
   if (error) return <ErrorState message={error} onRetry={() => void loadList()} />;
@@ -147,6 +213,31 @@ export function ReelRead() {
           )}
         </div>
       </SectionCard>
+      <SectionCard title="여러 링크 한 번에 (TikHub)" icon={ListPlus} description="'- 언박싱 유형'처럼 유형 이름 줄 아래에 주소를 붙여 넣으면 유형별로 묶습니다. 링크 1개 = TikHub 1회 (릴스 영상·캐러셀 사진 모두). 받은 원본은 유형 폴더별 ZIP 으로 내려받을 수 있습니다." data-reel-batch>
+        <Textarea rows={6} value={batch} onChange={(e) => setBatch(e.target.value)} placeholder={"- 언박싱 유형\nhttps://www.instagram.com/reels/…\n- 코디 캐러셀형\nhttps://www.instagram.com/p/…"} aria-label="여러 링크" />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[12.5px]">
+            <input type="checkbox" checked={batchRead} onChange={(e) => setBatchRead(e.target.checked)} />
+            받은 뒤 바로 읽기 (받아쓰기·AI 분석)
+          </label>
+          <Button
+            variant="primary"
+            icon={Link2}
+            loading={busy === "batch"}
+            disabled={!items.length}
+            onClick={() =>
+              window.confirm(`링크 ${items.length}개를 받을까요? TikHub ${items.length}회 호출 (유료).${batchRead ? "\n받은 뒤 읽기: 영상은 받아쓰기(OpenAI, 1분 약 $0.006) + AI 1번, 캐러셀은 AI 1번." : ""}`) && void run("batch", runBatch)
+            }
+            data-reel-batch-go
+          >
+            {items.length ? `${items.length}개 받기 (TikHub ${items.length}회)` : "링크를 붙여 넣어 주세요"}
+          </Button>
+          <Button variant="secondary" icon={Download} loading={busy === "zip"} disabled={!list.length} onClick={() => void run("zip", zipAll)} data-reel-zip>
+            원본 모두 받기 (ZIP)
+          </Button>
+          {progress && <span className="text-[12px] text-info">{progress}</span>}
+        </div>
+      </SectionCard>
       {busy === "upload" || busy === "url" || busy === "read" ? <Notice tone="info">영상을 받고 장면 사진·받아쓰기·분석을 하는 중입니다 (30초~1분).</Notice> : null}
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {!r ? (
@@ -161,7 +252,7 @@ export function ReelRead() {
       ) : (
         <>
           {r.error && <Notice tone="warning">{r.error}</Notice>}
-          <SectionCard title={`${r.name} · ${r.duration ?? "?"}초 · 장면 ${r.scenes.length}개`} icon={ScanSearch} actions={<Button size="sm" variant="ghost" loading={busy === "read"} onClick={() => void read(r.id)}>다시 읽기</Button>} data-reel-result>
+          <SectionCard title={r.kind === "photos" ? `${r.name} · 캐러셀 ${r.scenes.length}장` : `${r.name} · ${r.duration ?? "?"}초 · 장면 ${r.scenes.length}개`} icon={ScanSearch} actions={<Button size="sm" variant="ghost" loading={busy === "read"} onClick={() => void read(r.id)}>다시 읽기</Button>} data-reel-result>
             <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
               <div className="space-y-3">
                 <div>
@@ -201,6 +292,16 @@ export function ReelRead() {
               </div>
               <div className="space-y-2">
                 {r.videoKey && r.urls[r.videoKey] && <video src={r.urls[r.videoKey]} controls playsInline className="max-h-[420px] rounded bg-black" />}
+                {!r.videoKey && (r.photoKeys?.length ?? 0) > 0 && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {r.photoKeys!.map((k) =>
+                      r.urls[k] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={k} src={r.urls[k]} alt="" className="h-48 shrink-0 rounded object-cover" />
+                      ) : null,
+                    )}
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2 rounded-control border border-line p-2.5" data-reel-format>
                   <span className="text-[12.5px] font-semibold">대본 포맷에 담기</span>
                   <Select className="w-56" value={fmt} placeholder="새 포맷 만들기" onChange={(e) => setFmt(e.target.value)} options={[{ value: "", label: "새 포맷 만들기" }, ...formats.map((f) => ({ value: f.id, label: f.name }))]} aria-label="대본 포맷" />
@@ -233,7 +334,7 @@ export function ReelRead() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {r.urls[s.frameKey] ? <img src={r.urls[s.frameKey]} alt={`${i + 1}번 장면`} className="aspect-[9/16] w-16 rounded object-cover" /> : <span className="aspect-[9/16] w-16 rounded bg-muted" />}
                   <div className="min-w-0 text-[13px]">
-                    <p className="text-[12px] font-semibold text-brand">{s.t.toFixed(1)}초</p>
+                    <p className="text-[12px] font-semibold text-brand">{r.kind === "photos" ? `${s.t}장` : `${s.t.toFixed(1)}초`}</p>
                     <p>{s.screen}</p>
                     {s.speech && <p className="mt-0.5 text-fg-muted">“{s.speech}”</p>}
                   </div>
