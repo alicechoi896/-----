@@ -201,7 +201,7 @@ export const SHOTS = [
   },
   {
     id: "03-reel-read",
-    url: "/tools/reel-read",
+    url: "/instagram/trends?tab=read",
     viewport: { width: 1280, height: 2400 },
     prepare: async (p) => {
       const abs = (path) => new URL(path, p.url()).toString();

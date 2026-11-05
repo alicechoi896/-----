@@ -1,16 +1,6 @@
-import { FeaturePage } from "@/components/layout/FeaturePage";
-import { ReelRead } from "@/features/reel-read/ReelRead";
-import { getFeature } from "@/lib/registry";
+import { redirect } from "next/navigation";
 
-const FEATURE_ID = "reel-read";
-
-export const metadata = { title: getFeature(FEATURE_ID).title };
-
-/** v0.9.175: 릴스 읽기 (받아쓰기 + 장면별 화면 + 구조 + 아이디어) */
+/** v0.9.180 릴스 읽기는 인스타그램 › 인스타그램 트렌드 찾기 › [릴스 읽기] 탭으로 옮겼다 */
 export default function Page() {
-  return (
-    <FeaturePage featureId={FEATURE_ID} width="wide">
-      <ReelRead />
-    </FeaturePage>
-  );
+  redirect("/instagram/trends?tab=read");
 }
