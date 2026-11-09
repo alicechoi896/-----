@@ -392,7 +392,7 @@ export const videoJobService = {
       await videoStorage.put(key, out.file);
       const problems = out.scenes.filter((s) => s.issue).length;
       const review = problems > 0 || (out.qa.blackFrames ?? 0) > 0 || out.qa.voice === "none";
-      if (problems) out.qa.issues.unshift(`확인이 필요한 컷이 ${problems}개 있습니다 (원본 글자 처리).`);
+      if (problems) out.qa.issues.unshift(`확인이 필요한 컷이 ${problems}개 있습니다 (원본 글자 처리·맞는 장면).`);
       console.info("[VideoJob]", JSON.stringify({ jobId: job.id, scenes: out.scenes.length, aiCalls: out.aiCalls, ms: Date.now() - started, review }));
       await set({ status: review ? "needs_review" : "completed", progress: 100, outputPath: key, plan: { ...job.plan, scenes: out.scenes }, qa: { ...out.qa, aiCalls: out.aiCalls } });
     } catch (e) {

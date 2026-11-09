@@ -14,15 +14,16 @@ export interface SceneWant {
 
 const MAX_FRAMES = 160;
 
-export async function matchScenes(narrations: string[], sources: { id: string; scan: TextScan }[]): Promise<{ wants: Map<number, SceneWant>; aiCalls: number }> {
+export async function matchScenes(narrations: string[], sources: { id: string; scan: TextScan }[], product = ""): Promise<{ wants: Map<number, SceneWant>; finds: Map<number, string>; aiCalls: number }> {
   const wants = new Map<number, SceneWant>();
+  const finds = new Map<number, string>();
   // v0.9.185 제품 화면에 중국어가 보이는 장면·쓸모 낮은(흐림·제품 안 보임) 장면은 후보에서 뺀다
   const frames = sources
     .flatMap((s, si) => s.scan.samples.filter((x) => x.desc && !x.cn && (x.score ?? 5) >= 4).map((x) => ({ id: s.id, si, t: x.t, desc: x.desc!, score: x.score })))
     .slice(0, MAX_FRAMES);
-  if (!frames.length || !narrations.length) return { wants, aiCalls: 0 };
+  if (!frames.length || !narrations.length) return { wants, finds, aiCalls: 0 };
   const ai = await getAIProvider();
-  if (typeof ai.generateText !== "function") return { wants, aiCalls: 0 };
+  if (typeof ai.generateText !== "function") return { wants, finds, aiCalls: 0 };
   const prompt = [
     "쇼츠 제품 영상을 만든다. 대본 한 줄마다 아래 장면 목록에서 내용이 가장 잘 맞는 장면 번호를 고른다.",
     "예: '충전이 빨라요' → 충전 케이블을 꽂거나 충전 표시가 보이는 장면, '소음이 없어요' → 조용히 쓰는 장면, '가벼워요' → 한 손으로 드는 장면, '수영·다이빙에도' → 물속·바다·수영장에서 차고 있는 장면, '터치가 부드러워요' → 손가락으로 화면을 터치하는 장면.",
@@ -37,7 +38,8 @@ export async function matchScenes(narrations: string[], sources: { id: string; s
     "[장면] 번호. 영상 · 초: 설명",
     ...frames.map((f, i) => `${i + 1}. 영상${f.si + 1} · ${f.t}초: ${f.desc}${f.score != null ? ` (점수 ${f.score})` : ""}`),
     "",
-    '형식: JSON 만. {"m":[{"line":1,"scene":12},…]}',
+    `특정 장소·동작이 나오는데 맞는 장면이 없어 0 을 고른 줄은 find 에 그 장면을 찾을 짧은 한국어 검색어를 넣는다 (제품 이름 + 장면, 예: "${product || "애플워치 울트라"} 수영"). 다른 줄은 find 를 넣지 않는다.`,
+    '형식: JSON 만. {"m":[{"line":1,"scene":12},{"line":3,"scene":0,"find":"…"},…]}',
   ].join("\n");
   try {
     const { text } = await ai.generateText({
@@ -48,14 +50,16 @@ export async function matchScenes(narrations: string[], sources: { id: string; s
       ],
       maxTokens: 1500,
     });
-    const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { m?: { line?: number; scene?: number }[] };
+    const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { m?: { line?: number; scene?: number; find?: string }[] };
     for (const r of json.m ?? []) {
       const line = Number(r.line) - 1;
       const f = frames[Number(r.scene) - 1];
       if (line >= 0 && line < narrations.length && f) wants.set(line, { id: f.id, t: f.t });
+      const find = typeof r.find === "string" ? r.find.replace(/\s+/g, " ").trim().slice(0, 40) : "";
+      if (line >= 0 && line < narrations.length && !f && find) finds.set(line, find);
     }
   } catch (e) {
     console.warn("[SceneMatch] 실패 — 기존 방식으로", e instanceof Error ? e.message.slice(0, 120) : "");
   }
-  return { wants, aiCalls: 1 };
+  return { wants, finds, aiCalls: 1 };
 }

@@ -28,7 +28,8 @@ import {
   type GroupVideoStyle,
 } from "@/lib/video-production/config";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
-import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Combobox, EmptyState, ErrorState, FormField, Input, LoadingState, Modal, Notice, SectionCard, SegmentedControl, Select, Textarea } from "@/components/ui";
+import { SocialSearchPanel } from "@/features/video-import/SocialSearchPanel";
 import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { GiphyPicker } from "./GiphyPicker";
 import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
@@ -797,6 +798,9 @@ function JobPanel({
   const [gifFor, setGifFor] = useState<number | null>(null);
   const [placeFor, setPlaceFor] = useState<number | null>(null);
   const [startFor, setStartFor] = useState<number | null>(null);
+  // v0.9.186 대사에 맞는 장면이 원본에 없는 컷: 샤오홍슈·도우인에서 찾아 넣기 ([검색]을 누를 때만 TikHub 1번)
+  const [findFor, setFindFor] = useState<number | null>(null);
+  const [extraVideos, setExtraVideos] = useState<VideoProductionOptions["videos"]>([]);
   const [compare, setCompare] = useState(true);
   // v0.9.147 컷 순서 끌어서 바꾸기 (마지막 엔딩 컷은 그대로)
   const [dragFrom, setDragFrom] = useState<number | null>(null);
@@ -809,7 +813,7 @@ function JobPanel({
     setEdited({ ...edited, scenes: list.map((s, k) => ({ ...s, index: k })) });
   };
   const setScene = (i: number, patch: Partial<VideoPlan["scenes"][number]>) => setEdited({ ...edited, scenes: edited.scenes.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
-  const poolVideos = videos.filter((v) => job.plan.sourceVideoIds.includes(v.id));
+  const poolVideos = [...videos.filter((v) => job.plan.sourceVideoIds.includes(v.id) || edited.sourceVideoIds.includes(v.id)), ...extraVideos.filter((v) => !videos.some((x) => x.id === v.id))];
 
   async function download() {
     setNote(null);
@@ -953,6 +957,11 @@ function JobPanel({
                       {TREATMENT_LABEL[s.textTreatment ?? "unchecked"]}
                       {s.issue ? ` · ${s.issue}` : ""}
                     </span>
+                    {s.findHint && (
+                      <button type="button" onClick={() => setFindFor(i)} className="mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-brand ring-1 ring-inset ring-brand/40 hover:bg-brand-soft" data-job-find>
+                        맞는 원본 찾기 · {s.findHint}
+                      </button>
+                    )}
                   </span>
                   <span className="space-y-1">
                     <ClipChooser
@@ -1043,6 +1052,30 @@ function JobPanel({
         </div>
       )}
       <GiphyPicker open={gifFor !== null} onClose={() => setGifFor(null)} channelId={channelId} sceneText={gifFor !== null ? edited.scenes[gifFor]?.narration ?? "" : ""} onPick={(g) => gifFor !== null && setScene(gifFor, { gif: g, attention: true })} />
+      <Modal open={findFor !== null} onClose={() => setFindFor(null)} title={findFor !== null ? `${findFor + 1}번 컷에 맞는 원본 찾기` : ""} description={findFor !== null ? `대사 "${edited.scenes[findFor]?.narration ?? ""}" — [검색]을 누를 때만 TikHub 1번. 가져온 영상은 영상 라이브러리에 저장되고 이 컷에 넣습니다. 그다음 [다시 만들기]를 눌러 주세요.` : undefined} className="max-w-5xl">
+        {findFor !== null && (
+          <SocialSearchPanel
+            key={findFor}
+            productOptions={[]}
+            productsLoading={false}
+            maxBatch={3}
+            initialKeyword={edited.scenes[findFor]?.findHint ?? ""}
+            onImported={(res) => {
+              const got = res.filter((r) => r.ok && r.video).map((r) => r.video!);
+              if (!got.length) return;
+              const k = findFor;
+              setExtraVideos((o) => [...o, ...got.map((v) => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl ?? null, durationSec: v.durationSec ?? 0, productId: v.productId ?? null }))]);
+              setEdited((e) => ({
+                ...e,
+                sourceVideoIds: [...new Set([...e.sourceVideoIds, ...got.map((v) => v.id)])],
+                scenes: e.scenes.map((x, j) => (j === k ? { ...x, sourceVideoId: got[0].id, pinned: true, startAt: null, frame: null, findHint: null, issue: null } : x)),
+              }));
+              setNote(`${k + 1}번 컷에 새 원본 ${got.length}개를 넣었습니다. [다시 만들기]를 누르면 반영됩니다 (자동 검수 포함).`);
+              setFindFor(null);
+            }}
+          />
+        )}
+      </Modal>
       {startFor !== null && edited.scenes[startFor]?.sourceVideoId && (
         <SourceStartPicker
           videoId={edited.scenes[startFor].sourceVideoId!}

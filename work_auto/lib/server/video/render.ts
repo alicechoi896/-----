@@ -314,7 +314,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
     }));
     // v0.9.78: 대사와 뜻이 맞는 장면 (AI 글 1회, 장면 설명만). 사람이 고른 클립(pinned)은 그 클립 안에서만
     const matchable = [...sources.entries()].filter(([id]) => !isAiSource(id)).map(([id, x]) => ({ id, scan: x.scan }));
-    const matched = await matchScenes(scenes.map((s) => s.narration), matchable).catch(() => ({ wants: new Map<number, SceneWant>(), aiCalls: 0 }));
+    const matched = await matchScenes(scenes.map((s) => s.narration), matchable, job.plan.selectedTitle ?? "").catch(() => ({ wants: new Map<number, SceneWant>(), finds: new Map<number, string>(), aiCalls: 0 }));
+    // v0.9.186 대사에 맞는 장면이 원본에 없는 줄: 화면의 [맞는 원본 찾기] 검색어 (누를 때만 TikHub 1번)
+    for (const [k, s] of scenes.entries()) s.findHint = matched.finds.get(k) ?? null;
     aiCalls += matched.aiCalls;
     timing.match = Date.now() - t0;
     const usedRanges = new Map<string, [number, number][]>();
@@ -730,7 +732,11 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         }
         toCheck = next;
       }
-      for (const [k, why] of left) scenes[k].issue = `자동 검수: ${why} — 바꿀 장면이 없었습니다. 원본 영상을 더 넣거나 [영상 보며 고르기]로 바꿔 주세요.`;
+      for (const [k, why] of left) {
+        scenes[k].issue = `자동 검수: ${why} — 바꿀 장면이 없었습니다. [맞는 원본 찾기]로 원본을 더 넣거나 [영상 보며 고르기]로 바꿔 주세요.`;
+        if (!scenes[k].findHint) scenes[k].findHint = `${(job.plan.selectedTitle ?? "").slice(0, 16)} ${scenes[k].narration}`.trim().slice(0, 40);
+      }
+      for (const s of scenes) if (s.findHint && !s.issue) s.issue = `대사에 맞는 장면이 원본에 없습니다 ('${s.findHint}') — [맞는 원본 찾기]로 넣을 수 있습니다.`;
       if (rounds) issues.push(`편집 프리셋 자동 검수 ${rounds}번: ${swapped}컷을 다른 장면으로 바꿈${left.size ? `, 남은 문제 ${left.size}컷 (${[...left.keys()].map((k) => `${k + 1}번`).join("·")})` : ", 모두 통과"}.`);
       console.info("[VideoQA]", JSON.stringify({ jobId: job.id, rounds, swapped, left: left.size }));
       timing.qa = Date.now() - t0 - timing.encode;

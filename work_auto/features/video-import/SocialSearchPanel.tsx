@@ -116,13 +116,18 @@ export function SocialSearchPanel({
   productsLoading,
   maxBatch,
   onImported,
+  initialKeyword = "",
+  initialProductId = "",
 }: {
   productOptions: { value: string; label: string; description?: string }[];
   productsLoading: boolean;
   maxBatch: number;
   onImported: (results: ImportResult[]) => void;
+  /** v0.9.186 영상 제작의 [맞는 원본 찾기]에서 넘긴 검색어 (검색은 [검색]을 눌러야 함) */
+  initialKeyword?: string;
+  initialProductId?: string;
 }) {
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(initialKeyword);
   const [platform, setPlatform] = useState<SocialPlatform>("xiaohongshu");
   const [autoTranslate, setAutoTranslate] = useState(true);
   const [sort, setSort] = useState<SocialSortOption>("general");
@@ -131,7 +136,7 @@ export function SocialSearchPanel({
   const [searching, setSearching] = useState<"search" | "more" | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [selected, setSelected] = useState<Map<string, SocialVideoItem>>(new Map());
-  const [productId, setProductId] = useState("");
+  const [productId, setProductId] = useState(initialProductId);
   const [memo, setMemo] = useState("");
   const [importing, setImporting] = useState(false);
   // 한국어 제목 (번역이 끝난 것만), 번역 중인 카드
