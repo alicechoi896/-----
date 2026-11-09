@@ -6,7 +6,7 @@ import type { RawProductData } from "@/lib/types";
 import type { ChatMessage } from "../../providers/types";
 import type { GenerationContext } from "../context-types";
 import { renderStyleBlocks } from "../style-context";
-import { NO_RATING_RULE, isRatingTalk, endingTarget, followShare, formatStrength, formatTitleCount, formatViews, promptExamples, promptTitles, sampleList, titleMix } from "@/lib/script-format";
+import { NO_RATING_RULE, isRatingTalk, endingTarget, followShare, formatStrength, formatTitleCount, formatViews, promptTitles, sampleList, similarExamples, titleMix } from "@/lib/script-format";
 import { isListFormat } from "@/lib/generators/types";
 import type { PromptTemplate } from "./types";
 
@@ -35,7 +35,7 @@ function outputFormat(outputs: OutputSection[]): string {
   return `다음 JSON 형식으로만 응답한다:\n${JSON.stringify(shape, null, 2)}`;
 }
 
-function contextBlocks(ctx: GenerationContext): string[] {
+function contextBlocks(ctx: GenerationContext, input: Record<string, unknown> = {}): string[] {
   const blocks: string[] = [];
   const p = ctx.product;
   if (p) {
@@ -82,7 +82,10 @@ function contextBlocks(ctx: GenerationContext): string[] {
     const f = ctx.scriptFormat;
     const st = formatStrength(f);
     const pct = Math.round(st.ratio * 100);
-    const ex = promptExamples(f.examples, st.heavy);
+    // v0.9.189 지금 제품·주제와 비슷한 참고 대본 8~10편 (조회수만 보던 2~5편 대신)
+    const p = ctx.product?.product;
+    const query = [p?.name, p?.brand, p?.category, ...["topic", "keyword", "title", "productName"].map((k) => String(input[k] ?? ""))].filter(Boolean).join(" ");
+    const ex = similarExamples(f.examples, st.heavy, query);
     blocks.push(
       block(`대본 포맷: ${f.name} (사용자가 직접 모은 잘된 대본 ${st.total}개 기반 — 결과의 ${pct}% 이상을 이 포맷대로)`, [
         st.heavy
@@ -99,7 +102,7 @@ function contextBlocks(ctx: GenerationContext): string[] {
     if (ex.length) {
       blocks.push(
         block(
-          `대본 포맷 > 참고 대본 ${ex.length}편 (조회수 높은 순 — 구조·리듬·문장 길이를 ${pct}% 이상 따른다. 문장·제품명·숫자를 그대로 쓰지 않고, 받아 적은 오타는 따라 하지 않는다)`,
+          `대본 포맷 > 참고 대본 ${ex.length}편 (지금 제품·주제와 비슷한 순 — 단계 순서·구조·리듬·문장 길이를 ${pct}% 이상 따른다. 문장·제품명·숫자를 그대로 쓰지 않고, 받아 적은 오타는 따라 하지 않는다)`,
           ex.map((e, i) => `(${i + 1}${e.views != null ? ` · ${formatViews(e.views)}` : ""}) ${e.text.replace(/\n/g, " / ")}`),
         ),
       );
@@ -308,7 +311,7 @@ export function renderContentPrompt(
   const ending = ctx.scriptFormat && ctx.scriptFormatUse === "full" && config.outputs.some((o) => o.key === "script") ? endingTarget(ctx.scriptFormat).rule : null;
   const user = [
     block("작업", template.task),
-    ...contextBlocks(ctx),
+    ...contextBlocks(ctx, input as Record<string, unknown>),
     block("사용자 입력", userInput),
     outputFormat(config.outputs),
     ctx.psychology ? block("마케팅 심리 원칙 (켜져 있음 — 대본 포맷·말끝 규칙이 우선)", PSYCHOLOGY_GUIDE) : "",

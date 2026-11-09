@@ -1,6 +1,6 @@
 import "server-only";
 import { CLAUDE_ONLY_FEATURES, forcedAi, withClaude } from "../providers/ai-force";
-import { NO_RATING_RULE, banmalRatio, endingTarget, followShare, wrapScript, yoRatio } from "@/lib/script-format";
+import { NO_RATING_RULE, banmalRatio, endingTarget, followShare, formatStrength, similarExamples, wrapScript, yoRatio } from "@/lib/script-format";
 import { findHonestyViolations } from "@/lib/domain/honesty";
 import { APPENDABLE_KEYS, APPEND_MAX_ITEMS, mergeAppend } from "@/lib/generators/append";
 import { findGeneratorConfig } from "@/lib/generators/configs";
@@ -200,6 +200,85 @@ async function enforceEndings(p: Prepared, output: Record<string, GeneratedValue
   }
 }
 
+/** 숫자 토큰 (지어낸 숫자 검사용) */
+const numbersIn = (t: string) => new Set((t.match(/\d[\d,.]*/g) ?? []).map((x) => x.replace(/[,.]+$/, "").replace(/,/g, "")));
+const niDa = (t: string) => (t.match(/니다[.!?\s]*($|\n)/g) ?? []).length;
+
+/**
+ * v0.9.189 대본 포맷 검수: 다 만든 대본이 포맷(가이드라인 단계 순서·참고 대본 구조·리듬)을 따랐는지 AI 가 보고,
+ * 어긴 대본만 포맷대로 다시 고친다 (AI 1회). 고친 대본은 안전 검사를 통과할 때만 쓴다:
+ * 새 숫자를 지어내지 않았는지(원래 대본·제품 정보에 있는 숫자만) · '~니다.' 말끝을 늘리지 않았는지 · 길이가 크게 바뀌지 않았는지.
+ * 앱 규칙(‘~니다.’ 금지 · 한 줄 8~10자 · 평점 이야기 금지)은 그대로. 실패해도 원래 결과를 그대로 쓴다.
+ */
+async function enforceFormat(p: Prepared, output: Record<string, GeneratedValue>): Promise<void> {
+  const ctx = p.context;
+  const f = ctx.scriptFormat;
+  if (!f || ctx.scriptFormatUse !== "full" || !Array.isArray(output.script) || !output.script.length) return;
+  if (!f.guideline?.trim() && !(f.examples ?? []).length) return;
+  const scripts = (output.script as string[]).map(String);
+  const prod = ctx.product?.product;
+  const query = [prod?.name, prod?.brand, prod?.category, ...["topic", "keyword", "title"].map((k) => String(p.input[k] ?? ""))].filter(Boolean).join(" ");
+  const ex = similarExamples(f.examples ?? [], false, query).slice(0, 3);
+  const facts = JSON.stringify({ product: ctx.product ?? null, input: p.input });
+  try {
+    const ai = await getAIProvider();
+    const r = await ai.generateStructured<{ checks?: unknown }>({
+      task: "content:script-format-check",
+      messages: [
+        { role: "system", content: "당신은 한국어 쇼츠 대본 검수자다. 대본이 사용자의 대본 포맷(단계 순서·각 단계 역할·리듬)을 따랐는지 엄격하게 보고, 어긴 대본만 포맷대로 고친다. 내용(제품 사실·숫자)은 원래 대본에 있는 것만 쓴다. JSON 으로만 답한다." },
+        {
+          role: "user",
+          content: [
+            `[대본 포맷: ${f.name}] 가이드라인\n${(f.guideline ?? "").slice(0, 3000)}`,
+            ex.length ? `[참고 대본 (구조·리듬 예시, 내용 복사 금지)]\n${ex.map((e, i) => `(${i + 1}) ${e.text.replace(/\n/g, " / ")}`).join("\n")}` : "",
+            `[검수할 대본 ${scripts.length}편]\n${JSON.stringify(scripts)}`,
+            [
+              "편마다 판정: follows = 가이드라인의 단계 순서(Hook → 근거 → 핵심 → 혜택 → CTA 등)와 각 단계 역할, 참고 대본 같은 리듬을 따랐으면 true.",
+              "false 면 fixed 에 포맷대로 고친 대본을 쓴다. 지킬 것: 원래 대본에 있는 사실·숫자·제품 이름만 쓴다 (새 숫자·새 장점 금지) · 첫 줄 Hook 과 마지막 줄 CTA 는 원래 것을 되도록 그대로 · 줄마다 줄바꿈, 한 줄은 공백 포함 8~10자 안팎 · '~니다.'로 끝나는 문장 금지 · 평점·순위 이야기 금지 · 길이는 원래와 비슷하게.",
+              "true 면 fixed 는 빈 문자열. why 는 20자 안 (무엇이 어긋났는지).",
+              '형식: {"checks":[{"follows":true,"why":"","fixed":""},…]} (대본 순서 그대로)',
+            ].join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        },
+      ],
+      outputKeys: ["checks"],
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["checks"],
+        properties: { checks: { type: "array", items: { type: "object", additionalProperties: false, required: ["follows", "why", "fixed"], properties: { follows: { type: "boolean" }, why: { type: "string" }, fixed: { type: "string" } } } } },
+      },
+      variables: { scripts, format: f.name },
+      maxTokens: 3000,
+    });
+    const checks = Array.isArray(r.data.checks) ? (r.data.checks as { follows?: boolean; why?: string; fixed?: string }[]) : [];
+    let fixedN = 0;
+    let off = 0;
+    const known = numbersIn(`${facts} ${scripts.join(" ")}`);
+    checks.forEach((c, i) => {
+      if (i >= scripts.length || c?.follows !== false) return;
+      off++;
+      const orig = scripts[i];
+      const fixed = String(c.fixed ?? "").trim();
+      if (!fixed) return;
+      const lines = (t: string) => t.split(/\n+/).filter((x) => x.trim()).length;
+      // 안전 검사: 지어낸 숫자 없음 · '~니다.' 늘리지 않음 · 길이 ±40% 안
+      if ([...numbersIn(fixed)].some((n) => !known.has(n))) return;
+      if (niDa(fixed) > niDa(orig)) return;
+      if (Math.abs(fixed.length - orig.length) > orig.length * 0.4 || Math.abs(lines(fixed) - lines(orig)) > Math.max(3, lines(orig) * 0.4)) return;
+      scripts[i] = fixed;
+      fixedN++;
+    });
+    output.script = scripts;
+    const st = formatStrength(f);
+    ctx.summary.notes.push(off ? `대본 포맷 검수: ${scripts.length}편 중 ${off}편이 포맷과 달라 ${fixedN}편을 포맷대로 고쳤습니다 (참고 대본 ${st.heavy ? 10 : 8}편 기준).` : `대본 포맷 검수: ${scripts.length}편 모두 포맷대로입니다.`);
+  } catch {
+    /* 검수 실패 → 원래 결과 그대로 */
+  }
+}
+
 /** v0.9.174 YouTube 제품 홍보 영상(·자동 제작) 대본: 10자 넘는 줄은 띄어쓰기에서 나눈다 (낱말 중간은 안 끊음) */
 const WRAP_FEATURES = new Set(["yt-product-video"]);
 function wrapScriptLines(featureId: string, output: Record<string, GeneratedValue>): void {
@@ -215,6 +294,7 @@ async function finish(
 ): Promise<GeneratedContent> {
   const { feature, config, featureId, channelId, userId, input, context, template } = p;
   mergeUserKeywords(config, input, output);
+  await enforceFormat(p, output);
   await enforceEndings(p, output);
   wrapScriptLines(featureId, output);
   if (typeof output.description === "string") output.description = cleanDescription(output.description);

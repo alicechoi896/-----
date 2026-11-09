@@ -192,6 +192,29 @@ export function promptExamples(examples: ScriptExample[], heavy = false): Script
     .map((e) => ({ ...e, text: e.text.length > chars ? e.text.slice(0, chars) + "…" : e.text }));
 }
 
+/** v0.9.189 생성할 때 보여 주는 참고 대본 수·글자 수 (전에는 조회수 높은 2편 500자 / 큰 포맷 5편 900자) */
+export const SIMILAR_EXAMPLES = { n: 8, chars: 600, heavyN: 10, heavyChars: 700 } as const;
+const wordsIn = (t: string) => [...new Set(t.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2))];
+/**
+ * v0.9.189 지금 만드는 제품·주제와 비슷한 참고 대본을 고른다 — 제품 이름·브랜드·분류·주제 낱말이 제목·대본에 많이 나오는 것 먼저,
+ * 같으면 조회수 높은 것. 비슷한 게 모자라면 조회수 높은 것으로 채운다.
+ */
+export function similarExamples(examples: ScriptExample[], heavy: boolean, query: string): ScriptExample[] {
+  const n = heavy ? SIMILAR_EXAMPLES.heavyN : SIMILAR_EXAMPLES.n;
+  const chars = heavy ? SIMILAR_EXAMPLES.heavyChars : SIMILAR_EXAMPLES.chars;
+  const q = wordsIn(query);
+  return examples
+    .filter((e) => e.text.trim())
+    .map((e) => {
+      const hay = `${e.title} ${e.text}`.toLowerCase();
+      const hit = q.filter((w) => hay.includes(w)).length;
+      return { e, score: hit * 3 + Math.log10((e.views ?? 0) + 10) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(({ e }) => ({ ...e, text: e.text.length > chars ? e.text.slice(0, chars) + "…" : e.text }));
+}
+
 /** 제목 패턴 참고용: 조회수 높은 순 제목 최대 5개 */
 export function promptTitles(examples: ScriptExample[], max = 20): string[] {
   // v0.9.50: 매번 같은 제목만 보내 같은 제목이 반복되던 문제 → 생성할 때마다 무작위로 고른다 (조회수 높은 제목은 조금 더 자주)
