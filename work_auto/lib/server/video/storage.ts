@@ -67,6 +67,21 @@ export const videoStorage = {
     const { data } = await db.storage.from("videos").list(folder, { limit: opts?.limit ?? 100, offset: opts?.offset ?? 0, ...(opts?.desc ? { sortBy: { column: "name", order: "desc" } } : {}) });
     return (data ?? []).filter((f) => f.id).map((f) => ({ key: `${folder}/${f.name}`, createdAt: f.created_at ?? null, size: Number((f.metadata as { size?: number } | null)?.size ?? 0) }));
   },
+  /** v0.9.188 바로 아래 폴더 이름들 (파일 말고) */
+  async folders(folder: string, opts?: { limit?: number; offset?: number }): Promise<string[]> {
+    if (inMemory()) {
+      const names = new Set<string>();
+      for (const k of mem().keys()) {
+        if (!k.startsWith(`${folder}/`)) continue;
+        const rest = k.slice(folder.length + 1);
+        if (rest.includes("/")) names.add(rest.split("/")[0]);
+      }
+      return [...names].sort().slice(opts?.offset ?? 0, (opts?.offset ?? 0) + (opts?.limit ?? 100));
+    }
+    const db = await createSupabaseServerClient();
+    const { data } = await db.storage.from("videos").list(folder, { limit: opts?.limit ?? 100, offset: opts?.offset ?? 0 });
+    return (data ?? []).filter((f) => !f.id).map((f) => f.name);
+  },
   memoryFile(key: string): Buffer | null {
     return inMemory() ? (mem().get(key) ?? null) : null;
   },

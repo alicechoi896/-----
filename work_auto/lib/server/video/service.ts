@@ -2,6 +2,7 @@ import { isGiphyUrl, type GiphyItem } from "../providers/giphy";
 import { enforceSourceQuota } from "./vault";
 import { fitThumbs } from "@/lib/video-production/thumb";
 import "server-only";
+import { sweepOutputs } from "./output-sweep";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -470,5 +471,7 @@ export const videoJobService = {
     }
     // v0.9.187: 원본은 받은 지 7일 지나면 지우고, 합계가 3GB 를 넘으면 오래된 것부터 (Supabase 저장 공간)
     await enforceSourceQuota(userId).catch(() => undefined);
+    // v0.9.188 패션·드라마·메이크업·캐러셀·상세페이지 결과물은 3일 뒤
+    await sweepOutputs(userId).catch(() => undefined);
   },
 };
