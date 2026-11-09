@@ -8,7 +8,7 @@ const ffmpeg = (await import("ffmpeg-static")).default as unknown as string;
 const { TypecastTTSProvider } = await import("@/lib/server/providers/tts/typecast");
 vi.mock("@/lib/server/providers/registry", async () => {
   const { TypecastTTSProvider: P } = await import("@/lib/server/providers/tts/typecast");
-  return { getAIProvider: async () => ({ id: "mock", supportsVision: false }), getTTSProvider: async () => new P("KEY") };
+  return { getAIProvider: async () => ({ id: "mock", supportsVision: false }), getVisionProvider: async () => ({ id: "mock", supportsVision: false }), getTTSProvider: async () => new P("KEY") };
 });
 const { renderVideo } = await import("@/lib/server/video/render");
 

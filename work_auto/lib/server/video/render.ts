@@ -39,7 +39,9 @@ import { cutWindows, outputWindow, sequentialStart, type SourceEdit } from "@/li
 import { manualFilter } from "./edit-filter";
 import { stayCaptionsFor, stayTimeline } from "./stay-timeline";
 import { forgetStored } from "./vault";
-import { SCAN_VERSION, TITLE_BAR_FRAC, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, scanText, type Treatment, type TextScan } from "./text-scan";
+import { SCAN_VERSION, TITLE_BAR_FRAC, boxesIn, coverAll, decideTreatment, persistentBoxes, pickSegment, productIn, scanText, type Treatment, type TextScan } from "./text-scan";
+import { guardWindows } from "./window-guard";
+import { grabReviewFrames, reviewCuts, verdictText } from "./cut-review";
 import { videoStorage } from "./storage";
 import { isGiphyUrl } from "../providers/giphy";
 import { safeFetch } from "../security/safe-url";
@@ -344,7 +346,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const src = sources.get(s.sourceVideoId)!;
         const start = Math.max(0, Math.min(s.startAt, Math.max(0, src.duration - dur - 0.05)));
         const boxes = [...boxesIn(src.scan, start, dur), ...persistentBoxes(src.scan)];
-        let tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar);
+        let tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar, productIn(src.scan, start, dur));
         if (tr.kind === "rejected") {
           const c = coverAll(boxes, aspects.get(s.sourceVideoId), bar);
           tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
@@ -358,7 +360,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         let tr: Treatment = { kind: "clean" };
         if (!(s.frame || e?.frame || e?.zooms?.length)) {
           const boxes = [...boxesIn(src.scan, start, dur), ...persistentBoxes(src.scan)];
-          tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar);
+          tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar, productIn(src.scan, start, dur));
           if (tr.kind === "rejected") {
             const c = coverAll(boxes, aspects.get(s.sourceVideoId), bar);
             tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
@@ -418,6 +420,13 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       if (manual) {
         best = { ...best, tr: { kind: "clean" } };
         s.issue = null;
+        // v0.9.185 프리셋: 사람이 정한 화면이라도 원본 자막·로고·중국어가 보이면 더 확대해서 가린다 (제품 가운데 쪽으로)
+        const src0 = sources.get(best.id);
+        if (src0?.scan.checked) {
+          const g = guardWindows(manual, [...boxesIn(src0.scan, best.start, dur), ...persistentBoxes(src0.scan)], aspects.get(best.id) ?? 9 / 16, bar, productIn(src0.scan, best.start, dur));
+          manual = { base: g.base, segs: g.segs };
+          if (!g.ok) s.issue = "정한 화면에서 원본 글자를 다 가리지 못했습니다 (자동 검수에서 다른 장면으로 바꿉니다).";
+        }
       }
       const src = sources.get(best.id)!;
       usedRanges.set(best.id, [...(usedRanges.get(best.id) ?? []), [best.start, best.start + dur]]);
@@ -657,13 +666,75 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       await runFfmpeg(["-i", audio[k].file, "-af", `apad,atrim=0:${dur.toFixed(3)}`, "-ar", "44100", "-ac", "1", aout]);
       sceneAudio[k] = aout;
       done++;
-      await hooks.stage("rendering", 40 + Math.round((done / picks.length) * 45));
+      await hooks.stage("rendering", Math.min(85, 40 + Math.round((done / picks.length) * 45)));
     };
     // v0.9.80: 3컷씩 (작업 큐로 쉬지 않고)
     let nextPick = 0;
     await Promise.all(Array.from({ length: Math.min(C.encodeParallel, picks.length) }, async () => {
       while (nextPick < picks.length) await encode(picks[nextPick++]);
     }));
+
+    // 4-2) v0.9.185 편집 프리셋 자동 검수: 완성된 컷을 AI 로 보고(제품 정가운데·원본 글자 없음·제품에 중국어 없음·선명·대사와 맞음)
+    //      걸린 컷은 그 구간을 빼고 다른 장면으로 다시 골라 다시 만든 뒤 또 검수 — 통과하거나 바꿀 장면이 없을 때까지 (최대 QA_ROUNDS 번, 시간 안에서)
+    timing.encode = Date.now() - t0;
+    {
+      const banned = new Map<string, [number, number][]>();
+      const product = job.plan.selectedTitle ?? "";
+      let toCheck = picks.filter((p) => !isAiSource(p.best.id) && !(job.plan.ending && p.k === scenes.length - 1)).map((p) => p.k);
+      let rounds = 0;
+      let swapped = 0;
+      const left = new Map<number, string>();
+      while (toCheck.length && rounds < C.qaRounds && Date.now() - t0 < C.qaBudgetMs) {
+        rounds++;
+        const items = await Promise.all(toCheck.map(async (k) => ({ k, narration: scenes[k].narration, frames: await grabReviewFrames(sceneFiles[k], picks[k].dur, dir, `q${rounds}_${k}`) })));
+        const r = await reviewCuts(items.filter((x) => x.frames.length), product);
+        aiCalls += r.aiCalls;
+        if (!r.verdicts.size) {
+          rounds--; // 검수 AI 를 못 씀 (데모·미연결)
+          break;
+        }
+        const fails = [...r.verdicts.values()].filter((v) => !v.ok);
+        for (const k of toCheck) if (r.verdicts.get(k)?.ok) left.delete(k);
+        const next: number[] = [];
+        for (const v of fails) {
+          const pk = picks[v.k];
+          const s = pk.s;
+          banned.set(pk.best.id, [...(banned.get(pk.best.id) ?? []), [pk.best.start - 0.5, pk.best.start + pk.dur + 0.5]]);
+          // 다른 장면: 이미 쓴 구간·검수에 걸린 구간을 빼고. 사람이 고른 클립이면 그 클립 안에서 먼저, 없으면 모든 원본에서
+          const used = new Map<string, [number, number][]>();
+          for (const [id, rs] of usedRanges) used.set(id, [...rs]);
+          for (const [id, rs] of banned) used.set(id, [...(used.get(id) ?? []), ...rs]);
+          const srcList = (ids: string[]) => ids.filter((id) => !isAiSource(id) && sources.has(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === pk.best.id, aspect: aspects.get(id), range: null }));
+          const pinnedIds = s.pinned && pk.best.id ? [pk.best.id] : [];
+          let alt = pinnedIds.length ? pickSegment({ bar, narration: s.narration, dur: pk.dur, used, sources: srcList(pinnedIds) }) : null;
+          if (alt && (used.get(alt.id) ?? []).some(([a, b]) => alt!.start < b && alt!.start + pk.dur > a)) alt = null;
+          if (!alt) alt = pickSegment({ bar, narration: s.narration, dur: pk.dur, used, sources: srcList([...sources.keys()]) });
+          if (!alt || (used.get(alt.id) ?? []).some(([a, b]) => alt!.start < b && alt!.start + pk.dur > a)) {
+            left.set(v.k, verdictText(v));
+            continue;
+          }
+          pk.best = { id: alt.id, start: alt.start, tr: alt.tr };
+          pk.src = sources.get(alt.id)!;
+          pk.manual = null;
+          usedRanges.set(alt.id, [...(usedRanges.get(alt.id) ?? []), [alt.start, alt.start + pk.dur]]);
+          s.sourceVideoId = alt.id;
+          s.sourceStart = Number(alt.start.toFixed(2));
+          s.textTreatment = alt.tr.kind as TextTreatment;
+          s.issue = null;
+          await rm(sceneFiles[v.k], { force: true });
+          await rm(sceneAudio[v.k], { force: true });
+          await encode(pk);
+          swapped++;
+          left.set(v.k, verdictText(v));
+          next.push(v.k);
+        }
+        toCheck = next;
+      }
+      for (const [k, why] of left) scenes[k].issue = `자동 검수: ${why} — 바꿀 장면이 없었습니다. 원본 영상을 더 넣거나 [영상 보며 고르기]로 바꿔 주세요.`;
+      if (rounds) issues.push(`편집 프리셋 자동 검수 ${rounds}번: ${swapped}컷을 다른 장면으로 바꿈${left.size ? `, 남은 문제 ${left.size}컷 (${[...left.keys()].map((k) => `${k + 1}번`).join("·")})` : ", 모두 통과"}.`);
+      console.info("[VideoQA]", JSON.stringify({ jobId: job.id, rounds, swapped, left: left.size }));
+      timing.qa = Date.now() - t0 - timing.encode;
+    }
 
     // 5) 이어 붙이기 (다시 인코딩하지 않음) + 소리 섞기: 내레이션 + 배경음악(반복, 작게) + 효과음(컷 시작에)
     const vlist = path.join(dir, "v.txt");

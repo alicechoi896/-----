@@ -1,7 +1,7 @@
 import "server-only";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { getAIProvider } from "../providers/registry";
+import { getVisionProvider } from "../providers/registry";
 import type { ChatContentPart } from "../providers/types";
 import { VIDEO_RENDER_CONFIG, TOP_TITLE_TEMPLATE } from "@/lib/video-production/config";
 import type { TextTreatment } from "@/lib/types/video-production";
@@ -16,7 +16,7 @@ import { runFfmpeg } from "./ffmpeg";
 export type Box = { x: number; y: number; w: number; h: number };
 export interface TextScan {
   /** 샘플 시각(초)마다 글자 상자 */
-  samples: { t: number; boxes: Box[]; score?: number; desc?: string }[];
+  samples: { t: number; boxes: Box[]; score?: number; desc?: string; /** v0.9.185 제품 본체 위치 */ product?: Box | null; /** v0.9.185 제품(기기 화면 포함)에 중국어가 보임 — 확대로 못 지우니 이 장면은 피한다 */ cn?: boolean }[];
   checked: boolean;
   interval: number;
 }
@@ -25,10 +25,10 @@ export interface TextScan {
 const MAX_SAMPLES = 12;
 const PER_CALL = 12;
 /** 검사 결과 저장 버전 (프롬프트를 바꾸면 올린다) */
-export const SCAN_VERSION = 3;
+export const SCAN_VERSION = 4;
 
 export async function scanText(file: string, duration: number, dir: string, key: string): Promise<{ scan: TextScan; aiCalls: number }> {
-  const ai = await getAIProvider();
+  const ai = await getVisionProvider();
   const interval = Math.max(1, duration / MAX_SAMPLES);
   const times: number[] = [];
   for (let t = Math.min(0.2, duration / 2); t < duration - 0.05 && times.length < MAX_SAMPLES; t += interval) times.push(Number(t.toFixed(2)));
@@ -63,10 +63,12 @@ export async function scanText(file: string, duration: number, dir: string, key:
       type: "text",
       text: [
         `위 영상 프레임 ${batch.length}장을 순서대로 본다. 쇼츠 제품 영상에 쓸 장면을 고르려고 한다.`,
-        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 제품 본체에 인쇄된 아주 작은 글자는 빼도 된다.",
-        "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게: 제품이 크고 선명하게 보임, 손으로 쓰는 동작·사용 장면, 결과가 보이는 장면. 낮게: 인트로·아웃트로·검은 화면·흔들림·어두움·사람 얼굴만·글자 화면·제품이 안 보임.",
-        "3) desc: 장면을 한국어 10~25자로, 제품의 어떤 기능·동작을 보여 주는지 드러나게 (예: '충전 케이블 꽂는 손', '물 뿌려 방수 시험', '청소기로 바닥 미는 손', '한 손으로 가볍게 들기', '제품 박스 클로즈업').",
-        '형식: JSON 만. {"frames":[{"i":1,"boxes":[[x,y,w,h],…],"score":7,"desc":"…"},…]} — x,y,w,h 는 화면 너비·높이 대비 0~1 비율, 글자가 없으면 boxes 는 [].',
+        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 화면 아래쪽 자막 줄(중국어 자막 등)은 작거나 반투명해도 반드시 넣고, 줄 전체 길이로 넉넉하게 잡는다. 제품 본체(화면 속 기기)에 인쇄된 글자·기기 화면 속 글자는 빼도 된다.",
+        "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게(8~10): 제품이 화면 가운데 크고 또렷하게(초점 맞음·흔들림 없음) 보이면서 손으로 직접 쓰는 장면 (디스플레이를 손가락으로 터치·버튼 누르기·손목에 차고 움직이기·물에 넣기 등 기능을 실제로 보여 줌). 보통(4~6): 제품만 가만히 보이거나 화면(UI)만 보이는 장면. 낮게(0~3): 흐리거나 초점이 안 맞음·흔들림·어두움·제품이 화면 가장자리에 잘림·인트로·아웃트로·검은 화면·사람 얼굴만·글자 화면·제품이 안 보임.",
+        "4) product: 이 영상의 주인공 제품 본체가 보이는 영역 [x,y,w,h] (손·케이블은 빼고 제품만, 안 보이면 null).",
+        "5) cn: 제품 본체나 기기 화면(디스플레이)에 중국어(한자) 글자가 보이면 true, 아니면 false. 숫자·영어·아이콘만이면 false.",
+        "3) desc: 장면을 한국어 10~25자로, 제품의 어떤 기능·동작을 보여 주는지와 장소(물속·바다·운동 중·매장 등)가 드러나게 (예: '충전 케이블 꽂는 손', '물 뿌려 방수 시험', '청소기로 바닥 미는 손', '한 손으로 가볍게 들기', '제품 박스 클로즈업').",
+        '형식: JSON 만. {"frames":[{"i":1,"boxes":[[x,y,w,h],…],"score":7,"desc":"…","product":[x,y,w,h],"cn":false},…]} — x,y,w,h 는 화면 너비·높이 대비 0~1 비율, 글자가 없으면 boxes 는 [].',
       ].join("\n"),
     });
     try {
@@ -79,7 +81,7 @@ export async function scanText(file: string, duration: number, dir: string, key:
         ],
         maxTokens: 2500,
       });
-      const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { frames?: { i?: number; boxes?: number[][]; score?: number; desc?: string }[] };
+      const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { frames?: { i?: number; boxes?: number[][]; score?: number; desc?: string; product?: number[] | null; cn?: boolean }[] };
       for (const [j, f] of batch.entries()) {
         const row = json.frames?.find((r) => Number(r.i) === j + 1);
         if (!row) {
@@ -92,6 +94,8 @@ export async function scanText(file: string, duration: number, dir: string, key:
           boxes: (row.boxes ?? []).filter((b) => b.length === 4).map(([x, y, w, h]) => clampBox({ x, y, w, h })),
           score: Number.isFinite(Number(row.score)) ? Math.min(10, Math.max(0, Number(row.score))) : undefined,
           desc: typeof row.desc === "string" ? row.desc.slice(0, 40) : undefined,
+          product: Array.isArray(row.product) && row.product.length === 4 ? productBoxOf(row.product) : null,
+          cn: row.cn === true,
         });
       }
     } catch {
@@ -104,6 +108,19 @@ export async function scanText(file: string, duration: number, dir: string, key:
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, Number(v) || 0));
+function productBoxOf([x, y, w, h]: number[]): Box | null {
+  const b = clampBox({ x, y, w, h });
+  return b.w > 0.03 && b.h > 0.03 && b.w * b.h < 0.95 ? b : null;
+}
+
+/** v0.9.185 구간 [start, start+dur] 의 제품 위치 (샘플 평균). 없으면 null */
+export function productIn(scan: TextScan, start: number, dur: number): Box | null {
+  const pad = scan.interval;
+  const ps = scan.samples.filter((x) => x.product && x.t >= start - pad && x.t <= start + dur + pad).map((x) => x.product!);
+  if (!ps.length) return null;
+  const avg = (k: keyof Box) => ps.reduce((n, b) => n + b[k], 0) / ps.length;
+  return { x: avg("x"), y: avg("y"), w: avg("w"), h: avg("h") };
+}
 function clampBox(b: Box): Box {
   const x = clamp01(b.x);
   const y = clamp01(b.y);
@@ -172,7 +189,7 @@ function exposed(win: Box, aspect: number, barFrac: number): Box {
 /** 상단 제목 띠가 가리는 위쪽 비율 (기본). v0.9.162: 상단 제목을 끈 계획만 0 을 넘긴다 — 가전 등 기본은 그대로 */
 export const TITLE_BAR_FRAC = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
 
-export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.maxCropZoom, barFrac: number = TITLE_BAR_FRAC): Box | null {
+export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.maxCropZoom, barFrac: number = TITLE_BAR_FRAC, focus: { x: number; y: number } | null = null, focusBox: Box | null = null): Box | null {
   const step = 0.01;
   for (let s = 1; s >= 1 / maxZoom - 1e-9; s -= step) {
     const room = Math.max(0, 1 - s);
@@ -186,7 +203,8 @@ export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VI
         const win = { x, y, w: s, h: s };
         const ex = exposed(win, aspect, barFrac);
         if (boxes.some((b) => overlap(b, ex) > 0.00002)) continue;
-        const d = Math.abs(x + s / 2 - 0.5) + Math.abs(y + s / 2 - 0.5);
+        // v0.9.185 제품이 있으면 보이는 곳 가운데가 제품 가운데에 가깝게
+        const d = focus ? Math.abs(ex.x + ex.w / 2 - focus.x) + Math.abs(ex.y + ex.h / 2 - focus.y) + (focusBox && overlap(focusBox, ex) < 0.85 * focusBox.w * focusBox.h ? 5 : 0) : Math.abs(x + s / 2 - 0.5) + Math.abs(y + s / 2 - 0.5);
         if (d < bestD) {
           bestD = d;
           best = { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), w: Number(s.toFixed(4)), h: Number(s.toFixed(4)) };
@@ -203,33 +221,35 @@ const decided = new Map<string, Treatment>();
  * 우선순위 (v0.9.76): 글자·로고 없음(또는 상단 띠·꽉 채우기로 이미 안 보임) → 확대로 안 보이게 → 블러 → 사용 안 함.
  * 좌표는 원본 비율(0~1). aspect = 원본 가로÷세로 (꽉 채우기에서 잘리는 양옆·위아래 계산).
  */
-export function decideTreatment(boxes: Box[], checked: boolean, aspect = OUT_ASPECT, bar: number = TITLE_BAR_FRAC): Treatment {
-  const key = `${checked ? 1 : 0}|${aspect.toFixed(3)}|${bar.toFixed(4)}|${boxes.map((b) => `${b.x.toFixed(3)},${b.y.toFixed(3)},${b.w.toFixed(3)},${b.h.toFixed(3)}`).join(";")}`;
+export function decideTreatment(boxes: Box[], checked: boolean, aspect = OUT_ASPECT, bar: number = TITLE_BAR_FRAC, product: Box | null = null): Treatment {
+  const key = `${checked ? 1 : 0}|${aspect.toFixed(3)}|${bar.toFixed(4)}|${product ? [product.x, product.y, product.w, product.h].map((v) => v.toFixed(2)).join(",") : "-"}|${boxes.map((b) => `${b.x.toFixed(3)},${b.y.toFixed(3)},${b.w.toFixed(3)},${b.h.toFixed(3)}`).join(";")}`;
   const hit = decided.get(key);
   if (hit) return hit;
-  const tr = decide(boxes, checked, aspect, bar);
+  const tr = decide(boxes, checked, aspect, bar, product);
   if (decided.size > 5000) decided.clear();
   decided.set(key, tr);
   return tr;
 }
 
-function decide(boxes: Box[], checked: boolean, aspect: number, bar: number): Treatment {
+function decide(boxes: Box[], checked: boolean, aspect: number, bar: number, product: Box | null = null): Treatment {
+  const focus = product ? { x: product.x + product.w / 2, y: product.y + product.h / 2 } : null;
   // 글자 검사를 못 했으면 아래 자막 띠(샤오홍슈 중국어 자막)를 확대로 잘라 내고, 안 되면 블러
   if (!checked) {
     const crop = findCrop([SUBTITLE_BAND], aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar);
     return crop ? { kind: "unchecked", crop } : { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
   }
-  if (!boxes.length) return { kind: "clean" };
   // 상단 제목 띠가 이미 덮는 글자(띠 안에 끝나는 것)는 여유를 넓히기 전에 뺀다
   const visible = boxes.filter((b) => b.y + b.h + 0.02 > bar);
-  if (!visible.length) return { kind: "clean" };
   const padded = visible.map((b) => clampBox({ x: b.x - CROP_PAD, y: b.y - CROP_PAD, w: b.w + CROP_PAD * 2, h: b.h + CROP_PAD * 2 }));
-  const full = findCrop(padded, aspect, 1, bar);
-  if (full) return { kind: "clean" };
-  const crop = findCrop(padded, aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar);
-  if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect, bar) };
+  if (!visible.length || findCrop(padded, aspect, 1, bar)) {
+    // v0.9.185 글자는 없지만 제품이 한쪽에 치우쳐 있으면 제품이 가운데 오게 살짝 확대 (글자는 여전히 안 보이게)
+    const c = product ? centerOn(product, padded, aspect, bar) : null;
+    return c ? { kind: "clean", crop: c } : { kind: "clean" };
+  }
+  const crop = findCrop(padded, aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar, focus, product);
+  if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect, bar, product) };
   // v0.9.120: 확대로 다 못 가리면 — 글자가 가장 적게 보이는 확대 창 + 그래도 보이는 글자만 블러. 블러가 너무 크면 사용 안 함
-  const tr = coverAll(boxes, aspect, bar);
+  const tr = coverAll(boxes, aspect, bar, focus);
   return tr.kind === "blur" && blurShare(tr) <= MAX_BLUR_AREA ? tr : { kind: "rejected" };
 }
 
@@ -244,7 +264,9 @@ function blurShare(tr: Treatment): number {
  * 확대 비용을 조금 더해 같은 효과면 덜 확대한다. 블러 상자는 원본 좌표(0~1).
  * '가릴 수 없음'으로 끝나던 컷(검수 필요)에도 이걸 써서 자막·로고가 그대로 보이지 않게 한다.
  */
-export function coverAll(boxes: Box[], aspect = OUT_ASPECT, bar: number = TITLE_BAR_FRAC): Treatment {
+export function coverAll(boxes: Box[], aspect = OUT_ASPECT, bar: number = TITLE_BAR_FRAC, focus: { x: number; y: number } | null = null): Treatment {
+  const fx = focus?.x ?? 0.5;
+  const fy = focus?.y ?? 0.5;
   const pad = VIDEO_RENDER_CONFIG.textMaskPadding;
   const barFrac = bar;
   const marks = mergeNear(boxes.filter((b) => !(b.w >= 0.99 && b.h >= 0.99)))
@@ -260,7 +282,7 @@ export function coverAll(boxes: Box[], aspect = OUT_ASPECT, bar: number = TITLE_
         const win = { x: n ? (room * j) / n : 0, y: n ? (room * i) / n : 0, w: s, h: s };
         const ex = exposed(win, aspect, barFrac);
         const seen = marks.reduce((sum, b) => sum + overlap(b, ex), 0) / (s * s);
-        const cost = seen + 0.012 * (1 / s - 1) + 0.002 * (Math.abs(win.x + s / 2 - 0.5) + Math.abs(win.y + s / 2 - 0.5));
+        const cost = seen + 0.012 * (1 / s - 1) + (focus ? 0.02 : 0.002) * (Math.abs(ex.x + ex.w / 2 - fx) + Math.abs(ex.y + ex.h / 2 - fy));
         if (!best || cost < best.cost - 1e-9) best = { win, cost };
       }
     }
@@ -282,16 +304,42 @@ function intersect(a: Box, b: Box): Box | null {
 }
 
 /** 찾은 창을 조금 더 확대 (가운데 기준). 그래도 글자가 안 보이고 최대 배율 안이면 그 창, 아니면 원래 창 */
-function zoomMore(crop: Box, boxes: Box[], aspect: number, bar: number = TITLE_BAR_FRAC): Box {
+function zoomMore(crop: Box, boxes: Box[], aspect: number, bar: number = TITLE_BAR_FRAC, product: Box | null = null): Box {
   const s = crop.w / EXTRA_ZOOM;
   if (1 / s > VIDEO_RENDER_CONFIG.maxCropZoom + 1e-9) return crop;
   const barFrac = bar;
-  const cx = crop.x + crop.w / 2;
-  const cy = crop.y + crop.h / 2;
+  // v0.9.185 제품이 창 안에 있으면 제품 쪽으로 키운다
+  const pin = product && product.x + product.w / 2 > crop.x && product.x + product.w / 2 < crop.x + crop.w && product.y + product.h / 2 > crop.y && product.y + product.h / 2 < crop.y + crop.h;
+  const cx = pin ? product!.x + product!.w / 2 : crop.x + crop.w / 2;
+  const cy = pin ? product!.y + product!.h / 2 : crop.y + crop.h / 2;
   const win = { x: Math.min(1 - s, Math.max(0, cx - s / 2)), y: Math.min(1 - s, Math.max(0, cy - s / 2)), w: s, h: s };
   const ex = exposed(win, aspect, barFrac);
   if (boxes.some((b) => overlap(b, ex) > 0.00002)) return crop;
   return { x: Number(win.x.toFixed(4)), y: Number(win.y.toFixed(4)), w: Number(s.toFixed(4)), h: Number(s.toFixed(4)) };
+}
+
+/**
+ * v0.9.185 제품을 화면 가운데로: 제품이 보이는 곳 가운데에서 많이 벗어나 있으면 (화면의 10% 넘게)
+ * 제품 가운데를 중심으로 조금씩 확대 (최대 1.5배) — 제품이 거의 다 보이고 글자는 안 보이는 가장 덜 확대한 창. 못 찾으면 null
+ */
+const CENTER_MAX_ZOOM = 1.5;
+function centerOn(product: Box, boxes: Box[], aspect: number, bar: number): Box | null {
+  const pc = { x: product.x + product.w / 2, y: product.y + product.h / 2 };
+  const ex0 = exposed({ x: 0, y: 0, w: 1, h: 1 }, aspect, bar);
+  if (Math.abs(ex0.x + ex0.w / 2 - pc.x) < 0.06 * ex0.w && Math.abs(ex0.y + ex0.h / 2 - pc.y) < 0.06 * ex0.h) return null;
+  for (let s = 1 / 1.04; s >= 1 / CENTER_MAX_ZOOM - 1e-9; s -= 0.02) {
+    // 보이는 곳(제목 띠 아래) 가운데가 제품 가운데에 오도록 창 위치를 역산
+    const probe = exposed({ x: 0, y: 0, w: s, h: s }, aspect, bar);
+    const x = Math.min(1 - s, Math.max(0, pc.x - (probe.x + probe.w / 2)));
+    const y = Math.min(1 - s, Math.max(0, pc.y - (probe.y + probe.h / 2)));
+    const win = { x, y, w: s, h: s };
+    const ex = exposed(win, aspect, bar);
+    if (boxes.some((b) => overlap(b, ex) > 0.00002)) continue;
+    if (overlap(product, ex) < 0.85 * product.w * product.h) break; // 더 키우면 제품이 잘린다
+    const off = Math.abs(ex.x + ex.w / 2 - pc.x) / ex.w + Math.abs(ex.y + ex.h / 2 - pc.y) / ex.h;
+    if (off < 0.08) return { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), w: Number(s.toFixed(4)), h: Number(s.toFixed(4)) };
+  }
+  return null;
 }
 
 function union(boxes: Box[]): Box {
@@ -358,6 +406,10 @@ export function persistentBoxes(scan: TextScan): Box[] {
 
 /** v0.9.78: 대사와 뜻이 맞는 장면(want)을 품은 구간 보너스 */
 const WANT_BONUS = 6;
+/** v0.9.185 제품 화면 속 중국어 감점 (대사와 맞는 장면 보너스보다 크게) */
+const CN_PENALTY = 12;
+/** v0.9.185 제품이 안 보이는 장면 감점 */
+const NO_PRODUCT_PENALTY = 9;
 /** v0.9.157 영상별 구간 (초) */
 export type SourceRange = { from: number; to: number };
 
@@ -376,7 +428,7 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
     for (let n = 0; n <= steps; n++) {
       const start = lo + (span * n) / steps;
       if (anyFree && !free(start)) continue;
-      const tr = decideTreatment([...boxesIn(src.scan, start, input.dur), ...persistentBoxes(src.scan)], src.scan.checked, src.aspect, input.bar ?? TITLE_BAR_FRAC);
+      const tr = decideTreatment([...boxesIn(src.scan, start, input.dur), ...persistentBoxes(src.scan)], src.scan.checked, src.aspect, input.bar ?? TITLE_BAR_FRAC, productIn(src.scan, start, input.dur));
       if (tr.kind === "rejected") continue;
       // 이 구간의 장면들 (없으면 가장 가까운 장면)
       let inRange = src.scan.samples.filter((x) => x.t >= start && x.t <= start + input.dur);
@@ -386,7 +438,12 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
       const desc = inRange.map((x) => x.desc ?? "").join(" ");
       const match = Math.min(3, words.filter((w) => desc.includes(w)).length);
       const wanted = input.want && input.want.id === src.id && input.want.t >= start - 0.3 && input.want.t <= start + input.dur + 0.3 ? WANT_BONUS : 0;
-      const value = match * 3 + quality * 0.6 - PENALTY[tr.kind] * 2 + (src.assigned ? (src.pinned ? 8 : 1) : 0) + wanted;
+      // v0.9.185 제품(기기 화면)에 중국어가 보이는 장면은 확대로 못 지우니 크게 깎는다
+      const cnShown = inRange.some((x) => x.cn) ? CN_PENALTY : 0;
+      // v0.9.185 제품이 안 보이는 장면(빈 상자·바닥·배경)은 크게 깎는다 (제품 위치를 검사한 영상만)
+      const knowsProduct = src.scan.samples.some((x) => x.product !== undefined);
+      const noProduct = knowsProduct && inRange.length > 0 && inRange.every((x) => !x.product) ? NO_PRODUCT_PENALTY : 0;
+      const value = match * 3 + quality * 0.6 - PENALTY[tr.kind] * 2 + (src.assigned ? (src.pinned ? 8 : 1) : 0) + wanted - cnShown - noProduct;
       if (!best || value > best.value + 1e-9) best = { id: src.id, start, tr, value };
     }
   }

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
  */
 vi.mock("@/lib/server/providers/registry", () => ({
   getAIProvider: async () => ({ id: "mock", supportsVision: false }),
+  getVisionProvider: async () => ({ id: "mock", supportsVision: false }),
   getTTSProvider: async () => null,
 }));
 

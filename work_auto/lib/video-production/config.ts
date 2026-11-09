@@ -52,6 +52,10 @@ export const VIDEO_RENDER_CONFIG = {
   sourceKeepMaxBytes: 30 * 1024 * 1024 * 1024,
   /** 컷 인코딩 동시 수 */
   encodeParallel: 3,
+  /** v0.9.185 편집 프리셋 자동 검수 최대 횟수 (걸린 컷만 다시 골라 다시 검수) */
+  qaRounds: 10,
+  /** v0.9.185 검수는 렌더 시작부터 이 시간 안에서만 (함수 최대 800초) */
+  qaBudgetMs: 560_000,
 
   /** 원본 다운로드 제한 */
   // v0.9.141: 80 → 200MB (큰 원본은 받은 뒤 720p 로 줄여 보관)

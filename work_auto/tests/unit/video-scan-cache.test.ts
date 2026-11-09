@@ -2,18 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 
 /** v0.9.79: 원본 글자 검사 결과를 저장해 다시 쓴다 — 같은 원본으로 두 번 만들면 두 번째는 AI 이미지 읽기 0회 */
 const calls: string[] = [];
-vi.mock("@/lib/server/providers/registry", () => ({
-  getAIProvider: async () => ({
+vi.mock("@/lib/server/providers/registry", () => {
+  const ai = {
     id: "mock",
     supportsVision: true,
     generateText: async (req: { task: string }) => {
       calls.push(req.task);
       if (req.task === "video-scene-match") return { text: '{"m":[]}' };
+      if (req.task === "video-cut-review") return { text: "{\"cuts\":[]}" };
       return { text: JSON.stringify({ frames: Array.from({ length: 12 }, (_, i) => ({ i: i + 1, boxes: [], score: 6, desc: "제품을 손에 든 장면" })) }) };
     },
-  }),
-  getTTSProvider: async () => null,
-}));
+  };
+  return { getAIProvider: async () => ai, getVisionProvider: async () => ai, getTTSProvider: async () => null };
+});
 const { renderVideo } = await import("@/lib/server/video/render");
 
 const job = (id: string) => ({

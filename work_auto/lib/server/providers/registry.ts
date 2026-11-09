@@ -94,6 +94,17 @@ export async function getAIProvider(): Promise<AIProvider> {
   return withCostLog(await pickAIProvider());
 }
 
+/**
+ * v0.9.185 영상 프레임 글자·로고·제품 위치 찾기: OpenAI 가 연결돼 있으면 OpenAI (위치 상자가 더 정확), 아니면 기본 AI.
+ * 제품 원고를 Claude 로 고정하는 자동 제작 안에서도 이 일은 OpenAI 로.
+ */
+export async function getVisionProvider(): Promise<AIProvider> {
+  if (serverConfig.providerMode !== "live") return mockAI;
+  const openai = await loadCredentials("openai").catch(() => null);
+  if (openai) return withCostLog(new OpenAIProvider(openai.apiKey, serverConfig.openaiVisionModel));
+  return getAIProvider();
+}
+
 async function pickAIProvider(): Promise<AIProvider> {
   const [settings, claude, openai] = await Promise.all([
     // 설정 테이블이 아직 없는 등 실패해도 AI 선택은 계속되도록 기본값으로 대신한다
