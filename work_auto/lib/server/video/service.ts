@@ -468,8 +468,7 @@ export const videoJobService = {
       await videoStorage.remove(j.outputPath!).catch(() => undefined);
       await repo.videoJobs.update(j.id, { qa: { ...j.qa, fileDeleted: true }, updatedAt: nowIso() });
     }
-    // v0.9.134: 원본은 계속 보관하고, 합계가 한도(30GB)를 넘을 때만 오래된 것부터 지운다 (전에는 7일 뒤 지움)
-    void userId;
-    await enforceSourceQuota().catch(() => undefined);
+    // v0.9.187: 원본은 받은 지 7일 지나면 지우고, 합계가 3GB 를 넘으면 오래된 것부터 (Supabase 저장 공간)
+    await enforceSourceQuota(userId).catch(() => undefined);
   },
 };

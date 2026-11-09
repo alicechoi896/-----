@@ -134,7 +134,7 @@ export async function keepUploadMemory(key: string, body: ArrayBuffer): Promise<
   await videoStorage.put(key, Buffer.from(body), "video/mp4");
 }
 
-/** 보관한 원본 합계가 한도를 넘으면 오래된 것부터 지운다 */
+/** 보관한 원본: 받은 지 7일(sourceCacheDays) 지난 것은 지우고, 합계가 한도(3GB)를 넘으면 오래된 것부터 지운다 (v0.9.187) */
 export async function enforceSourceQuota(owner?: string): Promise<{ total: number; removed: number }> {
   const o = owner ?? (await getCurrentUserId());
   const all: { key: string; createdAt: string | null; size?: number }[] = [];
@@ -143,10 +143,26 @@ export async function enforceSourceQuota(owner?: string): Promise<{ total: numbe
     all.push(...rows);
     if (rows.length < 1000) break;
   }
-  let total = all.reduce((n, f) => n + (f.size ?? 0), 0);
   let removed = 0;
+  // 7일 지난 원본
+  const maxAge = VIDEO_RENDER_CONFIG.sourceCacheDays * 24 * 60 * 60 * 1000;
+  const fresh: typeof all = [];
+  for (const f of all) {
+    const at = Date.parse(f.createdAt ?? "");
+    if (Number.isFinite(at) && Date.now() - at > maxAge) {
+      await videoStorage.remove(f.key).catch(() => undefined);
+      removed++;
+    } else fresh.push(f);
+  }
+  if (removed) forgetStored(o);
+  all.length = 0;
+  all.push(...fresh);
+  let total = all.reduce((n, f) => n + (f.size ?? 0), 0);
   const limit = VIDEO_RENDER_CONFIG.sourceKeepMaxBytes;
-  if (total <= limit) return { total, removed };
+  if (total <= limit) {
+    if (removed) console.info("[XhsKeep] old", JSON.stringify({ removed, total }));
+    return { total, removed };
+  }
   for (const f of [...all].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))) {
     if (total <= limit * 0.9) break;
     await videoStorage.remove(f.key).catch(() => undefined);
