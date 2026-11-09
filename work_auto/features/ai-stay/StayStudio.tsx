@@ -67,6 +67,8 @@ interface Project {
   clipUrls?: Record<string, string>;
   /** v0.9.182 이 영상 목소리 (없으면 원고로 영상 만들기 마지막 설정) */
   voice?: StayVoice | null;
+  /** v0.9.191 대사가 따를 대본 포맷 */
+  formatId?: string | null;
   updatedAt: string;
 }
 
@@ -121,6 +123,14 @@ export function StayStudio() {
   // v0.9.182 다른 각도 만들기: 장소(원본 사진)마다 펼쳐서 각도 고르기
   const [angleOpen, setAngleOpen] = useState<string | null>(null);
   const [angleKinds, setAngleKinds] = useState<Set<string>>(new Set(["wide", "low", "close"]));
+  // v0.9.191 대사가 따를 대본 포맷 (AI 학습 관리 › 대본 포맷)
+  const [formats, setFormats] = useState<{ id: string; name: string; isDefault: boolean; contentType: string }[]>([]);
+  useEffect(() => {
+    void api.scriptFormats
+      .list()
+      .then((l) => setFormats(l.map((x) => ({ id: x.id, name: x.name, isDefault: x.isDefault, contentType: x.contentType }))))
+      .catch(() => setFormats([]));
+  }, []);
   useEffect(() => {
     void api.products
       .list()
@@ -250,6 +260,24 @@ export function StayStudio() {
             <span className="text-fg-subtle">AI 영상</span>
             <Badge tone={st.tone}>{vid ? "완성 · 재생 중" : st.label}</Badge>
             {c?.error && <span className="truncate text-danger">{c.error}</span>}
+            {c?.state === "success" && (
+              <button
+                type="button"
+                disabled={making || busy === "animate"}
+                onClick={() =>
+                  window.confirm(`${n}번 컷의 AI 영상을 지금 움직임 명령어로 다시 만들까요?\n약 ${((AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie) — 한 번 누르면 바로 과금됩니다.`) &&
+                  void run("animate", async () => {
+                    const r = await call<{ project: Project; created: number }>({ action: "animate", id: p.id, keys: [ph.key], confirmed: true });
+                    setP(r.project);
+                    setMsg({ tone: "info", text: `${n}번 컷을 다시 만들기 시작했습니다. 1~3분 뒤 바뀝니다 (자동 확인, 무료).` });
+                  })
+                }
+                className="rounded-full px-2 py-0.5 text-[11px] text-brand ring-1 ring-inset ring-brand/40 hover:bg-brand-soft disabled:opacity-40"
+                data-stay-redo
+              >
+                움직임 다시 만들기
+              </button>
+            )}
           </div>
           <Input key={`l${ph.line}`} defaultValue={ph.line} onBlur={(e) => e.target.value !== ph.line && set({ line: e.target.value })} placeholder="이 컷 자막·내레이션 (예: 돌 노천탕이)" className="h-8 text-[13px]" aria-label={`${n}번 대사`} />
           <Input key={`m${ph.motion}`} defaultValue={ph.motion} onBlur={(e) => e.target.value !== ph.motion && set({ motion: e.target.value })} placeholder="움직임 (영어, 예: steam rising, light rain)" className="h-7 text-[12px]" aria-label={`${n}번 움직임`} />
@@ -554,6 +582,16 @@ export function StayStudio() {
 
           <SectionCard title="② 제목·대사 (AI)" icon={Wand2} description="AI 가 사진을 보고 위쪽 제목 2줄과 컷마다 짧은 대사·움직임을 씁니다 (누를 때 AI 1번). 위 칸에서 바로 고칠 수 있습니다." data-stay-script>
             <div className="flex flex-wrap items-center gap-2">
+              {formats.length > 0 && (
+                <Select
+                  className="w-56"
+                  value={p.formatId ?? ""}
+                  onChange={(e) => void save({ formatId: e.target.value || null })}
+                  options={[{ value: "", label: `기본 포맷 (${formats.find((x) => x.contentType === "product" && x.isDefault)?.name ?? formats.find((x) => x.contentType === "product")?.name ?? "없음"})` }, ...formats.map((x) => ({ value: x.id, label: `대본 포맷: ${x.name}` }))]}
+                  aria-label="대본 포맷"
+                  data-stay-format
+                />
+              )}
               <Button variant="primary" icon={Sparkles} loading={busy === "script"} disabled={p.photos.length < 3} onClick={() => void run("script", async () => setP(await call<Project>({ action: "script", id: p.id })))} data-stay-script-go>
                 제목·대사 만들기
               </Button>
@@ -587,6 +625,27 @@ export function StayStudio() {
             >
               {making ? "만드는 중… (자동 확인)" : todo ? `${todo}장 살아 움직이게 · 약 ${usd}` : "모두 만들었습니다"}
             </Button>
+            {done > 0 && (
+              <Button
+                className="ml-2"
+                variant="secondary"
+                icon={Film}
+                loading={busy === "animate"}
+                disabled={making}
+                onClick={() =>
+                  window.confirm(`완성된 AI 컷 ${done}장을 새 움직임 명령어로 모두 다시 만들까요?\n(예전 컷이 줌만 되거나 멈춰 보이면)\n예상 비용 약 ${(done * (AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie) — 한 번 누르면 바로 과금됩니다.`) &&
+                  void run("animate", async () => {
+                    const keys = p.photos.filter((ph) => clipOf(ph.key)?.state === "success").map((ph) => ph.key);
+                    const r = await call<{ project: Project; created: number }>({ action: "animate", id: p.id, keys, confirmed: true });
+                    setP(r.project);
+                    setMsg({ tone: "info", text: `${r.created}장 다시 만들기를 시작했습니다. 1~3분 뒤 바뀝니다 (자동 확인, 무료).` });
+                  })
+                }
+                data-stay-redo-all
+              >
+                완성된 {done}장 다시 만들기 · 약 ${(done * (AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)}
+              </Button>
+            )}
             <p className="mt-2 text-[12px] text-fg-subtle" data-stay-animate-progress>
               완성 {done}/{p.photos.length}컷 — 각도 컷도 같이 만들어 영상에 넣습니다 (대사가 없는 컷도 들어감). 완성된 AI 영상은 ① 각 컷의 사진 자리에서 1시간 동안 바로 재생됩니다.
             </p>

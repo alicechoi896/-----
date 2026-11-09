@@ -373,7 +373,10 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         // AI 컷(5초, 글자 없음)은 여러 컷에 나눠 쓴다: 겹쳐도 되고, 쓸 때마다 시작 위치만 바꾼다
         const src = sources.get(s.sourceVideoId)!;
         const maxStart = Math.max(0, src.duration - dur - 0.1);
-        best = { id: s.sourceVideoId, start: maxStart > 0 ? ((usedRanges.get(s.sourceVideoId) ?? []).length * 1.7) % maxStart : 0, tr: { kind: "clean" } };
+        const uses = (usedRanges.get(s.sourceVideoId) ?? []).length;
+        // v0.9.191 AI 숙소: AI 영상은 처음 1초쯤 거의 안 움직이므로, 처음 쓸 때는 가운데 구간 (움직임이 붙은 곳)
+        const start = job.plan.stay && uses === 0 ? Math.min(maxStart, Math.max(0, (src.duration - dur) / 2)) : maxStart > 0 ? (uses * 1.7) % maxStart : 0;
+        best = { id: s.sourceVideoId, start, tr: { kind: "clean" } };
       } else if (!aiScene && s.sourceVideoId && prevPick?.id === s.sourceVideoId && sources.has(s.sourceVideoId) && prevPick.end + dur <= sources.get(s.sourceVideoId)!.duration - 0.05) {
         // v0.9.182: 바로 앞 컷과 같은 영상이면 끊기지 않게 앞 컷이 끝난 곳부터 이어서 (화면 처리도 앞 컷 그대로 — 확대가 튀지 않게)
         best = { id: s.sourceVideoId, start: prevPick.end, tr: prevPick.tr };
@@ -524,7 +527,9 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         const c = best.tr.crop;
         vf.push(`crop=${Math.round(size.width * c.w)}:${Math.round(size.height * c.h)}:${Math.round(size.width * c.x)}:${Math.round(size.height * c.y)}`);
       }
-      vf.push(`scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos`, `crop=${W}:${H}`, "unsharp=5:5:0.45:5:5:0", `fps=${C.fps}`, "setsar=1");
+      // v0.9.191 AI 숙소: AI 영상(초당 16~24장)을 30장으로 늘릴 때 같은 장면을 반복하지 않고 사이를 섞어 채운다 (뚝뚝 끊기는 느낌)
+      const smooth = job.plan.stay && isAiSource(best.id) ? `framerate=fps=${C.fps}` : `fps=${C.fps}`;
+      vf.push(`scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos`, `crop=${W}:${H}`, "unsharp=5:5:0.45:5:5:0", smooth, "setsar=1");
       // 원본이 컷보다 짧으면(AI 컷 5초 등) 반복해서 채운다
       const loop = src.duration < best.start + dur + 0.05 ? ["-stream_loop", "-1"] : [];
       const inputs: string[] = [...loop, "-ss", String(best.start), "-t", dur.toFixed(3), "-i", src.file];

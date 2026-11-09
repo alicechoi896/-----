@@ -28,8 +28,10 @@ const W = 720;
 const H = 1280;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+// v0.9.191 '줌만 되고 안 움직인다' — 예전 문구의 'slow push-in'만 따르고 장면은 멈춰 있었다.
+// 줌·카메라 이동을 빼고, 장면 속 요소가 처음부터 끝까지 눈에 보이게 계속 움직이도록. 사실적인 영상미
 const MOTION_RULE =
-  "Locked-off static camera on a tripod, no camera movement (at most a very slow subtle push-in). Keep the scene, room layout, furniture and colors exactly as in the photo. Only natural ambient motion: rising steam, gentle rain, rippling water, flickering fire or candle light, swaying leaves and curtains, drifting clouds or fog, as fits the photo. Photorealistic, calm and cinematic. No people appear unless already in the photo. No text, no captions, no logos, no watermark.";
+  "The camera stays completely still: no zoom, no push-in, no pan, no dolly. Instead, the scene itself is alive from the very first frame to the last: the elements described above move clearly and continuously, with natural realistic physics (for example leaves and branches swaying naturally in the wind, water flowing, dripping and rippling, steam and mist drifting, light flickering, curtains moving gently). It must never look like a still photo. Keep the place, room layout, furniture, materials and colors exactly as in the photo. Photorealistic, realistic cinematic footage, natural light, fine detail, smooth natural motion, like a high-end travel film shot on a cinema camera. No people unless already in the photo. No text, no captions, no logos, no watermark.";
 
 export interface StayPhoto {
   key: string;
@@ -83,6 +85,8 @@ export interface StayProject {
   clipFileAt?: Record<string, string>;
   /** v0.9.182 이 영상 AI 내레이션 목소리 (없으면 원고로 영상 만들기 마지막 설정) */
   voice?: StayVoice | null;
+  /** v0.9.191 대사를 따를 대본 포맷 (AI 학습 관리 › 대본 포맷). 없으면 기본 제품 홍보 포맷 */
+  formatId?: string | null;
   jobId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -292,7 +296,7 @@ export const stayService = {
   },
 
   /** 이름·메모·제목·대사·움직임·사진 순서 고치기 (사진 지우기 포함) */
-  async update(input: { id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; voice?: unknown }) {
+  async update(input: { id?: unknown; name?: unknown; note?: unknown; titleSmall?: unknown; titleBig?: unknown; titleSec?: unknown; photos?: unknown; voice?: unknown; formatId?: unknown }) {
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     const str = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -301,6 +305,7 @@ export const stayService = {
     if (input.titleSmall !== undefined) p.titleSmall = str(input.titleSmall, 20);
     if (input.titleBig !== undefined) p.titleBig = str(input.titleBig, 24);
     if (input.voice !== undefined) p.voice = cleanVoice(input.voice);
+    if (input.formatId !== undefined) p.formatId = input.formatId ? String(input.formatId).slice(0, 80) : null;
     if (input.titleSec !== undefined && Number.isFinite(Number(input.titleSec))) p.titleSec = Math.min(10, Math.max(1, Number(input.titleSec)));
     if (Array.isArray(input.photos)) {
       const byKey = new Map(p.photos.map((x) => [x.key, x]));
@@ -444,21 +449,24 @@ export const stayService = {
     const ai = await getAIProvider();
     const n = p.photos.length;
     let data: { titleSmall: string; titleBig: string; cuts: { line: string; motion: string; motionKo?: string }[] };
+    const fmt = await stayFormat(p);
     if (ai.id === "mock") {
-      data = { titleSmall: "비 오는 날", titleBig: `${p.name.slice(0, 12)} 히노끼탕`, cuts: p.photos.map((_, i) => ({ line: ["여기 진짜 숙소인데", "통창 앞 노천탕이", "료칸 그대로예요", "밤엔 불멍까지", "지금 저장해두세요"][i % 5], motion: "gentle steam rising, light rain", motionKo: "김이 은은하게 오르고 가랑비가 내림" })) };
+      data = { titleSmall: "비 오는 날", titleBig: `${p.name.slice(0, 12)} 히노끼탕`, cuts: p.photos.map((_, i) => ({ line: ["숲길을 따라 들어가면", "통창 앞 노천탕이 나오고", "밤엔 불멍까지 되는", "료칸 그대로예요", "지금 저장해두세요"][i % 5], motion: "leaves swaying naturally in the wind, steam rising, light rain falling", motionKo: "나뭇잎이 바람에 자연스럽게 흔들리고 김이 오르며 가랑비가 내림" })) };
     } else {
       const images = await Promise.all(p.photos.map(async (ph) => smallJpeg((await videoStorage.download(ph.key))!)));
       const parts = [
-        { type: "text" as const, text: `숙소: ${p.name}${p.note ? `\n메모(사실 정보): ${p.note}` : ""}\n아래 사진 ${n}장이 영상 컷 순서다. 사진마다 번호를 붙여 보낸다.${sameGroups(p)}` },
+        { type: "text" as const, text: `숙소: ${p.name}${p.note ? `\n메모(사실 정보): ${p.note}` : ""}\n아래 사진 ${n}장이 영상 컷 순서다. 사진마다 번호를 붙여 보낸다.${sameGroups(p)}${fmt}` },
         ...images.flatMap((data, i) => [{ type: "text" as const, text: `[사진 ${i + 1}]` }, { type: "image" as const, mediaType: "image/jpeg" as const, data }]),
         {
           type: "text" as const,
           text: `세로 숏폼 숙소 소개 영상(약 ${Math.round(n * 1.5)}초)을 만든다. 컷 하나 = 사진 하나 = 약 1.5초. 영상은 계속 흐르고 대사는 컷과 따로 이어 읽는다.
 - titleSmall: 영상 처음 2~3초 위쪽 작은 줄 (상황·날씨·계절, 8자 이내, 예: "비 오는 날")
 - titleBig: 위쪽 큰 줄 (숙소의 가장 센 한 방, 12자 이내, 예: "액자창 앞 히노끼탕")
-- cuts: 사진 순서대로 ${n}개. line = 그 사진 위 가운데 자막이자 내레이션. 4~14자, 한 호흡, 존댓말 구어체("~예요/~고요/~거죠"). 컷을 이어 읽으면 한 문장 흐름이 되게 (예: "글램핑인데" → "돌 노천탕이" → "료칸 그대로예요" → … → "지금 저장해두세요"). 첫 컷은 궁금하게, 마지막 컷은 저장·예약 유도.
+- cuts: 사진 순서대로 ${n}개. line = 그 사진 위 가운데 자막이자 내레이션. 4~14자, 한 호흡, 존댓말 구어체("~예요/~고요/~거죠"), '~니다.'로 끝내지 않는다.
+- 대사는 다음 컷으로 자연스럽게 이어지는 한 흐름이다: 앞 줄이 다음 컷을 데려가는 연결어로 끝난다 (예: "숲길을 따라 들어가면" → "돌 노천탕이 나오고" → "밤엔 불멍까지 되는" → "료칸 그대로예요" → … → "지금 저장해두세요"). 퀴즈·질문으로 끊지 않는다 (나쁜 예: "숲길 끝에 뭐가 있게요?"). 마지막 컷은 저장·예약 유도.
+- 대본 포맷이 있으면 그 단계 순서(Hook → 핵심 → 혜택 → CTA)와 리듬을 숙소 소개에 맞게 따른다 (가전 스펙 대신 숙소의 장면·경험, 가격·할인은 메모에 있을 때만).
 - 사진에 실제로 보이는 것과 메모의 사실만 말한다. 가격·평점·리뷰 수·순위·할인은 쓰지 않는다.
-- motion: 그 사진에서 자연스럽게 움직일 것만 영어로 (예: "steam rising from the hot spring, light rain falling, water rippling"). 카메라는 움직이지 않는다. 사진에 없는 사람·물건을 더하지 않는다.
+- motion: 그 사진에서 실제로 움직일 것을 영어로 구체적으로 2~3가지, 어디서 무엇이 어떻게 움직이는지 (예: "leaves on the trees swaying naturally in the wind, sunlight flickering through the branches, the forest path gently dappled with moving shadows" / "water dripping down the wooden wall behind, creating gentle ripples, the floating tray bobbing softly on the water, steam rising"). 카메라·줌 이야기는 쓰지 않는다. 사진에 없는 사람·물건을 더하지 않는다.
 - motionKo: motion 을 그대로 한국어로 옮긴 것 (사람이 읽는 용도).`,
         },
       ];
@@ -497,16 +505,18 @@ export const stayService = {
   },
 
   /** [살아 움직이게] 아직 안 만든(또는 실패한) 사진만 Kie 작업 — 사진 1장 = 1회 과금. 확인(confirmed) 필수 */
-  async animate(input: { id?: unknown; confirmed?: unknown }) {
+  async animate(input: { id?: unknown; confirmed?: unknown; keys?: unknown }) {
     if (input.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "확인 창에서 [만들기]를 눌러 주세요.", 409);
     const owner = await getCurrentUserId();
     const { list, p } = await own(owner, input.id);
     const provider = await getVideoAIProvider();
     if (!provider) throw new AppError("KIE_NOT_CONNECTED", "Kie AI 가 연결되어 있지 않습니다. 설정 › API 연결 센터에서 Kie AI 키를 넣어 주세요.", 409);
     let created = 0;
+    // v0.9.191 다시 만들기: 고른 사진은 완성된 AI 컷이 있어도 새 명령어로 다시 (사진 1장 = 1회 과금, 확인 후)
+    const redo = new Set(Array.isArray(input.keys) ? input.keys.map(String) : []);
     for (const ph of p.photos) {
       const old = clipOf(p, ph.key);
-      if (old && old.state !== "fail") continue;
+      if (old && old.state !== "fail" && !(redo.has(ph.key) && old.state === "success")) continue;
       const id = old?.id ?? nextClipId(p);
       if (old) await dropClipFile(p, old.id);
       const clip: AiClip = old ?? { id, mode: "product", prompt: "", imageUrl: null, taskId: null, state: "draft", model: null, credits: null, error: null };
@@ -731,4 +741,23 @@ export function canRefetch(t: StayAngleTask): boolean {
   if (t.state !== "fail" || !t.taskId) return false;
   if (t.refetch !== undefined) return t.refetch;
   return !/^AI 컷을 만들지 못했습니다|^15분이 지나도/.test(t.error ?? "");
+}
+
+/** v0.9.191 숙소 대사도 대본 포맷을 따른다 — 고른 포맷(없으면 기본 제품 홍보 포맷)의 가이드라인·참고 대본 3편·Hook·CTA 를 대본 AI 에 */
+async function stayFormat(p: StayProject): Promise<string> {
+  const { scriptFormatService } = await import("../services/script-formats");
+  const { similarExamples } = await import("@/lib/script-format");
+  const list = await scriptFormatService.list().catch(() => []);
+  const f = (p.formatId ? list.find((x) => x.id === p.formatId) : null) ?? list.find((x) => x.contentType === "product" && x.isDefault) ?? list.find((x) => x.contentType === "product");
+  if (!f) return "";
+  const ex = similarExamples(f.examples ?? [], false, `숙소 ${p.name} ${p.note}`).slice(0, 3);
+  return [
+    `\n\n[대본 포맷: ${f.name}] — 아래 구조·리듬을 숙소 영상에 맞게 따른다 (문장·제품명은 복사하지 않음)`,
+    (f.guideline ?? "").slice(0, 2000),
+    ex.length ? `참고 대본:\n${ex.map((e, i) => `(${i + 1}) ${e.text.replace(/\n/g, " / ").slice(0, 400)}`).join("\n")}` : "",
+    (f.hooks ?? []).length ? `Hook 예: ${(f.hooks ?? []).slice(0, 6).join(" | ")}` : "",
+    (f.ctas ?? []).length ? `CTA 예: ${(f.ctas ?? []).slice(0, 4).join(" | ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
