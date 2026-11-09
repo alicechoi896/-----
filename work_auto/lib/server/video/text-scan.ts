@@ -25,7 +25,7 @@ export interface TextScan {
 const MAX_SAMPLES = 12;
 const PER_CALL = 12;
 /** 검사 결과 저장 버전 (프롬프트를 바꾸면 올린다) */
-export const SCAN_VERSION = 4;
+export const SCAN_VERSION = 5;
 
 export async function scanText(file: string, duration: number, dir: string, key: string): Promise<{ scan: TextScan; aiCalls: number }> {
   const ai = await getVisionProvider();
@@ -63,7 +63,7 @@ export async function scanText(file: string, duration: number, dir: string, key:
       type: "text",
       text: [
         `위 영상 프레임 ${batch.length}장을 순서대로 본다. 쇼츠 제품 영상에 쓸 장면을 고르려고 한다.`,
-        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 화면 아래쪽 자막 줄(중국어 자막 등)은 작거나 반투명해도 반드시 넣고, 줄 전체 길이로 넉넉하게 잡는다. 제품 본체(화면 속 기기)에 인쇄된 글자·기기 화면 속 글자는 빼도 된다.",
+        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 화면 아래쪽 자막 줄(중국어 자막 등)은 작거나 반투명해도 반드시 넣고, 줄 전체 길이로 넉넉하게 잡는다. 제품 본체·제품 상자·기기 화면에 있는 글자(제품 이름·브랜드 로고·모델명 등 제품 자체의 글자)는 절대 넣지 않는다 — 그건 가리면 안 된다.",
         "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게(8~10): 제품이 화면 가운데 크고 또렷하게(초점 맞음·흔들림 없음) 보이면서 손으로 직접 쓰는 장면 (디스플레이를 손가락으로 터치·버튼 누르기·손목에 차고 움직이기·물에 넣기 등 기능을 실제로 보여 줌). 보통(4~6): 제품만 가만히 보이거나 화면(UI)만 보이는 장면. 낮게(0~3): 흐리거나 초점이 안 맞음·흔들림·어두움·제품이 화면 가장자리에 잘림·인트로·아웃트로·검은 화면·사람 얼굴만·글자 화면·제품이 안 보임.",
         "4) product: 이 영상의 주인공 제품 본체가 보이는 영역 [x,y,w,h] (손·케이블은 빼고 제품만, 안 보이면 null).",
         "5) cn: 제품 본체나 기기 화면(디스플레이)에 중국어(한자) 글자가 보이면 true, 아니면 false. 숫자·영어·아이콘만이면 false.",
@@ -189,7 +189,7 @@ function exposed(win: Box, aspect: number, barFrac: number): Box {
 /** 상단 제목 띠가 가리는 위쪽 비율 (기본). v0.9.162: 상단 제목을 끈 계획만 0 을 넘긴다 — 가전 등 기본은 그대로 */
 export const TITLE_BAR_FRAC = TOP_TITLE_TEMPLATE.barHeight / VIDEO_RENDER_CONFIG.height;
 
-export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.maxCropZoom, barFrac: number = TITLE_BAR_FRAC, focus: { x: number; y: number } | null = null, focusBox: Box | null = null): Box | null {
+export function findCrop(boxes: Box[], aspect = OUT_ASPECT, maxZoom: number = VIDEO_RENDER_CONFIG.autoCropMaxZoom, barFrac: number = TITLE_BAR_FRAC, focus: { x: number; y: number } | null = null, focusBox: Box | null = null): Box | null {
   const step = 0.01;
   for (let s = 1; s >= 1 / maxZoom - 1e-9; s -= step) {
     const room = Math.max(0, 1 - s);
@@ -235,7 +235,7 @@ function decide(boxes: Box[], checked: boolean, aspect: number, bar: number, pro
   const focus = product ? { x: product.x + product.w / 2, y: product.y + product.h / 2 } : null;
   // 글자 검사를 못 했으면 아래 자막 띠(샤오홍슈 중국어 자막)를 확대로 잘라 내고, 안 되면 블러
   if (!checked) {
-    const crop = findCrop([SUBTITLE_BAND], aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar);
+    const crop = findCrop([SUBTITLE_BAND], aspect, VIDEO_RENDER_CONFIG.autoCropMaxZoom, bar);
     return crop ? { kind: "unchecked", crop } : { kind: "unchecked", blur: SUBTITLE_BAND, blurs: [SUBTITLE_BAND] };
   }
   // 상단 제목 띠가 이미 덮는 글자(띠 안에 끝나는 것)는 여유를 넓히기 전에 뺀다
@@ -246,7 +246,7 @@ function decide(boxes: Box[], checked: boolean, aspect: number, bar: number, pro
     const c = product ? centerOn(product, padded, aspect, bar) : null;
     return c ? { kind: "clean", crop: c } : { kind: "clean" };
   }
-  const crop = findCrop(padded, aspect, VIDEO_RENDER_CONFIG.maxCropZoom, bar, focus, product);
+  const crop = findCrop(padded, aspect, VIDEO_RENDER_CONFIG.autoCropMaxZoom, bar, focus, product);
   if (crop) return { kind: "crop", crop: zoomMore(crop, padded, aspect, bar, product) };
   // v0.9.120: 확대로 다 못 가리면 — 글자가 가장 적게 보이는 확대 창 + 그래도 보이는 글자만 블러. 블러가 너무 크면 사용 안 함
   const tr = coverAll(boxes, aspect, bar, focus);
@@ -274,7 +274,7 @@ export function coverAll(boxes: Box[], aspect = OUT_ASPECT, bar: number = TITLE_
   if (!marks.length) return { kind: "clean" };
   const step = 0.02;
   let best: { win: Box; cost: number } | null = null;
-  for (let s = 1; s >= 1 / VIDEO_RENDER_CONFIG.maxCropZoom - 1e-9; s -= step) {
+  for (let s = 1; s >= 1 / VIDEO_RENDER_CONFIG.autoCropMaxZoom - 1e-9; s -= step) {
     const room = Math.max(0, 1 - s);
     const n = Math.round(room / step);
     for (let i = 0; i <= n; i++) {
@@ -306,7 +306,7 @@ function intersect(a: Box, b: Box): Box | null {
 /** 찾은 창을 조금 더 확대 (가운데 기준). 그래도 글자가 안 보이고 최대 배율 안이면 그 창, 아니면 원래 창 */
 function zoomMore(crop: Box, boxes: Box[], aspect: number, bar: number = TITLE_BAR_FRAC, product: Box | null = null): Box {
   const s = crop.w / EXTRA_ZOOM;
-  if (1 / s > VIDEO_RENDER_CONFIG.maxCropZoom + 1e-9) return crop;
+  if (1 / s > VIDEO_RENDER_CONFIG.autoCropMaxZoom + 1e-9) return crop;
   const barFrac = bar;
   // v0.9.185 제품이 창 안에 있으면 제품 쪽으로 키운다
   const pin = product && product.x + product.w / 2 > crop.x && product.x + product.w / 2 < crop.x + crop.w && product.y + product.h / 2 > crop.y && product.y + product.h / 2 < crop.y + crop.h;
@@ -322,11 +322,18 @@ function zoomMore(crop: Box, boxes: Box[], aspect: number, bar: number = TITLE_B
  * v0.9.185 제품을 화면 가운데로: 제품이 보이는 곳 가운데에서 많이 벗어나 있으면 (화면의 10% 넘게)
  * 제품 가운데를 중심으로 조금씩 확대 (최대 1.5배) — 제품이 거의 다 보이고 글자는 안 보이는 가장 덜 확대한 창. 못 찾으면 null
  */
-const CENTER_MAX_ZOOM = 1.5;
+const CENTER_MAX_ZOOM = 1.45;
 function centerOn(product: Box, boxes: Box[], aspect: number, bar: number): Box | null {
   const pc = { x: product.x + product.w / 2, y: product.y + product.h / 2 };
   const ex0 = exposed({ x: 0, y: 0, w: 1, h: 1 }, aspect, bar);
   if (Math.abs(ex0.x + ex0.w / 2 - pc.x) < 0.06 * ex0.w && Math.abs(ex0.y + ex0.h / 2 - pc.y) < 0.06 * ex0.h) return null;
+  const area = product.w * product.h;
+  const baseVis = overlap(product, ex0) / area;
+  const offOf = (ex: Box) => Math.abs(ex.x + ex.w / 2 - pc.x) / ex.w + Math.abs(ex.y + ex.h / 2 - pc.y) / ex.h;
+  const off0 = offOf(ex0);
+  const r4 = (n: number) => Number(n.toFixed(4));
+  // v0.9.190 정가운데까지 못 가도(위쪽 제목 띠·제품이 화면보다 넓을 때) 가장 가운데에 가까운 창 — 처음보다 30% 이상 가까워질 때만
+  let best: { win: Box; cost: number; off: number } | null = null;
   for (let s = 1 / 1.04; s >= 1 / CENTER_MAX_ZOOM - 1e-9; s -= 0.02) {
     // 보이는 곳(제목 띠 아래) 가운데가 제품 가운데에 오도록 창 위치를 역산
     const probe = exposed({ x: 0, y: 0, w: s, h: s }, aspect, bar);
@@ -335,11 +342,13 @@ function centerOn(product: Box, boxes: Box[], aspect: number, bar: number): Box 
     const win = { x, y, w: s, h: s };
     const ex = exposed(win, aspect, bar);
     if (boxes.some((b) => overlap(b, ex) > 0.00002)) continue;
-    if (overlap(product, ex) < 0.85 * product.w * product.h) break; // 더 키우면 제품이 잘린다
-    const off = Math.abs(ex.x + ex.w / 2 - pc.x) / ex.w + Math.abs(ex.y + ex.h / 2 - pc.y) / ex.h;
-    if (off < 0.08) return { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), w: Number(s.toFixed(4)), h: Number(s.toFixed(4)) };
+    if (overlap(product, ex) / area < Math.min(0.85, baseVis * 0.75)) break; // 더 키우면 제품이 많이 잘린다 (원래 보이던 만큼 기준)
+    const off = offOf(ex);
+    if (off < 0.08) return { x: r4(x), y: r4(y), w: r4(s), h: r4(s) };
+    const cost = off + 0.05 * (1 / s - 1);
+    if (!best || cost < best.cost) best = { win, cost, off };
   }
-  return null;
+  return best && best.off < off0 * 0.7 ? { x: r4(best.win.x), y: r4(best.win.y), w: r4(best.win.w), h: r4(best.win.h) } : null;
 }
 
 function union(boxes: Box[]): Box {

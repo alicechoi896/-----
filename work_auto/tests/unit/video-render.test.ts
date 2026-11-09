@@ -39,10 +39,13 @@ describe("영상 자동 제작", () => {
     const logo = decideTreatment([{ x: 0.78, y: 0.22, w: 0.18, h: 0.05 }], true);
     expect(logo.kind).toBe("crop");
     // 가운데 작은 글자 → 확대로 못 가려서 블러, 큰 글자 → 제외
-    // v0.9.82: 최대 1.8배라 가운데 작은 글자도 확대로 가린다
-    expect(decideTreatment([{ x: 0.4, y: 0.45, w: 0.2, h: 0.05 }], true).kind).toBe("crop");
-    // v0.9.120: 최대 2.4배 — 가운데 중간 글자도 확대로 가린다. 확대로 다 못 가리면 확대 + 남은 글자만 블러
-    expect(decideTreatment([{ x: 0.3, y: 0.42, w: 0.4, h: 0.12 }], true).kind).toBe("crop");
+    // v0.9.190: 자동 확대는 최대 1.7배 (과한 확대 금지) — 가운데 글자는 확대로 못 가리면 블러 (제품을 피해서)
+    const mid = decideTreatment([{ x: 0.4, y: 0.45, w: 0.2, h: 0.05 }], true);
+    expect(["crop", "blur"]).toContain(mid.kind);
+    if (mid.crop) expect(1 / mid.crop.w).toBeLessThanOrEqual(1.7 + 1e-6);
+    const mid2 = decideTreatment([{ x: 0.3, y: 0.42, w: 0.4, h: 0.12 }], true);
+    expect(["crop", "blur"]).toContain(mid2.kind);
+    if (mid2.crop) expect(1 / mid2.crop.w).toBeLessThanOrEqual(1.7 + 1e-6);
     const mixed = decideTreatment([{ x: 0.05, y: 0.5, w: 0.9, h: 0.08 }, { x: 0.05, y: 0.25, w: 0.9, h: 0.06 }], true);
     expect(["crop", "blur"]).toContain(mixed.kind);
     if (mixed.kind === "blur") expect(mixed.blurs?.length).toBeGreaterThan(0);

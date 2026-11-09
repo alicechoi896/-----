@@ -707,11 +707,15 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           for (const [id, rs] of usedRanges) used.set(id, [...rs]);
           for (const [id, rs] of banned) used.set(id, [...(used.get(id) ?? []), ...rs]);
           const srcList = (ids: string[]) => ids.filter((id) => !isAiSource(id) && sources.has(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === pk.best.id, aspect: aspects.get(id), range: null }));
-          const pinnedIds = s.pinned && pk.best.id ? [pk.best.id] : [];
-          let alt = pinnedIds.length ? pickSegment({ bar, narration: s.narration, dur: pk.dur, used, sources: srcList(pinnedIds) }) : null;
-          if (alt && (used.get(alt.id) ?? []).some(([a, b]) => alt!.start < b && alt!.start + pk.dur > a)) alt = null;
-          if (!alt) alt = pickSegment({ bar, narration: s.narration, dur: pk.dur, used, sources: srcList([...sources.keys()]) });
-          if (!alt || (used.get(alt.id) ?? []).some(([a, b]) => alt!.start < b && alt!.start + pk.dur > a)) {
+          // v0.9.190 그 컷에 정한 영상 안에서만 다른 구간을 고른다 (고르지 않은 다른 영상으로 바꾸지 않음).
+          // 사람이 시작 초·화면을 직접 정한 컷은 바꾸지 않는다
+          if (s.startAt != null || s.frame) {
+            left.set(v.k, verdictText(v));
+            continue;
+          }
+          const own = s.sourceVideoId && sources.has(s.sourceVideoId) && !isAiSource(s.sourceVideoId) ? s.sourceVideoId : pk.best.id;
+          const alt = pickSegment({ bar, narration: s.narration, dur: pk.dur, used, sources: srcList([own]) });
+          if (!alt || alt.id !== own || (used.get(alt.id) ?? []).some(([a, b]) => alt.start < b && alt.start + pk.dur > a)) {
             left.set(v.k, verdictText(v));
             continue;
           }
@@ -733,7 +737,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         toCheck = next;
       }
       for (const [k, why] of left) {
-        scenes[k].issue = `자동 검수: ${why} — 바꿀 장면이 없었습니다. [맞는 원본 찾기]로 원본을 더 넣거나 [영상 보며 고르기]로 바꿔 주세요.`;
+        scenes[k].issue = `자동 검수: ${why} — 이 컷 영상 안에 바꿀 구간이 없거나 직접 정한 컷이라 그대로 뒀습니다. [맞는 원본 찾기]나 [영상 보며 고르기]로 바꿀 수 있습니다.`;
         if (!scenes[k].findHint) scenes[k].findHint = `${(job.plan.selectedTitle ?? "").slice(0, 16)} ${scenes[k].narration}`.trim().slice(0, 40);
       }
       for (const s of scenes) if (s.findHint && !s.issue) s.issue = `대사에 맞는 장면이 원본에 없습니다 ('${s.findHint}') — [맞는 원본 찾기]로 넣을 수 있습니다.`;
