@@ -166,7 +166,9 @@ export function parseRecord(d: Obj | undefined): ClipStatus {
     if (!resultUrl && resultUrls.length) resultUrl = resultUrls[0];
   }
   const credits = d?.creditsConsumed != null && Number.isFinite(Number(d.creditsConsumed)) ? Number(d.creditsConsumed) : null;
-  const error = state === "fail" ? `AI 컷을 만들지 못했습니다${d?.failMsg ? ` (${String(d.failMsg).slice(0, 120)})` : ""}.` : state === "success" && !resultUrl ? "결과 영상 주소가 없습니다." : null;
+  // v0.9.192 Kie 영상 모델 서버 시간 초과 (11/10 부터 잦음) — 우리 쪽 문제가 아님을 알기 쉽게
+  const upstream = /upstream|timed out|timeout/i.test(String(d?.failMsg ?? ""));
+  const error = state === "fail" ? (upstream ? "Kie 영상 모델 서버가 시간 초과로 결과를 주지 못했습니다 (Kie 쪽 문제). 잠시 뒤 다시 만들어 주세요." : `AI 컷을 만들지 못했습니다${d?.failMsg ? ` (${String(d.failMsg).slice(0, 120)})` : ""}.`) : state === "success" && !resultUrl ? "결과 영상 주소가 없습니다." : null;
   return { state: state === "success" && !resultUrl ? "fail" : state, resultUrl, credits, error, ...(resultUrls.length ? { resultUrls } : {}) };
 }
 

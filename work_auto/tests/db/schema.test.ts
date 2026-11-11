@@ -42,7 +42,7 @@ beforeAll(async () => {
     insert into public.products (id, user_id, name, current_analysis_id) values ('prd1', '${B}', '에어팟', 'an1');
     insert into public.generated_contents (id, user_id, feature_id, channel_id, product_id, prompt_id, prompt_version, provider, model)
       values ('cnt1', '${B}', 'yt-product-video', 'youtube', 'prd1', 'p', '1', 'x', 'y');`);
-});
+}, 60_000); // v0.9.192 전체 테스트와 같이 돌면 PGlite 준비가 10초를 넘는다
 
 describe("schema.sql", () => {
   it("가입하면 프로필이 승인 대기로 만들어진다 (관리자 지정 전)", async () => {

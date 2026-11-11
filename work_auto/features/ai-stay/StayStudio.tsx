@@ -26,6 +26,8 @@ interface Photo {
   motionKo?: string;
   /** v0.9.169 컷 보이는 시간(초), 없으면 대사 길이만큼 */
   sec?: number | null;
+  /** v0.9.192 한글 움직임을 고쳤음 (움직이게 만들 때 영어로 바꿔 보냄) */
+  koEdited?: boolean;
   /** v0.9.174 다른 사진에서 만든 각도 */
   fromKey?: string | null;
   angle?: string | null;
@@ -70,6 +72,15 @@ interface Project {
   /** v0.9.191 대사가 따를 대본 포맷 */
   formatId?: string | null;
   updatedAt: string;
+}
+
+/** v0.9.192 화면에서 보내는 바꾸는 요청은 차례로 — 저장이 끝난 뒤에 다음 요청이 서버에 간다. seq 는 상태 확인 응답이 낡았는지 보는 번호 */
+const reqQueue = { p: Promise.resolve() as Promise<unknown>, seq: 0 };
+function callQ<T>(body: Record<string, unknown>): Promise<T> {
+  reqQueue.seq++;
+  const next = reqQueue.p.catch(() => undefined).then(() => call<T>(body));
+  reqQueue.p = next;
+  return next;
 }
 
 async function call<T>(body?: Record<string, unknown>, id?: string): Promise<T> {
@@ -162,11 +173,14 @@ export function StayStudio() {
   // v0.9.184 상태 확인은 한 번에 하나만, 응답이 늦게 와도 지금 보고 있는 영상일 때만 화면에 (다른 영상으로 바꾼 뒤 예전 영상이 다시 뜨지 않게)
   const pid = p?.id;
   const statusBusy = useRef(false);
+  // v0.9.192 화면에서 보내는 요청은 차례로 (대사·움직임 저장이 끝나기 전에 [살아 움직이게]가 예전 값을 읽어 덮어쓰던 문제).
+  // 상태 확인 응답은 그사이 저장한 게 있으면 버린다 (예전 값이 다시 보이지 않게)
   const checkStatus = useCallback((id: string) => {
     if (statusBusy.current) return;
     statusBusy.current = true;
+    const s0 = reqQueue.seq;
     void call<Project>({ action: "status", id })
-      .then((np) => setP((cur) => (cur && cur.id === np.id ? np : cur)))
+      .then((np) => reqQueue.seq === s0 && setP((cur) => (cur && cur.id === np.id ? np : cur)))
       .catch(() => undefined)
       .finally(() => {
         statusBusy.current = false;
@@ -206,10 +220,10 @@ export function StayStudio() {
   const create = (productId: string) =>
     run("create", async () => {
       const pick = stays?.find((x) => x.id === productId);
-      let np = await call<Project>({ action: "create", name: pick?.name ?? "새 숙소 영상" });
+      let np = await callQ<Project>({ action: "create", name: pick?.name ?? "새 숙소 영상" });
       let added = 0;
       if (pick) {
-        const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: np.id, productId: pick.id });
+        const r = await callQ<{ project: Project; added: number; found: number }>({ action: "product", id: np.id, productId: pick.id });
         np = r.project;
         added = r.added;
       }
@@ -218,7 +232,7 @@ export function StayStudio() {
       setJob(null);
       if (pick) setMsg({ tone: added ? "info" : "warning", text: added ? `'${pick.name}' 사진 ${added}장과 숙소 정보로 새 영상을 만들었습니다. 사진마다 [다른 각도 만들기]로 컷을 늘려 보세요.` : `'${pick.name}'에 사진이 없습니다. 제품 라이브러리 › ${pick.name} › 내 사진에 숙소 사진을 올린 뒤 [사진 다시 가져오기]를 눌러 주세요.` });
     });
-  const save = (patch: Partial<Project>) => p && run("save", async () => setP(await call<Project>({ action: "update", id: p.id, ...patch })));
+  const save = (patch: Partial<Project>) => p && run("save", async () => setP(await callQ<Project>({ action: "update", id: p.id, ...patch })));
   const clipOf = (key: string) => {
     const id = Object.entries(p?.clipKeys ?? {}).find(([, k]) => k === key)?.[0];
     return id ? p?.clips.find((c) => c.id === id) : undefined;
@@ -242,7 +256,11 @@ export function StayStudio() {
     const c = clipOf(ph.key);
     const st = STATE[c?.state ?? "none"];
     const vid = c?.state === "success" ? p.clipUrls?.[c.id] : undefined;
-    const set = (patch: Partial<Photo>) => void save({ photos: p.photos.map((x) => (x.key === ph.key ? { ...x, ...patch } : x)) });
+    const set = (patch: Partial<Photo>) => {
+      const photos = p.photos.map((x) => (x.key === ph.key ? { ...x, ...patch } : x));
+      setP({ ...p, photos });
+      void save({ photos });
+    };
     return (
       <div key={ph.key} className={cn("grid grid-cols-[88px_1fr_auto] items-start gap-2.5 rounded-control border p-2", child ? "ml-6 border-brand-line/60 bg-brand-soft/10" : "border-line")} data-stay-photo>
         <div className="relative">
@@ -267,7 +285,7 @@ export function StayStudio() {
                 onClick={() =>
                   window.confirm(`${n}번 컷의 AI 영상을 지금 움직임 명령어로 다시 만들까요?\n약 ${((AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie) — 한 번 누르면 바로 과금됩니다.`) &&
                   void run("animate", async () => {
-                    const r = await call<{ project: Project; created: number }>({ action: "animate", id: p.id, keys: [ph.key], confirmed: true });
+                    const r = await callQ<{ project: Project; created: number }>({ action: "animate", id: p.id, keys: [ph.key], confirmed: true });
                     setP(r.project);
                     setMsg({ tone: "info", text: `${n}번 컷을 다시 만들기 시작했습니다. 1~3분 뒤 바뀝니다 (자동 확인, 무료).` });
                   })
@@ -281,10 +299,18 @@ export function StayStudio() {
           </div>
           <Input key={`l${ph.line}`} defaultValue={ph.line} onBlur={(e) => e.target.value !== ph.line && set({ line: e.target.value })} placeholder="이 컷 자막·내레이션 (예: 돌 노천탕이)" className="h-8 text-[13px]" aria-label={`${n}번 대사`} />
           <Input key={`m${ph.motion}`} defaultValue={ph.motion} onBlur={(e) => e.target.value !== ph.motion && set({ motion: e.target.value })} placeholder="움직임 (영어, 예: steam rising, light rain)" className="h-7 text-[12px]" aria-label={`${n}번 움직임`} />
-          <p className="text-[11.5px] leading-snug text-fg-muted" data-stay-motion-ko>
-            <span className="mr-1 font-medium text-fg-subtle">한글</span>
-            {ph.motionKo || (ph.motion ? "아직 번역 없음 — ②의 [움직임 한글 번역]을 눌러 주세요" : "—")}
-          </p>
+          <label className="flex items-start gap-1.5 text-[11.5px] text-fg-muted" data-stay-motion-ko>
+            <span className="mt-1.5 shrink-0 font-medium text-fg-subtle">한글</span>
+            <Input
+              key={`k${ph.motionKo ?? ""}`}
+              defaultValue={ph.motionKo ?? ""}
+              onBlur={(e) => e.target.value !== (ph.motionKo ?? "") && set({ motionKo: e.target.value, koEdited: true })}
+              placeholder={ph.motion ? "아직 번역 없음 — 한글로 직접 써도 됩니다" : "움직임을 한글로 써도 됩니다 (예: 나뭇잎이 바람에 흔들린다)"}
+              className="h-7 text-[12px]"
+              aria-label={`${n}번 움직임 한글`}
+            />
+          </label>
+          {ph.koEdited && <p className="text-[11px] text-brand">한글을 고쳤습니다 — 움직이게 만들 때 이 한글을 영어로 바꿔 보냅니다.</p>}
           <label className="flex items-center gap-1.5 text-[11.5px] text-fg-subtle" data-stay-sec>
             컷 시간
             <select value={ph.sec ? String(ph.sec) : ""} onChange={(e) => set({ sec: e.target.value ? Number(e.target.value) : null })} className="h-7 rounded-control border border-line bg-canvas px-1.5 text-[12px] text-fg" aria-label={`${n}번 컷 시간`}>
@@ -370,7 +396,7 @@ export function StayStudio() {
                 onClick={() =>
                   window.confirm(`'${p.name}'을(를) 지울까요? 올린 사진도 지워집니다.`) &&
                   void run("remove", async () => {
-                    await call({ action: "remove", id: p.id });
+                    await callQ({ action: "remove", id: p.id });
                     setP(null);
                     await loadList();
                   })
@@ -413,7 +439,7 @@ export function StayStudio() {
                     onClick={() =>
                       window.confirm("제품 라이브러리의 사진으로 다시 가져올까요? 지금 사진·AI 움직임은 지우고 새로 넣습니다.") &&
                       void run("product", async () => {
-                        const r = await call<{ project: Project; added: number; found: number }>({ action: "product", id: p.id, productId: linked.id, replace: true });
+                        const r = await callQ<{ project: Project; added: number; found: number }>({ action: "product", id: p.id, productId: linked.id, replace: true });
                         setP(r.project);
                         setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장을 다시 가져왔습니다.` : "가져올 사진이 없습니다. 제품 라이브러리 › 내 사진에 올려 주세요." });
                       })
@@ -429,7 +455,7 @@ export function StayStudio() {
               ) : stays && stays.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
                   이 영상에 숙소 연결
-                  <Select className="w-64" value="" placeholder="숙소 고르기" onChange={(e) => e.target.value && void run("product", async () => { const r = await call<{ project: Project; added: number }>({ action: "product", id: p.id, productId: e.target.value }); setP(r.project); setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장을 가져왔습니다.` : "가져올 사진이 없습니다." }); })} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="숙소 연결" />
+                  <Select className="w-64" value="" placeholder="숙소 고르기" onChange={(e) => e.target.value && void run("product", async () => { const r = await callQ<{ project: Project; added: number }>({ action: "product", id: p.id, productId: e.target.value }); setP(r.project); setMsg({ tone: r.added ? "info" : "warning", text: r.added ? `사진 ${r.added}장을 가져왔습니다.` : "가져올 사진이 없습니다." }); })} options={stays.map((x) => ({ value: x.id, label: x.name }))} aria-label="숙소 연결" />
                 </div>
               ) : (
                 <p className="text-[12px] text-fg-muted">
@@ -450,7 +476,7 @@ export function StayStudio() {
                 e.target.value = "";
                 void run("upload", async () => {
                   let cur = p;
-                  for (const f of files) cur = await call<Project>({ action: "upload", id: p.id, dataUrl: await shrink(f) });
+                  for (const f of files) cur = await callQ<Project>({ action: "upload", id: p.id, dataUrl: await shrink(f) });
                   setP(cur);
                 });
               }}
@@ -556,7 +582,7 @@ export function StayStudio() {
                                     `장소 ${gi + 1} 사진으로 다른 각도 ${angleKinds.size}장을 만들까요?\n예상 비용 약 $${(angleKinds.size * STAY_ANGLE_CREDITS * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie 크레딧 ${angleKinds.size * STAY_ANGLE_CREDITS}). 한 번 누르면 바로 과금됩니다.\n만든 사진을 움직이게 하는 것(③)은 따로 1장 약 $${((AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)}입니다.`,
                                   ) &&
                                   void run("angles", async () => {
-                                    const r = await call<{ project: Project; created: number }>({ action: "angles", id: p.id, keys: [root.key], angles: [...angleKinds], confirmed: true });
+                                    const r = await callQ<{ project: Project; created: number }>({ action: "angles", id: p.id, keys: [root.key], angles: [...angleKinds], confirmed: true });
                                     setP(r.project);
                                     setAngleOpen(null);
                                     setMsg({ tone: "info", text: `장소 ${gi + 1}의 각도 사진 ${r.created}장 만들기를 시작했습니다. 30초~1분 뒤 이 장소 아래에 사진으로 나타납니다 (자동 확인, 무료).` });
@@ -592,10 +618,10 @@ export function StayStudio() {
                   data-stay-format
                 />
               )}
-              <Button variant="primary" icon={Sparkles} loading={busy === "script"} disabled={p.photos.length < 3} onClick={() => void run("script", async () => setP(await call<Project>({ action: "script", id: p.id })))} data-stay-script-go>
+              <Button variant="primary" icon={Sparkles} loading={busy === "script"} disabled={p.photos.length < 3} onClick={() => void run("script", async () => setP(await callQ<Project>({ action: "script", id: p.id })))} data-stay-script-go>
                 제목·대사 만들기
               </Button>
-              <Button icon={Wand2} loading={busy === "translate"} disabled={!p.photos.some((x) => x.motion.trim())} onClick={() => void run("translate", async () => setP(await call<Project>({ action: "translate", id: p.id })))} data-stay-translate>
+              <Button icon={Wand2} loading={busy === "translate"} disabled={!p.photos.some((x) => x.motion.trim())} onClick={() => void run("translate", async () => setP(await callQ<Project>({ action: "translate", id: p.id })))} data-stay-translate>
                 움직임 한글 번역
               </Button>
               <span className="text-[12px] text-fg-subtle">사진 {p.photos.length}장 · 약 {Math.round(p.photos.reduce((n, x) => n + (x.sec ?? 2.5), 0))}초 영상 · 대사는 컷과 따로 이어 읽음</span>
@@ -616,7 +642,7 @@ export function StayStudio() {
               onClick={() =>
                 window.confirm(`사진 ${todo}장을 AI 영상으로 만들까요?\n예상 비용 약 $${usd} (Kie 크레딧). 한 번 누르면 바로 과금됩니다.`) &&
                 void run("animate", async () => {
-                  const r = await call<{ project: Project; created: number }>({ action: "animate", id: p.id, confirmed: true });
+                  const r = await callQ<{ project: Project; created: number }>({ action: "animate", id: p.id, confirmed: true });
                   setP(r.project);
                   setMsg({ tone: "info", text: `${r.created}장 만들기를 시작했습니다. 1~3분 뒤 '완성'으로 바뀝니다 (자동 확인, 무료).` });
                 })
@@ -636,7 +662,7 @@ export function StayStudio() {
                   window.confirm(`완성된 AI 컷 ${done}장을 새 움직임 명령어로 모두 다시 만들까요?\n(예전 컷이 줌만 되거나 멈춰 보이면)\n예상 비용 약 ${(done * (AI_CLIP_CONFIG.product.credits ?? 20) * AI_CLIP_CONFIG.creditUsd).toFixed(2)} (Kie) — 한 번 누르면 바로 과금됩니다.`) &&
                   void run("animate", async () => {
                     const keys = p.photos.filter((ph) => clipOf(ph.key)?.state === "success").map((ph) => ph.key);
-                    const r = await call<{ project: Project; created: number }>({ action: "animate", id: p.id, keys, confirmed: true });
+                    const r = await callQ<{ project: Project; created: number }>({ action: "animate", id: p.id, keys, confirmed: true });
                     setP(r.project);
                     setMsg({ tone: "info", text: `${r.created}장 다시 만들기를 시작했습니다. 1~3분 뒤 바뀝니다 (자동 확인, 무료).` });
                   })
@@ -658,7 +684,7 @@ export function StayStudio() {
               icon={Film}
               loading={busy === "render" || rendering}
               disabled={!ready || making}
-              onClick={() => void run("render", async () => setJob(await call<VideoJob>({ action: "render", id: p.id })))}
+              onClick={() => void run("render", async () => setJob(await callQ<VideoJob>({ action: "render", id: p.id })))}
               data-stay-render-go
             >
               {rendering ? "영상 만드는 중…" : `영상 만들기 (컷 ${ready}개)`}
@@ -721,7 +747,7 @@ function StayVoicePanel({ value, onSave }: { value: StayVoice | null; onSave: (v
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12px] text-fg-muted">말하기 속도</span>
+            <span className="text-[12px] text-fg-muted">말하기 속도 <span className="text-fg-subtle">(자막도 말소리에 맞춰 같이 빨라짐)</span></span>
             <SegmentedControl size="sm" value={String(speed)} onChange={(v) => put({ voiceSpeed: Number(v) })} options={VOICE_SPEEDS.map((x) => ({ value: String(x), label: x === 0 ? "자동" : x === 1 ? "보통" : `${x}배` }))} />
           </div>
         </>

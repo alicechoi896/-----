@@ -3,7 +3,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import type { SessionInfo } from "@/lib/types";
 import type { AiClip, VideoJob, VideoPlan } from "@/lib/types/video-production";
 import { aiSourceId } from "@/lib/types/video-production";
-import { AI_CLIP_CONFIG, cleanVoiceSpeed, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
+import { AI_CLIP_CONFIG, cleanVoiceSpeed, DEFAULT_VOICE_SPEED, STAY_ANGLES, STAY_CUT_MAX_SEC, STAY_MAX_PHOTOS, estimateAiClipUsd } from "@/lib/video-production/config";
 import { createId, nowIso } from "@/lib/utils";
 import { lastVoiceSettings } from "../automation/auto-video";
 import { serverConfig } from "../config";
@@ -41,6 +41,8 @@ export interface StayPhoto {
   motion: string;
   /** v0.9.169 움직임 설명 한글 번역 (보기용, 영어를 고치면 비운다) */
   motionKo?: string;
+  /** v0.9.192 사람이 한글 움직임을 고쳤음 → 움직이게 만들 때 한글을 영어로 바꿔 보낸다 */
+  koEdited?: boolean;
   /** v0.9.169 이 컷 보이는 시간(초). 없으면 대사 길이만큼 */
   sec?: number | null;
   /** v0.9.174 이 사진이 다른 사진에서 만든 각도면: 원래 사진 key · 각도 */
@@ -315,8 +317,11 @@ export const stayService = {
           if (!old) return null;
           const motion = String(x.motion ?? "").replace(/\s+/g, " ").trim().slice(0, 600);
           // 영어 명령어를 고치면 예전 번역은 맞지 않으니 비운다
-          const motionKo = motion === old.motion ? old.motionKo : x.motionKo !== undefined && x.motionKo !== old.motionKo ? str(x.motionKo, 400) : "";
-          return { key: old.key, line: str(x.line, 60), motion, motionKo, sec: cleanSec(x.sec), fromKey: old.fromKey ?? null, angle: old.angle ?? null };
+          // v0.9.192 한글을 고치면 그 한글을 기준으로 (움직이게 만들 때 영어로 바꿔 보냄). 영어를 고치면 한글 번역은 비운다
+          const koNew = x.motionKo !== undefined && str(x.motionKo, 400) !== (old.motionKo ?? "") ? str(x.motionKo, 400) : null;
+          const motionKo = koNew ?? (motion === old.motion ? old.motionKo : "");
+          const koEdited = koNew !== null ? Boolean(koNew) : motion === old.motion ? Boolean(old.koEdited) : false;
+          return { key: old.key, line: str(x.line, 60), motion, motionKo, koEdited, sec: cleanSec(x.sec), fromKey: old.fromKey ?? null, angle: old.angle ?? null };
         })
         .filter((x): x is StayPhoto => Boolean(x));
       const keep = new Set(next.map((x) => x.key));
@@ -514,9 +519,15 @@ export const stayService = {
     let created = 0;
     // v0.9.191 다시 만들기: 고른 사진은 완성된 AI 컷이 있어도 새 명령어로 다시 (사진 1장 = 1회 과금, 확인 후)
     const redo = new Set(Array.isArray(input.keys) ? input.keys.map(String) : []);
-    for (const ph of p.photos) {
+    // v0.9.192 컷 하나 다시 만들기는 그 컷만 (전에는 실패·안 만든 다른 컷까지 같이 만들어 '계속 다시 만들어지는' 것처럼 보이고 과금됨)
+    const targets = p.photos.filter((ph) => {
       const old = clipOf(p, ph.key);
-      if (old && old.state !== "fail" && !(redo.has(ph.key) && old.state === "success")) continue;
+      if (redo.size) return redo.has(ph.key) && (!old || old.state === "success" || old.state === "fail");
+      return !old || old.state === "fail";
+    });
+    await koToMotion(targets);
+    for (const ph of targets) {
+      const old = clipOf(p, ph.key);
       const id = old?.id ?? nextClipId(p);
       if (old) await dropClipFile(p, old.id);
       const clip: AiClip = old ?? { id, mode: "product", prompt: "", imageUrl: null, taskId: null, state: "draft", model: null, credits: null, error: null };
@@ -659,7 +670,7 @@ export const stayService = {
     }
     if (await pruneClipFiles(p)) changed = true;
     if (await keepClipFiles(owner, p)) changed = true;
-    if (!changed) return withUrls(p);
+    if (!changed) return withUrls((await readAll(owner)).find((x) => x.id === p.id) ?? p);
     return withUrls(await saveStatus(owner, p));
   },
 
@@ -690,7 +701,10 @@ export const stayService = {
       ending: false,
       bgm: null,
       ...voice,
-      ...(p.voice?.voice ? { ttsEngine: p.voice.ttsEngine, voice: p.voice.voice, ttsEmotion: p.voice.ttsEmotion, voiceStyle: p.voice.voiceStyle, voiceSpeed: p.voice.voiceSpeed ?? (voice as Partial<VideoPlan>).voiceSpeed } : {}),
+      ...(p.voice?.voice ? { ttsEngine: p.voice.ttsEngine, voice: p.voice.voice, ttsEmotion: p.voice.ttsEmotion, voiceStyle: p.voice.voiceStyle } : {}),
+      // v0.9.192 말하기 속도는 목소리를 따로 안 골라도 적용 (자막은 말소리 시각을 따라 같이 빨라진다)
+      // 화면 ④의 말하기 속도와 같게 (안 눌렀으면 화면 기본값 2배)
+      voiceSpeed: p.voice?.voiceSpeed ?? DEFAULT_VOICE_SPEED,
       narrationOn: true,
       captions: true,
       meme: false,
@@ -760,4 +774,37 @@ async function stayFormat(p: StayProject): Promise<string> {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** v0.9.192 한글 움직임을 고친 컷: 한글 → 영어 명령어 (AI 1번, 글만). 실패하면 원래 영어 그대로 */
+async function koToMotion(photos: StayPhoto[]): Promise<void> {
+  const todo = photos.filter((ph) => ph.koEdited && ph.motionKo?.trim());
+  if (!todo.length) return;
+  try {
+    const ai = await getAIProvider();
+    let en: string[];
+    if (ai.id === "mock") en = todo.map((ph) => `(en) ${ph.motionKo}`);
+    else {
+      const r = await ai.generateStructured<{ items: string[] }>({
+        task: "stay-motion-en",
+        messages: [
+          { role: "system", content: "한국어로 쓴 영상 움직임 설명을 영상 AI(이미지→영상) 명령어 영어로 옮긴다. 뜻을 더하거나 빼지 않고, 무엇이 어떻게 움직이는지 구체적으로. 카메라·줌 이야기는 원문에 있을 때만. 답은 JSON 하나." },
+          { role: "user", content: `아래 ${todo.length}개를 순서대로 영어로 옮겨 items 배열로:\n${todo.map((ph, i) => `${i + 1}. ${ph.motionKo}`).join("\n")}` },
+        ],
+        outputKeys: ["items"],
+        jsonSchema: { type: "object", additionalProperties: false, required: ["items"], properties: { items: { type: "array", items: { type: "string" } } } },
+        variables: { count: todo.length },
+        maxTokens: 1500,
+      });
+      en = r.data.items ?? [];
+    }
+    todo.forEach((ph, i) => {
+      const t = String(en[i] ?? "").trim();
+      if (!t) return;
+      ph.motion = t.slice(0, 600);
+      ph.koEdited = false;
+    });
+  } catch {
+    /* 원래 영어 그대로 */
+  }
 }

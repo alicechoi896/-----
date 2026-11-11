@@ -1,6 +1,6 @@
 {
   "name": "work_auto",
-  "version": "0.9.191",
+  "version": "0.9.192",
   "private": true,
   "scripts": {
     "dev": "next dev",
