@@ -9,6 +9,8 @@ description: work_auto 인스타그램 쪽 기능 — AI 패션 사진·영상(�
 - 파일: `lib/fashion/formats.ts`(유형), `lib/fashion/prompts.ts`, `lib/server/fashion/{service,tasks,render,store}.ts`, 화면 `features/fashion/FashionEditor.tsx`.
 - 릴스 유형 8: 룩북·일상·요일(엘리베이터 문)·얼굴 없음·캐릭터·언박싱·워킹(AI 영상)·1인 리뷰(AI 영상). 피드 유형 5: 모델+제품 카드·라벨 카드·문자 섬네일 플랫레이·코디 플랫레이·색 조합.
 - [AI 로 문구 쓰기]는 유형에 맞게 (`formatGuide`). 음악 없음 (인스타·쇼츠 자체 음악). POV 문구 자리는 사용자가 끌어서 정함.
+- 영상 컨셉 9가지(`CLIP_CONCEPTS`)는 릴스 칸에 **항상 카드로** 보인다 (`ConceptPicker`, 고르면 (나) AI 영상). 숨기지 않는다.
+- AI 내레이션(`settings.voice`, v0.9.193): 첫 컷 POV('POV:' 빼고)+룩 한 줄(`look.voiceLine`, 비우면 caption)+마지막 cta. 말하기 속도 1~2배(atempo), 말 자막은 말소리 시각대로 아래쪽(룩 문구 대신). 말이 길면 룩을 늘림(최대 8초). 렌더 `lib/server/fashion/render.ts renderReels`, 테스트 `tests/unit/fashion-voice.test.ts`.
 - 결과물(out/)은 3일 뒤 삭제.
 
 ## 캐러셀 (/instagram/carousel)
