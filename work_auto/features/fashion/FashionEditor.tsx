@@ -6,7 +6,9 @@ import { Badge, Button, Input, Modal, Notice, SectionCard, SegmentedControl, Sel
 import { api } from "@/lib/api-client";
 import { approvedOf, BACKGROUNDS, CLIP_CONCEPTS, categoryLabel, newFashionId } from "@/lib/fashion/prompts";
 import { FEED_FORMATS, REEL_FORMATS, feedFormatOf, reelFormatOf } from "@/lib/fashion/formats";
-import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionLook, type FashionSettings } from "@/lib/fashion/types";
+import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionLook, type FashionSettings, type FashionVoice } from "@/lib/fashion/types";
+import type { VideoProductionOptions } from "@/lib/api-client";
+import { TypecastVoicePicker } from "@/features/video-production/VideoProductionWorkspace";
 import type { Product } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
 import { CostConfirm, TASK_LABEL, UploadButton, taskTone } from "@/features/drama-studio/ui";
@@ -478,14 +480,16 @@ function Outputs({ ctl, uploading, upload, onAsk }: { ctl: FashionCtl; uploading
           <p className="text-[12px] text-fg-muted">유형: <b>{reelFmt.label}</b> — {reelFmt.hint} (③에서 바꿈)</p>
           {reelFmt.unbox && <ExtraImages ctl={ctl} kind="unboxlook" title="언박싱 컷" hint="이 룩의 대표 제품을 손으로 꺼내 펼쳐 보여 주는 컷을 만들어, 룩 앞에 넣습니다." empty="아직 없음 (언박싱 컷 없이 룩만)" onAsk={onAsk} />}
           <SegmentedControl value={s.reelStyle} onChange={(v) => ctl.edit("settings", { ...s, reelStyle: v as "a" | "b" })} options={[{ value: "a", label: "(가) 사진 + 움직임 · 무료" }, { value: "b", label: "(나) AI 영상 · 룩마다 약 $0.16" }]} />
+          <ConceptPicker ctl={ctl} />
           {s.reelStyle === "b" && <LookClips ctl={ctl} upload={upload} uploading={uploading} />}
+          <ReelVoice ctl={ctl} />
           <div className="flex flex-wrap items-center gap-2">
             <Select value={String(s.secPerLook)} options={[1.5, 2, 2.5, 3].map((x) => ({ value: String(x), label: `룩마다 ${x}초` }))} onChange={(e) => ctl.edit("settings", { ...s, secPerLook: Number(e.target.value) })} className="h-9 w-32" aria-label="룩 길이" />
             <Button variant="primary" icon={Clapperboard} disabled={!ready.length || renderingOf("reels") || Boolean(ctl.busy)} onClick={() => void ctl.run("릴스 만들기", () => fashionApi.render(p.id, "reels"))} data-render-reels>
               릴스 만들기 (약 {Math.round(ready.length * s.secPerLook + 2.5)}초)
             </Button>
           </div>
-          <p className="text-[12px] text-fg-subtle" data-fashion-no-music>음악은 넣지 않습니다 (소리 없는 영상). 인스타·쇼츠에 올릴 때 앱의 음악을 고르세요.</p>
+          <p className="text-[12px] text-fg-subtle" data-fashion-no-music>음악은 넣지 않습니다{s.voice?.on ? " (AI 내레이션만 들어감)" : " (소리 없는 영상)"}. 인스타·쇼츠에 올릴 때 앱의 음악을 고르세요.</p>
         </div>
       </div>
       {p.renders.length > 0 && (
@@ -543,6 +547,94 @@ function Outputs({ ctl, uploading, upload, onAsk }: { ctl: FashionCtl; uploading
   );
 }
 
+/** v0.9.193 영상 컨셉 고르기 — 항상 보이게 (전에는 (나) AI 영상을 골라야만 보여서 고를 방법이 없는 것처럼 보였다). 컨셉은 AI 영상 동작이라 고르면 (나)로 */
+function ConceptPicker({ ctl }: { ctl: FashionCtl }) {
+  const p = ctl.project!;
+  const s = p.settings;
+  const cur = s.clipConcept ?? "pose";
+  return (
+    <div className="space-y-1.5 rounded-control border border-line bg-subtle/40 p-2" data-clip-concept>
+      <p className="text-[12px] text-fg-muted">
+        <b className="text-fg">영상 컨셉</b> — 룩마다 AI 영상(나)에서 모델이 할 동작입니다.{s.reelStyle !== "b" ? " 고르면 (나) AI 영상으로 바뀝니다 (룩마다 약 $0.16, 만들 때 확인 창)." : ""}
+      </p>
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+        {CLIP_CONCEPTS.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={s.reelStyle === "b" && cur === c.id}
+            onClick={() => ctl.edit("settings", { ...s, clipConcept: c.id, reelStyle: "b" })}
+            className={cn("rounded-control px-2 py-1.5 text-left ring-1 ring-inset", s.reelStyle === "b" && cur === c.id ? "bg-brand-soft ring-brand-line" : "bg-surface ring-line hover:bg-subtle")}
+          >
+            <span className="block text-[12px] font-semibold">{s.reelStyle === "b" && cur === c.id ? "✓ " : ""}{c.label}</span>
+            <span className="block text-[11px] leading-snug text-fg-subtle">{c.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** v0.9.193 릴스 AI 내레이션 — 목소리·말하기 속도·말 자막, 룩마다 내레이션 (비우면 룩 문구) */
+function ReelVoice({ ctl }: { ctl: FashionCtl }) {
+  const p = ctl.project!;
+  const s = p.settings;
+  const v: FashionVoice = s.voice ?? { on: false, ttsEngine: "openai", voice: "", voiceSpeed: 1.5, captions: true };
+  const [opts, setOpts] = useState<VideoProductionOptions | null>(null);
+  useEffect(() => {
+    if (v.on && !opts) void api.videoProduction.options("youtube").then(setOpts).catch(() => undefined);
+  }, [v.on, opts]);
+  const set = (patch: Partial<FashionVoice>) => ctl.edit("settings", { ...s, voice: { ...v, ...patch } });
+  const ready = p.looks.filter((l) => approvedOf(l.images));
+  return (
+    <div className="space-y-2 rounded-control border border-line p-2" data-fashion-voice>
+      <label className="flex items-center gap-2 text-[12.5px] font-semibold">
+        <input type="checkbox" checked={v.on} onChange={(e) => set({ on: e.target.checked })} className="accent-[var(--color-brand)]" />
+        AI 내레이션 넣기 <span className="font-normal text-fg-subtle">(첫 컷 POV · 룩마다 한 줄 · 마지막 댓글 안내를 읽어 줌)</span>
+      </label>
+      {v.on && (
+        <div className="space-y-2 text-[12.5px]">
+          {!opts ? (
+            <p className="text-fg-subtle">목소리 목록 준비 중…</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[12px] text-fg-muted">음성 엔진</span>
+                <SegmentedControl size="sm" value={v.ttsEngine} onChange={(x) => set({ ttsEngine: x as FashionVoice["ttsEngine"], voice: "" })} options={[{ value: "openai", label: "OpenAI" }, { value: "typecast", label: "타입캐스트" }]} />
+              </div>
+              {v.ttsEngine === "typecast" ? (
+                <TypecastVoicePicker channelId="youtube" ready={opts.ready.typecast} value={v.voice} onChange={(id) => set({ voice: id })} emotion={v.ttsEmotion ?? "normal"} onEmotion={(x) => set({ ttsEmotion: x })} emotions={opts.typecastEmotions} />
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Select value={v.voice || opts.voices[0]?.value || ""} options={opts.voices.map((x) => ({ value: x.value, label: x.label }))} onChange={(e) => set({ voice: e.target.value })} aria-label="목소리" />
+                  <Select value={v.voiceStyle ?? "shorts"} options={opts.voiceStyles} onChange={(e) => set({ voiceStyle: e.target.value })} aria-label="말투" />
+                </div>
+              )}
+            </>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12px] text-fg-muted">말하기 속도 <span className="text-fg-subtle">(자막도 같이)</span></span>
+            <SegmentedControl size="sm" value={String(v.voiceSpeed)} onChange={(x) => set({ voiceSpeed: Number(x) })} options={[1, 1.25, 1.5, 1.75, 2].map((x) => ({ value: String(x), label: x === 1 ? "보통" : `${x}배` }))} />
+          </div>
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" checked={v.captions} onChange={(e) => set({ captions: e.target.checked })} className="accent-[var(--color-brand)]" />
+            말하는 내용을 자막으로 (룩 문구 대신 아래쪽에, 말소리에 맞춰)
+          </label>
+          <div className="space-y-1">
+            {ready.map((l) => (
+              <div key={l.id} className="flex items-center gap-2">
+                <span className="w-14 shrink-0 text-[11.5px] font-medium text-fg-muted">{l.name}</span>
+                <Input value={l.voiceLine ?? ""} onChange={(e) => ctl.edit("looks", p.looks.map((x) => (x.id === l.id ? { ...x, voiceLine: e.target.value } : x)))} placeholder={l.caption ? `비우면 룩 문구: ${l.caption}` : "이 룩 내레이션 (예: 하객룩은 차분하게)"} className="h-8 text-[12.5px]" aria-label={`${l.name} 내레이션`} />
+              </div>
+            ))}
+          </div>
+          <p className="text-[11.5px] text-fg-subtle">말이 룩 길이보다 길면 그 룩을 늘립니다 (최대 8초). 릴스를 만들 때마다 음성 AI 를 부릅니다 (줄마다 1번).</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** v0.9.120 릴스 (나): 룩마다 AI 영상 (Seedance 2.0 Mini 4초, 시작 화면 = 고른 룩 이미지) */
 function LookClips({ ctl, upload, uploading }: { ctl: FashionCtl; upload: (f: File[], kind: "image" | "audio" | "video", target: Record<string, unknown>) => Promise<void>; uploading: boolean }) {
   const p = ctl.project!;
@@ -560,10 +652,9 @@ function LookClips({ ctl, upload, uploading }: { ctl: FashionCtl; upload: (f: Fi
         </Button>
         <span className="text-[11.5px] text-fg-subtle">Seedance 2.0 Mini 720p · 룩 이미지에서 시작해 같은 얼굴·옷으로 움직임 · 영상이 없는 룩은 사진 + 움직임으로 들어갑니다</span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-[220px_1fr]" data-clip-concept>
-        <Select value={p.settings.clipConcept ?? "pose"} options={CLIP_CONCEPTS.map((c) => ({ value: c.id, label: c.label }))} onChange={(e) => ctl.edit("settings", { ...p.settings, clipConcept: e.target.value })} aria-label="영상 컨셉" />
+      <div className="grid gap-2" data-clip-note>
         <Input value={p.settings.clipNote ?? ""} onChange={(e) => ctl.edit("settings", { ...p.settings, clipNote: e.target.value })} placeholder="추가 요청 (모든 룩 공통, 한국어 가능) 예: 엘리베이터 문이 열리며 걸어 나옴, 밝게 웃기" aria-label="영상 추가 요청" />
-        <p className="text-[11.5px] text-fg-subtle sm:col-span-2">컨셉: {CLIP_CONCEPTS.find((c) => c.id === (p.settings.clipConcept ?? "pose"))?.hint} · 룩마다 아래 [이 룩 동작]에 적으면 그 룩만 그 동작으로 만듭니다.</p>
+        <p className="text-[11.5px] text-fg-subtle">컨셉: {CLIP_CONCEPTS.find((c) => c.id === (p.settings.clipConcept ?? "pose"))?.label} (위에서 바꿈) · 룩마다 아래 [이 룩 동작]에 적으면 그 룩만 그 동작으로 만듭니다.</p>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {ready.map((l) => {

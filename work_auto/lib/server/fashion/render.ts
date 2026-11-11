@@ -6,7 +6,9 @@ import path from "node:path";
 import { approvedOf } from "@/lib/fashion/prompts";
 import { WEEKDAYS, feedFormatOf, reelFormatOf } from "@/lib/fashion/formats";
 import type { FashionItem, FashionLook, FashionProject, FashionRender } from "@/lib/fashion/types";
-import { runFfmpeg } from "../video/ffmpeg";
+import { mediaDuration, runFfmpeg } from "../video/ffmpeg";
+import { getTTSProvider } from "../providers/registry";
+import { VOICE_OPTIONS, atempoFor, captionChunks, voiceInstructions } from "@/lib/video-production/config";
 import { videoStorage } from "../video/storage";
 import { fashionDir } from "./store";
 
@@ -432,7 +434,7 @@ export async function renderFeed(owner: string, p: FashionProject, r: FashionRen
 }
 
 /** 릴스 한 컷 위에 얹는 투명 PNG — v0.9.181 유형별 (POV 고정·첫 화면 큰 제목·없음 / LOOK·n번룩·요일 / 체형 줄 / 작은 안내) */
-function reelOverlay(p: FashionProject, look: FashionLook | null, i: number, W: number, H: number, opts: { first?: boolean; bare?: boolean } = {}): Buffer {
+function reelOverlay(p: FashionProject, look: FashionLook | null, i: number, W: number, H: number, opts: { first?: boolean; bare?: boolean; noCaption?: boolean } = {}): Buffer {
   const c = createCanvas(W, H);
   const g = c.getContext("2d");
   const fmt = reelFormatOf(p.settings.format);
@@ -481,7 +483,7 @@ function reelOverlay(p: FashionProject, look: FashionLook | null, i: number, W: 
       g.restore();
     } else if (o.label === "num") small(`${i + 1}번룩`, W / 2, H * 0.53, 30);
     else if (o.label === "weekday") small(WEEKDAYS[i % WEEKDAYS.length], W * 0.06, H * 0.045, 46, "left", "fs_serif");
-    if (o.caption && look.caption.trim()) {
+    if (o.caption && look.caption.trim() && !opts.noCaption) {
       const { lines, px } = fitLines(g, look.caption, "fs_bold", 52, W * 0.84, 2);
       g.font = `${px}px fs_bold`;
       g.textAlign = "center";
@@ -512,6 +514,28 @@ function reelOverlay(p: FashionProject, look: FashionLook | null, i: number, W: 
   return c.toBuffer("image/png");
 }
 
+/** v0.9.193 말 시작 전 여유 (초) */
+const VO_LEAD = 0.15;
+/** v0.9.193 말 자막 한 조각 (아래쪽 가운데, 흰 글씨 + 검은 테두리) */
+function captionPng(text: string, W: number, H: number): Buffer {
+  const c = createCanvas(W, H);
+  const g = c.getContext("2d");
+  const { lines, px } = fitLines(g, text, "fs_bold", 60, W * 0.86, 2);
+  g.font = `${px}px fs_bold`;
+  g.textAlign = "center";
+  g.textBaseline = "bottom";
+  g.lineJoin = "round";
+  lines.forEach((l, k) => {
+    const y = H * 0.8 - (lines.length - 1 - k) * px * 1.25;
+    g.lineWidth = Math.max(6, px * 0.18);
+    g.strokeStyle = "rgba(0,0,0,0.9)";
+    g.strokeText(l, W / 2, y);
+    g.fillStyle = "#ffffff";
+    g.fillText(l, W / 2, y);
+  });
+  return c.toBuffer("image/png");
+}
+
 /** 릴스 (가): 룩 사진 + 움직임 + 문구 + 음악 → mp4 키 */
 export async function renderReels(owner: string, p: FashionProject, r: FashionRender): Promise<{ key: string; totalSec: number }> {
   fonts();
@@ -535,6 +559,54 @@ export async function renderReels(owner: string, p: FashionProject, r: FashionRe
     });
     if (parts[0]) parts[0].first = true;
     parts.push({ look: null, i: looks.length, sec: ctaSec });
+    // v0.9.193 AI 내레이션: 첫 컷 = POV(‘POV:’ 빼고) + 룩 한 줄, 룩 = 이 룩 내레이션(없으면 룩 문구), 마지막 = 댓글 안내. 언박싱 컷은 말 없음
+    const vo = p.settings.voice?.on ? p.settings.voice : null;
+    const speech: ({ file: string; dur: number; text: string } | null)[] = parts.map(() => null);
+    if (vo) {
+      const tts = await getTTSProvider(vo.ttsEngine).catch(() => null);
+      const voice = vo.ttsEngine === "typecast" ? vo.voice : vo.voice || VOICE_OPTIONS[0].value;
+      const tempo = atempoFor(Math.min(2, Math.max(1, vo.voiceSpeed || 1.5)));
+      for (const [k, part] of parts.entries()) {
+        const lookLine = part.look ? (part.look.voiceLine?.trim() || part.look.caption.trim()) : "";
+        const text = part.unbox ? "" : part.look ? [part.first ? (p.settings.pov || "").replace(/^\s*POV\s*[:：]\s*/i, "").trim() : "", lookLine].filter(Boolean).join(". ") : (p.settings.cta || "").trim();
+        if (!text || !tts || (vo.ttsEngine === "typecast" && !voice)) continue;
+        try {
+          const raw = path.join(dir, `tts${k}.mp3`);
+          await writeFile(raw, await tts.synthesize(text, voice, voiceInstructions(vo.voiceStyle), { emotion: vo.ttsEmotion }));
+          const wav = path.join(dir, `tts${k}.wav`);
+          await runFfmpeg(["-y", "-i", raw, "-af", `silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse${tempo ? `,${tempo}` : ""}`, "-ar", "44100", "-ac", "2", wav], 60_000);
+          const dur = await mediaDuration(wav);
+          speech[k] = { file: wav, dur, text };
+          // 말이 컷보다 길면 컷을 늘린다 (최대 8초)
+          part.sec = Math.min(8, Math.max(part.sec, dur + VO_LEAD + 0.35));
+        } catch (e) {
+          console.warn("[FashionVoice]", JSON.stringify({ project: p.id, part: k, error: e instanceof Error ? e.message.slice(0, 120) : "?" }));
+        }
+      }
+    }
+    const capsOn = Boolean(vo?.captions);
+    /** 말 자막 조각 PNG + 시각 (말소리 길이를 글자 수로 나눔) — 마지막 안내 컷은 가운데 상자가 있어 넣지 않는다 */
+    const captionsFor = async (k: number): Promise<{ file: string; a: number; b: number }[]> => {
+      const sp = speech[k];
+      if (!capsOn || !sp || !parts[k].look) return [];
+      const chunks = captionChunks(sp.text.replace(/\.\s+/g, " "), 14);
+      const total = chunks.reduce((n, c) => n + c.replace(/\s/g, "").length, 0) || 1;
+      const out: { file: string; a: number; b: number }[] = [];
+      let at = VO_LEAD;
+      for (const [j, c] of chunks.entries()) {
+        const len = (sp.dur * c.replace(/\s/g, "").length) / total;
+        const file = path.join(dir, `cap${k}_${j}.png`);
+        await writeFile(file, captionPng(c, W, H));
+        out.push({ file, a: at, b: j === chunks.length - 1 ? parts[k].sec : at + len });
+        at += len;
+      }
+      return out;
+    };
+    const capInputs = (caps: { file: string }[]) => caps.flatMap((c) => ["-loop", "1", "-i", c.file]);
+    const capFilter = (caps: { a: number; b: number }[], first: number) =>
+      caps.length
+        ? caps.map((c, j) => `[${j ? `c${j - 1}` : "v0"}][${first + j}:v]overlay=0:0:enable='between(t,${c.a.toFixed(3)},${(c.b - 0.001).toFixed(3)})'${j === caps.length - 1 ? ",format=yuv420p[v]" : `[c${j}]`}`).join(";")
+        : "[v0]null[v]";
     const useClips = p.settings.reelStyle === "b";
     // 엘리베이터 문 (왼쪽·오른쪽 문짝 PNG, 컷 처음에 열리고 끝에 닫힘)
     const doorL = path.join(dir, "doorL.png");
@@ -566,11 +638,13 @@ export async function renderReels(owner: string, p: FashionProject, r: FashionRe
         // v0.9.120 릴스 (나): 룩 AI 영상 앞부분 N초 + 같은 문구
         const cf = path.join(dir, `clip${segs.length}.mp4`);
         await writeFile(cf, clipBuf);
-        const ovFile = path.join(dir, `ovc${segs.length}.png`);
-        await writeFile(ovFile, reelOverlay(p, part.look, part.i, W, H, { first: part.first }));
-        const out = path.join(dir, `seg${segs.length}.mp4`);
+        const k = segs.length;
+        const caps = await captionsFor(k);
+        const ovFile = path.join(dir, `ovc${k}.png`);
+        await writeFile(ovFile, reelOverlay(p, part.look, part.i, W, H, { first: part.first, noCaption: caps.length > 0 }));
+        const out = path.join(dir, `seg${k}.mp4`);
         const frames = Math.round(part.sec * FPS);
-        await runFfmpeg(["-y", "-i", cf, "-i", ovFile, "-filter_complex", `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS},tpad=stop_mode=clone:stop_duration=${part.sec},format=yuv420p[bg];[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]`, "-map", "[v]", "-frames:v", String(frames), "-r", String(FPS), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out], 180_000);
+        await runFfmpeg(["-y", "-i", cf, "-i", ovFile, ...capInputs(caps), "-filter_complex", `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS},tpad=stop_mode=clone:stop_duration=${part.sec},format=yuv420p[bg];[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v0];${capFilter(caps, 2)}`, "-map", "[v]", "-frames:v", String(frames), "-r", String(FPS), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out], 180_000);
         segs.push(out);
         continue;
       }
@@ -578,14 +652,15 @@ export async function renderReels(owner: string, p: FashionProject, r: FashionRe
       const imgFile = path.join(dir, `in${n}.png`);
       const srcKey = part.unbox ? approvedOf(part.look!.unboxImages ?? [])!.key : approvedOf(src.images)!.key;
       await writeFile(imgFile, (await videoStorage.download(srcKey))!);
+      const caps = await captionsFor(n);
       const ovFile = path.join(dir, `ov${n}.png`);
-      await writeFile(ovFile, reelOverlay(p, part.look, part.i, W, H, { first: part.first, bare: part.unbox && !part.first }));
+      await writeFile(ovFile, reelOverlay(p, part.look, part.i, W, H, { first: part.first, bare: part.unbox && !part.first, noCaption: caps.length > 0 }));
       const frames = Math.round(part.sec * FPS);
       const out = path.join(dir, `seg${n}.mp4`);
       // 살짝 다가가는 움직임 (1.00 → 1.06). 마지막 안내는 어둡게. 요일 룩은 문이 열리고 닫힘
       const doors = fmt.doors && part.look && !part.unbox;
       const base = `[0:v]scale=${W * 2}:${H * 2}:force_original_aspect_ratio=increase,crop=${W * 2}:${H * 2},zoompan=z='1+0.06*on/${frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${W}x${H}:fps=${FPS}${part.look ? "" : ",eq=brightness=-0.12"},format=yuv420p[${doors ? "bg0" : "bg"}]${doors ? `;${doorFilter(part.sec)}` : ""}`;
-      await runFfmpeg(["-y", "-i", imgFile, "-i", ovFile, ...(doors ? ["-loop", "1", "-i", doorL, "-loop", "1", "-i", doorR] : []), "-filter_complex", `${base};[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]`, "-map", "[v]", "-frames:v", String(frames), "-r", String(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out], 180_000);
+      await runFfmpeg(["-y", "-i", imgFile, "-i", ovFile, ...(doors ? ["-loop", "1", "-i", doorL, "-loop", "1", "-i", doorR] : []), ...capInputs(caps), "-filter_complex", `${base};[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v0];${capFilter(caps, doors ? 4 : 2)}`, "-map", "[v]", "-frames:v", String(frames), "-r", String(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out], 180_000);
       segs.push(out);
     }
     const list = path.join(dir, "list.txt");
@@ -601,6 +676,21 @@ export async function renderReels(owner: string, p: FashionProject, r: FashionRe
       await writeFile(bf, bgm);
       const vol = Math.min(1, Math.max(0, p.settings.bgmVolume ?? 0.5));
       await runFfmpeg(["-y", "-i", joined, "-stream_loop", "-1", "-i", bf, "-filter_complex", `[1:a]volume=${vol},atrim=0:${total.toFixed(3)},afade=t=in:d=0.3,afade=t=out:st=${Math.max(0, total - 1.2).toFixed(3)}:d=1.2[a]`, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-t", total.toFixed(3), "-movflags", "+faststart", final], 180_000);
+    } else if (speech.some(Boolean)) {
+      // v0.9.193 내레이션: 컷마다 (조금 뒤에 시작하는) 말소리를 컷 길이에 맞춰 이어 붙인다
+      const pieces: string[] = [];
+      for (const [k, part] of parts.entries()) {
+        const pf = path.join(dir, `a${k}.wav`);
+        const sp = speech[k];
+        if (sp) await runFfmpeg(["-y", "-i", sp.file, "-af", `adelay=${Math.round(VO_LEAD * 1000)}|${Math.round(VO_LEAD * 1000)},apad,atrim=0:${part.sec.toFixed(3)}`, "-ar", "44100", "-ac", "2", pf], 60_000);
+        else await runFfmpeg(["-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", part.sec.toFixed(3), pf], 60_000);
+        pieces.push(pf);
+      }
+      const alist = path.join(dir, "a.txt");
+      await writeFile(alist, pieces.map((x) => `file '${x.replace(/\\/g, "/")}'`).join("\n"));
+      const voiceWav = path.join(dir, "voice.wav");
+      await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", alist, "-c", "copy", voiceWav], 60_000);
+      await runFfmpeg(["-y", "-i", joined, "-i", voiceWav, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "160k", "-t", total.toFixed(3), "-movflags", "+faststart", final], 120_000);
     } else {
       await runFfmpeg(["-y", "-i", joined, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-t", total.toFixed(3), "-movflags", "+faststart", final], 120_000);
     }

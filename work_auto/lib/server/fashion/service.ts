@@ -5,7 +5,7 @@ import path from "node:path";
 import { mediaDuration } from "../video/ffmpeg";
 import { approvedOf, backgroundEn, categoryLabel, DEFAULT_SETTINGS, emptyFashionProject, newFashionId } from "@/lib/fashion/prompts";
 import { FEED_FORMATS, REEL_FORMATS, feedFormatOf, reelFormatOf } from "@/lib/fashion/formats";
-import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionItem, type FashionLook, type FashionProject, type FashionRender, type FashionSection } from "@/lib/fashion/types";
+import { FASHION_CATEGORIES, FASHION_STALE_RENDER_MS, type FashionCategory, type FashionImage, type FashionItem, type FashionLook, type FashionProject, type FashionRender, type FashionSection, type FashionVoice } from "@/lib/fashion/types";
 import { AppError } from "../http";
 import { getAIProvider } from "../providers/registry";
 import { getCurrentUserId } from "../repositories";
@@ -68,6 +68,22 @@ function mergeClips(server: NonNullable<FashionLook["clips"]>, client: unknown):
   return kept;
 }
 
+/** v0.9.193 릴스 AI 내레이션 설정 */
+function cleanFashionVoice(raw: unknown): FashionVoice | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = raw as Record<string, unknown>;
+  const speed = Number(v.voiceSpeed);
+  return {
+    on: v.on === true,
+    ttsEngine: v.ttsEngine === "typecast" ? "typecast" : "openai",
+    voice: str(v.voice, 120),
+    ttsEmotion: str(v.ttsEmotion, 40) || undefined,
+    voiceStyle: str(v.voiceStyle, 40) || undefined,
+    voiceSpeed: Number.isFinite(speed) ? Math.min(2, Math.max(1, speed)) : 1.5,
+    captions: v.captions !== false,
+  };
+}
+
 function cleanSection(owner: string, p: FashionProject, section: FashionSection, value: unknown): void {
   const v = (value ?? {}) as Record<string, unknown>;
   switch (section) {
@@ -96,6 +112,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
         coverSub: str(v.coverSub, 50),
         brand: str(v.brand, 24),
         script: str(v.script, 30),
+        voice: cleanFashionVoice(v.voice),
       };
       return;
     case "items": {
@@ -140,6 +157,7 @@ function cleanSection(owner: string, p: FashionProject, section: FashionSection,
           caption: str(x.caption, 60),
           pose: str(x.pose, 200),
           clipMotion: str((x as { clipMotion?: unknown }).clipMotion, 300),
+          voiceLine: str((x as { voiceLine?: unknown }).voiceLine, 80),
           images: old ? mergeImages(old.images, x.images) : [],
           feedImages: old?.feedImages ? mergeImages(old.feedImages, (x as { feedImages?: unknown }).feedImages) : [],
           flatImages: old?.flatImages ? mergeImages(old.flatImages, (x as { flatImages?: unknown }).flatImages) : [],

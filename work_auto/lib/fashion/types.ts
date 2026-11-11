@@ -65,6 +65,8 @@ export interface FashionLook {
   clips?: FashionClip[];
   /** v0.9.124 이 룩만의 영상 동작 (비우면 컨셉) */
   clipMotion?: string;
+  /** v0.9.193 이 룩 내레이션 (비우면 룩 문구) */
+  voiceLine?: string;
   /** v0.9.171 피드 카드용: 같은 모델·같은 옷, 무늬 없는 밝은 배경 (승인 1장을 피드에 씀, 없으면 룩 이미지) */
   feedImages?: FashionImage[];
   /** v0.9.181 피드 플랫레이·벽에 건 코디 (모델 없이 제품만) */
@@ -119,6 +121,22 @@ export interface FashionSettings {
   /** 라벨 카드: 아래 브랜드 이름 · 손글씨 한 줄 */
   brand?: string;
   script?: string;
+  /** v0.9.193 릴스 AI 내레이션 (끄면 지금처럼 소리 없음) */
+  voice?: FashionVoice;
+}
+
+/** v0.9.193 릴스 AI 내레이션: 목소리·말하기 속도·말 자막 */
+export interface FashionVoice {
+  on: boolean;
+  ttsEngine: "openai" | "typecast";
+  /** 비우면 OpenAI 기본 목소리 */
+  voice: string;
+  ttsEmotion?: string;
+  voiceStyle?: string;
+  /** 말하기 속도 1~2 (자막도 말소리에 맞춰 같이) */
+  voiceSpeed: number;
+  /** 말하는 내용을 자막으로 (룩 문구 대신 아래쪽에, 말소리 시각대로) */
+  captions: boolean;
 }
 
 /** v0.9.170 '만드는 중'으로 이만큼 멈춰 있으면 끊긴 것으로 본다 (서버·화면 같은 기준, 렌더 함수 최대 800초보다 길게) */
