@@ -2,7 +2,7 @@
 
 # 자동화 지니: 작업 규칙
 
-작업 전에 `docs/DEVELOPMENT_GUIDE.md`를 읽는다. 기능 목록은 `docs/FEATURE_REGISTRY.md`에 있다.
+작업 전에 `docs/DEVELOPMENT_GUIDE.md`를 읽는다. 작업 규칙 스킬은 `.claude/skills/` 에 있다 — 항상 `safety-rules`, 마무리·배포는 `ship-checklist`, 영상 편집 `video-edit`, 원고·대본 포맷 `script-format`, Kie 생성 `kie-generation`, 숙소 `stay-video`, 인스타그램 `fashion-instagram`. 기능 목록은 `docs/FEATURE_REGISTRY.md`에 있다.
 
 - 메뉴, 카드, 페이지 제목은 `lib/registry`에서 만든다. 하드코딩하지 않는다.
 - 새 기능은 `defaultTiers`(기본 접근 등급)를 반드시 정하고, 페이지는 `FeaturePage`로 감싼다. 전용 API 는 `requireAccess()`.
