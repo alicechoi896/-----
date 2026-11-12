@@ -1,5 +1,6 @@
 "use client";
 
+import { MakeSetButton } from "@/features/content-set/ContentSets";
 import { useRef, useState } from "react";
 import { CalendarPlus, Check, Film, ListPlus, Loader2, RefreshCw, Search, Sparkles, Star } from "lucide-react";
 import type { OutputSection } from "@/lib/generators/types";
@@ -285,6 +286,7 @@ export function TwoStageWorkspace({
                   <Film className="size-4" />
                   이 제목으로 영상 만들기
                 </Link>
+                <MakeSetButton contentId={activeGroup.id} />
                 <Button size="sm" variant="secondary" icon={CalendarPlus} onClick={() => setScheduleFor(activeGroup)} data-schedule-upload-group>
                   이 제목 업로드 예약하기
                 </Button>

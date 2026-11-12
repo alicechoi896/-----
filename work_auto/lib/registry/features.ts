@@ -25,6 +25,7 @@ import {
   Shirt,
   CalendarClock,
   Wallet,
+  Layers,
 } from "lucide-react";
 import type { MemberTier } from "@/lib/types";
 import type { FeatureDef } from "./types";
@@ -369,6 +370,21 @@ export const FEATURES: FeatureDef[] = [
     requiredProviders: [],
     inputs: ["검색어", "카테고리"],
     outputs: ["제품 카드/목록", "제품 상세 분석 데이터"],
+  },
+  {
+    id: "content-set",
+    channelId: "tools",
+    order: 0,
+    title: "콘텐츠 세트",
+    description: "하나(영상 원고·블로그 글·캐러셀)로 시작해 같은 내용으로 나머지 — 영상 원고 · 캐러셀 · 블로그 글 · 스레드 글 — 를 만들고 한곳에서 봅니다. 결과 화면의 [이 내용으로 세트 만들기]로 시작합니다.",
+    href: "/make/sets",
+    icon: Layers,
+    kind: "tool",
+    status: "live",
+    defaultTiers: GOLD_UP,
+    requiredProviders: ["openai"],
+    inputs: ["시작 콘텐츠 (영상 원고 · 블로그 글 · 캐러셀)"],
+    outputs: ["영상 원고 · 캐러셀(글) · 블로그 글 · 스레드 글 (같은 내용)"],
   },
   {
     id: "detail-page",

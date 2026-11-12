@@ -1,5 +1,6 @@
 "use client";
 
+import { MakeSetButton } from "@/features/content-set/ContentSets";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Download, Film, GalleryHorizontal, ImagePlus, Palette, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
@@ -85,7 +86,10 @@ export function CarouselStudio() {
     try {
       const l = await call<Project[]>();
       setList(l.map((x) => ({ id: x.id, name: x.name })));
-      if (l[0]) await open(l[0].id);
+      // v0.9.199 ?project= 로 그 캐러셀 열기 (콘텐츠 세트에서)
+      const want = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("project");
+      const pick = l.find((x) => x.id === want) ?? l[0];
+      if (pick) await open(pick.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
     }
@@ -156,6 +160,7 @@ export function CarouselStudio() {
   return (
     <div className="space-y-5" data-carousel>
       <div className="flex flex-wrap items-center gap-2">
+        {p && <MakeSetButton carouselId={p.id} />}
         {list.length > 0 && <Select className="w-60" value={p?.id ?? ""} onChange={(e) => void run("open", () => open(e.target.value))} options={list.map((x) => ({ value: x.id, label: x.name }))} aria-label="캐러셀 고르기" />}
         <Input className="h-9 w-72" value={newTopic} onChange={(e) => setNewTopic(e.target.value)} placeholder="새 캐러셀 주제 (예: AI 한테 욕하면 계정 정지)" aria-label="새 캐러셀 주제" />
         <Button

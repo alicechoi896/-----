@@ -447,6 +447,31 @@ export const SHOTS = [
     },
   },
   {
+    id: "04-sets",
+    url: "/make/sets",
+    viewport: { width: 1280, height: 1500 },
+    prepare: async (p) => {
+      const abs = (path) => new URL(path, p.url()).toString();
+      const post = (u, body) => p.request.post(abs(u), { data: body }).then((r) => r.json());
+      const list = (await (await p.request.get(abs("/api/sets"))).json()).data ?? [];
+      let id = list.find((x) => x.items?.threads?.posts?.length)?.id;
+      if (!id) {
+        const blog = (await post("/api/contents/generate", { featureId: "blog-info-writing", input: { writingType: "일반 정보", topic: "겨울철 난방비 줄이는 방법", mainKeyword: "난방비 절약", length: "medium" }, clientRequestId: crypto.randomUUID() })).data;
+        const set = (await post("/api/sets", { action: "from-content", contentId: blog.id })).data;
+        await post("/api/sets", { action: "make", id: set.id, target: "threads" });
+        await post("/api/sets", { action: "make", id: set.id, target: "script" });
+        id = set.id;
+      }
+      await p.goto(abs(`/make/sets?id=${id}`), { waitUntil: "networkidle" });
+      await p.locator("[data-set-items]").first().waitFor({ timeout: 15_000 });
+    },
+    marks: {
+      1: (p) => p.locator("[aria-label=\"핵심 내용\"]").first(),
+      2: (p) => p.locator('[data-set-make="carousel"]').first(),
+      3: (p) => p.locator('[data-set-tile="threads"]').first(),
+    },
+  },
+  {
     id: "04-carousel",
     url: "/instagram/carousel",
     viewport: { width: 1280, height: 3800 },

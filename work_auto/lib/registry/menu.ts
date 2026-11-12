@@ -1,4 +1,4 @@
-import { BookOpen, Boxes, Brain, Clapperboard, FileText, Images, LineChart, Package, PenLine, Search, Settings2, Upload, Video } from "lucide-react";
+import { BookOpen, Boxes, Layers, Brain, Clapperboard, FileText, Images, LineChart, Package, PenLine, Search, Settings2, Upload, Video } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 /**
@@ -62,6 +62,7 @@ export const MENU: MenuGroup[] = [
     id: "make-text",
     label: "③ 만들기 · 글·이미지",
     items: [
+      { id: "m-sets", title: "콘텐츠 세트", icon: Layers, href: "/make/sets", tabs: [{ id: "content-set", label: "콘텐츠 세트" }] },
       {
         id: "m-script",
         title: "영상 원고",

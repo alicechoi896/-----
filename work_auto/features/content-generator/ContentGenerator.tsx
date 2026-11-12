@@ -1,5 +1,6 @@
 "use client";
 
+import { MakeSetButton } from "@/features/content-set/ContentSets";
 import { useEffect, useRef, useState } from "react";
 import { History, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
 import { getGeneratorConfig } from "@/lib/generators/configs";
@@ -257,6 +258,13 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               }}
             />
           ) : result ? (
+            <>
+            {/* v0.9.199 같은 내용으로 영상 원고·캐러셀·블로그 글·스레드 글 */}
+            {(featureId.startsWith("blog-") || /^(yt|clip)-/.test(featureId)) && (
+              <div className="mb-3 flex justify-end">
+                <MakeSetButton contentId={result.id} />
+              </div>
+            )}
             <ResultPanel
               content={result}
               outputs={config.outputs}
@@ -264,6 +272,7 @@ export function ContentGenerator({ featureId, initialValues }: { featureId: stri
               onChange={updateContent}
               photos={result.id === history.data?.[0]?.id ? resultPhotos : []}
             />
+            </>
           ) : (
             <SectionCard>
               <EmptyState
