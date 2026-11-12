@@ -4,7 +4,7 @@ import Link from "next/link";
 import { BrandMark } from "./BrandMark";
 import { SITE_NAME } from "@/lib/site";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-react";
 import { signOut } from "@/app/(auth)/login/actions";
 import { clearApiCache } from "@/lib/api-client";
@@ -12,6 +12,8 @@ import { ROLE_LABEL } from "@/lib/permissions";
 import { CHANNELS, FEATURES, STANDALONE_PAGES, getFeaturesByChannel, matchFeatureByPath, type ChannelDef } from "@/lib/registry";
 import { MENU, menuItemOf } from "@/lib/registry/menu";
 
+/** 열어 둔 메뉴 묶음 (이 브라우저에만, v0.9.201) */
+const OPEN_KEY = "wa.menu.open";
 /** 메뉴 탭 id(기능·단독 페이지) → 주소 */
 const hrefOf = (id: string) => FEATURES.find((x) => x.id === id)?.href ?? STANDALONE_PAGES.find((x) => x.id === id)?.href ?? null;
 /** 지금 주소가 속한 메뉴 (가장 긴 주소가 맞는 기능·단독 페이지 → 그 메뉴) */
@@ -38,10 +40,44 @@ export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "
 
   const admin = CHANNELS.find((c) => c.id === "admin")!;
   const activeItem = activeMenuItem(pathname);
+  // v0.9.201 묶음 열고 닫기: 지금 화면이 속한 묶음은 펼치고, 나머지는 사람이 연 것만 (열어 둔 묶음은 이 브라우저에 기억)
+  const activeGroup = MENU.find((g) => g.items.some((i) => i.id === activeItem))?.id ?? null;
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      try {
+        const raw = window.localStorage.getItem(OPEN_KEY);
+        if (raw) setOpened(new Set(JSON.parse(raw) as string[]));
+      } catch {
+        /* 기억 못 해도 동작 */
+      }
+    });
+  }, []);
+  const isOpen = (id: string) => opened.has(id) || (id === activeGroup && !closed.has(id));
+  const toggle = (id: string) => {
+    const open = isOpen(id);
+    const nextOpened = new Set(opened);
+    const nextClosed = new Set(closed);
+    if (open) {
+      nextOpened.delete(id);
+      nextClosed.add(id);
+    } else {
+      nextOpened.add(id);
+      nextClosed.delete(id);
+    }
+    setOpened(nextOpened);
+    setClosed(nextClosed);
+    try {
+      window.localStorage.setItem(OPEN_KEY, JSON.stringify([...nextOpened]));
+    } catch {
+      /* 기억 못 해도 동작 */
+    }
+  };
 
   const nav = (
-    <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4" onClick={() => setMobileOpen(false)}>
-      <div className="flex flex-col gap-0.5">
+    <nav className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-4" onClick={() => setMobileOpen(false)}>
+      <div className="mb-1 flex flex-col gap-0.5">
         <NavLink href="/" icon={House} label="홈" active={pathname === "/"} />
       </div>
 
@@ -49,12 +85,30 @@ export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "
       {MENU.map((g) => {
         const items = g.items.map((it) => ({ it, tabs: it.tabs.filter((t) => allowed.has(t.id)) })).filter((x) => x.tabs.length > 0);
         if (!items.length) return null;
+        const open = isOpen(g.id);
         return (
-          <NavGroup key={g.id} label={g.label}>
-            {items.map(({ it, tabs }) => (
-              <NavLink key={it.id} href={hrefOf(tabs[0].id) ?? it.href} icon={it.icon} label={it.title} active={it.id === activeItem} />
-            ))}
-          </NavGroup>
+          <div key={g.id} className="flex flex-col gap-0.5" data-menu-group={g.id}>
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(g.id);
+              }}
+              className={cn("flex h-8 items-center gap-1.5 rounded-control px-2.5 text-left text-[12.5px] font-semibold transition-colors hover:bg-muted", g.id === activeGroup ? "text-fg" : "text-fg-muted")}
+            >
+              <span className="flex-1 truncate">{g.label}</span>
+              {!open && <span className="text-[11px] font-normal text-fg-subtle">{items.length}</span>}
+              <ChevronRight className={cn("size-3.5 text-fg-subtle transition-transform", open && "rotate-90")} />
+            </button>
+            {open && (
+              <div className="mb-1 ml-2 flex flex-col gap-0.5 border-l border-line pl-1.5">
+                {items.map(({ it, tabs }) => (
+                  <NavLink key={it.id} href={hrefOf(tabs[0].id) ?? it.href} icon={it.icon} label={it.title} active={it.id === activeItem} />
+                ))}
+              </div>
+            )}
+          </div>
         );
       })}
 
