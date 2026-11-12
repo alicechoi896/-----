@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Bot, Camera, Clapperboard, Film, Mic, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Bot, Camera, Clapperboard, Film, Mic, MonitorPlay, Search, ShieldCheck, ShoppingBag, Sparkles, Upload, Wand2 } from "lucide-react";
 import type { AiProviderId, ApiConnectionPublic } from "@/lib/types";
 import { api } from "@/lib/api-client";
 import { useAsync } from "@/lib/hooks/useAsync";
@@ -106,6 +106,15 @@ const PROVIDERS: ProviderMeta[] = [
     icon: Sparkles,
     fields: [{ name: "apiKey", label: "API Key", placeholder: "GIPHY API Key", hint: "developers.giphy.com → Create an API Key (API). 키는 서버에만 암호화해 저장합니다" }],
     docsUrl: "https://developers.giphy.com/dashboard/",
+  },
+  {
+    id: "uplika",
+    name: "업리카 (SNS 게시)",
+    description: "완성 영상을 인스타그램 릴스·틱톡·스레드 등에 바로 올리거나 예약 (완성 영상의 [SNS 에 올리기]). 올릴 계정은 업리카 대시보드 › Connections 에서 연결 · [올리기] 1번 = 1번 게시 (확인 창) · [테스트]는 연결된 계정 목록 읽기(무료)",
+    usages: ["SNS 게시 (인스타그램·틱톡·스레드 등)"],
+    icon: Upload,
+    fields: [{ name: "apiKey", label: "API Key", placeholder: "업리카 API Key (sk_…)", hint: "업리카 대시보드 › API Keys 에서 만들기 (권한: accounts:read · posts:read · posts:write). 키는 한 번만 보이고, 여기 넣으면 서버에만 암호화해 저장합니다" }],
+    docsUrl: "https://uplika.com/ko/docs",
   },
   {
     id: "kie",

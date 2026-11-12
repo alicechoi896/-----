@@ -19,6 +19,10 @@ export const PUBLISH_PLATFORMS: PublishPlatform[] = [
   { id: "naver-blog", label: "NAVER 블로그", dot: "bg-green-600", channelId: "naver-blog" },
   // v0.9.53: 인스타그램 릴스 (YouTube 와 같은 영상을 올린다)
   { id: "instagram", label: "Instagram", dot: "bg-pink-500", channelId: "instagram" },
+  // v0.9.195 업리카로 올리는 곳
+  { id: "tiktok", label: "TikTok", dot: "bg-neutral-800" },
+  { id: "threads", label: "Threads", dot: "bg-neutral-500" },
+  { id: "facebook", label: "Facebook", dot: "bg-blue-700" },
   { id: "other", label: "기타", dot: "bg-slate-400" },
 ];
 

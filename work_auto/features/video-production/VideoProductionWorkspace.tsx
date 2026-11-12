@@ -34,6 +34,7 @@ import { PublicationForm } from "@/features/uploads/PublicationForm";
 import { GiphyPicker } from "./GiphyPicker";
 import { THUMB_MAX, cutThumb, thumbLen } from "@/lib/video-production/thumb";
 import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
+import { UplikaPublishButton } from "@/features/uplika/UplikaPublish";
 import { SourceEditEditor, editSummary, frameStyle } from "./FrameDialog";
 import { cleanEdit, type SourceEdit } from "@/lib/video-production/source-edit";
 import { cn, formatRelative } from "@/lib/utils";
@@ -897,6 +898,7 @@ function JobPanel({
             {job.channelId === "youtube" && job.outputPath && !job.qa.fileDeleted && (
               <div className="mt-3">
                 <YouTubeUploadButton jobId={job.id} title={job.plan.selectedTitle} />
+                <UplikaPublishButton jobId={job.id} caption={job.plan.selectedTitle} />
               </div>
             )}
             <ThumbMaker job={job} />

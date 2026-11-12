@@ -20,6 +20,7 @@ export const LIMITS = {
   "video-import": 10, // 영상 여러 개 가져오기 (한 번에 최대 20개)
   "describe-photos": 10,
   "client-errors": 20,
+  "uplika-publish": 10, // v0.9.195 업리카 SNS 게시 (1번 = 1번)
   "xhs-search": 10, // TikHub 영상 검색 (샤오홍슈·도우인 공통, 사용자 키·[검색]·[더 보기] 1번 = 1회 약 $0.01)
   "photo-ai": 10, // 제품 사진 AI 배경 연출 (OpenAI 이미지, 장당 비용)
   "style-import": 20, // 나의 스타일 파일 일괄 추가 미리보기 (파일 파싱만, 외부 호출 없음)

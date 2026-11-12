@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { api, type VideoProductionOptions } from "@/lib/api-client";
 import { DEFAULT_CAPTION_STYLE, DEFAULT_GROUP_STYLES, DEFAULT_PAUSE, DEFAULT_TITLE_STYLE, DEFAULT_VOICE_SPEED, PAUSE_OPTIONS, VOICE_SPEEDS, type CaptionStyle, type GroupVideoStyle, type TitleStyle } from "@/lib/video-production/config";
 import { YouTubeUploadButton } from "@/features/youtube-upload/YouTubeUpload";
+import { UplikaPublishButton } from "@/features/uplika/UplikaPublish";
 import { ItemFeedback } from "@/components/shared/ItemFeedback";
 import { XhsPermanentLinks } from "@/features/product-library/XhsPermanentLinks";
 import { CaptionStylePicker, TitleStylePicker, TypecastVoicePicker, VideoFontFaces } from "@/features/video-production/VideoProductionWorkspace";
@@ -341,6 +342,7 @@ function ReportItem({ it, k, url, date, onDone, onError, onRemove, onMakeNow, ma
             {it.thumbnailTitle && <Field label="섬네일 제목 (대본 포맷 참고 · 영상 상단 제목 2번째 줄)" value={it.thumbnailTitle} />}
 {/* v0.9.174 섬네일 이미지 만들기는 뺐다 (사용자 요청) */}
             {it.jobId && it.status === "done" && <YouTubeUploadButton jobId={it.jobId} title={it.title ?? it.productName} description={it.description ?? ""} tags={it.tags ?? []} productId={it.productId} />}
+            {it.jobId && it.status === "done" && <UplikaPublishButton jobId={it.jobId} caption={[it.title ?? it.productName, it.description ?? ""].filter(Boolean).join("\n\n")} productId={it.productId} />}
             {it.jobId && (
               <a href={`/youtube/video-production?jobId=${it.jobId}&autoDate=${date}&autoItem=${it.id}`} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-control bg-brand px-4 text-[14px] font-semibold text-white shadow-card hover:bg-brand-hover" data-auto-edit>
                 <Film className="size-4" /> 영상 편집하기 (GIF 위치·화살표·자막·클립 구간 바꾸기)

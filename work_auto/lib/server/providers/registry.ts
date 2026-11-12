@@ -1,4 +1,5 @@
 import "server-only";
+import { UplikaProvider } from "./uplika";
 import { aiUsd, recordCostLater } from "../costs/ledger";
 import { MockInstagramProvider, TikHubInstagramProvider, type InstagramProvider } from "./instagram/provider";
 import { GraphInstagramProvider, MockMetaInstagramProvider, type MetaInstagramProvider } from "./instagram/meta-graph";
@@ -182,6 +183,12 @@ export async function getVideoAIProvider(): Promise<VideoAIProvider | null> {
   return cred ? new KieVideoProvider(cred.apiKey) : null;
 }
 
+/** 업리카 (v0.9.195): 연결되어 있지 않으면 null */
+export async function getUplikaProvider(): Promise<UplikaProvider | null> {
+  const cred = await loadCredentials("uplika").catch(() => null);
+  return cred ? new UplikaProvider(cred.apiKey) : null;
+}
+
 /** GIPHY (v0.9.102): 연결되어 있지 않으면 null. 데모는 빈 결과 */
 export async function getGiphyProvider(): Promise<Pick<GiphyProvider, "search"> | null> {
   if (serverConfig.providerMode !== "live") return new MockGiphyProvider();
@@ -281,6 +288,10 @@ export function createProviderForTest<P extends ProviderId>(provider: P, cred: P
       return new KieVideoProvider((cred as ProviderCredentialMap["kie"]).apiKey);
     case "giphy":
       return new GiphyProvider((cred as ProviderCredentialMap["giphy"]).apiKey) as unknown as BaseProvider;
+    case "uplika": {
+      const c = new UplikaProvider((cred as ProviderCredentialMap["uplika"]).apiKey);
+      return { id: "uplika", label: "업리카", testConnection: () => c.testConnection() } as unknown as BaseProvider;
+    }
     case "meta-instagram": {
       const c = cred as ProviderCredentialMap["meta-instagram"];
       return new GraphInstagramProvider(c.apiKey, c.igUserId);

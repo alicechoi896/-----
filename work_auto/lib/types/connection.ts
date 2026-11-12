@@ -52,4 +52,6 @@ export interface ProviderCredentialMap {
   typecast: { apiKey: string };
   /** 주목 효과 GIF 검색 (v0.9.102, GIPHY — 무료, 시간당 한도) */
   giphy: { apiKey: string };
+  /** SNS 게시 (v0.9.195, 업리카 — 인스타그램·틱톡·스레드 등) */
+  uplika: { apiKey: string };
 }
