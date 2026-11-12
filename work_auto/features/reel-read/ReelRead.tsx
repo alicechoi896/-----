@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BookmarkPlus, Download, Link2, ListPlus, ScanSearch, Trash2, Upload } from "lucide-react";
 import { api } from "@/lib/api-client";
@@ -47,6 +49,7 @@ interface Reel {
   first3s: string;
   structure: { hook: string; body: string; cta: string };
   ideas: string[];
+  hooks?: { text: string; formula: string; score: number; warnings: string[] }[];
   field: string;
   state: string;
   error: string | null;
@@ -268,6 +271,23 @@ export function ReelRead() {
                     ))}
                   </ol>
                 </div>
+                {(r.hooks?.length ?? 0) > 0 && (
+                  <div data-reel-hooks>
+                    <p className="text-[12.5px] font-semibold">
+                      내 분야 첫 문장(Hook) 후보 <span className="font-normal text-fg-subtle">— 점수 = 3초 안에 말하기·숫자·걸린 것·핵심 앞에·부르기 (조회수 예측 아님)</span>
+                    </p>
+                    <ol className="mt-1 space-y-1 text-[13px]">
+                      {r.hooks!.map((h, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-1.5">
+                          <span className={cn("inline-flex w-10 justify-center rounded-full px-1.5 text-[11.5px] font-semibold", h.score >= 75 ? "bg-success-soft text-success" : h.score >= 50 ? "bg-subtle text-fg" : "bg-danger/10 text-danger")}>{h.score}</span>
+                          <span>{h.text}</span>
+                          <span className="text-[11px] text-fg-subtle">{h.formula}</span>
+                          {h.warnings.length > 0 && <span className="text-[11px] text-danger">{h.warnings.join(" · ")}</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 {r.videoKey && r.urls[r.videoKey] && <video src={r.urls[r.videoKey]} controls playsInline className="max-h-[420px] rounded bg-black" />}

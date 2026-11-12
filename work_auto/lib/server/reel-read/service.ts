@@ -1,4 +1,5 @@
 import "server-only";
+import { HOOK_FORMULAS, hookScore } from "@/lib/instagram/hook-score";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -40,6 +41,8 @@ export interface ReelRead {
   first3s: string;
   structure: { hook: string; body: string; cta: string };
   ideas: string[];
+  /** v0.9.196 내 분야 Hook 후보 (26가지 공식, 점수 높은 순) */
+  hooks?: { text: string; formula: string; score: number; warnings: string[] }[];
   /** 내 분야 (아이디어용) */
   field: string;
   /** v0.9.178 유형 이름 (여러 링크 한 번에 넣을 때 '- 언박싱 유형' 줄) — ZIP 폴더 이름 */
@@ -143,7 +146,7 @@ async function readPhotos(r: ReelRead): Promise<ReelRead> {
     imgs.push({ key: k, b64: c.toBuffer("image/jpeg", 80).toString("base64") });
   }
   const ai = await getAIProvider();
-  type Out = { summary: string[]; slides: { screen: string; text: string }[]; first3s: string; hook: string; body: string; cta: string; ideas: string[] };
+  type Out = { summary: string[]; slides: { screen: string; text: string }[]; first3s: string; hook: string; body: string; cta: string; ideas: string[]; hooks?: { text: string; formula: string }[] };
   let out: Out;
   if (ai.id === "mock") out = { summary: ["표지에 큰 글자", "장마다 코디 하나", "마지막 저장 유도"], slides: imgs.map((_, i) => ({ screen: `${i + 1}장 화면`, text: "" })), first3s: "표지 큰 글자", hook: "표지 문구", body: "장마다 하나", cta: "저장", ideas: ["", "", ""] };
   else {
@@ -161,15 +164,16 @@ async function readPhotos(r: ReelRead): Promise<ReelRead> {
 - slides: 장마다 screen = 무엇이 보이는지(구도·인물·옷·배경·레이아웃·색), text = 장 위의 글자 그대로 (없으면 빈 문자열)
 - first3s: 표지(1장)가 어떻게 넘기게 만드는지
 - hook·body·cta: 표지 / 중간 / 마지막 장 구조를 한 줄씩
-- ideas: 내 분야에 바꿔 쓸 아이디어 3개 (내 분야: ${r.field || "AI 패션 룩북·코디 콘텐츠"}). 구조만 빌리고 그대로 베끼지 않는다.` },
+- ideas: 내 분야에 바꿔 쓸 아이디어 3개 (내 분야: ${r.field || "AI 패션 룩북·코디 콘텐츠"}). 구조만 빌리고 그대로 베끼지 않는다.
+${HOOK_GUIDE}` },
           ],
         },
       ],
-      outputKeys: ["summary", "slides", "first3s", "hook", "body", "cta", "ideas"],
+      outputKeys: ["summary", "slides", "first3s", "hook", "body", "cta", "ideas", "hooks"],
       jsonSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["summary", "slides", "first3s", "hook", "body", "cta", "ideas"],
+        required: ["summary", "slides", "first3s", "hook", "body", "cta", "ideas", "hooks"],
         properties: {
           summary: { type: "array", items: { type: "string" } },
           slides: { type: "array", items: { type: "object", additionalProperties: false, required: ["screen", "text"], properties: { screen: { type: "string" }, text: { type: "string" } } } },
@@ -178,6 +182,7 @@ async function readPhotos(r: ReelRead): Promise<ReelRead> {
           body: { type: "string" },
           cta: { type: "string" },
           ideas: { type: "array", items: { type: "string" } },
+          hooks: HOOKS_SCHEMA,
         },
       },
       variables: { reel: r.id, slides: imgs.length },
@@ -190,6 +195,7 @@ async function readPhotos(r: ReelRead): Promise<ReelRead> {
   r.first3s = str(out.first3s, 300);
   r.structure = { hook: str(out.hook, 200), body: str(out.body, 200), cta: str(out.cta, 200) };
   r.ideas = (out.ideas ?? []).map((x) => str(x, 300)).slice(0, 3);
+  r.hooks = scoredHooks(out.hooks);
   r.state = "read";
   r.error = null;
   return r;
@@ -313,10 +319,10 @@ export const reelReadService = {
       const noKey = tr === null;
       // AI 분석 1번
       const ai = await getAIProvider();
-      type Out = { summary: string[]; scenes: { screen: string; speech: string }[]; first3s: string; hook: string; body: string; cta: string; ideas: string[] };
+      type Out = { summary: string[]; scenes: { screen: string; speech: string }[]; first3s: string; hook: string; body: string; cta: string; ideas: string[]; hooks?: { text: string; formula: string }[] };
       let out: Out;
       if (ai.id === "mock") {
-        out = { summary: ["첫 장면에서 손해를 짚어 멈추게 한다", "세 가지를 하나씩 보여 준다", "저장을 부탁하며 끝낸다"], scenes: frames.map((_, i) => ({ screen: `장면 ${i + 1} 화면`, speech: r.transcript[i]?.text ?? "" })), first3s: "큰 글자 + '모르면 손해' 말로 멈추게 함", hook: "손실 회피 질문", body: "3가지 나열", cta: "저장 유도", ideas: ["우리 제품으로 '모르면 손해' 3가지", "전/후 비교 컷", "마지막에 저장 유도"] };
+        out = { summary: ["첫 장면에서 손해를 짚어 멈추게 한다", "세 가지를 하나씩 보여 준다", "저장을 부탁하며 끝낸다"], scenes: frames.map((_, i) => ({ screen: `장면 ${i + 1} 화면`, speech: r.transcript[i]?.text ?? "" })), first3s: "큰 글자 + '모르면 손해' 말로 멈추게 함", hook: "손실 회피 질문", body: "3가지 나열", cta: "저장 유도", ideas: ["우리 제품으로 '모르면 손해' 3가지", "전/후 비교 컷", "마지막에 저장 유도"], hooks: [{ text: "이거 모르고 사면 30만 원 손해예요", formula: "손해 고백" }, { text: "안녕하세요 오늘은 제품을 소개해 드릴게요", formula: "공개" }] };
       } else {
         const said = r.transcript.map((s) => `[${s.t.toFixed(1)}~${s.end.toFixed(1)}초] ${s.text}`).join("\n") || "(말소리 없음)";
         const r2 = await ai.generateStructured<Out>({
@@ -335,16 +341,17 @@ export const reelReadService = {
 - scenes: 위 장면 순서대로 ${frames.length}개. screen = 그 화면에 무엇이 보이는지(구도·인물·제품·화면 글자 포함, 한 문장), speech = 그 장면 시간에 나온 말 (받아쓰기에서, 없으면 빈 문자열)
 - first3s: 첫 3초에 어떤 화면과 말로 멈추게 했는지
 - hook·body·cta: 첫 3초 / 중간 전개 / 마지막 행동 유도 구조를 한 줄씩
-- ideas: 내 분야에 바꿔 쓸 아이디어 3개 (내 분야: ${r.field || "제품·숙소 홍보 숏폼"}). 원본 영상·대본을 그대로 베끼지 않고 구조만 빌린다.`,
+- ideas: 내 분야에 바꿔 쓸 아이디어 3개 (내 분야: ${r.field || "제품·숙소 홍보 숏폼"}). 원본 영상·대본을 그대로 베끼지 않고 구조만 빌린다.
+${HOOK_GUIDE}`,
                 },
               ],
             },
           ],
-          outputKeys: ["summary", "scenes", "first3s", "hook", "body", "cta", "ideas"],
+          outputKeys: ["summary", "scenes", "first3s", "hook", "body", "cta", "ideas", "hooks"],
           jsonSchema: {
             type: "object",
             additionalProperties: false,
-            required: ["summary", "scenes", "first3s", "hook", "body", "cta", "ideas"],
+            required: ["summary", "scenes", "first3s", "hook", "body", "cta", "ideas", "hooks"],
             properties: {
               summary: { type: "array", items: { type: "string" } },
               scenes: { type: "array", items: { type: "object", additionalProperties: false, required: ["screen", "speech"], properties: { screen: { type: "string" }, speech: { type: "string" } } } },
@@ -353,6 +360,7 @@ export const reelReadService = {
               body: { type: "string" },
               cta: { type: "string" },
               ideas: { type: "array", items: { type: "string" } },
+              hooks: HOOKS_SCHEMA,
             },
           },
           variables: { reel: r.id, scenes: frames.length },
@@ -365,6 +373,7 @@ export const reelReadService = {
       r.first3s = str(out.first3s, 300);
       r.structure = { hook: str(out.hook, 200), body: str(out.body, 200), cta: str(out.cta, 200) };
       r.ideas = (out.ideas ?? []).map((x) => str(x, 300)).slice(0, 3);
+      r.hooks = scoredHooks(out.hooks);
       r.state = "read";
       r.error = noKey ? "OpenAI 키가 없어 받아쓰기 없이 화면만 읽었습니다 (설정 › API 연결 센터)." : null;
       console.info("[ReelRead] read", JSON.stringify({ id: r.id, dur: r.duration, scenes: frames.length, segs: r.transcript.length }));
@@ -393,3 +402,20 @@ export const reelReadService = {
     return { format: { id: format.id, name: format.name } };
   },
 };
+
+/** v0.9.196 Hook 후보: 26가지 공식 중 골라 내 분야로 (instagram-agent-skill ig-reel 을 한국어로) */
+const HOOK_GUIDE = `- hooks: 내 분야 첫 문장(Hook) 후보 5개. 아래 공식 중 원본의 첫 3초 구조와 가장 가까운 것부터 서로 다른 공식으로 고르고, formula 에 공식 이름을 적는다. 3초 안에 말할 수 있게 18자 안팎, 구체적인 숫자·이름, 걸린 것(손해·후회·금지)을 앞에, 인사·예고('오늘은 ~ 소개') 금지, '~니다.' 금지.
+공식: ${HOOK_FORMULAS.map((h) => `${h.name}(${h.example})`).join(" / ")}`;
+const HOOKS_SCHEMA = { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "formula"], properties: { text: { type: "string" }, formula: { type: "string" } } } } as const;
+function scoredHooks(raw: unknown): NonNullable<ReelRead["hooks"]> {
+  const list = Array.isArray(raw) ? (raw as { text?: unknown; formula?: unknown }[]) : [];
+  return list
+    .map((h) => ({ text: str(h?.text, 80), formula: str(h?.formula, 20) }))
+    .filter((h) => h.text)
+    .slice(0, 5)
+    .map((h) => {
+      const sc = hookScore(h.text);
+      return { ...h, score: sc.total, warnings: sc.warnings.slice(0, 2) };
+    })
+    .sort((a, b) => b.score - a.score);
+}

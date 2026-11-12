@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Loader2, Play, Search, X } from "lucide-react";
 import type { IgMetaKind, IgReel, IgSource, IgSourceStatus } from "@/lib/types/instagram";
+import { outlierOf } from "@/lib/instagram/hook-score";
 import { ApiError, api } from "@/lib/api-client";
 import { toHashtag } from "@/lib/instagram";
 import { Button, EmptyState, ErrorState, Input, Notice, SectionCard, SegmentedControl, Select } from "@/components/ui";
@@ -15,7 +16,7 @@ import { cn, formatNumber, formatRelative } from "@/lib/utils";
 type Sort = "plays" | "likes" | "comments" | "recent" | "ratio";
 const SORTS: { value: Sort; label: string }[] = [
   { value: "plays", label: "조회수 많은 순" },
-  { value: "ratio", label: "팔로워 대비 조회수 순" },
+  { value: "ratio", label: "팔로워 대비 터진 순 (평소 대비)" },
   { value: "likes", label: "좋아요 많은 순" },
   { value: "comments", label: "댓글 많은 순" },
   { value: "recent", label: "최신 순" },
@@ -33,7 +34,8 @@ const titleOf = (r: IgReel) => (r.caption.split(/\s#/)[0] || r.caption).replace(
 /** 같은 릴스의 재생 주소 (화면에 있는 동안만) */
 const mediaCache = new Map<string, string | null>();
 
-const NO_VIEWS: Sort[] = ["plays", "ratio"];
+// v0.9.196 '팔로워 대비'는 조회수가 없으면(공식 API) 참여율로 정렬하므로 공식 API 에서도 쓴다
+const NO_VIEWS: Sort[] = ["plays"];
 const KINDS: { value: IgMetaKind; label: string }[] = [
   { value: "top", label: "인기 게시물" },
   { value: "recent", label: "최근 24시간" },
@@ -160,7 +162,7 @@ export function InstagramTrendExplorer() {
     const from = days ? now - days * 86_400_000 : 0;
     const list = items.filter((r) => !from || (r.postedAt && Date.parse(r.postedAt) >= from));
     const score = (r: IgReel) =>
-      sort === "plays" ? (r.plays ?? -1) : sort === "likes" ? (r.likes ?? -1) : sort === "comments" ? (r.comments ?? -1) : sort === "recent" ? Date.parse(r.postedAt ?? "") || 0 : r.plays && r.followers ? r.plays / r.followers : -1;
+      sort === "plays" ? (r.plays ?? -1) : sort === "likes" ? (r.likes ?? -1) : sort === "comments" ? (r.comments ?? -1) : sort === "recent" ? Date.parse(r.postedAt ?? "") || 0 : (outlierOf(r)?.ratio ?? -1);
     return [...list].sort((a, b) => score(b) - score(a));
   }, [items, sort, period, now]);
   const hashtags = useMemo(() => {
@@ -332,6 +334,7 @@ export function InstagramTrendExplorer() {
                               {p?.status === "loading" ? <Loader2 className="size-8 animate-spin text-white" /> : <Play className="size-9 rounded-full bg-black/50 p-2 text-white" />}
                             </span>
                             {r.plays != null && <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white">▶ {formatNumber(r.plays)}</span>}
+                            <OutlierBadge r={r} />
                           </button>
                         )}
                         {p?.status === "error" && <p className="absolute inset-x-1 bottom-8 rounded bg-black/70 px-2 py-1 text-[11px] text-white">{p.message}</p>}
@@ -409,5 +412,18 @@ export function InstagramTrendExplorer() {
         </>
       )}
     </div>
+  );
+}
+
+/** v0.9.196 팔로워 대비 얼마나 터졌나 (ig-viral 의 '평소 대비'를 팔로워 기준으로) — 3배 넘으면 🔥 */
+function OutlierBadge({ r }: { r: IgReel }) {
+  const o = outlierOf(r);
+  if (!o) return null;
+  const text = o.basis === "plays" ? `팔로워 대비 ${o.ratio >= 10 ? Math.round(o.ratio) : o.ratio.toFixed(1)}배` : `참여율 ${(o.ratio * 100).toFixed(1)}%`;
+  return (
+    <span className={`absolute top-1.5 right-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${o.tier === "hot" ? "bg-red-600 text-white" : o.tier === "good" ? "bg-amber-400 text-black" : "bg-black/55 text-white"}`} title="조회수 ÷ 팔로워 (공식 API 는 (좋아요+댓글×3) ÷ 팔로워). 계정 평소보다 얼마나 더 퍼졌는지의 대신값" data-ig-outlier>
+      {o.tier === "hot" ? "🔥 " : ""}
+      {text}
+    </span>
   );
 }
