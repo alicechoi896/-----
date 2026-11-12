@@ -17,6 +17,7 @@ interface Core {
   cta: string;
   keywords: string[];
   body: string;
+  origin?: "stay" | "fashion" | null;
 }
 interface ContentSet {
   id: string;
@@ -27,6 +28,7 @@ interface ContentSet {
     blog?: { contentId: string; featureId: string; headline: string; preview?: string } | null;
     carousel?: { id: string; name: string } | null;
     threads?: { posts: string[]; at: string } | null;
+    video?: { type: "stay" | "fashion"; id: string; name: string } | null;
   };
   updatedAt: string;
 }
@@ -128,6 +130,19 @@ export function ContentSets({ initialId }: { initialId?: string }) {
       </SectionCard>
 
       <div className="grid gap-4 lg:grid-cols-2" data-set-items>
+        {cur.items.video ? (
+          <div className="space-y-2 rounded-card border border-line bg-surface p-4" data-set-tile="video">
+            <div className="flex items-center gap-2">
+              <Film className="size-4 text-fg-subtle" />
+              <p className="text-[14px] font-semibold">영상 ({cur.items.video.type === "stay" ? "AI 숙소 영상" : "AI 패션"})</p>
+              <Badge tone="success">있음</Badge>
+            </div>
+            <p className="text-[12.5px] font-medium">{cur.items.video.name}</p>
+            <Link href={cur.items.video.type === "stay" ? "/video/stay" : `/instagram/fashion?project=${cur.items.video.id}`} className="text-[12.5px] font-medium text-brand hover:underline">
+              {cur.items.video.type === "stay" ? "AI 숙소 영상 열기" : "AI 패션 열기"} →
+            </Link>
+          </div>
+        ) : (
         <Tile
           icon={Film}
           title="영상 원고 → 영상"
@@ -145,6 +160,7 @@ export function ContentSets({ initialId }: { initialId?: string }) {
             </div>
           )}
         </Tile>
+        )}
         <Tile
           icon={Images}
           title="캐러셀"
@@ -233,7 +249,7 @@ function Tile({ icon: Icon, title, made, busy, onMake, makeLabel, links, hint, c
 }
 
 /** 결과 화면에서 [이 내용으로 세트 만들기] — 세트를 만들고(이미 있으면 그 세트) 세트 화면으로 */
-export function MakeSetButton({ contentId, carouselId }: { contentId?: string; carouselId?: string }) {
+export function MakeSetButton({ contentId, carouselId, stayId, fashionId }: { contentId?: string; carouselId?: string; stayId?: string; fashionId?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -248,7 +264,7 @@ export function MakeSetButton({ contentId, carouselId }: { contentId?: string; c
           setBusy(true);
           setErr(null);
           try {
-            const s = await call<ContentSet>(contentId ? { action: "from-content", contentId } : { action: "from-carousel", carouselId });
+            const s = await call<ContentSet>(contentId ? { action: "from-content", contentId } : stayId ? { action: "from-stay", stayId } : fashionId ? { action: "from-fashion", fashionId } : { action: "from-carousel", carouselId });
             router.push(`/make/sets?id=${encodeURIComponent(s.id)}`);
           } catch (e) {
             setErr(e instanceof Error ? e.message : "만들지 못했습니다.");

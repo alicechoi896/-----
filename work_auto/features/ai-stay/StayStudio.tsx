@@ -1,5 +1,6 @@
 "use client";
 
+import { MakeSetButton } from "@/features/content-set/ContentSets";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, BedDouble, Film, ImagePlus, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { api } from "@/lib/api-client";
@@ -405,6 +406,7 @@ export function StayStudio() {
                 지우기
               </Button>
             )}
+            {p && <MakeSetButton stayId={p.id} />}
           </div>
         )}
       </SectionCard>

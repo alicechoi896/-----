@@ -1,5 +1,6 @@
 "use client";
 
+import { MakeSetButton } from "@/features/content-set/ContentSets";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, FolderOpen, Plus, Shirt, Trash2 } from "lucide-react";
 import { Badge, Button, EmptyState, ErrorState, Input, LoadingState, SectionCard } from "@/components/ui";
@@ -130,6 +131,9 @@ function ProjectView({ id, onClose }: { id: string; onClose: () => void }) {
         </Button>
         <Input value={ctl.project.title} onChange={(e) => ctl.edit("title", e.target.value)} className="h-9 max-w-md font-semibold" aria-label="프로젝트 이름" />
         <span className="text-[12px] text-fg-subtle">{ctl.saveState === "saving" ? "저장 중…" : ctl.saveState === "dirty" ? "저장 대기" : ctl.saveState === "error" ? "저장 실패" : "저장됨"}</span>
+        <span className="ml-auto">
+          <MakeSetButton fashionId={ctl.project.id} />
+        </span>
       </div>
       <FashionEditor ctl={ctl} />
     </div>

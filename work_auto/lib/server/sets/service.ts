@@ -29,6 +29,8 @@ export interface SetCore {
   keywords: string[];
   /** 기준 내용 (대본·본문·장마다 글) — 다른 것을 만들 때 그대로 근거로 */
   body: string;
+  /** v0.9.202 숙소·패션 영상에서 시작한 세트 (영상이 이미 있어 '영상 원고' 대신 그 영상) */
+  origin?: "stay" | "fashion" | null;
 }
 /** 만든 원고·글 (미리 보기 글은 세트에 같이 저장 — 화면이 따로 부르지 않게) */
 export interface ItemRef {
@@ -40,12 +42,14 @@ export interface ItemRef {
 export interface ContentSet {
   id: string;
   core: SetCore;
-  source: { type: "content" | "carousel"; id: string; label: string };
+  source: { type: "content" | "carousel" | "stay" | "fashion"; id: string; label: string };
   items: {
     script?: ItemRef | null;
     blog?: ItemRef | null;
     carousel?: { id: string; name: string } | null;
     threads?: { posts: string[]; at: string } | null;
+    /** v0.9.202 숙소·패션 영상 (그 화면으로 열기) */
+    video?: { type: "stay" | "fashion"; id: string; name: string } | null;
   };
   createdAt: string;
   updatedAt: string;
@@ -174,6 +178,56 @@ export const contentSetService = {
       body: [car.notes, ...slides, car.caption].filter(Boolean).join("\n").slice(0, 2500),
     };
     const s: ContentSet = { id: createId("set"), core, source: { type: "carousel", id: car.id, label: "캐러셀" }, items: { carousel: { id: car.id, name: car.name } }, createdAt: nowIso(), updatedAt: nowIso() };
+    return save(owner, s);
+  },
+
+  /** v0.9.202 AI 숙소 영상에서 시작 — 숙소(제품 라이브러리 '숙소')·제목·컷 대사·사실 메모 */
+  async fromStay(stayId: unknown): Promise<ContentSet> {
+    const owner = await getCurrentUserId();
+    const { stayService } = await import("../stay/service");
+    const p = await stayService.get(stayId);
+    const existing = (await readAll(owner)).find((x) => x.items.video?.type === "stay" && x.items.video.id === p.id);
+    if (existing) return existing;
+    const product = p.productId ? await getRepositories().products.get(p.productId).catch(() => null) : null;
+    const lines = p.photos.map((ph) => ph.line).filter(Boolean);
+    const core: SetCore = {
+      kind: p.productId ? "product" : "info",
+      origin: "stay",
+      title: str(`${p.titleSmall} ${p.titleBig}`.trim() || p.name, 120),
+      topic: str(p.name, 120),
+      productId: p.productId ?? null,
+      productName: product?.name ?? p.name,
+      hook: str(lines[0], 200),
+      cta: str(lines[lines.length - 1], 200),
+      keywords: [],
+      body: [p.note ? `사실 메모: ${p.note}` : "", lines.length ? `영상 대사: ${lines.join(" / ")}` : "", ...p.photos.map((ph) => ph.motionKo).filter(Boolean).map((x) => `장면: ${x}`)].filter(Boolean).join("\n").slice(0, 2500),
+    };
+    const s: ContentSet = { id: createId("set"), core, source: { type: "stay", id: p.id, label: "AI 숙소 영상" }, items: { video: { type: "stay", id: p.id, name: p.name } }, createdAt: nowIso(), updatedAt: nowIso() };
+    return save(owner, s);
+  },
+
+  /** v0.9.202 AI 패션에서 시작 — 주제·POV·룩 문구·상품 이름 (블로그는 정보성 글로: 상품이 여러 개라) */
+  async fromFashion(fashionId: unknown): Promise<ContentSet> {
+    const owner = await getCurrentUserId();
+    const { fashionService } = await import("../fashion/service");
+    const { project: p } = (await fashionService.get(String(fashionId ?? ""))) as unknown as { project: { id: string; title: string; settings: { theme: string; pov: string; cta: string }; items: { id: string; name: string }[]; looks: { name: string; caption: string; itemIds: string[]; voiceLine?: string }[] } };
+    const existing = (await readAll(owner)).find((x) => x.items.video?.type === "fashion" && x.items.video.id === p.id);
+    if (existing) return existing;
+    const itemName = (id: string) => p.items.find((i) => i.id === id)?.name ?? "";
+    const looks = p.looks.map((l) => `${l.name}: ${l.voiceLine || l.caption}${l.itemIds.length ? ` (${l.itemIds.map(itemName).filter(Boolean).join(", ")})` : ""}`);
+    const core: SetCore = {
+      kind: "info",
+      origin: "fashion",
+      title: str(p.title, 120),
+      topic: str(p.settings.theme || p.title, 120),
+      productId: null,
+      productName: null,
+      hook: str(p.settings.pov.replace(/^\s*POV\s*[:：]\s*/i, ""), 200),
+      cta: str(p.settings.cta, 200),
+      keywords: [p.settings.theme, ...p.items.map((i) => i.name)].filter(Boolean).slice(0, 10),
+      body: [`코디 주제: ${p.settings.theme}`, ...looks].join("\n").slice(0, 2500),
+    };
+    const s: ContentSet = { id: createId("set"), core, source: { type: "fashion", id: p.id, label: "AI 패션" }, items: { video: { type: "fashion", id: p.id, name: p.title } }, createdAt: nowIso(), updatedAt: nowIso() };
     return save(owner, s);
   },
 

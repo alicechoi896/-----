@@ -21,12 +21,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return handle(async () => {
     await requireAccess("content-set");
-    const b = await readJson<{ action?: string; id?: unknown; contentId?: unknown; carouselId?: unknown; core?: Record<string, unknown>; target?: unknown }>(request);
+    const b = await readJson<{ action?: string; id?: unknown; contentId?: unknown; carouselId?: unknown; stayId?: unknown; fashionId?: unknown; core?: Record<string, unknown>; target?: unknown }>(request);
     switch (b.action) {
       case "from-content":
         return svc.fromContent(b.contentId);
       case "from-carousel":
         return svc.fromCarousel(b.carouselId);
+      case "from-stay":
+        await requireAccess("ai-stay");
+        return svc.fromStay(b.stayId);
+      case "from-fashion":
+        await requireAccess("ig-fashion");
+        return svc.fromFashion(b.fashionId);
       case "update":
         return svc.updateCore(b.id, (b.core ?? {}) as never);
       case "make": {
