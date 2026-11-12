@@ -955,6 +955,7 @@ function JobPanel({
                     <span className="line-clamp-2 text-[11px] text-fg-subtle" title={s.issue ?? undefined}>
                       {s.start != null ? `${s.start.toFixed(1)}초 · ` : ""}
                       {TREATMENT_LABEL[s.textTreatment ?? "unchecked"]}
+                      {s.sceneDesc ? ` · 장면: ${s.sceneDesc}` : ""}
                       {s.issue ? ` · ${s.issue}` : ""}
                     </span>
                     {s.findHint && (

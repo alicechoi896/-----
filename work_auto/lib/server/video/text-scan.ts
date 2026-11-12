@@ -25,7 +25,7 @@ export interface TextScan {
 const MAX_SAMPLES = 12;
 const PER_CALL = 12;
 /** 검사 결과 저장 버전 (프롬프트를 바꾸면 올린다) */
-export const SCAN_VERSION = 5;
+export const SCAN_VERSION = 6;
 
 export async function scanText(file: string, duration: number, dir: string, key: string): Promise<{ scan: TextScan; aiCalls: number }> {
   const ai = await getVisionProvider();
@@ -63,7 +63,7 @@ export async function scanText(file: string, duration: number, dir: string, key:
       type: "text",
       text: [
         `위 영상 프레임 ${batch.length}장을 순서대로 본다. 쇼츠 제품 영상에 쓸 장면을 고르려고 한다.`,
-        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 화면 아래쪽 자막 줄(중국어 자막 등)은 작거나 반투명해도 반드시 넣고, 줄 전체 길이로 넉넉하게 잡는다. 제품 본체·제품 상자·기기 화면에 있는 글자(제품 이름·브랜드 로고·모델명 등 제품 자체의 글자)는 절대 넣지 않는다 — 그건 가리면 안 된다.",
+        "1) boxes: 화면에 보이는 모든 글자(자막·설명 문구·중국어·영어·스티커 글자)와 로고·워터마크(샤오홍슈 로고·계정 ID·@이름·채널 로고·브랜드 로고 이미지, 글자가 없어도)의 위치. 화면 아래쪽 자막 줄(중국어 자막 등)은 작거나 반투명해도 반드시 넣고, 줄 전체 길이로 넉넉하게 잡는다. 제품 본체·제품 상자 표면·기기 화면 속에 인쇄되거나 표시된 글자(제품 이름·브랜드 로고·모델명 등 제품 자체의 글자)는 넣지 않는다 — 그건 가리면 안 된다. 하지만 영상 위에 덧붙인 제목·자막·설명 글자는 제품 이름이 들어 있어도 반드시 넣는다 (예: 화면 위에 떠 있는 'Setting up my new Galaxy Tab S12 Ultra').",
         "2) score: 이 장면을 제품 홍보 영상에 쓸 만한 정도 0~10. 높게(8~10): 제품이 화면 가운데 크고 또렷하게(초점 맞음·흔들림 없음) 보이면서 손으로 직접 쓰는 장면 (디스플레이를 손가락으로 터치·버튼 누르기·손목에 차고 움직이기·물에 넣기 등 기능을 실제로 보여 줌). 보통(4~6): 제품만 가만히 보이거나 화면(UI)만 보이는 장면. 낮게(0~3): 흐리거나 초점이 안 맞음·흔들림·어두움·제품이 화면 가장자리에 잘림·인트로·아웃트로·검은 화면·사람 얼굴만·글자 화면·제품이 안 보임.",
         "4) product: 이 영상의 주인공 제품 본체가 보이는 영역 [x,y,w,h] (손·케이블은 빼고 제품만, 안 보이면 null).",
         "5) cn: 제품 본체나 기기 화면(디스플레이)에 중국어(한자) 글자가 보이면 true, 아니면 false. 숫자·영어·아이콘만이면 false.",
@@ -425,6 +425,8 @@ export type SourceRange = { from: number; to: number };
 export function pickSegment(input: { narration: string; dur: number; sources: SegmentSource[]; used: Map<string, [number, number][]>; want?: { id: string; t: number } | null; bar?: number }): { id: string; start: number; tr: Treatment; value: number } | null {
   const words = wordsOf(input.narration);
   let best: { id: string; start: number; tr: Treatment; value: number } | null = null;
+  // v0.9.194 제품이 안 보이는 장면·제품에 중국어가 보이는 장면은 '다른 장면이 하나도 없을 때만' (감점만으로는 브이로그 장면이 들어갔다)
+  let bestBad = null as { id: string; start: number; tr: Treatment; value: number } | null;
   for (const src of input.sources) {
     const ranges = input.used.get(src.id) ?? [];
     // v0.9.157: 사람이 정한 영상별 구간(from~to) 안에서만 고른다. 구간이 짧아 빈 자리가 없으면 겹쳐도 구간 안에서
@@ -453,8 +455,12 @@ export function pickSegment(input: { narration: string; dur: number; sources: Se
       const knowsProduct = src.scan.samples.some((x) => x.product !== undefined);
       const noProduct = knowsProduct && inRange.length > 0 && inRange.every((x) => !x.product) ? NO_PRODUCT_PENALTY : 0;
       const value = match * 3 + quality * 0.6 - PENALTY[tr.kind] * 2 + (src.assigned ? (src.pinned ? 8 : 1) : 0) + wanted - cnShown - noProduct;
+      if (cnShown || noProduct) {
+        if (!bestBad || value > bestBad.value + 1e-9) bestBad = { id: src.id, start, tr, value };
+        continue;
+      }
       if (!best || value > best.value + 1e-9) best = { id: src.id, start, tr, value };
     }
   }
-  return best;
+  return best ?? bestBad;
 }

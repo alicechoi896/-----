@@ -355,20 +355,34 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
         }
         best = { id: s.sourceVideoId, start, tr };
       } else if (!aiScene && s.sourceVideoId && sources.has(s.sourceVideoId) && rangeOf(s.sourceVideoId)) {
-        // v0.9.165: 구간을 정한 영상 — 장면을 고르지 않고 구간 시작부터 차례로 (5초로 정하면 첫 컷은 정확히 5초부터)
-        const src = sources.get(s.sourceVideoId)!;
-        const start = sequentialStart(rangeOf(s.sourceVideoId)!, usedSec(s.sourceVideoId), dur, src.duration);
-        const e = editOf(s.sourceVideoId);
-        let tr: Treatment = { kind: "clean" };
-        if (!(s.frame || e?.frame || e?.zooms?.length)) {
+        // v0.9.194: 구간을 정한 영상도 '구간 안에서' 내용을 보고 고른다 — 대사와 맞는 장면·제품이 보이는 장면·글자를 가릴 수 있는 장면
+        // (전에는 구간 시작부터 차례로 잘라 붙여, 제품이 없는 브이로그 장면(디저트·옷걸이)이 대사와 상관없이 들어갔다)
+        const id = s.sourceVideoId;
+        const src = sources.get(id)!;
+        const range = rangeOf(id)!;
+        const e = editOf(id);
+        const want = matched.wants.get(k);
+        const pick = pickSegment({
+          bar,
+          narration: s.narration,
+          dur,
+          used: usedRanges,
+          want: want && want.id === id ? want : null,
+          sources: [{ id, duration: src.duration, scan: src.scan, assigned: true, pinned: true, aspect: aspects.get(id), range: { from: range.from, to: src.duration } }],
+        });
+        if (pick) {
+          // 사람이 화면(확대)을 정했으면 자동 확대 대신 그 화면 (글자가 보이면 아래 guardWindows 가 더 확대)
+          best = { id, start: pick.start, tr: s.frame || e?.frame || e?.zooms?.length ? { kind: "clean" } : pick.tr };
+        } else {
+          const start = sequentialStart(range, usedSec(id), dur, src.duration);
           const boxes = [...boxesIn(src.scan, start, dur), ...persistentBoxes(src.scan)];
-          tr = decideTreatment(boxes, src.scan.checked, aspects.get(s.sourceVideoId), bar, productIn(src.scan, start, dur));
+          let tr = decideTreatment(boxes, src.scan.checked, aspects.get(id), bar, productIn(src.scan, start, dur));
           if (tr.kind === "rejected") {
-            const c = coverAll(boxes, aspects.get(s.sourceVideoId), bar);
+            const c = coverAll(boxes, aspects.get(id), bar);
             tr = c.kind === "clean" ? { kind: "rejected" } : { ...c, kind: "rejected" };
           }
+          best = { id, start, tr };
         }
-        best = { id: s.sourceVideoId, start, tr };
       } else if (aiScene && s.sourceVideoId && sources.has(s.sourceVideoId)) {
         // AI 컷(5초, 글자 없음)은 여러 컷에 나눠 쓴다: 겹쳐도 되고, 쓸 때마다 시작 위치만 바꾼다
         const src = sources.get(s.sourceVideoId)!;
@@ -441,6 +455,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
       s.start = Number(t.toFixed(2));
       s.duration = Number(dur.toFixed(2));
       s.textTreatment = best.tr.kind as TextTreatment;
+      s.sceneDesc = sceneDescOf(src.scan, best.start, dur);
       if (best.tr.kind === "unchecked") s.issue = s.issue ?? "원본 글자를 검사하지 못해 아래 자막 띠만 확대로 잘랐습니다 (AI 이미지 읽기 연결 필요).";
       t += dur;
 
@@ -711,7 +726,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           const used = new Map<string, [number, number][]>();
           for (const [id, rs] of usedRanges) used.set(id, [...rs]);
           for (const [id, rs] of banned) used.set(id, [...(used.get(id) ?? []), ...rs]);
-          const srcList = (ids: string[]) => ids.filter((id) => !isAiSource(id) && sources.has(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === pk.best.id, aspect: aspects.get(id), range: null }));
+          const srcList = (ids: string[]) => ids.filter((id) => !isAiSource(id) && sources.has(id)).map((id) => ({ id, duration: sources.get(id)!.duration, scan: sources.get(id)!.scan, assigned: id === pk.best.id, aspect: aspects.get(id), range: rangeOf(id) ? { from: rangeOf(id)!.from, to: sources.get(id)!.duration } : null }));
           // v0.9.190 그 컷에 정한 영상 안에서만 다른 구간을 고른다 (고르지 않은 다른 영상으로 바꾸지 않음).
           // 사람이 시작 초·화면을 직접 정한 컷은 바꾸지 않는다
           if (s.startAt != null || s.frame) {
@@ -731,6 +746,7 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
           s.sourceVideoId = alt.id;
           s.sourceStart = Number(alt.start.toFixed(2));
           s.textTreatment = alt.tr.kind as TextTreatment;
+          s.sceneDesc = sceneDescOf(pk.src.scan, alt.start, pk.dur);
           s.issue = null;
           await rm(sceneFiles[v.k], { force: true });
           await rm(sceneAudio[v.k], { force: true });
@@ -832,4 +848,10 @@ export async function renderVideo(job: VideoJob, videos: ReferenceVideo[], hooks
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+/** v0.9.194 고른 구간의 장면 설명 (원본 검사 desc) — 컷마다 왜 이 장면인지 화면에 보이게 */
+function sceneDescOf(scan: TextScan, start: number, dur: number): string | null {
+  const descs = scan.samples.filter((x) => x.desc && x.t >= start - 0.5 && x.t <= start + dur + 0.5).map((x) => x.desc!);
+  return descs.length ? [...new Set(descs)].slice(0, 2).join(" / ").slice(0, 80) : null;
 }

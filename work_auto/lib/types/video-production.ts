@@ -48,6 +48,8 @@ export interface VideoScene {
   issue?: string | null;
   /** v0.9.186 대사에 맞는 장면이 원본에 없을 때 찾아볼 검색어 (한국어, 제품 이름 포함) — 화면의 [맞는 원본 찾기] */
   findHint?: string | null;
+  /** v0.9.194 이 컷에 고른 원본 구간의 장면 설명 (원본 검사 결과) */
+  sceneDesc?: string | null;
 }
 
 /** AI 컷 (v0.9.60, Kie AI): product = 제품 사진 → 움직이는 영상, text = 글 → 장면 */
