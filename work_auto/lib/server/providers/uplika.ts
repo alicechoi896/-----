@@ -106,6 +106,16 @@ export class UplikaProvider {
     return parsePost(b);
   }
 
+  /** v0.9.200 스레드 이어 쓰기 글 (첫 글 + 답글 차례로). content 대신 threadItems */
+  async publishThread(input: { items: string[]; accountIds: string[]; scheduledAt?: string | null }, idempotencyKey: string): Promise<UplikaPost> {
+    const b = await this.call<Obj>("/posts", {
+      method: "POST",
+      idempotencyKey,
+      body: JSON.stringify({ threadItems: input.items.map((content) => ({ content })), accountIds: input.accountIds, ...(input.scheduledAt ? { scheduledAt: input.scheduledAt } : {}) }),
+    });
+    return parsePost(b);
+  }
+
   async post(id: string): Promise<UplikaPost> {
     return parsePost(await this.call<Obj>(`/posts/${encodeURIComponent(id)}`, { method: "GET" }));
   }

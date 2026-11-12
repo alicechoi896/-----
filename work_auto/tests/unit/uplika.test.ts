@@ -34,6 +34,18 @@ describe("업리카 연결", () => {
     expect(JSON.parse(pub.body!)).toMatchObject({ mediaIds: ["med_1"], options: { instagram: { contentType: "reel" } } });
   });
 
+  it("스레드 이어 쓰기: content 대신 threadItems 로 보낸다 (v0.9.200)", async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ id: "post_t", status: "publishing", targets: [{ platform: "threads", status: "publishing" }] }), { status: 202 });
+    });
+    const r = await new UplikaProvider("sk").publishThread({ items: ["첫 글", "둘째 글"], accountIds: ["acc_t"] }, "wa-th-1");
+    expect(r.id).toBe("post_t");
+    expect(body).toMatchObject({ threadItems: [{ content: "첫 글" }, { content: "둘째 글" }], accountIds: ["acc_t"] });
+    expect(body.content).toBeUndefined();
+  });
+
   it("게시 결과: 주소·오류를 읽는다", () => {
     const r = parsePost({ id: "post_1", status: "partial", targets: [{ platform: "instagram", status: "published", url: "https://instagram.com/reel/x" }, { platform: "tiktok", status: "failed", error: { message: "bad" } }] });
     expect(r.targets[0].url).toBe("https://instagram.com/reel/x");

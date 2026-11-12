@@ -123,3 +123,47 @@ export async function uplikaPostStatus(postId: string, publicationIds: string[],
   }
   return post;
 }
+
+/** v0.9.200 콘텐츠 세트의 스레드 글 → 스레드에 이어 쓰기로 (확인 후 1번 = 1번) */
+export async function uplikaPublishThreads(input: { posts: string[]; accountId: string; scheduledAt?: string | null; clientRequestId: string; title?: string }, session: SessionInfo): Promise<{ post: UplikaPost; publicationIds: string[] }> {
+  const p = await provider();
+  const reqId = String(input.clientRequestId ?? "").trim();
+  if (!/^[\w-]{8,80}$/.test(reqId)) throw new AppError("VALIDATION", "요청 번호가 없습니다. 화면을 새로 고쳐 주세요.");
+  const items = (Array.isArray(input.posts) ? input.posts : []).map((x) => String(x ?? "").trim().slice(0, 500)).filter(Boolean).slice(0, 10);
+  if (!items.length) throw new AppError("VALIDATION", "올릴 스레드 글이 없습니다.");
+  const { accounts } = await p.accounts().catch((e) => {
+    throw friendly(e);
+  });
+  const acc = accounts.find((a) => a.id === input.accountId && a.platform === "threads");
+  if (!acc) throw new AppError("VALIDATION", "스레드 계정을 골라 주세요 (업리카 › Connections 에서 스레드 연결).");
+  const at = input.scheduledAt ? Date.parse(input.scheduledAt) : NaN;
+  const scheduledAt = Number.isFinite(at) && at > Date.now() + 10 * 60_000 ? new Date(at).toISOString() : null;
+  if (input.scheduledAt && !scheduledAt) throw new AppError("VALIDATION", "예약은 지금부터 10분 뒤 이후로 정해 주세요.");
+  let post: UplikaPost;
+  try {
+    post = await p.publishThread({ items, accountIds: [acc.id], scheduledAt }, `wa-th-${reqId}`);
+  } catch (e) {
+    throw friendly(e);
+  }
+  console.info("[Uplika] threads", JSON.stringify({ post: post.id, items: items.length, scheduled: Boolean(scheduledAt) }));
+  const publicationIds: string[] = [];
+  try {
+    const row = await publicationService.create(session, {
+      contentId: null,
+      productId: null,
+      platform: "threads",
+      accountName: acc.handle ? `@${acc.handle}` : acc.displayName,
+      title: (input.title || items[0]).slice(0, 100),
+      contentType: "스레드 글",
+      status: scheduledAt ? "scheduled" : "draft",
+      scheduledAt,
+      publishedAt: null,
+      platformUrl: "",
+      note: `업리카 게시 ${post.id} (스레드 ${items.length}개 이어 쓰기)`,
+    });
+    publicationIds.push(row.id);
+  } catch (e) {
+    console.warn("[Uplika] publication", e instanceof Error ? e.message : e);
+  }
+  return { post, publicationIds };
+}

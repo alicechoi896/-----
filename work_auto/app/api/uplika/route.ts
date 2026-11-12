@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/server/auth";
 import { AppError, handle, readJson } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/rate-limit";
-import { uplikaAccounts, uplikaPostStatus, uplikaPublishJob, type UplikaPublishInput } from "@/lib/server/uplika/publish";
+import { uplikaAccounts, uplikaPostStatus, uplikaPublishJob, uplikaPublishThreads, type UplikaPublishInput } from "@/lib/server/uplika/publish";
 
 export const maxDuration = 300;
 
@@ -22,9 +22,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return handle(async () => {
     const session = await requireAdmin();
-    const b = await readJson<UplikaPublishInput & { confirmed?: boolean }>(request);
+    const b = await readJson<UplikaPublishInput & { confirmed?: boolean; kind?: string; posts?: string[]; accountId?: string; title?: string }>(request);
     if (b.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "확인 창에서 [올리기]를 눌러 주세요.", 409);
     await rateLimit("uplika-publish");
+    // v0.9.200 스레드 이어 쓰기 글 (콘텐츠 세트)
+    if (b.kind === "threads") return uplikaPublishThreads({ posts: b.posts ?? [], accountId: String(b.accountId ?? ""), scheduledAt: b.scheduledAt, clientRequestId: b.clientRequestId, title: b.title }, session);
     return uplikaPublishJob({ ...b, accountIds: Array.isArray(b.accountIds) ? b.accountIds.map(String).slice(0, 10) : [] }, session);
   });
 }

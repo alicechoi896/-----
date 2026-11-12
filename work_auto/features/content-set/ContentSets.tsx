@@ -194,9 +194,12 @@ export function ContentSets({ initialId }: { initialId?: string }) {
                   </button>
                 </div>
               ))}
-              <Button size="sm" variant="ghost" icon={Copy} onClick={() => copy(cur.items.threads!.posts.join("\n\n"))}>
-                전체 복사
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="ghost" icon={Copy} onClick={() => copy(cur.items.threads!.posts.join("\n\n"))}>
+                  전체 복사
+                </Button>
+                <ThreadsPublish posts={cur.items.threads.posts} title={c.title} />
+              </div>
             </div>
           )}
         </Tile>
@@ -257,6 +260,82 @@ export function MakeSetButton({ contentId, carouselId }: { contentId?: string; c
         이 내용으로 세트 만들기
       </Button>
       {err && <span className="text-[11.5px] text-danger">{err}</span>}
+    </span>
+  );
+}
+
+const newReqId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+/** v0.9.200 스레드 글 → 업리카로 스레드에 이어 쓰기 (확인 후 1번 = 1번) */
+function ThreadsPublish({ posts, title }: { posts: string[]; title: string }) {
+  const [accounts, setAccounts] = useState<{ id: string; handle: string; platform: string }[] | null>(null);
+  const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [reqId, setReqId] = useState(newReqId);
+  const api = async <T,>(init?: RequestInit) => {
+    const res = await fetch("/api/uplika", { ...init, headers: { "Content-Type": "application/json" }, cache: "no-store" });
+    const j = (await res.json().catch(() => null)) as { ok: boolean; data: T; error?: { message: string } } | null;
+    if (!j?.ok) throw new Error(j?.error?.message ?? "요청하지 못했습니다.");
+    return j.data;
+  };
+  if (!accounts)
+    return (
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={MessageSquareText}
+        onClick={() =>
+          void api<{ accounts: { id: string; handle: string; platform: string }[] }>()
+            .then((r) => {
+              const t = r.accounts.filter((a) => a.platform === "threads");
+              setAccounts(t);
+              setPick(t[0]?.id ?? "");
+              if (!t.length) setNote("업리카에 연결된 스레드 계정이 없습니다 (업리카 › Connections).");
+            })
+            .catch((e) => setNote(e instanceof Error ? e.message : "계정을 읽지 못했습니다."))
+        }
+        data-threads-publish-open
+      >
+        스레드에 올리기 (업리카)
+      </Button>
+    );
+  return (
+    <span className="flex flex-wrap items-center gap-1.5 text-[12px]">
+      {accounts.length > 0 && (
+        <>
+          <select value={pick} onChange={(e) => setPick(e.target.value)} className="h-8 rounded-control border border-line bg-canvas px-2" aria-label="스레드 계정">
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                @{a.handle}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="primary"
+            loading={busy}
+            disabled={!pick || busy}
+            onClick={async () => {
+              if (!window.confirm(`스레드 @${accounts.find((a) => a.id === pick)?.handle} 에 ${posts.length}개 글을 이어 쓰기로 지금 올릴까요?\n실제 계정에 공개 게시됩니다.`)) return;
+              setBusy(true);
+              try {
+                const r = await api<{ post: { id: string; status: string } }>({ method: "POST", body: JSON.stringify({ kind: "threads", posts, accountId: pick, title, clientRequestId: reqId, confirmed: true }) });
+                setNote(`올리는 중입니다 (${r.post.id}). 업로드 관리에 기록했습니다.`);
+                setReqId(newReqId());
+              } catch (e) {
+                setNote(e instanceof Error ? e.message : "올리지 못했습니다.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            data-threads-publish-go
+          >
+            올리기
+          </Button>
+        </>
+      )}
+      {note && <span className="text-fg-muted">{note}</span>}
     </span>
   );
 }
