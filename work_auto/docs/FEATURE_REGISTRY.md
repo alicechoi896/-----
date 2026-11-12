@@ -1,5 +1,7 @@
 # FEATURE REGISTRY: 전체 기능 목록
 
+> v0.9.197: 왼쪽 메뉴·홈 카드는 `lib/registry/menu.ts`(일하는 순서 6묶음)로 만든다. 기능을 추가하면 FEATURES 와 함께 MENU 의 알맞은 묶음(또는 기존 메뉴의 탭)에 넣는다 — 빠지면 tests/unit/menu.test.ts 가 실패한다. channelId 는 실제 동작(유튜브·클립 등)에 쓰이므로 메뉴 때문에 바꾸지 않는다.
+
 > **이 파일만 봐도 서비스 전체를 파악할 수 있어야 한다.**
 > 코드의 단일 기준은 `lib/registry/features.ts`(기능)와 `lib/generators/configs.ts`(생성 폼)이다. 기능을 추가하거나 바꾸면 이 표도 같이 고친다.
 > 상태: ✅ live (실제 연동) · 🧪 mock (Mock 데이터로 전체 흐름 동작) · ⏳ planned (준비 중, 카드만 노출)

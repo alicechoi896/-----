@@ -9,7 +9,18 @@ import { ChevronRight, House, LogOut, Menu, X, type LucideIcon } from "lucide-re
 import { signOut } from "@/app/(auth)/login/actions";
 import { clearApiCache } from "@/lib/api-client";
 import { ROLE_LABEL } from "@/lib/permissions";
-import { CHANNELS, STANDALONE_PAGES, getFeaturesByChannel, matchFeatureByPath, type ChannelDef } from "@/lib/registry";
+import { CHANNELS, FEATURES, STANDALONE_PAGES, getFeaturesByChannel, matchFeatureByPath, type ChannelDef } from "@/lib/registry";
+import { MENU, menuItemOf } from "@/lib/registry/menu";
+
+/** 메뉴 탭 id(기능·단독 페이지) → 주소 */
+const hrefOf = (id: string) => FEATURES.find((x) => x.id === id)?.href ?? STANDALONE_PAGES.find((x) => x.id === id)?.href ?? null;
+/** 지금 주소가 속한 메뉴 (가장 긴 주소가 맞는 기능·단독 페이지 → 그 메뉴) */
+function activeMenuItem(pathname: string): string | null {
+  const f = matchFeatureByPath(pathname);
+  const id = f?.id ?? STANDALONE_PAGES.filter((p) => pathname === p.href || pathname.startsWith(p.href + "/")).sort((a, b) => b.href.length - a.href.length)[0]?.id;
+  if (!id) return null;
+  return menuItemOf(id)?.item.id ?? (f?.menuParent ? (menuItemOf(f.menuParent)?.item.id ?? null) : null);
+}
 import type { SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -25,28 +36,27 @@ export function AppSidebar({ providerMode, session }: { providerMode: "mock" | "
   const allowed = new Set(session.allowed);
   const isAdmin = session.role === "admin";
 
-  const channels = CHANNELS.filter((c) => c.id !== "settings" && !c.adminOnly);
-  const settings = CHANNELS.find((c) => c.id === "settings")!;
   const admin = CHANNELS.find((c) => c.id === "admin")!;
+  const activeItem = activeMenuItem(pathname);
 
   const nav = (
-    <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4" onClick={() => setMobileOpen(false)}>
+    <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4" onClick={() => setMobileOpen(false)}>
       <div className="flex flex-col gap-0.5">
         <NavLink href="/" icon={House} label="홈" active={pathname === "/"} />
       </div>
 
-      <NavGroup label="채널">
-        {channels.map((c) => (
-          <ChannelNav key={c.id} channel={c} pathname={pathname} allowed={allowed} />
-        ))}
-      </NavGroup>
-
-      <NavGroup label="관리">
-        {STANDALONE_PAGES.filter((p) => allowed.has(p.id)).map((p) => (
-          <NavLink key={p.id} href={p.href} icon={p.icon} label={p.title} active={pathname.startsWith(p.href)} />
-        ))}
-        <ChannelNav channel={settings} pathname={pathname} allowed={allowed} />
-      </NavGroup>
+      {/* v0.9.197 일하는 순서대로 6묶음 (lib/registry/menu.ts). 기능·주소는 그대로, 같은 일의 플랫폼별 화면은 그 화면 위쪽 탭으로 */}
+      {MENU.map((g) => {
+        const items = g.items.map((it) => ({ it, tabs: it.tabs.filter((t) => allowed.has(t.id)) })).filter((x) => x.tabs.length > 0);
+        if (!items.length) return null;
+        return (
+          <NavGroup key={g.id} label={g.label}>
+            {items.map(({ it, tabs }) => (
+              <NavLink key={it.id} href={hrefOf(tabs[0].id) ?? it.href} icon={it.icon} label={it.title} active={it.id === activeItem} />
+            ))}
+          </NavGroup>
+        );
+      })}
 
       {isAdmin && (
         <NavGroup label="관리자">

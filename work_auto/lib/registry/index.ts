@@ -1,5 +1,6 @@
 import { CHANNELS, STANDALONE_PAGES } from "./channels";
 import { FEATURES } from "./features";
+import { menuItemOf } from "./menu";
 import type { ChannelDef, FeatureDef, HubId, StandalonePageDef } from "./types";
 
 export { CHANNELS, FEATURES, STANDALONE_PAGES };
@@ -41,9 +42,14 @@ export interface Crumb {
   href?: string;
 }
 
-/** 기능 페이지의 브레드크럼: 홈 > 채널 > 기능 */
+/** 기능 페이지의 브레드크럼: 홈 > 메뉴 묶음 > 메뉴(탭이 여럿이면) > 기능 (v0.9.197 메뉴 기준, 메뉴에 없으면 예전처럼 채널) */
 export function getFeatureCrumbs(featureId: string): Crumb[] {
   const feature = getFeature(featureId);
+  const m = menuItemOf(featureId);
+  if (m) {
+    const group = m.group.label.replace(/^[①②③④⑤⑥]s*/, "");
+    return [{ label: "홈", href: "/" }, { label: group }, ...(m.item.tabs.length > 1 ? [{ label: m.item.title, href: m.item.href }] : []), { label: feature.title }];
+  }
   const channel = getChannel(feature.channelId);
   return [
     { label: "홈", href: "/" },

@@ -6,6 +6,7 @@ import { SectionCard } from "@/components/ui/SectionCard";
 import { ROLE_LABEL, canAccess, lowestTierFor } from "@/lib/permissions";
 import { getSession } from "@/lib/server/auth";
 import { FeaturePageHeader } from "./FeaturePageHeader";
+import { MenuTabs } from "./MenuTabs";
 import { PageContainer } from "./PageContainer";
 
 /**
@@ -33,6 +34,7 @@ export async function FeaturePage({
   return (
     <PageContainer width={width}>
       {header ?? <FeaturePageHeader featureId={featureId} />}
+      {session && <MenuTabs featureId={featureId} allowed={session.allowed} />}
       {allowed ? children : <NoAccess featureId={featureId} roleLabel={session ? ROLE_LABEL[session.role] : "비로그인"} />}
     </PageContainer>
   );

@@ -87,7 +87,7 @@ export const SHOTS = [
     viewport: { width: 1280, height: 1250 },
     marks: {
       1: (p) => p.locator("aside nav").first(),
-      2: (p) => p.locator("main a", { hasText: "바로가기" }).first(),
+      2: (p) => p.locator("[data-home-menu]").first(),
       3: (p) => card(p, "API 연결"),
     },
   },
