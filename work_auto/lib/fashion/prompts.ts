@@ -134,12 +134,6 @@ export function lookPrompt(p: FashionProject, look: FashionLook, refItems: Fashi
     .join("\n");
 }
 
-/** Suno 배경음악 (릴스: 말소리가 없어 음악이 분위기를 만든다) */
-export function fashionMusicPrompt(p: FashionProject, note: string): string {
-  const base = note.trim() || `${p.settings.theme} fashion lookbook`;
-  return `Instrumental music for a trendy Korean fashion Instagram reel: ${base}. Stylish, catchy, light and upbeat with a clear beat for outfit changes, no vocals, no lyrics, loopable.`.slice(0, 500);
-}
-
 /** 룩마다 쓰는 제품 사진 (사진 있는 것만, 최대 6장) */
 /** v0.9.171 피드 카드용 이미지: 승인한 룩 이미지 그대로, 배경만 무늬 없는 밝은 바탕 (오려 붙인 것처럼 보이게) */
 export function feedLookPrompt(): string {

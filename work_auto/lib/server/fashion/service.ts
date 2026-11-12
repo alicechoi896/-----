@@ -14,7 +14,7 @@ import { productService } from "../services/products";
 import { videoStorage } from "../video/storage";
 import { renderFeed, renderReels, readyLooks } from "./render";
 import { fashionDir, isFashionId, loadFashion, ownsFashionKey, readFashionIndex, removeFashionFromIndex, saveFashion, withFashionUrls } from "./store";
-import { createFashionClips, createFashionImages, createFashionMusic, IMAGE_CREDITS, syncFashion, type FashionImageJob } from "./tasks";
+import { createFashionClips, createFashionImages, IMAGE_CREDITS, syncFashion, type FashionImageJob } from "./tasks";
 
 /** AI 패션 피드·릴스 서비스 (v0.9.103). docs/FASHION.md */
 const now = () => new Date().toISOString();
@@ -454,18 +454,6 @@ export const fashionService = {
     const tasks = await createFashionClips(p, (Array.isArray(body.lookIds) ? body.lookIds : []).map(String), requestId);
     p.tasks = [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks];
     return { ...(await withFashionUrls(await saveMerged(owner, p))), created: tasks.filter((t) => t.externalTaskId).length, failed: tasks.filter((t) => t.status === "fail").length };
-  },
-
-  /** 음악 만들기 (Kie Suno, 1회 과금, 확인 후에만) */
-  async music(id: string, body: { note?: unknown; clientRequestId?: unknown; confirmed?: unknown }) {
-    if (body.confirmed !== true) throw new AppError("CONFIRM_REQUIRED", "비용이 드는 작업입니다. 확인 창에서 [만들기]를 눌러 주세요.", 409);
-    const requestId = str(body.clientRequestId, 80);
-    if (requestId.length < 8) throw new AppError("VALIDATION", "요청 번호가 없습니다.");
-    const { owner, p } = await open(id);
-    if (p.tasks.some((t) => t.kind === "music" && (t.status === "generating" || t.status === "requesting") && t.requestId !== requestId)) throw new AppError("BUSY", "음악을 만드는 중입니다. 끝난 뒤 다시 눌러 주세요.", 409);
-    const tasks = await createFashionMusic(p, str(body.note, 300), requestId);
-    p.tasks = [...p.tasks.filter((t) => !tasks.some((x) => x.id === t.id)), ...tasks];
-    return withFashionUrls(await saveMerged(owner, p));
   },
 
   async sync(id: string) {

@@ -2,6 +2,13 @@
 
 형식: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) · 날짜는 YYYY-MM-DD
 
+## [0.9.198] - 2026-11-12: 소스 정리
+
+### 정리
+- 쓰지 않는 코드 찾기(knip, 읽기만)로 확인: 아무 데서도 쓰지 않는 파일은 1개뿐 — 홈 채널 카드(components/shared/ChannelCard.tsx, 메뉴 정리로 안 씀) 지움, getHomeChannels 지움
+- AI 패션 **음악 만들기 경로 끊음** (Kie Suno 유료 — 화면은 v0.9.170 에 뺐고 부르는 곳 없음): /api/fashion/[id]/music, fashionService.music, createFashionMusic, fashionMusicPrompt. 예전 프로젝트의 음악 작업 확인·기록은 그대로 읽힘. AI 드라마의 음악은 그대로
+- 예전 주소 넘겨주기 페이지(/drama · /fashion · /tools/reel-read)와 예전 채널 화면은 즐겨찾기·링크가 깨지지 않게 그대로 둠. DB 는 건드리지 않음
+
 ## [0.9.197] - 2026-11-12: 메뉴 정리 — 일하는 순서대로 6묶음
 
 ### 바뀜

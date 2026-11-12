@@ -3,7 +3,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CLIP_CONCEPTS, approvedOf, categoryEn, fashionMusicPrompt, feedLookPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
+import { CLIP_CONCEPTS, approvedOf, categoryEn, feedLookPrompt, lookPrompt, lookRefItems, modelPrompt, newFashionId } from "@/lib/fashion/prompts";
 import { feedFormatOf, flatPrompt, reelFormatOf, unboxPrompt } from "@/lib/fashion/formats";
 import type { FashionImage, FashionLook, FashionProject, FashionTask } from "@/lib/fashion/types";
 import { AppError } from "../http";
@@ -197,21 +197,6 @@ export async function createFashionClips(p: FashionProject, lookIds: string[], r
 }
 
 /** 음악 만들기 (Suno V6, 1회 = 곡 2개 정도) */
-export async function createFashionMusic(p: FashionProject, note: string, requestId: string): Promise<FashionTask[]> {
-  const dup = p.tasks.filter((t) => t.requestId === requestId);
-  if (dup.length) return dup;
-  const key = `${p.id}:${requestId}`;
-  if (inFlight.has(key)) return inFlight.get(key)!;
-  const run = (async () => {
-    const prov = await provider();
-    const t = baseTask({ kind: "music", target: { type: "bgm" }, modelId: "suno-v6", prompt: fashionMusicPrompt(p, note), requestId });
-    await submit(prov, [t], () => "ai-music-api/generate", async (x) => (x.request = { custom_mode: false, instrumental: true, model: "V6", prompt: x.prompt }));
-    return [t];
-  })().finally(() => inFlight.delete(key));
-  inFlight.set(key, run);
-  return run;
-}
-
 async function fetchFile(url: string, max: number): Promise<Buffer> {
   if (new URL(url).protocol !== "https:") throw new Error("결과 주소가 https 가 아닙니다.");
   const res = await safeFetch(url, { signal: AbortSignal.timeout(120_000) });
